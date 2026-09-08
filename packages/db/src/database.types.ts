@@ -41,14 +41,14 @@ export type IntegrationKind =
   | "slack"
   | "webhook";
 
-interface Table<Row, Insert = Partial<Row>, Update = Partial<Row>> {
+type Table<Row, Insert = Partial<Row>, Update = Partial<Row>> = {
   Row: Row;
   Insert: Insert;
   Update: Update;
   Relationships: [];
-}
+};
 
-export interface WorkspaceRow {
+export type WorkspaceRow = {
   id: string;
   name: string;
   slug: string;
@@ -58,9 +58,9 @@ export interface WorkspaceRow {
   trial_ends_at: string | null;
   data_retention_days: number;
   created_at: string;
-}
+};
 
-export interface ProfileRow {
+export type ProfileRow = {
   id: string;
   email: string;
   full_name: string | null;
@@ -68,17 +68,17 @@ export interface ProfileRow {
   bio: string | null;
   timezone: string;
   created_at: string;
-}
+};
 
-export interface MembershipRow {
+export type MembershipRow = {
   id: string;
   workspace_id: string;
   user_id: string;
   role: MembershipRole;
   created_at: string;
-}
+};
 
-export interface LinkedinAccountRow {
+export type LinkedinAccountRow = {
   id: string;
   workspace_id: string;
   user_id: string;
@@ -99,9 +99,9 @@ export interface LinkedinAccountRow {
   last_action_at: string | null;
   working_hours: Json;
   created_at: string;
-}
+};
 
-export interface BusinessProfileRow {
+export type BusinessProfileRow = {
   id: string;
   workspace_id: string;
   website_url: string | null;
@@ -111,9 +111,9 @@ export interface BusinessProfileRow {
   created_by: string | null;
   created_at: string;
   updated_at: string;
-}
+};
 
-export interface CustomerProfileRow {
+export type CustomerProfileRow = {
   id: string;
   workspace_id: string;
   business_profile_id: string;
@@ -124,9 +124,9 @@ export interface CustomerProfileRow {
   approved_at: string | null;
   created_at: string;
   updated_at: string;
-}
+};
 
-export interface ProspectRow {
+export type ProspectRow = {
   id: string;
   workspace_id: string;
   linkedin_url: string;
@@ -151,9 +151,9 @@ export interface ProspectRow {
   crm_contact_id: string | null;
   created_at: string;
   updated_at: string;
-}
+};
 
-export interface CampaignRow {
+export type CampaignRow = {
   id: string;
   workspace_id: string;
   customer_profile_id: string | null;
@@ -169,18 +169,18 @@ export interface CampaignRow {
   launched_at: string | null;
   created_at: string;
   updated_at: string;
-}
+};
 
-export interface CampaignStepRow {
+export type CampaignStepRow = {
   id: string;
   workspace_id: string;
   campaign_id: string;
   step_number: number;
   delay_days: number;
   message: string;
-}
+};
 
-export interface CampaignProspectRow {
+export type CampaignProspectRow = {
   id: string;
   workspace_id: string;
   campaign_id: string;
@@ -196,9 +196,9 @@ export interface CampaignProspectRow {
   closed_at: string | null;
   created_at: string;
   updated_at: string;
-}
+};
 
-export interface ConversationRow {
+export type ConversationRow = {
   id: string;
   workspace_id: string;
   prospect_id: string;
@@ -209,9 +209,9 @@ export interface ConversationRow {
   needs_human: boolean;
   needs_human_reason: string | null;
   created_at: string;
-}
+};
 
-export interface MessageRow {
+export type MessageRow = {
   id: string;
   workspace_id: string;
   conversation_id: string;
@@ -224,9 +224,9 @@ export interface MessageRow {
   approved_by: string | null;
   sent_at: string | null;
   created_at: string;
-}
+};
 
-export interface ReplyDraftRow {
+export type ReplyDraftRow = {
   id: string;
   workspace_id: string;
   conversation_id: string;
@@ -240,9 +240,9 @@ export interface ReplyDraftRow {
   resolved_by: string | null;
   resolved_at: string | null;
   created_at: string;
-}
+};
 
-export interface MeetingRow {
+export type MeetingRow = {
   id: string;
   workspace_id: string;
   prospect_id: string;
@@ -256,9 +256,9 @@ export interface MeetingRow {
   crm_event_id: string | null;
   status: string;
   created_at: string;
-}
+};
 
-export interface IntegrationRow {
+export type IntegrationRow = {
   id: string;
   workspace_id: string;
   kind: IntegrationKind;
@@ -268,18 +268,18 @@ export interface IntegrationRow {
   config: Json;
   status: string;
   created_at: string;
-}
+};
 
-export interface KnowledgeDocumentRow {
+export type KnowledgeDocumentRow = {
   id: string;
   workspace_id: string;
   title: string;
   content: string;
   source: string | null;
   created_at: string;
-}
+};
 
-export interface EventRow {
+export type EventRow = {
   id: number;
   workspace_id: string;
   name: string;
@@ -288,9 +288,9 @@ export interface EventRow {
   subject_id: string | null;
   payload: Json;
   created_at: string;
-}
+};
 
-export interface LlmCallRow {
+export type LlmCallRow = {
   id: number;
   workspace_id: string | null;
   agent: string;
@@ -305,9 +305,9 @@ export interface LlmCallRow {
   subject_id: string | null;
   error: string | null;
   created_at: string;
-}
+};
 
-export interface Database {
+export type Database = {
   public: {
     Tables: {
       workspaces: Table<WorkspaceRow>;
@@ -329,8 +329,11 @@ export interface Database {
       events: Table<EventRow>;
       llm_calls: Table<LlmCallRow>;
     };
-    Views: Record<string, never>;
-    Functions: Record<string, never>;
+    // `{ [_ in never]: never }` and not `Record<string, never>`: an index
+    // signature here intersects with Tables and collapses every row type to
+    // `never`. This is the idiom the Supabase generator emits.
+    Views: { [_ in never]: never };
+    Functions: { [_ in never]: never };
     Enums: {
       membership_role: MembershipRole;
       linkedin_account_status: LinkedinAccountStatus;
@@ -341,6 +344,6 @@ export interface Database {
       reply_mode: ReplyModeDb;
       integration_kind: IntegrationKind;
     };
-    CompositeTypes: Record<string, never>;
+    CompositeTypes: { [_ in never]: never };
   };
-}
+};
