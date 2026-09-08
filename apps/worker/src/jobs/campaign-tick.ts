@@ -1,4 +1,5 @@
 import { canTransition, LINKEDIN_LIMITS, type CampaignProspectStatus } from "@le/shared";
+import { entitlementFor } from "@le/billing";
 import { checkAction, dailyInviteCap, nextGapMs } from "@le/linkedin";
 import type { Db } from "@le/db";
 import type { Queues } from "../queues.js";
@@ -22,8 +23,17 @@ export async function runCampaignTick(db: Db, queues: Queues, now: Date = new Da
   if (!campaigns?.length) return 0;
 
   let enqueued = 0;
+  // One entitlement lookup per workspace, not per campaign.
+  const entitled = new Map<string, boolean>();
 
   for (const campaign of campaigns) {
+    // A trial that has ended, or a subscription that has, stops outreach here.
+    // Reading is never blocked; see packages/billing/src/entitlement.ts.
+    if (!entitled.has(campaign.workspace_id)) {
+      entitled.set(campaign.workspace_id, await canWorkspaceSend(db, campaign.workspace_id, now));
+    }
+    if (!entitled.get(campaign.workspace_id)) continue;
+
     const { data: accountRow } = await db
       .from("linkedin_accounts")
       .select(
@@ -139,4 +149,24 @@ async function enqueueFollowUps(
     count++;
   }
   return count;
+}
+
+/** Whether billing permits this workspace to start new outreach. */
+async function canWorkspaceSend(db: Db, workspaceId: string, now: Date): Promise<boolean> {
+  const { data } = await db
+    .from("workspaces")
+    .select("plan, trial_ends_at, subscription_status, seats")
+    .eq("id", workspaceId)
+    .maybeSingle();
+  if (!data) return false;
+
+  return entitlementFor(
+    {
+      plan: data.plan as never,
+      trialEndsAt: data.trial_ends_at,
+      subscriptionStatus: (data.subscription_status ?? null) as never,
+      seats: data.seats ?? 1,
+    },
+    now,
+  ).canSend;
 }

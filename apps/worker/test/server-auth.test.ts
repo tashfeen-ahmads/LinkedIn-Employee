@@ -6,7 +6,10 @@ import type { Queues } from "../src/queues.js";
 
 const SECRET = "s".repeat(48);
 
-function makeApp({ secret }: { secret: string | undefined } = { secret: SECRET }) {
+function makeApp({
+  secret,
+  isMember = true,
+}: { secret: string | undefined; isMember?: boolean } = { secret: SECRET }) {
   const added: Array<{ queue: string; data: unknown }> = [];
   const queue = (name: string) => ({
     add: async (_jobName: string, data: unknown) => {
@@ -14,8 +17,19 @@ function makeApp({ secret }: { secret: string | undefined } = { secret: SECRET }
     },
   });
 
+  // Minimal stub: every endpoint under test asks the same membership question.
+  const db = {
+    from: () => ({
+      select: () => ({
+        eq: () => ({
+          eq: () => ({ maybeSingle: async () => ({ data: isMember ? { id: "m1" } : null }) }),
+        }),
+      }),
+    }),
+  } as unknown as WorkerContext["db"];
+
   const ctx = {
-    db: {} as WorkerContext["db"],
+    db,
     linkedin: new MockLinkedInProvider(),
     env: {
       INTERNAL_API_SECRET: secret,
@@ -105,6 +119,33 @@ describe("internal API authentication", () => {
 
     expect(res.status).toBe(503);
     expect(added).toHaveLength(0);
+  });
+
+  it("refuses a workspace the named user does not belong to", async () => {
+    // Second lock: even with the shared secret, the worker will not bind
+    // credentials to a workspace the user is not a member of.
+    const { app, added } = makeApp({ secret: SECRET, isMember: false });
+    const res = await app.request("/jobs/strategy", {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${SECRET}` },
+      body: validStrategyBody,
+    });
+
+    expect(res.status).toBe(403);
+    expect(added).toHaveLength(0);
+  });
+
+  it("guards account linking against non-members too", async () => {
+    const { app } = makeApp({ secret: SECRET, isMember: false });
+    const res = await app.request("/auth/linkedin/link", {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${SECRET}` },
+      body: JSON.stringify({
+        workspaceId: "11111111-1111-4111-8111-111111111111",
+        userId: "22222222-2222-4222-8222-222222222222",
+      }),
+    });
+    expect(res.status).toBe(403);
   });
 
   it("leaves the health check open", async () => {

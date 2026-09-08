@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
+import { entitlementFor, entitlementMessage } from "@le/billing";
 
 const NAV = [
   { href: "/app", label: "Overview" },
@@ -9,6 +10,7 @@ const NAV = [
   { href: "/app/inbox", label: "Inbox" },
   { href: "/app/meetings", label: "Meetings" },
   { href: "/app/team", label: "Team" },
+  { href: "/app/billing", label: "Billing" },
 ];
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -22,6 +24,20 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     .select("id", { count: "exact", head: true })
     .eq("workspace_id", session.workspaceId)
     .eq("status", "pending");
+
+  const { data: workspace } = await supabase
+    .from("workspaces")
+    .select("plan, trial_ends_at, subscription_status, seats")
+    .eq("id", session.workspaceId)
+    .single();
+
+  const entitlement = entitlementFor({
+    plan: (workspace?.plan ?? "trial") as never,
+    trialEndsAt: workspace?.trial_ends_at ?? null,
+    subscriptionStatus: workspace?.subscription_status ?? null,
+    seats: workspace?.seats ?? 1,
+  });
+  const billingMessage = entitlementMessage(entitlement);
 
   const { data: account } = await supabase
     .from("linkedin_accounts")
@@ -71,6 +87,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       </aside>
 
       <div style={{ flex: 1, minWidth: 0 }}>
+        {billingMessage ? (
+          <div
+            className={`notice ${entitlement.canSend ? "warning" : "danger"}`}
+            style={{ margin: "1rem 1.5rem 0", borderRadius: "var(--radius)" }}
+          >
+            {billingMessage}{" "}
+            <Link href="/app/billing" style={{ textDecoration: "underline" }}>
+              Billing
+            </Link>
+          </div>
+        ) : null}
         {account && account.status !== "active" ? (
           <div
             className={`notice ${account.status === "restricted" ? "danger" : "warning"}`}

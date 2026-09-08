@@ -3,6 +3,12 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { exchangeGoogleCode, googleConsentUrl } from "@le/calendar";
 import { exchangeHubSpotCode, hubspotConsentUrl } from "@le/crm";
+import {
+  StripeClient,
+  normalizeSubscriptionStatus,
+  planFromPriceLookupKey,
+  verifyStripeWebhook,
+} from "@le/billing";
 import { decryptJson, encryptJson } from "./crypto.js";
 import type { MiddlewareHandler } from "hono";
 import type { Queues } from "./queues.js";
@@ -34,6 +40,35 @@ const LinkRequest = z.object({
   workspaceId: z.string().uuid(),
   userId: z.string().uuid(),
 });
+
+const CheckoutRequest = LinkRequest.extend({
+  plan: z.enum(["solo", "pro", "teams"]),
+  seats: z.number().int().min(1).max(100).default(1),
+  email: z.string().email().optional(),
+});
+
+/**
+ * Verifies the named user really belongs to the named workspace.
+ *
+ * The shared secret already proves the caller is the web app, which derives
+ * both ids from a signed-in session. This is the second lock: if that secret
+ * ever leaks, an attacker still cannot bind their own HubSpot portal or
+ * calendar to a workspace they are not a member of, which would otherwise
+ * redirect every prospect conversation in that workspace to them.
+ */
+async function assertMembership(
+  db: WorkerContext["db"],
+  workspaceId: string,
+  userId: string,
+): Promise<boolean> {
+  const { data } = await db
+    .from("memberships")
+    .select("id")
+    .eq("workspace_id", workspaceId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  return Boolean(data);
+}
 
 /** Signed state so the OAuth callback cannot be used to bind someone else's calendar. */
 function encodeState(workspaceId: string, userId: string, key: string): string {
@@ -68,6 +103,9 @@ export function createServer(ctx: WorkerContext, queues: Queues): Hono {
   app.post("/jobs/strategy", async (c) => {
     const parsed = StrategyRequest.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: "invalid request" }, 400);
+    if (!(await assertMembership(ctx.db, parsed.data.workspaceId, parsed.data.userId))) {
+      return c.json({ error: "not a member of that workspace" }, 403);
+    }
     await queues.strategy.add("strategy", parsed.data);
     return c.json({ queued: true });
   });
@@ -75,6 +113,9 @@ export function createServer(ctx: WorkerContext, queues: Queues): Hono {
   app.post("/jobs/targeting", async (c) => {
     const parsed = TargetingRequest.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: "invalid request" }, 400);
+    if (!(await assertMembership(ctx.db, parsed.data.workspaceId, parsed.data.userId))) {
+      return c.json({ error: "not a member of that workspace" }, 403);
+    }
     await queues.targeting.add("targeting", parsed.data);
     return c.json({ queued: true });
   });
@@ -111,6 +152,10 @@ export function createServer(ctx: WorkerContext, queues: Queues): Hono {
   app.post("/auth/linkedin/link", async (c) => {
     const parsed = LinkRequest.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: "invalid request" }, 400);
+
+    if (!(await assertMembership(ctx.db, parsed.data.workspaceId, parsed.data.userId))) {
+      return c.json({ error: "not a member of that workspace" }, 403);
+    }
 
     const link = await ctx.linkedin.createHostedAuthLink({
       userId: parsed.data.userId,
@@ -178,6 +223,9 @@ export function createServer(ctx: WorkerContext, queues: Queues): Hono {
     if (!ctx.env.GOOGLE_CLIENT_ID || !ctx.env.CREDENTIALS_KEY) {
       return c.json({ error: "google calendar is not configured" }, 501);
     }
+    if (!(await assertMembership(ctx.db, parsed.data.workspaceId, parsed.data.userId))) {
+      return c.json({ error: "not a member of that workspace" }, 403);
+    }
 
     const url = googleConsentUrl({
       clientId: ctx.env.GOOGLE_CLIENT_ID,
@@ -244,6 +292,9 @@ export function createServer(ctx: WorkerContext, queues: Queues): Hono {
     if (!ctx.env.HUBSPOT_CLIENT_ID || !ctx.env.CREDENTIALS_KEY) {
       return c.json({ error: "hubspot is not configured" }, 501);
     }
+    if (!(await assertMembership(ctx.db, parsed.data.workspaceId, parsed.data.userId))) {
+      return c.json({ error: "not a member of that workspace" }, 403);
+    }
 
     const url = hubspotConsentUrl({
       clientId: ctx.env.HUBSPOT_CLIENT_ID,
@@ -299,7 +350,130 @@ export function createServer(ctx: WorkerContext, queues: Queues): Hono {
     }
   });
 
+  // Billing. Checkout and the portal are internal calls; the webhook is public
+  // and carries Stripe's own signature.
+  app.post("/jobs/checkout", async (c) => {
+    const parsed = CheckoutRequest.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "invalid request" }, 400);
+    if (!(await assertMembership(ctx.db, parsed.data.workspaceId, parsed.data.userId))) {
+      return c.json({ error: "not a member of that workspace" }, 403);
+    }
+
+    const priceId = {
+      solo: ctx.env.STRIPE_PRICE_SOLO,
+      pro: ctx.env.STRIPE_PRICE_PRO,
+      teams: ctx.env.STRIPE_PRICE_TEAMS,
+    }[parsed.data.plan];
+    if (!ctx.env.STRIPE_SECRET_KEY || !ctx.env.STRIPE_WEBHOOK_SECRET || !priceId) {
+      return c.json({ error: "billing is not configured" }, 501);
+    }
+
+    const stripe = new StripeClient({
+      secretKey: ctx.env.STRIPE_SECRET_KEY,
+      webhookSecret: ctx.env.STRIPE_WEBHOOK_SECRET,
+    });
+
+    try {
+      const session = await stripe.createCheckoutSession({
+        workspaceId: parsed.data.workspaceId,
+        priceId,
+        quantity: parsed.data.seats,
+        customerEmail: parsed.data.email,
+        successUrl: `${ctx.env.APP_URL}/app/billing?checkout=success`,
+        cancelUrl: `${ctx.env.APP_URL}/app/billing?checkout=cancelled`,
+      });
+      return c.json({ url: session.url });
+    } catch (error) {
+      console.error("checkout failed", error);
+      return c.json({ error: "could not start checkout" }, 502);
+    }
+  });
+
+  app.post("/webhooks/stripe", async (c) => {
+    if (!ctx.env.STRIPE_WEBHOOK_SECRET) return c.json({ error: "not configured" }, 501);
+
+    const body = await c.req.text();
+    const signature = c.req.header("stripe-signature") ?? "";
+
+    let event;
+    try {
+      event = verifyStripeWebhook({ body, signatureHeader: signature, secret: ctx.env.STRIPE_WEBHOOK_SECRET });
+    } catch (error) {
+      // An unverified billing event is a free subscription for whoever found
+      // the URL, so this rejects rather than logs and continues.
+      console.error("rejected stripe webhook", error);
+      return c.json({ error: "invalid signature" }, 401);
+    }
+
+    // Stripe redelivers, and order is not guaranteed. Recording the event id
+    // first makes a repeat a no-op.
+    const { error: insertError } = await ctx.db.from("billing_events").insert({
+      id: event.id,
+      type: event.type,
+      payload: event as never,
+      workspace_id: workspaceIdFrom(event.data.object),
+    });
+    if (insertError) return c.json({ received: true, duplicate: true });
+
+    await applyBillingEvent(ctx, event);
+    return c.json({ received: true });
+  });
+
   return app;
+}
+
+/** Applies a verified Stripe event to the workspace it names. */
+async function applyBillingEvent(
+  ctx: WorkerContext,
+  event: { type: string; data: { object: Record<string, unknown> } },
+): Promise<void> {
+  const object = event.data.object;
+  const workspaceId = workspaceIdFrom(object);
+  if (!workspaceId) return;
+
+  if (event.type === "checkout.session.completed") {
+    await ctx.db
+      .from("workspaces")
+      .update({
+        stripe_customer_id: asString(object.customer),
+        stripe_subscription_id: asString(object.subscription),
+      })
+      .eq("id", workspaceId);
+    return;
+  }
+
+  if (event.type.startsWith("customer.subscription.")) {
+    const status = normalizeSubscriptionStatus(asString(object.status));
+    const items = object.items as { data?: Array<{ price?: { lookup_key?: string }; quantity?: number }> } | undefined;
+    const first = items?.data?.[0];
+    const periodEnd = typeof object.current_period_end === "number"
+      ? new Date(object.current_period_end * 1000).toISOString()
+      : null;
+
+    await ctx.db
+      .from("workspaces")
+      .update({
+        subscription_status: status,
+        // A deleted subscription keeps its plan name so the UI can say what
+        // they had, while the status is what actually gates sending.
+        ...(event.type === "customer.subscription.deleted"
+          ? {}
+          : { plan: planFromPriceLookupKey(first?.price?.lookup_key) }),
+        seats: first?.quantity ?? 1,
+        current_period_end: periodEnd,
+        stripe_subscription_id: asString(object.id),
+      })
+      .eq("id", workspaceId);
+  }
+}
+
+function workspaceIdFrom(object: Record<string, unknown>): string | null {
+  const metadata = object.metadata as Record<string, unknown> | undefined;
+  return asString(metadata?.workspace_id) ?? asString(object.client_reference_id);
+}
+
+function asString(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
 }
 
 /**

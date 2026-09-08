@@ -17,6 +17,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@le/billing':
+        specifier: workspace:*
+        version: link:../../packages/billing
       '@le/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -66,6 +69,9 @@ importers:
       '@le/agents':
         specifier: workspace:*
         version: link:../../packages/agents
+      '@le/billing':
+        specifier: workspace:*
+        version: link:../../packages/billing
       '@le/calendar':
         specifier: workspace:*
         version: link:../../packages/calendar
@@ -125,6 +131,18 @@ importers:
       tsx:
         specifier: ^4.19.0
         version: 4.23.13
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.0
+        version: 3.2.7(@types/node@22.20.1)(tsx@4.23.13)
+
+  packages/billing:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.20.1
       typescript:
         specifier: ^5.9.0
         version: 5.9.3

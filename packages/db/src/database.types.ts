@@ -48,6 +48,8 @@ type Table<Row, Insert = Partial<Row>, Update = Partial<Row>> = {
   Relationships: [];
 };
 
+export type SubscriptionStatus = "active" | "trialing" | "past_due" | "canceled" | "unpaid";
+
 export type WorkspaceRow = {
   id: string;
   name: string;
@@ -56,8 +58,20 @@ export type WorkspaceRow = {
   stripe_subscription_id: string | null;
   plan: string;
   trial_ends_at: string | null;
+  subscription_status: SubscriptionStatus | null;
+  seats: number;
+  current_period_end: string | null;
   data_retention_days: number;
   created_at: string;
+};
+
+export type BillingEventRow = {
+  id: string;
+  workspace_id: string | null;
+  type: string;
+  stripe_created_at: string | null;
+  payload: Json;
+  processed_at: string;
 };
 
 export type ProfileRow = {
@@ -311,6 +325,7 @@ export type Database = {
   public: {
     Tables: {
       workspaces: Table<WorkspaceRow>;
+      billing_events: Table<BillingEventRow>;
       profiles: Table<ProfileRow>;
       memberships: Table<MembershipRow>;
       linkedin_accounts: Table<LinkedinAccountRow>;
@@ -343,6 +358,7 @@ export type Database = {
       message_source: MessageSource;
       reply_mode: ReplyModeDb;
       integration_kind: IntegrationKind;
+      subscription_status: SubscriptionStatus;
     };
     CompositeTypes: { [_ in never]: never };
   };

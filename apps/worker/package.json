@@ -21,7 +21,8 @@
     "ioredis": "^5.4.0",
     "zod": "^4.1.0",
     "@le/calendar": "workspace:*",
-    "@le/crm": "workspace:*"
+    "@le/crm": "workspace:*",
+    "@le/billing": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
