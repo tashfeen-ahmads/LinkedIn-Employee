@@ -1,0 +1,142 @@
+:root {
+  --bg: #ffffff;
+  --surface: #f7f8fa;
+  --surface-raised: #ffffff;
+  --border: #e3e6ea;
+  --text: #14181f;
+  --text-muted: #5b6472;
+  --accent: #1a56db;
+  --accent-hover: #1743ad;
+  --accent-soft: #eef3fe;
+  --positive: #0f7b52;
+  --positive-soft: #e6f4ee;
+  --warning: #92500a;
+  --warning-soft: #fdf1e0;
+  --danger: #b32318;
+  --danger-soft: #fdeceb;
+  --radius: 10px;
+  --shadow: 0 1px 2px rgba(20, 24, 31, 0.06), 0 4px 12px rgba(20, 24, 31, 0.04);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e1117;
+    --surface: #151a22;
+    --surface-raised: #1a212b;
+    --border: #262f3c;
+    --text: #e9edf3;
+    --text-muted: #98a3b3;
+    --accent: #6f9bff;
+    --accent-hover: #8fb2ff;
+    --accent-soft: #16233d;
+    --positive: #4ecf9a;
+    --positive-soft: #10281f;
+    --warning: #e0a350;
+    --warning-soft: #2a1f10;
+    --danger: #f4756a;
+    --danger-soft: #2c1512;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 14px rgba(0, 0, 0, 0.3);
+  }
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-size: 16px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: inherit; text-decoration: none; }
+
+h1, h2, h3 { line-height: 1.15; letter-spacing: -0.02em; margin: 0 0 0.5em; }
+h1 { font-size: clamp(2.1rem, 5vw, 3.4rem); font-weight: 680; }
+h2 { font-size: clamp(1.5rem, 3vw, 2.1rem); font-weight: 640; }
+h3 { font-size: 1.1rem; font-weight: 620; }
+p { margin: 0 0 1em; }
+
+.container { width: min(1120px, 100% - 3rem); margin-inline: auto; }
+.narrow { width: min(720px, 100% - 3rem); margin-inline: auto; }
+
+.muted { color: var(--text-muted); }
+.small { font-size: 0.875rem; }
+.mono { font-variant-numeric: tabular-nums; }
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.7rem 1.15rem;
+  border-radius: var(--radius);
+  border: 1px solid transparent;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  font-weight: 560;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+.btn:hover { background: var(--accent-hover); }
+.btn[disabled] { opacity: 0.55; cursor: not-allowed; }
+.btn.secondary { background: transparent; border-color: var(--border); color: var(--text); }
+.btn.secondary:hover { background: var(--surface); }
+.btn.small { padding: 0.4rem 0.75rem; font-size: 0.85rem; }
+
+.card {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+}
+
+.field { display: block; margin-bottom: 1rem; }
+.field span { display: block; font-size: 0.875rem; font-weight: 550; margin-bottom: 0.35rem; }
+.field input, .field textarea, .field select {
+  width: 100%;
+  padding: 0.62rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.95rem;
+}
+.field input:focus, .field textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 550;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+.pill.accent { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+.pill.positive { background: var(--positive-soft); color: var(--positive); border-color: transparent; }
+.pill.warning { background: var(--warning-soft); color: var(--warning); border-color: transparent; }
+.pill.danger { background: var(--danger-soft); color: var(--danger); border-color: transparent; }
+
+table { width: 100%; border-collapse: collapse; font-size: 0.92rem; }
+th, td { text-align: left; padding: 0.7rem 0.75rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-muted); font-weight: 600; }
+.table-scroll { overflow-x: auto; }
+
+.notice {
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 0.9rem;
+}
+.notice.warning { background: var(--warning-soft); border-color: transparent; color: var(--warning); }
+.notice.danger { background: var(--danger-soft); border-color: transparent; color: var(--danger); }
