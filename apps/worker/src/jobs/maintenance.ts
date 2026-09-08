@@ -22,7 +22,7 @@ export async function runMaintenance(ctx: WorkerContext, now: Date = new Date())
 
   for (const account of accounts ?? []) {
     try {
-      await pollHealth(db, ctx.linkedin, account);
+      await pollHealth(db, ctx.linkedin, account, { email: ctx.email, appUrl: ctx.env.APP_URL });
     } catch (err) {
       console.error("health poll failed", account.id, err);
     }

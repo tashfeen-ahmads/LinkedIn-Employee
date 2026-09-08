@@ -1,7 +1,10 @@
 import type { Db } from "@le/db";
 import type { AccountHealth, LinkedInProvider } from "@le/linkedin";
 import type { AccountUsage, WorkingHours } from "@le/linkedin";
+import { accountPausedEmail } from "@le/email";
+import type { EmailProvider } from "@le/email";
 import { recordEvent } from "./context.js";
+import { trySend } from "./email.js";
 
 export interface AccountRecord {
   id: string;
@@ -73,6 +76,7 @@ export async function applyHealth(
   db: Db,
   account: { id: string; workspace_id: string; status: string },
   health: AccountHealth,
+  notify?: { email: EmailProvider | null; appUrl: string },
 ): Promise<boolean> {
   if (health === "ok") {
     if (account.status === "warning") {
@@ -94,6 +98,34 @@ export async function applyHealth(
     subjectId: account.id,
     payload: { health },
   });
+
+  // Tell the rep now. Otherwise they find out days later by noticing that
+  // nothing happened.
+  if (notify && health !== "warning") {
+    const { data: owner } = await db
+      .from("linkedin_accounts")
+      .select("user_id")
+      .eq("id", account.id)
+      .maybeSingle();
+    if (owner) {
+      const { data: profile } = await db
+        .from("profiles")
+        .select("email")
+        .eq("id", owner.user_id)
+        .maybeSingle();
+      if (profile?.email) {
+        await trySend(
+          notify.email,
+          accountPausedEmail({
+            to: profile.email,
+            appUrl: notify.appUrl,
+            status,
+            detail: `The provider reported the account as ${health}.`,
+          }),
+        );
+      }
+    }
+  }
   // A warning still lets the current action finish; anything worse stops it.
   return health === "warning";
 }
@@ -116,8 +148,9 @@ export async function pollHealth(
   db: Db,
   provider: LinkedInProvider,
   account: { id: string; workspace_id: string; status: string; provider_account_id: string | null },
+  notify?: { email: EmailProvider | null; appUrl: string },
 ): Promise<void> {
   if (!account.provider_account_id) return;
   const health = await provider.getAccountHealth(account.provider_account_id);
-  await applyHealth(db, account, health);
+  await applyHealth(db, account, health, notify);
 }

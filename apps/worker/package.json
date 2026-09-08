@@ -22,7 +22,8 @@
     "zod": "^4.1.0",
     "@le/calendar": "workspace:*",
     "@le/crm": "workspace:*",
-    "@le/billing": "workspace:*"
+    "@le/billing": "workspace:*",
+    "@le/email": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

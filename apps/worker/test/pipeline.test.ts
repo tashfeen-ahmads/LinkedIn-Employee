@@ -147,6 +147,7 @@ function harness(overrides: { plan?: string; trialEndsAt?: string } = {}): Harne
   const ctx = {
     db: db.asDb(),
     linkedin,
+    email: null,
     env: {
       LINKEDIN_PROVIDER: "mock",
       CALENDAR_PROVIDER: "mock",

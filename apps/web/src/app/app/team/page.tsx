@@ -81,14 +81,28 @@ async function inviteMember(formData: FormData) {
     .is("accepted_at", null)
     .is("revoked_at", null);
 
-  await supabase.from("invitations").insert({
-    workspace_id: session.workspaceId,
-    email,
-    role: role as "rep" | "manager" | "admin",
-    token: createInviteToken(),
-    invited_by: session.userId,
-    expires_at: inviteExpiry(),
-  });
+  const { data: invitation } = await supabase
+    .from("invitations")
+    .insert({
+      workspace_id: session.workspaceId,
+      email,
+      role: role as "rep" | "manager" | "admin",
+      token: createInviteToken(),
+      invited_by: session.userId,
+      expires_at: inviteExpiry(),
+    })
+    .select("id")
+    .single();
+
+  // The worker sends it. If mail is not configured the invitation still exists
+  // and the link is shown below, so this never blocks adding a teammate.
+  if (invitation) {
+    await callWorker("/jobs/send-invite", {
+      workspaceId: session.workspaceId,
+      userId: session.userId,
+      invitationId: invitation.id,
+    });
+  }
 
   revalidatePath("/app/team");
 }
@@ -244,8 +258,8 @@ export default async function TeamPage({
           <h3>Invite a teammate</h3>
           <p className="small muted">
             Each rep connects their own LinkedIn account. Nobody shares a login, and no two reps will
-            ever message the same person. We do not send the invitation email yet — copy the link
-            below and send it to them yourself.
+            ever message the same person. We email the invitation; the link is also below in case it
+            does not arrive.
           </p>
           <form action={inviteMember} style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "flex-end" }}>
             <label className="field" style={{ flex: "1 1 240px", marginBottom: 0 }}>

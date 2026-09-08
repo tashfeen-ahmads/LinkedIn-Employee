@@ -14,6 +14,8 @@ import type { MiddlewareHandler } from "hono";
 import type { Queues } from "./queues.js";
 import type { WorkerContext } from "./context.js";
 import { eraseProspect, exportWorkspace } from "./jobs/retention.js";
+import { inviteEmail } from "@le/email";
+import { trySend } from "./email.js";
 
 const StrategyRequest = z.object({
   workspaceId: z.string().uuid(),
@@ -40,6 +42,10 @@ const SendReplyRequest = z.object({
 const LinkRequest = z.object({
   workspaceId: z.string().uuid(),
   userId: z.string().uuid(),
+});
+
+const InviteEmailRequest = LinkRequest.extend({
+  invitationId: z.string().uuid(),
 });
 
 const EraseRequest = LinkRequest.extend({
@@ -356,6 +362,52 @@ export function createServer(ctx: WorkerContext, queues: Queues): Hono {
       console.error("hubspot callback failed", error);
       return c.redirect(`${ctx.env.APP_URL}/app/team?error=exchange_failed`);
     }
+  });
+
+  // Delivers an invitation that the web app has already created and
+  // authorised. The token is read here rather than accepted from the caller,
+  // so this endpoint cannot be used to mail an arbitrary string as an invite.
+  app.post("/jobs/send-invite", async (c) => {
+    const parsed = InviteEmailRequest.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "invalid request" }, 400);
+    if (!(await assertMembership(ctx.db, parsed.data.workspaceId, parsed.data.userId))) {
+      return c.json({ error: "not a member of that workspace" }, 403);
+    }
+
+    const { data: invitation } = await ctx.db
+      .from("invitations")
+      .select("id, email, role, token, expires_at, accepted_at, revoked_at")
+      .eq("id", parsed.data.invitationId)
+      .eq("workspace_id", parsed.data.workspaceId)
+      .maybeSingle();
+    if (!invitation || invitation.accepted_at || invitation.revoked_at) {
+      return c.json({ error: "invitation is not sendable" }, 409);
+    }
+
+    const [{ data: workspace }, { data: inviter }] = await Promise.all([
+      ctx.db.from("workspaces").select("name").eq("id", parsed.data.workspaceId).maybeSingle(),
+      ctx.db.from("profiles").select("full_name").eq("id", parsed.data.userId).maybeSingle(),
+    ]);
+
+    const days = Math.max(
+      1,
+      Math.ceil((Date.parse(invitation.expires_at) - Date.now()) / 86_400_000),
+    );
+
+    const delivered = await trySend(
+      ctx.email,
+      inviteEmail({
+        to: invitation.email,
+        workspaceName: workspace?.name ?? "a workspace",
+        inviterName: inviter?.full_name ?? null,
+        role: invitation.role,
+        acceptUrl: `${ctx.env.APP_URL}/invite/${invitation.token}`,
+        expiresInDays: days,
+      }),
+    );
+
+    // A false here is not an error: the UI still shows the link to copy.
+    return c.json({ delivered });
   });
 
   // Data subject rights. Both are internal calls, so they inherit the shared

@@ -73,7 +73,7 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
       providerId: prospect.provider_id,
       note: renderTemplate(campaign.connection_note, prospect.first_name),
     });
-    if (result.health) await applyHealth(db, accountRow, result.health);
+    if (result.health) await applyHealth(db, accountRow, result.health, { email: ctx.email, appUrl: ctx.env.APP_URL });
     if (!result.ok) {
       await failProspect(ctx, cp.id, result.error ?? "invitation failed");
       return;
@@ -124,7 +124,7 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
     providerId: prospect.provider_id ?? undefined,
     text: body,
   });
-  if (result.health) await applyHealth(db, accountRow, result.health);
+  if (result.health) await applyHealth(db, accountRow, result.health, { email: ctx.email, appUrl: ctx.env.APP_URL });
   if (!result.ok) {
     await failProspect(ctx, cp.id, result.error ?? "message failed");
     return;
@@ -214,7 +214,7 @@ async function sendApprovedReply(
     providerId: prospect.provider_id ?? undefined,
     text: draft.body,
   });
-  if (result.health) await applyHealth(db, account, result.health);
+  if (result.health) await applyHealth(db, account, result.health, { email: ctx.email, appUrl: ctx.env.APP_URL });
   if (!result.ok) return;
 
   await recordAction(db, account.id, "message");

@@ -10,6 +10,7 @@ import { handleInboundMessage } from "./jobs/inbound.js";
 import { runStrategyJob } from "./jobs/strategy.js";
 import { runTargetingJob } from "./jobs/targeting.js";
 import { runMaintenance } from "./jobs/maintenance.js";
+import { runDailyDigest } from "./jobs/digest.js";
 import { createServer } from "./server.js";
 
 const env = loadEnv();
@@ -54,6 +55,7 @@ const workers = [
     concurrency: 4,
   }),
   new Worker(QUEUE_NAMES.maintenance, () => runMaintenance(ctx), { connection, concurrency: 1 }),
+  new Worker(QUEUE_NAMES.digest, () => runDailyDigest(ctx), { connection, concurrency: 1 }),
 ];
 
 for (const worker of workers) {

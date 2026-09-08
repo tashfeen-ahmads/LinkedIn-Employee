@@ -81,7 +81,6 @@ live campaign and record the number in its README.
 ## Known gaps
 
 - Salesforce, Microsoft 365 calendar, and the email follow-up channel.
-- Invitations are created but not emailed; the admin copies the link.
 - The Solo plan's no-Sales-Navigator path in `docs/02-product-spec.md` should
   not be built as written. LinkedIn sued Proxycurl and it shut down in July
   2025; see `docs/06-research.md`.

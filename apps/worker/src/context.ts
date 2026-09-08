@@ -1,11 +1,14 @@
 import { createAnthropic, type AgentContext } from "@le/agents";
 import { createServiceClient, type Db } from "@le/db";
 import { MockLinkedInProvider, UnipileProvider, type LinkedInProvider } from "@le/linkedin";
+import type { EmailProvider } from "@le/email";
 import type { Env } from "./config.js";
+import { createEmailProvider } from "./email.js";
 
 export interface WorkerContext {
   db: Db;
   linkedin: LinkedInProvider;
+  email: EmailProvider | null;
   env: Env;
   /** Agent context bound to a workspace so usage is attributed correctly. */
   agentsFor(workspaceId: string): AgentContext;
@@ -27,6 +30,7 @@ export function createWorkerContext(env: Env): WorkerContext {
   return {
     db,
     linkedin,
+    email: createEmailProvider(env),
     env,
     agentsFor(workspaceId: string): AgentContext {
       return {

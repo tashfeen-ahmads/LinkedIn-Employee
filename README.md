@@ -16,6 +16,7 @@ packages/linkedin  Provider interface, Unipile adapter, mock, and the rate limit
 packages/calendar  Calendar interface, Google adapter, and the deterministic slot finder
 packages/crm       CRM interface, HubSpot adapter, and signed outbound webhooks
 packages/billing   Entitlement rules and the Stripe client
+packages/email     Email provider, templates, and the HTML renderer
 packages/shared    Zod schemas, campaign state machine, safety caps
 packages/db        Supabase migrations, row-level security, types
 docs/              Plan and research
@@ -46,7 +47,8 @@ sending, honours provider health signals, and writes an audit record.
 | Calendar availability and meeting booking | Built (Google); Microsoft 365 not yet |
 | CRM sync | HubSpot and signed webhooks; Salesforce not yet |
 | Billing and trial enforcement | Built (Stripe) |
-| Team invitations | Built; the invite email is not sent, the admin copies the link |
+| Team invitations | Built, and emailed |
+| Daily digest and account-paused alerts | Built |
 | Data retention, erasure and export | Built |
 | End-to-end pipeline tests | Built, and verified by breaking the code on purpose |
 | Internal API auth, encrypted OAuth tokens, RLS | Built |

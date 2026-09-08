@@ -26,6 +26,11 @@ const EnvSchema = z.object({
   STRIPE_PRICE_SOLO: z.string().optional(),
   STRIPE_PRICE_PRO: z.string().optional(),
   STRIPE_PRICE_TEAMS: z.string().optional(),
+  EMAIL_PROVIDER: z.enum(["resend", "mock", "off"]).default("off"),
+  RESEND_API_KEY: z.string().optional(),
+  /** e.g. "LinkedIn Employee <hello@yourdomain.com>" */
+  EMAIL_FROM: z.string().optional(),
+  EMAIL_REPLY_TO: z.string().optional(),
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   /** 32 bytes of hex. Encrypts OAuth tokens at rest; see src/crypto.ts. */

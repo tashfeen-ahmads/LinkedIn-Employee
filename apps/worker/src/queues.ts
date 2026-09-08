@@ -8,6 +8,7 @@ export const QUEUE_NAMES = {
   linkedinAction: "linkedin-action",
   inbound: "inbound-message",
   maintenance: "maintenance",
+  digest: "digest",
 } as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
@@ -60,6 +61,7 @@ export interface Queues {
   linkedinAction: Queue<LinkedInActionJob>;
   inbound: Queue<InboundMessageJob>;
   maintenance: Queue<Record<string, never>>;
+  digest: Queue<Record<string, never>>;
 }
 
 const DEFAULT_JOB_OPTIONS: JobsOptions = {
@@ -78,6 +80,7 @@ export function createQueues(connection: IORedis): Queues {
     linkedinAction: new Queue(QUEUE_NAMES.linkedinAction, opts),
     inbound: new Queue(QUEUE_NAMES.inbound, opts),
     maintenance: new Queue(QUEUE_NAMES.maintenance, opts),
+    digest: new Queue(QUEUE_NAMES.digest, opts),
   };
 }
 
@@ -96,5 +99,11 @@ export async function scheduleRepeatables(queues: Queues): Promise<void> {
     "nightly",
     { pattern: "0 3 * * *" },
     { name: "maintenance", data: {} },
+  );
+  // Weekday mornings only: a digest on Sunday is an email nobody wants.
+  await queues.digest.upsertJobScheduler(
+    "weekday-morning",
+    { pattern: "0 7 * * 1-5" },
+    { name: "digest", data: {} },
   );
 }

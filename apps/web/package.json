@@ -19,7 +19,8 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "server-only": "^0.0.1",
-    "@le/billing": "workspace:*"
+    "@le/billing": "workspace:*",
+    "@le/email": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

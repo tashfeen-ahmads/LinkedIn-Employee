@@ -31,6 +31,7 @@ function makeApp({
   const ctx = {
     db,
     linkedin: new MockLinkedInProvider(),
+    email: null,
     env: {
       INTERNAL_API_SECRET: secret,
       APP_URL: "http://app.test",
