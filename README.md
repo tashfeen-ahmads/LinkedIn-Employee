@@ -9,13 +9,16 @@ built to be safer for the rep's LinkedIn account and more transparent about why 
 ## Repository layout
 
 ```
-apps/web         Next.js 15 app: marketing site, auth, onboarding, dashboard, approval inbox
-apps/worker      BullMQ worker: agent jobs, campaign pacing, LinkedIn executor, webhooks
-packages/agents  The three agents on Claude, with prompts and schemas versioned together
+apps/web           Next.js 15: marketing site, auth, onboarding, dashboard, approval inbox, billing
+apps/worker        BullMQ worker: agent jobs, campaign pacing, LinkedIn executor, webhooks, OAuth
+packages/agents    The three agents on Claude, with prompts, schemas and evals versioned together
 packages/linkedin  Provider interface, Unipile adapter, mock, and the rate limiter
-packages/shared  Zod schemas, campaign state machine, safety caps
-packages/db      Supabase migrations, row-level security, generated types
-docs/            Plan and research
+packages/calendar  Calendar interface, Google adapter, and the deterministic slot finder
+packages/crm       CRM interface, HubSpot adapter, and signed outbound webhooks
+packages/billing   Entitlement rules and the Stripe client
+packages/shared    Zod schemas, campaign state machine, safety caps
+packages/db        Supabase migrations, row-level security, types
+docs/              Plan and research
 ```
 
 ## How it fits together
@@ -32,6 +35,30 @@ docs/            Plan and research
 Every action that touches a real LinkedIn account goes through one code path
 (`apps/worker/src/jobs/linkedin-action.ts`), which re-checks the limiter immediately before
 sending, honours provider health signals, and writes an audit record.
+
+## What is built
+
+| Area | State |
+|---|---|
+| Strategy, Targeting and Reply agents | Built, on Claude with structured outputs |
+| Campaign pacing and the LinkedIn rate limiter | Built and unit-tested against the researched caps |
+| Approval inbox and the send/hold gate | Built, gate is a pure tested function |
+| Calendar availability and meeting booking | Built (Google); Microsoft 365 not yet |
+| CRM sync | HubSpot and signed webhooks; Salesforce not yet |
+| Billing and trial enforcement | Built (Stripe) |
+| Internal API auth, encrypted OAuth tokens, RLS | Built |
+| Reply-classification eval | Harness and dataset built, **not yet run** — needs an API key |
+| Non-Sales-Navigator prospect data | **Not built.** See the note below |
+| Email follow-up channel | Not built |
+
+### The one plan item that needs rethinking
+
+`docs/02-product-spec.md` proposes a Solo plan that works without a Sales
+Navigator seat by using third-party prospect data. The research
+(`docs/06-research.md` section 2) found that LinkedIn sued Proxycurl, the
+obvious provider, and it shut down permanently in July 2025 under a permanent
+injunction. Do not build that path on a scraping-based data vendor without
+fresh legal advice.
 
 ## Safety model
 
