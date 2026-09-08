@@ -13,6 +13,7 @@ import { decryptJson, encryptJson } from "./crypto.js";
 import type { MiddlewareHandler } from "hono";
 import type { Queues } from "./queues.js";
 import type { WorkerContext } from "./context.js";
+import { eraseProspect, exportWorkspace } from "./jobs/retention.js";
 
 const StrategyRequest = z.object({
   workspaceId: z.string().uuid(),
@@ -40,6 +41,13 @@ const LinkRequest = z.object({
   workspaceId: z.string().uuid(),
   userId: z.string().uuid(),
 });
+
+const EraseRequest = LinkRequest.extend({
+  prospectId: z.string().uuid(),
+  reason: z.string().min(1).max(200),
+});
+
+const ExportRequest = LinkRequest;
 
 const CheckoutRequest = LinkRequest.extend({
   plan: z.enum(["solo", "pro", "teams"]),
@@ -348,6 +356,33 @@ export function createServer(ctx: WorkerContext, queues: Queues): Hono {
       console.error("hubspot callback failed", error);
       return c.redirect(`${ctx.env.APP_URL}/app/team?error=exchange_failed`);
     }
+  });
+
+  // Data subject rights. Both are internal calls, so they inherit the shared
+  // secret and the membership check.
+  app.post("/jobs/erase-prospect", async (c) => {
+    const parsed = EraseRequest.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "invalid request" }, 400);
+    if (!(await assertMembership(ctx.db, parsed.data.workspaceId, parsed.data.userId))) {
+      return c.json({ error: "not a member of that workspace" }, 403);
+    }
+
+    const result = await eraseProspect(ctx, {
+      workspaceId: parsed.data.workspaceId,
+      prospectId: parsed.data.prospectId,
+      reason: parsed.data.reason,
+    });
+    return c.json(result);
+  });
+
+  app.post("/jobs/export", async (c) => {
+    const parsed = ExportRequest.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "invalid request" }, 400);
+    if (!(await assertMembership(ctx.db, parsed.data.workspaceId, parsed.data.userId))) {
+      return c.json({ error: "not a member of that workspace" }, 403);
+    }
+
+    return c.json(await exportWorkspace(ctx, parsed.data.workspaceId));
   });
 
   // Billing. Checkout and the portal are internal calls; the webhook is public

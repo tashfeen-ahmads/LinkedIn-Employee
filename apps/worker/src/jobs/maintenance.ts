@@ -1,6 +1,7 @@
 import { LINKEDIN_LIMITS } from "@le/shared";
 import type { WorkerContext } from "../context.js";
 import { pollHealth } from "../accounts.js";
+import { runRetentionSweep } from "./retention.js";
 
 /**
  * Nightly housekeeping:
@@ -8,7 +9,8 @@ import { pollHealth } from "../accounts.js";
  *    a day even if no action happened to hit it;
  *  - withdraw stale pending invitations, which keeps the pending-invite count
  *    down and with it the risk of a limit;
- *  - close campaign prospects whose sequence has run out.
+ *  - close campaign prospects whose sequence has run out;
+ *  - erase prospect data held past the workspace's retention limit.
  */
 export async function runMaintenance(ctx: WorkerContext, now: Date = new Date()): Promise<void> {
   const { db } = ctx;
@@ -28,6 +30,9 @@ export async function runMaintenance(ctx: WorkerContext, now: Date = new Date())
 
   await withdrawStaleInvites(ctx, now);
   await closeExhaustedSequences(ctx, now);
+
+  const erased = await runRetentionSweep(ctx, now);
+  if (erased > 0) console.log(`retention sweep erased ${erased} prospects`);
 }
 
 async function withdrawStaleInvites(ctx: WorkerContext, now: Date): Promise<void> {

@@ -1,5 +1,27 @@
+import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
+import { callWorker } from "@/lib/worker";
+
+/**
+ * Erasure on request. A prospect who asks to be forgotten is a request the
+ * customer is legally obliged to honour, so it is one click rather than a
+ * support ticket.
+ */
+async function eraseProspect(formData: FormData) {
+  "use server";
+  const prospectId = String(formData.get("prospectId"));
+  if (!prospectId) return;
+
+  const session = await requireSession();
+  await callWorker("/jobs/erase-prospect", {
+    workspaceId: session.workspaceId,
+    userId: session.userId,
+    prospectId,
+    reason: "requested by the individual",
+  });
+  revalidatePath("/app/prospects");
+}
 
 interface Signal {
   type: string;
@@ -50,7 +72,8 @@ export default async function ProspectsPage() {
       <h1 style={{ fontSize: "1.6rem" }}>Prospects</h1>
       <p className="muted">
         {prospects.length} in this workspace, ranked by fit. Nobody here can be contacted twice by two
-        different reps.
+        different reps. Erasing someone removes everything we hold about them and keeps only a
+        do-not-contact record, so a later campaign cannot re-import them.
       </p>
 
       <div className="table-scroll" style={{ marginTop: "1.5rem" }}>
@@ -62,6 +85,7 @@ export default async function ProspectsPage() {
               <th>Intent</th>
               <th>Why</th>
               <th>Status</th>
+              <th />
             </tr>
           </thead>
           <tbody>
@@ -102,6 +126,20 @@ export default async function ProspectsPage() {
                       <span className="pill">Contacted</span>
                     ) : (
                       <span className="pill positive">New</span>
+                    )}
+                  </td>
+                  <td>
+                    {prospect.do_not_contact ? null : (
+                      <form action={eraseProspect}>
+                        <input type="hidden" name="prospectId" value={prospect.id} />
+                        <button
+                          className="btn secondary small"
+                          type="submit"
+                          title="Delete everything we hold about this person, keeping only a do-not-contact record"
+                        >
+                          Erase
+                        </button>
+                      </form>
                     )}
                   </td>
                 </tr>
