@@ -11,5 +11,8 @@ export async function GET(request: Request) {
   const { error } = await supabase.auth.exchangeCodeForSession(code);
   if (error) return NextResponse.redirect(`${origin}/login?error=${encodeURIComponent(error.message)}`);
 
-  return NextResponse.redirect(`${origin}/onboarding`);
+  // An invited user goes back to the invitation rather than being asked to
+  // create a workspace they were never meant to own.
+  const invite = searchParams.get("invite");
+  return NextResponse.redirect(invite ? `${origin}/invite/${invite}` : `${origin}/onboarding`);
 }

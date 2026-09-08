@@ -3,6 +3,9 @@ import { createClient } from "@/lib/supabase-server";
 import { callWorker } from "@/lib/worker";
 import { redirect } from "next/navigation";
 import { LINKEDIN_LIMITS } from "@le/shared";
+import { PLAN_SEATS } from "@le/billing";
+import { revalidatePath } from "next/cache";
+import { createInviteToken, inviteExpiry, INVITE_TTL_DAYS } from "@/lib/invitations";
 
 /**
  * Team and connection management. Each rep connects their own LinkedIn account
@@ -39,7 +42,79 @@ async function connectHubSpot() {
   if (result?.url) redirect(result.url);
 }
 
-export default async function TeamPage() {
+/**
+ * Invites a teammate. Seat limits are enforced here rather than at acceptance:
+ * telling someone their invitation is invalid after they clicked it is a worse
+ * experience than telling the admin they need another seat.
+ */
+async function inviteMember(formData: FormData) {
+  "use server";
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  const role = String(formData.get("role") ?? "rep");
+  if (!email || !["rep", "manager", "admin"].includes(role)) return;
+
+  const session = await requireSession();
+  if (!["owner", "admin", "manager"].includes(session.role)) return;
+
+  const supabase = await createClient();
+
+  const [{ count: members }, { data: workspace }] = await Promise.all([
+    supabase
+      .from("memberships")
+      .select("id", { count: "exact", head: true })
+      .eq("workspace_id", session.workspaceId),
+    supabase.from("workspaces").select("plan, seats").eq("id", session.workspaceId).single(),
+  ]);
+
+  const seatLimit = Math.max(workspace?.seats ?? 1, PLAN_SEATS[(workspace?.plan ?? "trial") as never] ?? 1);
+  if ((members ?? 0) >= seatLimit) {
+    redirect("/app/team?error=" + encodeURIComponent("You have used every seat on your plan."));
+  }
+
+  // Re-inviting the same person replaces the previous invitation rather than
+  // leaving two live tokens for one mailbox.
+  await supabase
+    .from("invitations")
+    .update({ revoked_at: new Date().toISOString() })
+    .eq("workspace_id", session.workspaceId)
+    .eq("email", email)
+    .is("accepted_at", null)
+    .is("revoked_at", null);
+
+  await supabase.from("invitations").insert({
+    workspace_id: session.workspaceId,
+    email,
+    role: role as "rep" | "manager" | "admin",
+    token: createInviteToken(),
+    invited_by: session.userId,
+    expires_at: inviteExpiry(),
+  });
+
+  revalidatePath("/app/team");
+}
+
+async function revokeInvitation(formData: FormData) {
+  "use server";
+  const id = String(formData.get("invitationId"));
+  const session = await requireSession();
+  if (!["owner", "admin", "manager"].includes(session.role)) return;
+
+  const supabase = await createClient();
+  await supabase
+    .from("invitations")
+    .update({ revoked_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("workspace_id", session.workspaceId);
+
+  revalidatePath("/app/team");
+}
+
+export default async function TeamPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
+  const params = await searchParams;
   const session = await requireSession();
   const supabase = await createClient();
 
@@ -68,12 +143,27 @@ export default async function TeamPage() {
     .in("kind", ["hubspot", "webhook"])
     .maybeSingle();
 
+  const { data: invitations } = await supabase
+    .from("invitations")
+    .select("id, email, role, expires_at, created_at")
+    .eq("workspace_id", session.workspaceId)
+    .is("accepted_at", null)
+    .is("revoked_at", null)
+    .order("created_at", { ascending: false });
+
+  const canManage = ["owner", "admin", "manager"].includes(session.role);
   const accountByUser = new Map((accounts ?? []).map((a) => [a.user_id, a]));
   const mine = accountByUser.get(session.userId);
 
   return (
     <>
       <h1 style={{ fontSize: "1.6rem" }}>Team</h1>
+
+      {params.error ? (
+        <div className="notice danger" style={{ marginBottom: "1.25rem" }}>
+          {params.error}
+        </div>
+      ) : null}
 
       <section className="card" style={{ marginTop: "1.25rem" }}>
         <h3>Your LinkedIn account</h3>
@@ -147,6 +237,73 @@ export default async function TeamPage() {
           </>
         )}
       </section>
+
+      {canManage ? (
+        <section className="card" style={{ marginTop: "1rem" }}>
+          <h3>Invite a teammate</h3>
+          <p className="small muted">
+            Each rep connects their own LinkedIn account. Nobody shares a login, and no two reps will
+            ever message the same person.
+          </p>
+          <form action={inviteMember} style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "flex-end" }}>
+            <label className="field" style={{ flex: "1 1 240px", marginBottom: 0 }}>
+              <span>Work email</span>
+              <input type="email" name="email" required placeholder="teammate@company.com" />
+            </label>
+            <label className="field" style={{ width: 140, marginBottom: 0 }}>
+              <span>Role</span>
+              <select name="role" defaultValue="rep">
+                <option value="rep">Rep</option>
+                <option value="manager">Manager</option>
+                <option value="admin">Admin</option>
+              </select>
+            </label>
+            <button className="btn" type="submit">
+              Send invite
+            </button>
+          </form>
+
+          {invitations?.length ? (
+            <div className="table-scroll" style={{ marginTop: "1.25rem" }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Pending invitation</th>
+                    <th>Role</th>
+                    <th>Expires</th>
+                    <th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {invitations.map((invitation) => (
+                    <tr key={invitation.id}>
+                      <td>{invitation.email}</td>
+                      <td>
+                        <span className="pill">{invitation.role}</span>
+                      </td>
+                      <td className="small muted">
+                        {new Date(invitation.expires_at).toLocaleDateString()}
+                      </td>
+                      <td>
+                        <form action={revokeInvitation}>
+                          <input type="hidden" name="invitationId" value={invitation.id} />
+                          <button className="btn secondary small" type="submit">
+                            Revoke
+                          </button>
+                        </form>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <p className="small muted" style={{ marginTop: "1rem", marginBottom: 0 }}>
+              No pending invitations. Links stay valid for {INVITE_TTL_DAYS} days.
+            </p>
+          )}
+        </section>
+      ) : null}
 
       <section style={{ marginTop: "2rem" }}>
         <h2 style={{ fontSize: "1.15rem" }}>Members</h2>

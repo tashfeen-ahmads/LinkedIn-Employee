@@ -65,6 +65,20 @@ export type WorkspaceRow = {
   created_at: string;
 };
 
+export type InvitationRow = {
+  id: string;
+  workspace_id: string;
+  email: string;
+  role: MembershipRole;
+  token: string;
+  invited_by: string | null;
+  expires_at: string;
+  accepted_at: string | null;
+  accepted_by: string | null;
+  revoked_at: string | null;
+  created_at: string;
+};
+
 export type BillingEventRow = {
   id: string;
   workspace_id: string | null;
@@ -326,6 +340,7 @@ export type Database = {
     Tables: {
       workspaces: Table<WorkspaceRow>;
       billing_events: Table<BillingEventRow>;
+      invitations: Table<InvitationRow>;
       profiles: Table<ProfileRow>;
       memberships: Table<MembershipRow>;
       linkedin_accounts: Table<LinkedinAccountRow>;

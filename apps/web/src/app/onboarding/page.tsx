@@ -76,6 +76,17 @@ export default async function OnboardingPage({
   const { data: existing } = await supabase.from("memberships").select("workspace_id").eq("user_id", user.id).limit(1);
   if (existing?.length) redirect("/app");
 
+  // Someone with a pending invitation is joining a team, not starting one.
+  const { data: pendingInvite } = await supabase
+    .from("invitations")
+    .select("token")
+    .eq("email", user.email ?? "")
+    .is("accepted_at", null)
+    .is("revoked_at", null)
+    .limit(1)
+    .maybeSingle();
+  if (pendingInvite) redirect(`/invite/${pendingInvite.token}`);
+
   return (
     <main style={{ padding: "4rem 0" }}>
       <div className="narrow" style={{ maxWidth: 560 }}>
