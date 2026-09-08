@@ -1,8 +1,10 @@
+import { timingSafeEqual } from "node:crypto";
 import { Hono } from "hono";
 import { z } from "zod";
 import { exchangeGoogleCode, googleConsentUrl } from "@le/calendar";
 import { exchangeHubSpotCode, hubspotConsentUrl } from "@le/crm";
 import { decryptJson, encryptJson } from "./crypto.js";
+import type { MiddlewareHandler } from "hono";
 import type { Queues } from "./queues.js";
 import type { WorkerContext } from "./context.js";
 
@@ -47,6 +49,19 @@ export function createServer(ctx: WorkerContext, queues: Queues): Hono {
   const app = new Hono();
 
   app.get("/health", (c) => c.json({ ok: true }));
+
+  /**
+   * Everything under /jobs and /auth/*\/link is a privileged internal API: the
+   * caller names the workspace and user it is acting for, so without this check
+   * anyone who can reach the worker could enqueue outreach for any tenant or
+   * start an OAuth flow bound to someone else's workspace.
+   *
+   * The web app is the only legitimate caller and shares this secret with it.
+   * Provider callbacks are deliberately not covered: the OAuth callbacks carry
+   * their own signed state, and the Unipile webhook its own signature.
+   */
+  app.use("/jobs/*", requireInternalAuth(ctx.env.INTERNAL_API_SECRET));
+  app.use("/auth/:provider/link", requireInternalAuth(ctx.env.INTERNAL_API_SECRET));
 
   // Job entry points used by the web app. These enqueue and return; nothing
   // that touches LinkedIn or Claude happens on the request thread.
@@ -285,6 +300,31 @@ export function createServer(ctx: WorkerContext, queues: Queues): Hono {
   });
 
   return app;
+}
+
+/**
+ * Constant-time bearer check. A missing secret fails closed: an unauthenticated
+ * internal API is worse than a worker that refuses to start work.
+ */
+function requireInternalAuth(secret: string | undefined): MiddlewareHandler {
+  return async (c, next) => {
+    if (!secret) return c.json({ error: "worker is not configured for internal calls" }, 503);
+
+    const header = c.req.header("authorization") ?? "";
+    const presented = header.startsWith("Bearer ") ? header.slice(7) : "";
+    if (!constantTimeEquals(presented, secret)) return c.json({ error: "unauthorized" }, 401);
+
+    await next();
+  };
+}
+
+function constantTimeEquals(a: string, b: string): boolean {
+  const left = Buffer.from(a);
+  const right = Buffer.from(b);
+  // Compare a fixed-size digest-like buffer so length alone does not leak via
+  // an early return; timingSafeEqual itself requires equal lengths.
+  if (left.length !== right.length) return false;
+  return timingSafeEqual(left, right);
 }
 
 function decryptState(state: string, key: string): { workspaceId: string; userId: string; issuedAt: number } {

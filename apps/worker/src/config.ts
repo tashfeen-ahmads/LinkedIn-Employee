@@ -7,7 +7,10 @@ const EnvSchema = z.object({
   REDIS_URL: z.string().default("redis://localhost:6379"),
   UNIPILE_DSN: z.string().min(1),
   UNIPILE_ACCESS_TOKEN: z.string().min(1),
+  /** Required in production: without it, anyone can forge an inbound reply. */
   UNIPILE_WEBHOOK_SECRET: z.string().optional(),
+  /** Shared with the web app to authenticate internal job dispatch. */
+  INTERNAL_API_SECRET: z.string().min(32).optional(),
   APP_URL: z.string().default("http://localhost:3000"),
   /** Public base URL of this worker, used for OAuth redirect URIs. */
   WORKER_URL: z.string().default("http://localhost:4000"),

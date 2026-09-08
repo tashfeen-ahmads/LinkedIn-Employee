@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase-server";
+import { callWorker } from "@/lib/worker";
 
 /**
  * First run. Creates the workspace and kicks off the Strategy Agent, so the
@@ -42,20 +43,15 @@ async function createWorkspace(formData: FormData) {
   });
   if (fullName) await supabase.from("profiles").update({ full_name: fullName }).eq("id", user.id);
 
-  // The Strategy Agent runs in the worker; the web tier only enqueues it.
-  await fetch(`${process.env.WORKER_URL ?? "http://localhost:4000"}/jobs/strategy`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      workspaceId: workspace.id,
-      userId: user.id,
-      websiteUrl: websiteUrl || undefined,
-      linkedinCompanyUrl: linkedinCompanyUrl || undefined,
-      description: description || undefined,
-    }),
-  }).catch(() => {
-    // The worker being down must not lose the signup; the user can retry the
-    // Strategy Agent from the dashboard.
+  // The Strategy Agent runs in the worker; the web tier only enqueues it. A
+  // worker outage must not lose the signup, so a failure here is logged and the
+  // user can retry from the dashboard.
+  await callWorker("/jobs/strategy", {
+    workspaceId: workspace.id,
+    userId: user.id,
+    websiteUrl: websiteUrl || undefined,
+    linkedinCompanyUrl: linkedinCompanyUrl || undefined,
+    description: description || undefined,
   });
 
   redirect("/app");

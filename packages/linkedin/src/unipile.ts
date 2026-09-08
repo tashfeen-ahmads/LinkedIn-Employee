@@ -233,10 +233,14 @@ export class UnipileProvider implements LinkedInProvider {
   }
 
   parseWebhook(input: { body: string; signature?: string }): InboundMessage[] {
-    if (this.webhookSecret) {
-      if (!input.signature || !verifySignature(input.body, input.signature, this.webhookSecret)) {
-        throw new Error("Invalid Unipile webhook signature");
-      }
+    // Fails closed. An unsigned webhook is an open door: a forged delivery
+    // makes the Reply Agent answer a message no prospect ever sent, in a real
+    // rep's name, so an unconfigured secret must reject rather than accept.
+    if (!this.webhookSecret) {
+      throw new Error("Unipile webhook secret is not configured; refusing to accept unverified deliveries");
+    }
+    if (!input.signature || !verifySignature(input.body, input.signature, this.webhookSecret)) {
+      throw new Error("Invalid Unipile webhook signature");
     }
     const parsed = JSON.parse(input.body) as RawUnipileMessage | { items?: RawUnipileMessage[] };
     const items = "items" in parsed && Array.isArray(parsed.items) ? parsed.items : [parsed as RawUnipileMessage];

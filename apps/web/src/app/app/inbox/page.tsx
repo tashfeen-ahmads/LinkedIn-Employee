@@ -1,6 +1,7 @@
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
+import { callWorker } from "@/lib/worker";
 
 /**
  * The approval inbox. Every draft the Reply Agent held back lands here with the
@@ -24,13 +25,8 @@ async function approveDraft(formData: FormData) {
     .eq("id", draftId)
     .eq("workspace_id", session.workspaceId);
 
-  await fetch(`${process.env.WORKER_URL ?? "http://localhost:4000"}/jobs/send-reply`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ workspaceId: session.workspaceId, draftId }),
-  }).catch(() => {
-    // Approved rows are picked up by the worker's sweep if this call fails.
-  });
+  // Approved rows are picked up by the worker's sweep if this call fails.
+  await callWorker("/jobs/send-reply", { workspaceId: session.workspaceId, draftId });
 
   revalidatePath("/app/inbox");
 }

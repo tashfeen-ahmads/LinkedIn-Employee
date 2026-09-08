@@ -1,5 +1,7 @@
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
+import { callWorker } from "@/lib/worker";
+import { redirect } from "next/navigation";
 import { LINKEDIN_LIMITS } from "@le/shared";
 
 /**
@@ -10,52 +12,31 @@ import { LINKEDIN_LIMITS } from "@le/shared";
 async function connectLinkedIn() {
   "use server";
   const session = await requireSession();
-  const response = await fetch(`${process.env.WORKER_URL ?? "http://localhost:4000"}/auth/linkedin/link`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ workspaceId: session.workspaceId, userId: session.userId }),
-  }).catch(() => null);
-
-  if (!response?.ok) return;
-  const { url } = (await response.json()) as { url?: string };
-  if (url) {
-    const { redirect } = await import("next/navigation");
-    redirect(url);
-  }
+  const result = await callWorker<{ url?: string }>("/auth/linkedin/link", {
+    workspaceId: session.workspaceId,
+    userId: session.userId,
+  });
+  if (result?.url) redirect(result.url);
 }
 
 async function connectCalendar() {
   "use server";
   const session = await requireSession();
-  const response = await fetch(`${process.env.WORKER_URL ?? "http://localhost:4000"}/auth/google/link`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ workspaceId: session.workspaceId, userId: session.userId }),
-  }).catch(() => null);
-
-  if (!response?.ok) return;
-  const { url } = (await response.json()) as { url?: string };
-  if (url) {
-    const { redirect } = await import("next/navigation");
-    redirect(url);
-  }
+  const result = await callWorker<{ url?: string }>("/auth/google/link", {
+    workspaceId: session.workspaceId,
+    userId: session.userId,
+  });
+  if (result?.url) redirect(result.url);
 }
 
 async function connectHubSpot() {
   "use server";
   const session = await requireSession();
-  const response = await fetch(`${process.env.WORKER_URL ?? "http://localhost:4000"}/auth/hubspot/link`, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ workspaceId: session.workspaceId, userId: session.userId }),
-  }).catch(() => null);
-
-  if (!response?.ok) return;
-  const { url } = (await response.json()) as { url?: string };
-  if (url) {
-    const { redirect } = await import("next/navigation");
-    redirect(url);
-  }
+  const result = await callWorker<{ url?: string }>("/auth/hubspot/link", {
+    workspaceId: session.workspaceId,
+    userId: session.userId,
+  });
+  if (result?.url) redirect(result.url);
 }
 
 export default async function TeamPage() {
