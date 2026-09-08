@@ -15,6 +15,9 @@ const EnvSchema = z.object({
   /** Set to "mock" in development to run without touching LinkedIn at all. */
   LINKEDIN_PROVIDER: z.enum(["unipile", "mock"]).default("unipile"),
   CALENDAR_PROVIDER: z.enum(["google", "mock"]).default("google"),
+  CRM_PROVIDER: z.enum(["auto", "mock"]).default("auto"),
+  HUBSPOT_CLIENT_ID: z.string().optional(),
+  HUBSPOT_CLIENT_SECRET: z.string().optional(),
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   /** 32 bytes of hex. Encrypts OAuth tokens at rest; see src/crypto.ts. */

@@ -41,6 +41,23 @@ async function connectCalendar() {
   }
 }
 
+async function connectHubSpot() {
+  "use server";
+  const session = await requireSession();
+  const response = await fetch(`${process.env.WORKER_URL ?? "http://localhost:4000"}/auth/hubspot/link`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ workspaceId: session.workspaceId, userId: session.userId }),
+  }).catch(() => null);
+
+  if (!response?.ok) return;
+  const { url } = (await response.json()) as { url?: string };
+  if (url) {
+    const { redirect } = await import("next/navigation");
+    redirect(url);
+  }
+}
+
 export default async function TeamPage() {
   const session = await requireSession();
   const supabase = await createClient();
@@ -61,6 +78,13 @@ export default async function TeamPage() {
     .eq("workspace_id", session.workspaceId)
     .eq("user_id", session.userId)
     .eq("kind", "google_calendar")
+    .maybeSingle();
+
+  const { data: crm } = await supabase
+    .from("integrations")
+    .select("kind, status")
+    .eq("workspace_id", session.workspaceId)
+    .in("kind", ["hubspot", "webhook"])
     .maybeSingle();
 
   const accountByUser = new Map((accounts ?? []).map((a) => [a.user_id, a]));
@@ -116,6 +140,27 @@ export default async function TeamPage() {
             <form action={connectCalendar}>
               <button className="btn" type="submit">
                 {calendar ? "Reconnect Google Calendar" : "Connect Google Calendar"}
+              </button>
+            </form>
+          </>
+        )}
+      </section>
+
+      <section className="card" style={{ marginTop: "1rem" }}>
+        <h3>Your CRM</h3>
+        {crm?.status === "active" ? (
+          <p className="small muted" style={{ margin: 0 }}>
+            Connected to {crm.kind === "hubspot" ? "HubSpot" : "your webhook"}. Contacts, messages and
+            booked meetings sync automatically, and every AI-written message is labelled as such.
+          </p>
+        ) : (
+          <>
+            <p className="small muted">
+              Not connected. Everything still works; your CRM just will not know about it.
+            </p>
+            <form action={connectHubSpot}>
+              <button className="btn secondary" type="submit">
+                Connect HubSpot
               </button>
             </form>
           </>

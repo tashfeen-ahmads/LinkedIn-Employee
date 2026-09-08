@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { exchangeGoogleCode, googleConsentUrl } from "@le/calendar";
+import { exchangeHubSpotCode, hubspotConsentUrl } from "@le/crm";
 import { decryptJson, encryptJson } from "./crypto.js";
 import type { Queues } from "./queues.js";
 import type { WorkerContext } from "./context.js";
@@ -218,6 +219,67 @@ export function createServer(ctx: WorkerContext, queues: Queues): Hono {
       return c.redirect(`${ctx.env.APP_URL}/app/team?calendar=connected`);
     } catch (error) {
       console.error("google callback failed", error);
+      return c.redirect(`${ctx.env.APP_URL}/app/team?error=exchange_failed`);
+    }
+  });
+
+  app.post("/auth/hubspot/link", async (c) => {
+    const parsed = LinkRequest.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "invalid request" }, 400);
+    if (!ctx.env.HUBSPOT_CLIENT_ID || !ctx.env.CREDENTIALS_KEY) {
+      return c.json({ error: "hubspot is not configured" }, 501);
+    }
+
+    const url = hubspotConsentUrl({
+      clientId: ctx.env.HUBSPOT_CLIENT_ID,
+      redirectUri: `${ctx.env.WORKER_URL}/auth/hubspot/callback`,
+      state: encodeState(parsed.data.workspaceId, parsed.data.userId, ctx.env.CREDENTIALS_KEY),
+    });
+    return c.json({ url });
+  });
+
+  app.get("/auth/hubspot/callback", async (c) => {
+    const code = c.req.query("code");
+    const state = c.req.query("state");
+    if (!code || !state) return c.redirect(`${ctx.env.APP_URL}/app/team?error=missing_code`);
+    if (!ctx.env.HUBSPOT_CLIENT_ID || !ctx.env.HUBSPOT_CLIENT_SECRET || !ctx.env.CREDENTIALS_KEY) {
+      return c.redirect(`${ctx.env.APP_URL}/app/team?error=not_configured`);
+    }
+
+    let claims: { workspaceId: string; userId: string; issuedAt: number };
+    try {
+      claims = decryptState(state, ctx.env.CREDENTIALS_KEY);
+    } catch {
+      return c.redirect(`${ctx.env.APP_URL}/app/team?error=bad_state`);
+    }
+    if (Date.now() - claims.issuedAt > 3_600_000) {
+      return c.redirect(`${ctx.env.APP_URL}/app/team?error=expired`);
+    }
+
+    try {
+      const tokens = await exchangeHubSpotCode({
+        code,
+        clientId: ctx.env.HUBSPOT_CLIENT_ID,
+        clientSecret: ctx.env.HUBSPOT_CLIENT_SECRET,
+        redirectUri: `${ctx.env.WORKER_URL}/auth/hubspot/callback`,
+      });
+
+      // A CRM connection is workspace-wide, not per rep: every rep's activity
+      // should land in the same HubSpot portal.
+      await ctx.db.from("integrations").upsert(
+        {
+          workspace_id: claims.workspaceId,
+          user_id: null,
+          kind: "hubspot",
+          credentials_encrypted: encryptJson(tokens, ctx.env.CREDENTIALS_KEY),
+          status: "active",
+        },
+        { onConflict: "workspace_id,kind,user_id" },
+      );
+
+      return c.redirect(`${ctx.env.APP_URL}/app/team?crm=connected`);
+    } catch (error) {
+      console.error("hubspot callback failed", error);
       return c.redirect(`${ctx.env.APP_URL}/app/team?error=exchange_failed`);
     }
   });

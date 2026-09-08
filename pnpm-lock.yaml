@@ -66,6 +66,9 @@ importers:
       '@le/calendar':
         specifier: workspace:*
         version: link:../../packages/calendar
+      '@le/crm':
+        specifier: workspace:*
+        version: link:../../packages/crm
       '@le/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -127,6 +130,18 @@ importers:
         version: 3.2.7(@types/node@22.20.1)(tsx@4.23.13)
 
   packages/calendar:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.20.1
+      typescript:
+        specifier: ^5.9.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.0
+        version: 3.2.7(@types/node@22.20.1)(tsx@4.23.13)
+
+  packages/crm:
     devDependencies:
       '@types/node':
         specifier: ^22.10.0

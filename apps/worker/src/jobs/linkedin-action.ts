@@ -3,6 +3,7 @@ import { canTransition, type CampaignProspectStatus } from "@le/shared";
 import type { WorkerContext } from "../context.js";
 import { recordEvent } from "../context.js";
 import { applyHealth, recordAction, toUsage, type AccountRecord } from "../accounts.js";
+import { syncConversationToCrm } from "../crm.js";
 import type { LinkedInActionJob } from "../queues.js";
 
 /**
@@ -163,6 +164,14 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
     subjectId: cp.id,
     payload: { step: job.stepNumber },
   });
+  await syncConversationToCrm(db, ctx.env, {
+    workspaceId: cp.workspace_id,
+    prospectId: prospect.id,
+    body,
+    direction: "outbound",
+    authoredBy: "agent",
+    occurredAt: new Date().toISOString(),
+  });
 }
 
 /** Sends a draft a human approved in the inbox. */
@@ -226,6 +235,14 @@ async function sendApprovedReply(
     name: "reply.sent",
     subjectType: "conversation",
     subjectId: conversation.id,
+  });
+  await syncConversationToCrm(db, ctx.env, {
+    workspaceId: draft.workspace_id,
+    prospectId: prospect.id,
+    body: draft.body,
+    direction: "outbound",
+    authoredBy: "agent",
+    occurredAt: new Date().toISOString(),
   });
 }
 

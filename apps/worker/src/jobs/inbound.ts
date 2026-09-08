@@ -17,6 +17,7 @@ import { recordEvent } from "../context.js";
 import type { InboundMessageJob, Queues } from "../queues.js";
 import { ensureConversation } from "./linkedin-action.js";
 import { offerSlots, resolveCalendar } from "../calendar.js";
+import { syncConversationToCrm, syncMeetingToCrm } from "../crm.js";
 import { tryBookMeeting } from "./booking.js";
 
 /**
@@ -87,6 +88,14 @@ export async function handleInboundMessage(
     name: "message.received",
     subjectType: "conversation",
     subjectId: conversation.id,
+  });
+  await syncConversationToCrm(db, ctx.env, {
+    workspaceId: job.workspaceId,
+    prospectId: prospect.id,
+    body: job.text,
+    direction: "inbound",
+    authoredBy: "human",
+    occurredAt: job.receivedAt,
   });
 
   const campaignProspect = await stopSequence(ctx, conversation.id, prospect.id);
@@ -189,7 +198,10 @@ export async function handleInboundMessage(
       binding: calendar,
       durationMinutes: ctx.env.MEETING_DURATION_MINUTES,
     });
-    if (meetingId) bookedMeeting = true;
+    if (meetingId) {
+      bookedMeeting = true;
+      await syncMeetingToCrm(db, ctx.env, { workspaceId: job.workspaceId, meetingId });
+    }
   }
 
   const slots = calendar && !bookedMeeting
