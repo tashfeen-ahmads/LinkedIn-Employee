@@ -46,6 +46,9 @@ sending, honours provider health signals, and writes an audit record.
 | Calendar availability and meeting booking | Built (Google); Microsoft 365 not yet |
 | CRM sync | HubSpot and signed webhooks; Salesforce not yet |
 | Billing and trial enforcement | Built (Stripe) |
+| Team invitations | Built; the invite email is not sent, the admin copies the link |
+| Data retention, erasure and export | Built |
+| End-to-end pipeline tests | Built, and verified by breaking the code on purpose |
 | Internal API auth, encrypted OAuth tokens, RLS | Built |
 | Reply-classification eval | Harness and dataset built, **not yet run** — needs an API key |
 | Non-Sales-Navigator prospect data | **Not built.** See the note below |

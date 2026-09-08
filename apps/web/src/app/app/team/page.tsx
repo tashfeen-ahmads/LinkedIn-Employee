@@ -145,13 +145,14 @@ export default async function TeamPage({
 
   const { data: invitations } = await supabase
     .from("invitations")
-    .select("id, email, role, expires_at, created_at")
+    .select("id, email, role, token, expires_at, created_at")
     .eq("workspace_id", session.workspaceId)
     .is("accepted_at", null)
     .is("revoked_at", null)
     .order("created_at", { ascending: false });
 
   const canManage = ["owner", "admin", "manager"].includes(session.role);
+  const appUrl = process.env.APP_URL ?? "http://localhost:3000";
   const accountByUser = new Map((accounts ?? []).map((a) => [a.user_id, a]));
   const mine = accountByUser.get(session.userId);
 
@@ -243,7 +244,8 @@ export default async function TeamPage({
           <h3>Invite a teammate</h3>
           <p className="small muted">
             Each rep connects their own LinkedIn account. Nobody shares a login, and no two reps will
-            ever message the same person.
+            ever message the same person. We do not send the invitation email yet — copy the link
+            below and send it to them yourself.
           </p>
           <form action={inviteMember} style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "flex-end" }}>
             <label className="field" style={{ flex: "1 1 240px", marginBottom: 0 }}>
@@ -270,6 +272,7 @@ export default async function TeamPage({
                   <tr>
                     <th>Pending invitation</th>
                     <th>Role</th>
+                    <th>Link to send them</th>
                     <th>Expires</th>
                     <th />
                   </tr>
@@ -280,6 +283,24 @@ export default async function TeamPage({
                       <td>{invitation.email}</td>
                       <td>
                         <span className="pill">{invitation.role}</span>
+                      </td>
+                      <td>
+                        <input
+                          readOnly
+                          onFocus={undefined}
+                          value={`${appUrl}/invite/${invitation.token}`}
+                          style={{
+                            width: "100%",
+                            minWidth: 220,
+                            fontSize: "0.78rem",
+                            fontFamily: "ui-monospace, monospace",
+                            padding: "0.35rem 0.5rem",
+                            border: "1px solid var(--border)",
+                            borderRadius: 6,
+                            background: "var(--surface)",
+                            color: "var(--text-muted)",
+                          }}
+                        />
                       </td>
                       <td className="small muted">
                         {new Date(invitation.expires_at).toLocaleDateString()}
