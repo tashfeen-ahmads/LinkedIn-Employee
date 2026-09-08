@@ -1,7 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { Hono } from "hono";
 import { z } from "zod";
-import { exchangeGoogleCode, googleConsentUrl } from "@le/calendar";
+import { exchangeGoogleCode, exchangeMicrosoftCode, googleConsentUrl, microsoftConsentUrl } from "@le/calendar";
 import { exchangeHubSpotCode, exchangeSalesforceCode, hubspotConsentUrl, salesforceConsentUrl } from "@le/crm";
 import {
   StripeClient,
@@ -296,6 +296,73 @@ export function createServer(ctx: WorkerContext, queues: Queues): Hono {
       return c.redirect(`${ctx.env.APP_URL}/app/team?calendar=connected`);
     } catch (error) {
       console.error("google callback failed", error);
+      return c.redirect(`${ctx.env.APP_URL}/app/team?error=exchange_failed`);
+    }
+  });
+
+  app.post("/auth/microsoft/link", async (c) => {
+    const parsed = LinkRequest.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "invalid request" }, 400);
+    if (!ctx.env.MICROSOFT_CLIENT_ID || !ctx.env.CREDENTIALS_KEY) {
+      return c.json({ error: "microsoft calendar is not configured" }, 501);
+    }
+    if (!(await assertMembership(ctx.db, parsed.data.workspaceId, parsed.data.userId))) {
+      return c.json({ error: "not a member of that workspace" }, 403);
+    }
+
+    const url = microsoftConsentUrl({
+      clientId: ctx.env.MICROSOFT_CLIENT_ID,
+      redirectUri: `${ctx.env.WORKER_URL}/auth/microsoft/callback`,
+      state: encodeState(parsed.data.workspaceId, parsed.data.userId, ctx.env.CREDENTIALS_KEY),
+      tenant: ctx.env.MICROSOFT_TENANT,
+    });
+    return c.json({ url });
+  });
+
+  app.get("/auth/microsoft/callback", async (c) => {
+    const code = c.req.query("code");
+    const state = c.req.query("state");
+    if (!code || !state) return c.redirect(`${ctx.env.APP_URL}/app/team?error=missing_code`);
+    if (!ctx.env.MICROSOFT_CLIENT_ID || !ctx.env.MICROSOFT_CLIENT_SECRET || !ctx.env.CREDENTIALS_KEY) {
+      return c.redirect(`${ctx.env.APP_URL}/app/team?error=not_configured`);
+    }
+
+    let claims: { workspaceId: string; userId: string; issuedAt: number };
+    try {
+      claims = decryptState(state, ctx.env.CREDENTIALS_KEY);
+    } catch {
+      return c.redirect(`${ctx.env.APP_URL}/app/team?error=bad_state`);
+    }
+    if (Date.now() - claims.issuedAt > 3_600_000) {
+      return c.redirect(`${ctx.env.APP_URL}/app/team?error=expired`);
+    }
+
+    try {
+      const tokens = await exchangeMicrosoftCode({
+        code,
+        clientId: ctx.env.MICROSOFT_CLIENT_ID,
+        clientSecret: ctx.env.MICROSOFT_CLIENT_SECRET,
+        redirectUri: `${ctx.env.WORKER_URL}/auth/microsoft/callback`,
+        tenant: ctx.env.MICROSOFT_TENANT,
+      });
+      if (!tokens.refreshToken) {
+        return c.redirect(`${ctx.env.APP_URL}/app/team?error=no_refresh_token`);
+      }
+
+      await ctx.db.from("integrations").upsert(
+        {
+          workspace_id: claims.workspaceId,
+          user_id: claims.userId,
+          kind: "microsoft_calendar",
+          credentials_encrypted: encryptJson(tokens, ctx.env.CREDENTIALS_KEY),
+          status: "active",
+        },
+        { onConflict: "workspace_id,kind,user_id" },
+      );
+
+      return c.redirect(`${ctx.env.APP_URL}/app/team?calendar=connected`);
+    } catch (error) {
+      console.error("microsoft callback failed", error);
       return c.redirect(`${ctx.env.APP_URL}/app/team?error=exchange_failed`);
     }
   });

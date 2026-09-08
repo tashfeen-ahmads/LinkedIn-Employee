@@ -13,7 +13,7 @@ apps/web           Next.js 15: marketing site, auth, onboarding, dashboard, appr
 apps/worker        BullMQ worker: agent jobs, campaign pacing, LinkedIn executor, webhooks, OAuth
 packages/agents    The three agents on Claude, with prompts, schemas and evals versioned together
 packages/linkedin  Provider interface, Unipile adapter, mock, and the rate limiter
-packages/calendar  Calendar interface, Google adapter, and the deterministic slot finder
+packages/calendar  Calendar interface, Google and Microsoft adapters, the slot finder
 packages/crm       CRM interface, HubSpot and Salesforce adapters, signed webhooks
 packages/billing   Entitlement rules and the Stripe client
 packages/email     Email provider, templates, and the HTML renderer
@@ -44,7 +44,7 @@ sending, honours provider health signals, and writes an audit record.
 | Strategy, Targeting and Reply agents | Built, on Claude with structured outputs |
 | Campaign pacing and the LinkedIn rate limiter | Built and unit-tested against the researched caps |
 | Approval inbox and the send/hold gate | Built, gate is a pure tested function |
-| Calendar availability and meeting booking | Built (Google); Microsoft 365 not yet |
+| Calendar availability and meeting booking | Built (Google and Microsoft 365) |
 | CRM sync | HubSpot, Salesforce, and signed webhooks |
 | Billing and trial enforcement | Built (Stripe) |
 | Team invitations | Built, and emailed |

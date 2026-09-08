@@ -123,6 +123,16 @@ async function revokeInvitation(formData: FormData) {
   revalidatePath("/app/team");
 }
 
+async function connectMicrosoftCalendar() {
+  "use server";
+  const session = await requireSession();
+  const result = await callWorker<{ url?: string }>("/auth/microsoft/link", {
+    workspaceId: session.workspaceId,
+    userId: session.userId,
+  });
+  if (result?.url) redirect(result.url);
+}
+
 async function connectSalesforce() {
   "use server";
   const session = await requireSession();
@@ -154,10 +164,10 @@ export default async function TeamPage({
 
   const { data: calendar } = await supabase
     .from("integrations")
-    .select("status")
+    .select("kind, status")
     .eq("workspace_id", session.workspaceId)
     .eq("user_id", session.userId)
-    .eq("kind", "google_calendar")
+    .in("kind", ["google_calendar", "microsoft_calendar"])
     .maybeSingle();
 
   const { data: crm } = await supabase
@@ -223,8 +233,8 @@ export default async function TeamPage({
         <h3>Your calendar</h3>
         {calendar?.status === "active" ? (
           <p className="small muted" style={{ margin: 0 }}>
-            Google Calendar connected. The Reply Agent offers only times you are genuinely free and
-            books the meeting itself.
+            {calendar.kind === "microsoft_calendar" ? "Microsoft 365" : "Google Calendar"} connected. The
+            Reply Agent offers only times you are genuinely free and books the meeting itself.
           </p>
         ) : (
           <>
@@ -233,11 +243,18 @@ export default async function TeamPage({
                 ? "Your calendar connection expired. Reconnect so the agent can keep booking meetings."
                 : "Not connected. Until it is, the agent offers to send times instead of proposing any — it will never invent a slot."}
             </p>
-            <form action={connectCalendar}>
-              <button className="btn" type="submit">
-                {calendar ? "Reconnect Google Calendar" : "Connect Google Calendar"}
-              </button>
-            </form>
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+              <form action={connectCalendar}>
+                <button className="btn" type="submit">
+                  {calendar ? "Reconnect Google" : "Connect Google Calendar"}
+                </button>
+              </form>
+              <form action={connectMicrosoftCalendar}>
+                <button className="btn secondary" type="submit">
+                  Connect Microsoft 365
+                </button>
+              </form>
+            </div>
           </>
         )}
       </section>

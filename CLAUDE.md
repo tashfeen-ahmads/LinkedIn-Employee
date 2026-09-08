@@ -80,7 +80,9 @@ live campaign and record the number in its README.
 
 ## Known gaps
 
-- Microsoft 365 calendar and the email follow-up channel.
+- The email follow-up channel for prospects who accept an invitation then go
+  quiet. Roadmap item for quarter two; the email layer it would need already
+  exists in `packages/email`.
 - The Solo plan's no-Sales-Navigator path in `docs/02-product-spec.md` should
   not be built as written. LinkedIn sued Proxycurl and it shut down in July
   2025; see `docs/06-research.md`.

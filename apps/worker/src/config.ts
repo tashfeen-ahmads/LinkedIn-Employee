@@ -18,6 +18,10 @@ const EnvSchema = z.object({
   /** Set to "mock" in development to run without touching LinkedIn at all. */
   LINKEDIN_PROVIDER: z.enum(["unipile", "mock"]).default("unipile"),
   CALENDAR_PROVIDER: z.enum(["google", "mock"]).default("google"),
+  MICROSOFT_CLIENT_ID: z.string().optional(),
+  MICROSOFT_CLIENT_SECRET: z.string().optional(),
+  /** "common" for any work account, or a specific tenant id. */
+  MICROSOFT_TENANT: z.string().optional(),
   CRM_PROVIDER: z.enum(["auto", "mock"]).default("auto"),
   HUBSPOT_CLIENT_ID: z.string().optional(),
   HUBSPOT_CLIENT_SECRET: z.string().optional(),
