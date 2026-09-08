@@ -2,8 +2,10 @@ import {
   CrmError,
   HubSpotProvider,
   MockCrmProvider,
+  SalesforceProvider,
   WebhookProvider,
   refreshHubSpotToken,
+  refreshSalesforceToken,
   type CrmProvider,
 } from "@le/crm";
 import type { Db } from "@le/db";
@@ -29,7 +31,7 @@ export async function resolveCrm(db: Db, env: Env, workspaceId: string): Promise
     .from("integrations")
     .select("id, kind, credentials_encrypted, config, status")
     .eq("workspace_id", workspaceId)
-    .in("kind", ["hubspot", "webhook"])
+    .in("kind", ["hubspot", "salesforce", "webhook"])
     .eq("status", "active");
 
   const hubspot = integrations?.find((i) => i.kind === "hubspot");
@@ -53,6 +55,43 @@ export async function resolveCrm(db: Db, env: Env, workspaceId: string): Promise
       return { provider: new HubSpotProvider(), accessToken: tokens.accessToken };
     } catch {
       await db.from("integrations").update({ status: "reauth_required" }).eq("id", hubspot.id);
+    }
+  }
+
+  const salesforce = integrations?.find((i) => i.kind === "salesforce");
+  if (
+    salesforce?.credentials_encrypted &&
+    env.CREDENTIALS_KEY &&
+    env.SALESFORCE_CLIENT_ID &&
+    env.SALESFORCE_CLIENT_SECRET
+  ) {
+    try {
+      let tokens = decryptJson<{
+        accessToken: string;
+        refreshToken?: string;
+        instanceUrl: string;
+        expiresAt: number;
+      }>(salesforce.credentials_encrypted, env.CREDENTIALS_KEY);
+
+      if (tokens.expiresAt <= Date.now()) {
+        if (!tokens.refreshToken) throw new Error("no refresh token");
+        tokens = await refreshSalesforceToken({
+          refreshToken: tokens.refreshToken,
+          clientId: env.SALESFORCE_CLIENT_ID,
+          clientSecret: env.SALESFORCE_CLIENT_SECRET,
+        });
+        await db
+          .from("integrations")
+          .update({ credentials_encrypted: encryptJson(tokens, env.CREDENTIALS_KEY) })
+          .eq("id", salesforce.id);
+      }
+
+      return {
+        provider: new SalesforceProvider({ instanceUrl: tokens.instanceUrl }),
+        accessToken: tokens.accessToken,
+      };
+    } catch {
+      await db.from("integrations").update({ status: "reauth_required" }).eq("id", salesforce.id);
     }
   }
 

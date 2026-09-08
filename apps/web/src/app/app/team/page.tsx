@@ -123,6 +123,16 @@ async function revokeInvitation(formData: FormData) {
   revalidatePath("/app/team");
 }
 
+async function connectSalesforce() {
+  "use server";
+  const session = await requireSession();
+  const result = await callWorker<{ url?: string }>("/auth/salesforce/link", {
+    workspaceId: session.workspaceId,
+    userId: session.userId,
+  });
+  if (result?.url) redirect(result.url);
+}
+
 export default async function TeamPage({
   searchParams,
 }: {
@@ -154,7 +164,7 @@ export default async function TeamPage({
     .from("integrations")
     .select("kind, status")
     .eq("workspace_id", session.workspaceId)
-    .in("kind", ["hubspot", "webhook"])
+    .in("kind", ["hubspot", "salesforce", "webhook"])
     .maybeSingle();
 
   const { data: invitations } = await supabase
@@ -236,7 +246,9 @@ export default async function TeamPage({
         <h3>Your CRM</h3>
         {crm?.status === "active" ? (
           <p className="small muted" style={{ margin: 0 }}>
-            Connected to {crm.kind === "hubspot" ? "HubSpot" : "your webhook"}. Contacts, messages and
+            Connected to{" "}
+            {crm.kind === "hubspot" ? "HubSpot" : crm.kind === "salesforce" ? "Salesforce" : "your webhook"}. Contacts,
+            messages and
             booked meetings sync automatically, and every AI-written message is labelled as such.
           </p>
         ) : (
@@ -244,11 +256,18 @@ export default async function TeamPage({
             <p className="small muted">
               Not connected. Everything still works; your CRM just will not know about it.
             </p>
-            <form action={connectHubSpot}>
-              <button className="btn secondary" type="submit">
-                Connect HubSpot
-              </button>
-            </form>
+            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+              <form action={connectHubSpot}>
+                <button className="btn secondary" type="submit">
+                  Connect HubSpot
+                </button>
+              </form>
+              <form action={connectSalesforce}>
+                <button className="btn secondary" type="submit">
+                  Connect Salesforce
+                </button>
+              </form>
+            </div>
           </>
         )}
       </section>

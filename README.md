@@ -14,7 +14,7 @@ apps/worker        BullMQ worker: agent jobs, campaign pacing, LinkedIn executor
 packages/agents    The three agents on Claude, with prompts, schemas and evals versioned together
 packages/linkedin  Provider interface, Unipile adapter, mock, and the rate limiter
 packages/calendar  Calendar interface, Google adapter, and the deterministic slot finder
-packages/crm       CRM interface, HubSpot adapter, and signed outbound webhooks
+packages/crm       CRM interface, HubSpot and Salesforce adapters, signed webhooks
 packages/billing   Entitlement rules and the Stripe client
 packages/email     Email provider, templates, and the HTML renderer
 packages/shared    Zod schemas, campaign state machine, safety caps
@@ -45,7 +45,7 @@ sending, honours provider health signals, and writes an audit record.
 | Campaign pacing and the LinkedIn rate limiter | Built and unit-tested against the researched caps |
 | Approval inbox and the send/hold gate | Built, gate is a pure tested function |
 | Calendar availability and meeting booking | Built (Google); Microsoft 365 not yet |
-| CRM sync | HubSpot and signed webhooks; Salesforce not yet |
+| CRM sync | HubSpot, Salesforce, and signed webhooks |
 | Billing and trial enforcement | Built (Stripe) |
 | Team invitations | Built, and emailed |
 | Daily digest and account-paused alerts | Built |

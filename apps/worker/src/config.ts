@@ -21,6 +21,10 @@ const EnvSchema = z.object({
   CRM_PROVIDER: z.enum(["auto", "mock"]).default("auto"),
   HUBSPOT_CLIENT_ID: z.string().optional(),
   HUBSPOT_CLIENT_SECRET: z.string().optional(),
+  SALESFORCE_CLIENT_ID: z.string().optional(),
+  SALESFORCE_CLIENT_SECRET: z.string().optional(),
+  /** Use https://test.salesforce.com for a sandbox org. */
+  SALESFORCE_LOGIN_URL: z.string().optional(),
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
   STRIPE_PRICE_SOLO: z.string().optional(),
