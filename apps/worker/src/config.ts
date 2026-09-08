@@ -9,9 +9,18 @@ const EnvSchema = z.object({
   UNIPILE_ACCESS_TOKEN: z.string().min(1),
   UNIPILE_WEBHOOK_SECRET: z.string().optional(),
   APP_URL: z.string().default("http://localhost:3000"),
+  /** Public base URL of this worker, used for OAuth redirect URIs. */
+  WORKER_URL: z.string().default("http://localhost:4000"),
   WORKER_PORT: z.coerce.number().default(4000),
   /** Set to "mock" in development to run without touching LinkedIn at all. */
   LINKEDIN_PROVIDER: z.enum(["unipile", "mock"]).default("unipile"),
+  CALENDAR_PROVIDER: z.enum(["google", "mock"]).default("google"),
+  GOOGLE_CLIENT_ID: z.string().optional(),
+  GOOGLE_CLIENT_SECRET: z.string().optional(),
+  /** 32 bytes of hex. Encrypts OAuth tokens at rest; see src/crypto.ts. */
+  CREDENTIALS_KEY: z.string().length(64).optional(),
+  /** Minutes a booked intro call runs for. */
+  MEETING_DURATION_MINUTES: z.coerce.number().int().min(15).max(120).default(30),
 });
 
 export type Env = z.infer<typeof EnvSchema>;

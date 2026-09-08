@@ -24,6 +24,23 @@ async function connectLinkedIn() {
   }
 }
 
+async function connectCalendar() {
+  "use server";
+  const session = await requireSession();
+  const response = await fetch(`${process.env.WORKER_URL ?? "http://localhost:4000"}/auth/google/link`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ workspaceId: session.workspaceId, userId: session.userId }),
+  }).catch(() => null);
+
+  if (!response?.ok) return;
+  const { url } = (await response.json()) as { url?: string };
+  if (url) {
+    const { redirect } = await import("next/navigation");
+    redirect(url);
+  }
+}
+
 export default async function TeamPage() {
   const session = await requireSession();
   const supabase = await createClient();
@@ -37,6 +54,14 @@ export default async function TeamPage() {
     .from("linkedin_accounts")
     .select("user_id, status, display_name, invites_today, invites_this_week, messages_today, has_sales_navigator")
     .eq("workspace_id", session.workspaceId);
+
+  const { data: calendar } = await supabase
+    .from("integrations")
+    .select("status")
+    .eq("workspace_id", session.workspaceId)
+    .eq("user_id", session.userId)
+    .eq("kind", "google_calendar")
+    .maybeSingle();
 
   const accountByUser = new Map((accounts ?? []).map((a) => [a.user_id, a]));
   const mine = accountByUser.get(session.userId);
@@ -68,6 +93,29 @@ export default async function TeamPage() {
             <form action={connectLinkedIn}>
               <button className="btn" type="submit">
                 Connect LinkedIn
+              </button>
+            </form>
+          </>
+        )}
+      </section>
+
+      <section className="card" style={{ marginTop: "1rem" }}>
+        <h3>Your calendar</h3>
+        {calendar?.status === "active" ? (
+          <p className="small muted" style={{ margin: 0 }}>
+            Google Calendar connected. The Reply Agent offers only times you are genuinely free and
+            books the meeting itself.
+          </p>
+        ) : (
+          <>
+            <p className="small muted">
+              {calendar?.status === "reauth_required"
+                ? "Your calendar connection expired. Reconnect so the agent can keep booking meetings."
+                : "Not connected. Until it is, the agent offers to send times instead of proposing any — it will never invent a slot."}
+            </p>
+            <form action={connectCalendar}>
+              <button className="btn" type="submit">
+                {calendar ? "Reconnect Google Calendar" : "Connect Google Calendar"}
               </button>
             </form>
           </>

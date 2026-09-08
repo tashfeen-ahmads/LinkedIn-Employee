@@ -16,6 +16,8 @@ import type { WorkerContext } from "../context.js";
 import { recordEvent } from "../context.js";
 import type { InboundMessageJob, Queues } from "../queues.js";
 import { ensureConversation } from "./linkedin-action.js";
+import { offerSlots, resolveCalendar } from "../calendar.js";
+import { tryBookMeeting } from "./booking.js";
 
 /**
  * Agent 3 end to end: a prospect replies, we classify it, decide whether a
@@ -148,6 +150,7 @@ export async function handleInboundMessage(
     return;
   }
 
+  let bookedMeeting = false;
   const business = await loadBusinessProfile(ctx, job.workspaceId);
   if (!business) {
     await flagForHuman(ctx, conversation.id, job.workspaceId, "no business profile configured");
@@ -160,9 +163,41 @@ export async function handleInboundMessage(
 
   const { data: rep } = await db
     .from("profiles")
-    .select("full_name, bio")
+    .select("full_name, bio, timezone")
     .eq("id", account.user_id)
     .single();
+
+  const timezone = rep?.timezone ?? "UTC";
+  const calendar = await resolveCalendar(db, ctx.env, {
+    workspaceId: job.workspaceId,
+    userId: account.user_id,
+    timezone,
+  });
+
+  // If this reply accepts a time we previously offered, book it before drafting
+  // anything: the confirmation message should say the meeting is in the diary,
+  // not offer the same slots again.
+  if (calendar) {
+    const offered = await lastOfferedSlots(ctx, conversation.id);
+    const meetingId = await tryBookMeeting(ctx, {
+      workspaceId: job.workspaceId,
+      conversationId: conversation.id,
+      prospectId: prospect.id,
+      repUserId: account.user_id,
+      offeredSlots: offered,
+      message: job.text,
+      binding: calendar,
+      durationMinutes: ctx.env.MEETING_DURATION_MINUTES,
+    });
+    if (meetingId) bookedMeeting = true;
+  }
+
+  const slots = calendar && !bookedMeeting
+    ? await offerSlots(calendar, {
+        workingHours: parseWorkingHours(campaign?.rules),
+        durationMinutes: ctx.env.MEETING_DURATION_MINUTES,
+      })
+    : { iso: [], readable: [] };
 
   const draft = await draftReply(agents, {
     business,
@@ -174,10 +209,10 @@ export async function handleInboundMessage(
     message: job.text,
     classification,
     rules,
-    // Calendar availability is fetched by the integration layer; until a
-    // calendar is connected the agent offers to send times instead of
-    // inventing any.
-    availableSlots: [],
+    // The only datetimes the agent may name. An empty list means it offers to
+    // send times rather than inventing any.
+    availableSlots: slots.readable,
+    bookedMeeting,
   });
 
   const { data: saved } = await db
@@ -188,7 +223,10 @@ export async function handleInboundMessage(
       in_reply_to: inbound?.id ?? null,
       body: draft.message,
       proposes_meeting: draft.proposesMeeting,
-      proposed_slots: draft.proposedSlots as never,
+      // The ISO slots we actually offered, not the model's rendering of them.
+      // The booking step matches a prospect's acceptance against this list, so
+      // it has to be authoritative.
+      proposed_slots: (draft.proposesMeeting ? slots.iso : []) as never,
       unanswered_questions: draft.unansweredQuestions as never,
       prompt_version: DRAFT_PROMPT_VERSION,
       status: decision.action === "send" ? "approved" : "pending",
@@ -300,4 +338,35 @@ async function loadCustomerProfile(ctx: WorkerContext, id: string) {
   if (!data) return undefined;
   const parsed = CustomerProfileSchema.safeParse(data.spec);
   return parsed.success ? parsed.data : undefined;
+}
+
+/**
+ * The ISO slots named in the last outbound message. Stored on the draft that
+ * produced it, so the booking step matches against what we actually offered
+ * rather than re-deriving availability.
+ */
+async function lastOfferedSlots(ctx: WorkerContext, conversationId: string): Promise<string[]> {
+  const { data } = await ctx.db
+    .from("reply_drafts")
+    .select("proposed_slots, created_at")
+    .eq("conversation_id", conversationId)
+    .eq("proposes_meeting", true)
+    .in("status", ["sent", "approved"])
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  return Array.isArray(data?.proposed_slots) ? (data.proposed_slots as string[]) : [];
+}
+
+function parseWorkingHours(rules: unknown): { start: number; end: number; days: number[] } {
+  const fallback = { start: 9, end: 17, days: [1, 2, 3, 4, 5] };
+  if (!rules || typeof rules !== "object") return fallback;
+  const hours = (rules as { workingHours?: unknown }).workingHours;
+  if (!hours || typeof hours !== "object") return fallback;
+  const h = hours as Partial<{ start: number; end: number; days: number[] }>;
+  if (typeof h.start === "number" && typeof h.end === "number" && Array.isArray(h.days)) {
+    return { start: h.start, end: h.end, days: h.days };
+  }
+  return fallback;
 }

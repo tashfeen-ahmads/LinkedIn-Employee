@@ -152,7 +152,7 @@ export type ReplyClassification = z.infer<typeof ReplyClassificationSchema>;
 export const ReplyDraftSchema = z.object({
   message: z.string().max(1500),
   proposesMeeting: z.boolean(),
-  proposedSlots: z.array(z.string()).max(3).describe("ISO datetimes actually offered, if any."),
+  proposedSlots: z.array(z.string()).max(3).describe("The slots you offered, copied verbatim from the list you were given."),
   usedKnowledge: z.array(z.string()).describe("Which knowledge-base snippets informed the answer."),
   unansweredQuestions: z.array(z.string()),
 });

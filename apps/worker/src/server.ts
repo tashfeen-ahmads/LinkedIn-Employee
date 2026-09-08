@@ -1,5 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
+import { exchangeGoogleCode, googleConsentUrl } from "@le/calendar";
+import { decryptJson, encryptJson } from "./crypto.js";
 import type { Queues } from "./queues.js";
 import type { WorkerContext } from "./context.js";
 
@@ -29,6 +31,11 @@ const LinkRequest = z.object({
   workspaceId: z.string().uuid(),
   userId: z.string().uuid(),
 });
+
+/** Signed state so the OAuth callback cannot be used to bind someone else's calendar. */
+function encodeState(workspaceId: string, userId: string, key: string): string {
+  return encryptJson({ workspaceId, userId, issuedAt: Date.now() }, key);
+}
 
 /**
  * Inbound webhook surface. Unipile posts here when a prospect replies; we
@@ -147,5 +154,77 @@ export function createServer(ctx: WorkerContext, queues: Queues): Hono {
     return c.json({ received: messages.length });
   });
 
+  // Google Calendar connect. The Reply Agent cannot offer a time until this is
+  // done, so the flow is deliberately two clicks: consent, then callback.
+  app.post("/auth/google/link", async (c) => {
+    const parsed = LinkRequest.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "invalid request" }, 400);
+    if (!ctx.env.GOOGLE_CLIENT_ID || !ctx.env.CREDENTIALS_KEY) {
+      return c.json({ error: "google calendar is not configured" }, 501);
+    }
+
+    const url = googleConsentUrl({
+      clientId: ctx.env.GOOGLE_CLIENT_ID,
+      redirectUri: `${ctx.env.WORKER_URL}/auth/google/callback`,
+      state: encodeState(parsed.data.workspaceId, parsed.data.userId, ctx.env.CREDENTIALS_KEY),
+    });
+    return c.json({ url });
+  });
+
+  app.get("/auth/google/callback", async (c) => {
+    const code = c.req.query("code");
+    const state = c.req.query("state");
+    if (!code || !state) return c.redirect(`${ctx.env.APP_URL}/app/team?error=missing_code`);
+    if (!ctx.env.GOOGLE_CLIENT_ID || !ctx.env.GOOGLE_CLIENT_SECRET || !ctx.env.CREDENTIALS_KEY) {
+      return c.redirect(`${ctx.env.APP_URL}/app/team?error=not_configured`);
+    }
+
+    let claims: { workspaceId: string; userId: string; issuedAt: number };
+    try {
+      claims = decryptState(state, ctx.env.CREDENTIALS_KEY);
+    } catch {
+      return c.redirect(`${ctx.env.APP_URL}/app/team?error=bad_state`);
+    }
+    // A consent link older than an hour is not honoured.
+    if (Date.now() - claims.issuedAt > 3_600_000) {
+      return c.redirect(`${ctx.env.APP_URL}/app/team?error=expired`);
+    }
+
+    try {
+      const tokens = await exchangeGoogleCode({
+        code,
+        clientId: ctx.env.GOOGLE_CLIENT_ID,
+        clientSecret: ctx.env.GOOGLE_CLIENT_SECRET,
+        redirectUri: `${ctx.env.WORKER_URL}/auth/google/callback`,
+      });
+
+      if (!tokens.refreshToken) {
+        // Without a refresh token the connection dies in an hour; make the rep
+        // re-consent rather than storing something that will silently expire.
+        return c.redirect(`${ctx.env.APP_URL}/app/team?error=no_refresh_token`);
+      }
+
+      await ctx.db.from("integrations").upsert(
+        {
+          workspace_id: claims.workspaceId,
+          user_id: claims.userId,
+          kind: "google_calendar",
+          credentials_encrypted: encryptJson(tokens, ctx.env.CREDENTIALS_KEY),
+          status: "active",
+        },
+        { onConflict: "workspace_id,kind,user_id" },
+      );
+
+      return c.redirect(`${ctx.env.APP_URL}/app/team?calendar=connected`);
+    } catch (error) {
+      console.error("google callback failed", error);
+      return c.redirect(`${ctx.env.APP_URL}/app/team?error=exchange_failed`);
+    }
+  });
+
   return app;
+}
+
+function decryptState(state: string, key: string): { workspaceId: string; userId: string; issuedAt: number } {
+  return decryptJson(state, key);
 }

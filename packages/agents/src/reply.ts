@@ -115,8 +115,10 @@ export interface DraftInput {
   message: string;
   classification: ReplyClassification;
   rules: RulesOfEngagement;
-  /** ISO datetimes genuinely free on the rep's calendar. */
+  /** Human-readable slots genuinely free on the rep's calendar. */
   availableSlots: string[];
+  /** True when this reply confirms a meeting we have already put in the diary. */
+  bookedMeeting?: boolean;
 }
 
 /** Agent 3, step two: write the reply. */
@@ -143,11 +145,13 @@ export async function draftReply(ctx: AgentContext, input: DraftInput): Promise<
       `Conversation so far:\n${renderHistory(input.history)}`,
       `\nThe prospect just wrote:\n"""\n${input.message}\n"""`,
       `\nClassification: ${JSON.stringify(input.classification)}`,
-      input.availableSlots.length
-        ? `\nFree slots on the calendar (offer at most three, exactly as given):\n${input.availableSlots.join("\n")}`
-        : `\nNo calendar availability was retrieved. Do not invent times.${
-            input.rules.bookingLink ? ` You may share this booking link: ${input.rules.bookingLink}` : ""
-          }`,
+      input.bookedMeeting
+        ? "\nThe meeting they accepted is already in the calendar and an invitation has been sent. Confirm it briefly and warmly. Do not offer any further times."
+        : input.availableSlots.length
+          ? `\nFree slots on the calendar (offer at most three, exactly as written here):\n${input.availableSlots.join("\n")}`
+          : `\nNo calendar availability was retrieved. Do not invent times.${
+              input.rules.bookingLink ? ` You may share this booking link: ${input.rules.bookingLink}` : ""
+            }`,
       "\nWrite the reply.",
     ].join("\n"),
     effort: "medium",
