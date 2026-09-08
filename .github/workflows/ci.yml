@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Build first: the packages compile to dist/, and the apps typecheck
+      # against those outputs rather than against source.
+      - run: pnpm build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+
+      - run: pnpm typecheck
+
+      - run: pnpm test
+
+      # The eval dataset's own consistency checks run here. The eval itself
+      # needs an API key and is run deliberately, not on every push.
+      - name: Check migration is applied in one piece
+        run: |
+          test -f packages/db/supabase/migrations/0001_init.sql
+          grep -q "enable row level security" packages/db/supabase/migrations/0001_init.sql
