@@ -1,4 +1,4 @@
-import type { IntentSignal, ProspectCandidate } from "@le/shared";
+import { normalizeLinkedInUrl, type IntentSignal, type ProspectCandidate } from "@le/shared";
 
 /**
  * Intent score from observable signals. Deliberately not an LLM call: the score
@@ -62,16 +62,4 @@ export function dedupeCandidates(candidates: ProspectCandidate[]): ProspectCandi
     out.push(c);
   }
   return out;
-}
-
-/** Canonical form used as the workspace-wide uniqueness key for a prospect. */
-export function normalizeLinkedInUrl(url: string): string {
-  return url
-    .trim()
-    .toLowerCase()
-    .replace(/^https?:\/\//, "")
-    .replace(/^[a-z]{2,3}\./, "")
-    .replace(/^www\./, "")
-    .replace(/\?.*$/, "")
-    .replace(/\/+$/, "");
 }

@@ -58,6 +58,7 @@ export const DEMO: {
   prospects: DemoProspect[];
   conversations: DemoConversation[];
   meeting: { prospect: string; inDays: number; durationMinutes: number };
+  exclusions: Array<{ kind: "company" | "person"; rawValue: string; reason: string }>;
 } = {
   workspace: {
     name: "Northwind Systems",
@@ -385,4 +386,11 @@ export const DEMO: {
     inDays: 3,
     durationMinutes: 30,
   },
+
+  // The two reasons a team actually reaches for this list: an account someone
+  // else already owns, and a person who asked a colleague to stop.
+  exclusions: [
+    { kind: "company", rawValue: "Halstead Freight", reason: "Existing customer — AE owns the account" },
+    { kind: "person", rawValue: "linkedin.com/in/ana-oliveira-demo", reason: "Asked us not to contact her" },
+  ],
 };

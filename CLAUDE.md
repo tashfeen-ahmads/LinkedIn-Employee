@@ -9,7 +9,7 @@ plan. This file is for whoever works on the code next.
 pnpm install
 pnpm build          # packages compile to dist/; apps typecheck against those
 pnpm typecheck
-pnpm test           # 269 tests, no network, no API key needed
+pnpm test           # 285 tests, no network, no API key needed
 node scripts/mutation-check.mjs   # proves the safety tests actually bite
 pnpm --filter @le/web dev
 pnpm --filter @le/worker dev
@@ -49,6 +49,13 @@ tests that were verified by deliberately breaking the code.
    product cannot make.
 6. **Webhooks and the internal API fail closed.** A missing secret rejects
    rather than accepts; see `apps/worker/src/server.ts`.
+7. **The shared exclusion list is checked immediately before every send**, not
+   only when a campaign is built (`matchExclusion` in
+   `packages/shared/src/exclusions.ts`). A campaign launched this morning
+   already has invitations queued against every name on it; an account added at
+   10am has to stop the 10:05 send. Matching is deterministic for the same
+   reason opt-outs are — "never contact this account" is a promise a colleague
+   made to a customer.
 
 ## Conventions
 

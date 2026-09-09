@@ -190,6 +190,9 @@ importers:
 
   packages/db:
     dependencies:
+      '@le/shared':
+        specifier: workspace:*
+        version: link:../shared
       '@supabase/supabase-js':
         specifier: ^2.48.0
         version: 2.116.0

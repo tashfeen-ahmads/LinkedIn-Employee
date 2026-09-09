@@ -1,9 +1,10 @@
 import { checkAction } from "@le/linkedin";
-import { canTransition, type CampaignProspectStatus } from "@le/shared";
+import { canTransition, exclusionReason, matchExclusion, type CampaignProspectStatus } from "@le/shared";
 import type { WorkerContext } from "../context.js";
 import { recordEvent } from "../context.js";
 import { applyHealth, recordAction, toUsage, type AccountRecord, ACCOUNT_USAGE_COLUMNS } from "../accounts.js";
 import { syncConversationToCrm } from "../crm.js";
+import { loadExclusions } from "../exclusions.js";
 import type { LinkedInActionJob } from "../queues.js";
 
 /**
@@ -31,7 +32,7 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
 
   const { data: prospect } = await db
     .from("prospects")
-    .select("id, provider_id, linkedin_url, first_name, do_not_contact")
+    .select("id, provider_id, linkedin_url, first_name, company, do_not_contact")
     .eq("id", cp.prospect_id)
     .single();
   if (!prospect) return;
@@ -39,6 +40,20 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
   // A prospect can be banned between scheduling and sending.
   if (prospect.do_not_contact) {
     await closeProspect(ctx, cp.id, "prospect marked do not contact");
+    return;
+  }
+
+  // And their account can land on the shared exclusion list in the same window
+  // — a colleague closes the deal, or the customer signs. Checked here, at the
+  // last possible moment, for the same reason the limiter is: a campaign
+  // launched this morning already has invitations queued against every name on
+  // it, and filtering at targeting time would not touch a single one.
+  const excluded = matchExclusion(await loadExclusions(db, cp.workspace_id), {
+    company: prospect.company,
+    linkedinUrl: prospect.linkedin_url,
+  });
+  if (excluded) {
+    await closeProspect(ctx, cp.id, exclusionReason(excluded));
     return;
   }
 

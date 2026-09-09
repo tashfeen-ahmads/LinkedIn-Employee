@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MockLinkedInProvider } from "@le/linkedin";
+import { normalizeExclusionValue } from "@le/shared";
 import { FakeDb } from "./fake-db.js";
 import { runCampaignTick } from "../src/jobs/campaign-tick.js";
 import { runLinkedInAction } from "../src/jobs/linkedin-action.js";
@@ -246,6 +247,49 @@ describe("campaign pipeline", () => {
 
     expect(linkedin.sentInvitations).toHaveLength(0);
     expect(db.find("campaign_prospects", { id: CP })?.status).toBe("closed");
+  });
+
+  it("never contacts an account added to the shared exclusion list after launch", async () => {
+    // The scenario the list exists for: a colleague closes Northwind at 10am
+    // and the campaign already has this invitation queued.
+    const { db, ctx, linkedin } = harness();
+    db.seed("exclusions", [
+      {
+        id: "excl-1",
+        workspace_id: WORKSPACE,
+        kind: "company",
+        value: normalizeExclusionValue("company", "Northwind Ltd."),
+        raw_value: "Northwind Ltd.",
+        reason: "closed by AE",
+      },
+    ]);
+
+    await runLinkedInAction(ctx, { kind: "invite", workspaceId: WORKSPACE, campaignProspectId: CP });
+
+    expect(linkedin.sentInvitations).toHaveLength(0);
+    const cp = db.find("campaign_prospects", { id: CP })!;
+    expect(cp.status).toBe("closed");
+    // The rep has to be able to see why their number went down.
+    expect(cp.status_reason).toBe("excluded: Northwind Ltd. — closed by AE");
+  });
+
+  it("excludes one named person without stopping the rest of the campaign", async () => {
+    const { db, ctx, linkedin } = harness();
+    db.seed("exclusions", [
+      {
+        id: "excl-2",
+        workspace_id: WORKSPACE,
+        kind: "person",
+        value: normalizeExclusionValue("person", "https://www.linkedin.com/in/someone-else/"),
+        raw_value: "https://www.linkedin.com/in/someone-else/",
+        reason: null,
+      },
+    ]);
+
+    await runLinkedInAction(ctx, { kind: "invite", workspaceId: WORKSPACE, campaignProspectId: CP });
+
+    expect(linkedin.sentInvitations).toHaveLength(1);
+    expect(db.find("campaign_prospects", { id: CP })?.status).toBe("invited");
   });
 
   it("stops the sequence when the prospect replies", async () => {

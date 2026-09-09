@@ -10,6 +10,7 @@
  * signed into — a demo you cannot log into shows nothing.
  */
 import { createClient } from "@supabase/supabase-js";
+import { normalizeExclusionValue } from "@le/shared";
 import { DEMO } from "./demo-data.js";
 import type { Database } from "../database.types.js";
 
@@ -185,6 +186,17 @@ export async function seedDemo(db: Db, now: Date = new Date()): Promise<SeedResu
     meeting_url: "https://meet.example.test/demo",
     status: "scheduled",
   } as never);
+
+  await db.from("exclusions").insert(
+    DEMO.exclusions.map((entry) => ({
+      workspace_id: workspaceId,
+      kind: entry.kind,
+      value: normalizeExclusionValue(entry.kind, entry.rawValue),
+      raw_value: entry.rawValue,
+      reason: entry.reason,
+      created_by: userId,
+    })) as never,
+  );
 
   // The overview counts these, so the funnel is empty without them.
   await db.from("events").insert(

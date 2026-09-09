@@ -50,6 +50,9 @@ type Table<Row, Insert = Partial<Row>, Update = Partial<Row>> = {
 
 export type SubscriptionStatus = "active" | "trialing" | "past_due" | "canceled" | "unpaid";
 
+/** Mirrors the exclusion_kind enum; the matching rules live in @le/shared. */
+export type ExclusionKindDb = "company" | "person";
+
 export type WorkspaceRow = {
   id: string;
   name: string;
@@ -76,6 +79,17 @@ export type InvitationRow = {
   accepted_at: string | null;
   accepted_by: string | null;
   revoked_at: string | null;
+  created_at: string;
+};
+
+export type ExclusionRow = {
+  id: string;
+  workspace_id: string;
+  kind: ExclusionKindDb;
+  value: string;
+  raw_value: string;
+  reason: string | null;
+  created_by: string | null;
   created_at: string;
 };
 
@@ -341,6 +355,7 @@ export type Database = {
       workspaces: Table<WorkspaceRow>;
       billing_events: Table<BillingEventRow>;
       invitations: Table<InvitationRow>;
+      exclusions: Table<ExclusionRow>;
       profiles: Table<ProfileRow>;
       memberships: Table<MembershipRow>;
       linkedin_accounts: Table<LinkedinAccountRow>;
@@ -374,6 +389,7 @@ export type Database = {
       reply_mode: ReplyModeDb;
       integration_kind: IntegrationKind;
       subscription_status: SubscriptionStatus;
+      exclusion_kind: ExclusionKindDb;
     };
     CompositeTypes: { [_ in never]: never };
   };

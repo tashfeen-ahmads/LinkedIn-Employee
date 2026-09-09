@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { IntentSignal } from "@le/shared";
-import { dedupeCandidates, intentScore, normalizeLinkedInUrl, rankScore } from "../src/scoring.js";
+import { dedupeCandidates, intentScore, rankScore } from "../src/scoring.js";
 
 const now = new Date("2026-09-08T12:00:00Z");
 
@@ -43,20 +43,6 @@ describe("intentScore", () => {
 describe("rankScore", () => {
   it("weights fit above intent", () => {
     expect(rankScore(90, 0)).toBeGreaterThan(rankScore(40, 100));
-  });
-});
-
-describe("normalizeLinkedInUrl", () => {
-  it("treats the same person written five ways as one key", () => {
-    const variants = [
-      "https://www.linkedin.com/in/jane-doe/",
-      "http://linkedin.com/in/jane-doe",
-      "https://uk.linkedin.com/in/jane-doe",
-      "LinkedIn.com/in/Jane-Doe?originalSubdomain=uk",
-      "  https://www.linkedin.com/in/jane-doe  ",
-    ];
-    const keys = new Set(variants.map(normalizeLinkedInUrl));
-    expect(keys.size).toBe(1);
   });
 });
 

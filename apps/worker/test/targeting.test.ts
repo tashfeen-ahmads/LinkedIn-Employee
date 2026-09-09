@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MockLinkedInProvider } from "@le/linkedin";
+import { normalizeExclusionValue } from "@le/shared";
 import { FakeDb } from "./fake-db.js";
 import type { WorkerContext } from "../src/context.js";
 
@@ -173,6 +174,33 @@ describe("runTargetingJob", () => {
 
     const scored = scoreMock.mock.calls[0]?.[1] as { candidates: Array<{ providerId: string }> };
     expect(scored.candidates.map((c) => c.providerId)).toEqual(["p2"]);
+  });
+
+  it("never puts an excluded account in front of the scoring model", async () => {
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    db.seed("exclusions", [
+      {
+        id: "excl-1",
+        workspace_id: WORKSPACE,
+        kind: "company",
+        value: normalizeExclusionValue("company", "Northwind Ltd."),
+        raw_value: "Northwind Ltd.",
+        reason: "existing customer",
+      },
+    ]);
+    linkedin.candidates = {
+      // Both work at Northwind; the exclusion is on the account, so both go.
+      items: [candidate("p1", "https://www.linkedin.com/in/jane-one"), candidate("p2", "https://www.linkedin.com/in/jane-two")],
+      cursor: null,
+    };
+
+    const campaignId = await runTargetingJob(ctx, job);
+
+    expect(campaignId).toBeNull();
+    // Not merely unqueued — never scored, so an off-limits account costs
+    // nothing in model spend either.
+    expect(scoreMock).not.toHaveBeenCalled();
   });
 
   it("drops disqualified and low-fit prospects before anyone is queued", async () => {

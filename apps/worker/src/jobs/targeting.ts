@@ -1,7 +1,14 @@
-import { buildCampaign, normalizeLinkedInUrl, scoreProspects } from "@le/agents";
-import { BusinessProfileSchema, CustomerProfileSchema, LINKEDIN_LIMITS } from "@le/shared";
+import { buildCampaign, scoreProspects } from "@le/agents";
+import {
+  BusinessProfileSchema,
+  CustomerProfileSchema,
+  LINKEDIN_LIMITS,
+  matchExclusion,
+  normalizeLinkedInUrl,
+} from "@le/shared";
 import type { WorkerContext } from "../context.js";
 import { recordEvent } from "../context.js";
+import { loadExclusions } from "../exclusions.js";
 import type { TargetingJob } from "../queues.js";
 
 const MIN_FIT_TO_QUEUE = 60;
@@ -47,7 +54,16 @@ export async function runTargetingJob(ctx: WorkerContext, job: TargetingJob): Pr
   // Anyone this workspace already knows about is excluded, whichever rep owns
   // them. This is the cross-rep duplicate prevention promised in the spec.
   const known = await loadKnownUrls(ctx, job.workspaceId, page.items.map((c) => c.linkedinUrl));
-  const fresh = page.items.filter((c) => !known.has(normalizeLinkedInUrl(c.linkedinUrl)));
+  const unknown = page.items.filter((c) => !known.has(normalizeLinkedInUrl(c.linkedinUrl)));
+
+  // The shared exclusion list, applied before the scoring model sees anyone.
+  // The send-time check in linkedin-action.ts is the one that has to be right;
+  // this one keeps off-limits accounts out of the campaign a human reviews, and
+  // out of the model spend.
+  const exclusions = await loadExclusions(db, job.workspaceId);
+  const fresh = unknown.filter(
+    (c) => !matchExclusion(exclusions, { company: c.company, linkedinUrl: c.linkedinUrl }),
+  );
   if (fresh.length === 0) return null;
 
   const ranked = await scoreProspects(ctx.agentsFor(job.workspaceId), { profile, candidates: fresh });

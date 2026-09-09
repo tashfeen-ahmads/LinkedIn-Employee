@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { normalizeCompany } from "@le/shared";
 import { DEMO } from "../src/seed/demo-data.js";
 
 /**
@@ -49,6 +50,24 @@ describe("demo dataset", () => {
     const optedOut = DEMO.prospects.filter((p) => p.doNotContact);
     expect(optedOut.length).toBeGreaterThanOrEqual(1);
     expect(optedOut[0]?.status).toBe("opted_out");
+  });
+
+  it("ships an exclusion list with both kinds on it", () => {
+    // A screenshot of an empty list argues nothing; these two entries are the
+    // two reasons the feature exists.
+    expect(DEMO.exclusions.some((e) => e.kind === "company")).toBe(true);
+    expect(DEMO.exclusions.some((e) => e.kind === "person")).toBe(true);
+    for (const entry of DEMO.exclusions) expect(entry.reason).not.toBe("");
+  });
+
+  it("never excludes a company it is also prospecting into", () => {
+    // Otherwise the demo shows a campaign the product would refuse to send.
+    const excluded = new Set(
+      DEMO.exclusions.filter((e) => e.kind === "company").map((e) => normalizeCompany(e.rawValue)),
+    );
+    for (const prospect of DEMO.prospects) {
+      expect(excluded.has(normalizeCompany(prospect.company)), prospect.company).toBe(false);
+    }
   });
 
   it("never books a meeting for someone who never replied", () => {
