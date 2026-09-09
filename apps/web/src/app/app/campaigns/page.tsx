@@ -1,26 +1,6 @@
-import { revalidatePath } from "next/cache";
+import Link from "next/link";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
-
-async function setCampaignStatus(formData: FormData) {
-  "use server";
-  const campaignId = String(formData.get("campaignId"));
-  const status = String(formData.get("status"));
-  if (!["running", "paused"].includes(status)) return;
-
-  const session = await requireSession();
-  const supabase = await createClient();
-  await supabase
-    .from("campaigns")
-    .update({
-      status: status as "running" | "paused",
-      ...(status === "running" ? { launched_at: new Date().toISOString() } : {}),
-    })
-    .eq("id", campaignId)
-    .eq("workspace_id", session.workspaceId);
-
-  revalidatePath("/app/campaigns");
-}
 
 export default async function CampaignsPage() {
   const session = await requireSession();
@@ -76,17 +56,13 @@ export default async function CampaignsPage() {
                   <span className={`pill ${campaign.status === "running" ? "positive" : ""}`}>
                     {campaign.status}
                   </span>
-                  <form action={setCampaignStatus}>
-                    <input type="hidden" name="campaignId" value={campaign.id} />
-                    <input
-                      type="hidden"
-                      name="status"
-                      value={campaign.status === "running" ? "paused" : "running"}
-                    />
-                    <button className="btn secondary small" type="submit">
-                      {campaign.status === "running" ? "Pause" : "Launch"}
-                    </button>
-                  </form>
+                  {/* Launching happens on the review page and nowhere else: it
+                      is the one action that reaches strangers, and it should
+                      not be possible without having seen the list and the
+                      four messages. */}
+                  <Link className="btn secondary small" href={`/app/campaigns/${campaign.id}`}>
+                    {campaign.status === "draft" ? "Review" : "Open"}
+                  </Link>
                 </div>
               </header>
               <p
