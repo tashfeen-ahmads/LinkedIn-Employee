@@ -14,6 +14,7 @@ import {
 } from "@le/shared";
 import type { WorkerContext } from "../context.js";
 import { recordEvent } from "../context.js";
+import { flagForHuman } from "../holds.js";
 import type { InboundMessageJob, Queues } from "../queues.js";
 import { ensureConversation } from "./linkedin-action.js";
 import { offerSlots, resolveCalendar } from "../calendar.js";
@@ -153,7 +154,7 @@ export async function handleInboundMessage(
     }
     await recordEvent(db, {
       workspaceId: job.workspaceId,
-      name: classification.optOut ? "prospect.opted_out" : "reply.needs_human",
+      name: classification.optOut ? "prospect.opted_out" : "reply.sequence_stopped",
       subjectType: "conversation",
       subjectId: conversation.id,
       payload: { reason: decision.reason ?? null },
@@ -164,7 +165,7 @@ export async function handleInboundMessage(
   let bookedMeeting = false;
   const business = await loadBusinessProfile(ctx, job.workspaceId);
   if (!business) {
-    await flagForHuman(ctx, conversation.id, job.workspaceId, "no business profile configured");
+    await flagForHuman(db, conversation.id, "no business profile configured");
     return;
   }
 
@@ -213,21 +214,30 @@ export async function handleInboundMessage(
       })
     : { iso: [], readable: [] };
 
-  const draft = await draftReply(agents, {
-    business,
-    profile: customerProfile,
-    repName: rep?.full_name ?? "the sender",
-    repBio: rep?.bio ?? undefined,
-    knowledge,
-    history,
-    message: job.text,
-    classification,
-    rules,
-    // The only datetimes the agent may name. An empty list means it offers to
-    // send times rather than inventing any.
-    availableSlots: slots.readable,
-    bookedMeeting,
-  });
+  let draft;
+  try {
+    draft = await draftReply(agents, {
+      business,
+      profile: customerProfile,
+      repName: rep?.full_name ?? "the sender",
+      repBio: rep?.bio ?? undefined,
+      knowledge,
+      history,
+      message: job.text,
+      classification,
+      rules,
+      // The only datetimes the agent may name. An empty list means it offers
+      // to send times rather than inventing any.
+      availableSlots: slots.readable,
+      bookedMeeting,
+    });
+  } catch (error) {
+    // The prospect replied and we could not write an answer. Retrying is the
+    // queue's job; making sure a person sees the conversation either way is
+    // ours, because the alternative is a warm reply nobody ever reads.
+    await flagForHuman(db, conversation.id, "could not draft a reply, answer this one yourself");
+    throw error;
+  }
 
   const { data: saved } = await db
     .from("reply_drafts")
@@ -257,7 +267,7 @@ export async function handleInboundMessage(
   });
 
   if (decision.action === "hold_for_human") {
-    await flagForHuman(ctx, conversation.id, job.workspaceId, decision.reason ?? "held for review");
+    await flagForHuman(db, conversation.id, decision.reason ?? "held for review");
     return;
   }
 
@@ -268,13 +278,6 @@ export async function handleInboundMessage(
       { jobId: `reply:${saved.id}` },
     );
   }
-}
-
-async function flagForHuman(ctx: WorkerContext, conversationId: string, workspaceId: string, reason: string) {
-  await ctx.db
-    .from("conversations")
-    .update({ needs_human: true, needs_human_reason: reason })
-    .eq("id", conversationId);
 }
 
 /** A reply ends the automated sequence; the conversation takes over. */

@@ -250,6 +250,8 @@ export type ConversationRow = {
   last_message_at: string | null;
   needs_human: boolean;
   needs_human_reason: string | null;
+  /** Why it is waiting: a reply to approve, or a meeting to book by hand. */
+  needs_human_kind: "reply" | "booking" | null;
   created_at: string;
 };
 

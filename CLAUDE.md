@@ -9,7 +9,7 @@ plan. This file is for whoever works on the code next.
 pnpm install
 pnpm build          # packages compile to dist/; apps typecheck against those
 pnpm typecheck
-pnpm test           # 309 tests, no network, no API key needed
+pnpm test           # 312 tests, no network, no API key needed
 node scripts/mutation-check.mjs   # proves the safety tests actually bite
 pnpm --filter @le/web dev
 pnpm --filter @le/worker dev
@@ -53,7 +53,12 @@ tests that were verified by deliberately breaking the code.
    (`approved_at` in `apps/worker/src/jobs/targeting.ts`). The Strategy Agent
    writes profiles; it does not approve them. Approval happens on
    `/app/strategy` and nowhere else.
-8. **The shared exclusion list is checked immediately before every send**, not
+8. **Nothing held for a human is invisible.** `/app/inbox` lists conversations,
+   not drafts: a conversation can be flagged with no draft at all, and while the
+   page listed drafts those were shown to nobody. Holds carry a kind
+   (`apps/worker/src/holds.ts`) so sending a reply clears the reply hold and
+   never the one asking someone to book a meeting by hand.
+9. **The shared exclusion list is checked immediately before every send**, not
    only when a campaign is built (`matchExclusion` in
    `packages/shared/src/exclusions.ts`). A campaign launched this morning
    already has invitations queued against every name on it; an account added at

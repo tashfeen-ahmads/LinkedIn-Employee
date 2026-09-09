@@ -378,6 +378,22 @@ const MUTATIONS = [
     pkg: "@le/crm",
   },
   {
+    id: "holds/booking-survives-a-reply",
+    rule: "Sending a reply never clears a hold asking someone to book a meeting by hand",
+    file: "apps/worker/src/holds.ts",
+    from: '    .eq("id", conversationId)\n    .eq("needs_human_kind", kind);',
+    to: '    .eq("id", conversationId);',
+    pkg: "@le/worker",
+  },
+  {
+    id: "holds/undraftable-reply",
+    rule: "A reply the agent could not draft is still put in front of a person",
+    file: "apps/worker/src/jobs/inbound.ts",
+    from: 'await flagForHuman(db, conversation.id, "could not draft a reply, answer this one yourself");',
+    to: "// mutated",
+    pkg: "@le/worker",
+  },
+  {
     id: "strategy/targeting-needs-approval",
     rule: "Targeting refuses a customer profile no human has approved",
     file: "apps/worker/src/jobs/targeting.ts",

@@ -169,6 +169,10 @@ describe("tryBookMeeting", () => {
 
     // A booked meeting that never reached the calendar must not vanish quietly.
     expect(id).toBeNull();
-    expect(db.find("conversations", { id: CONVERSATION })?.needs_human).toBe(true);
+    const conversation = db.find("conversations", { id: CONVERSATION })!;
+    expect(conversation.needs_human).toBe(true);
+    // Marked as a booking, so the reply that goes out moments later does not
+    // clear it. Nothing else says the meeting is in nobody's diary.
+    expect(conversation.needs_human_kind).toBe("booking");
   });
 });

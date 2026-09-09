@@ -356,6 +356,21 @@ describe("campaign pipeline", () => {
     expect(draftMock).not.toHaveBeenCalled();
   });
 
+  it("surfaces a reply it could not draft instead of losing it", async () => {
+    // A model error must not turn a warm inbound reply into silence. The queue
+    // retries; the flag is what makes sure a person sees it either way.
+    const { db, ctx, queues } = harness();
+    draftMock.mockRejectedValue(new Error("model unavailable"));
+
+    await expect(handleInboundMessage(ctx, queues, inboundJob("Sounds interesting"))).rejects.toThrow(
+      "model unavailable",
+    );
+
+    const conversation = db.rows("conversations")[0]!;
+    expect(conversation.needs_human).toBe(true);
+    expect(conversation.needs_human_kind).toBe("reply");
+  });
+
   it("ignores a redelivered webhook rather than answering twice", async () => {
     const { db, ctx, queues } = harness();
     const job = inboundJob("Sounds interesting");
@@ -504,5 +519,44 @@ describe("regressions found in review", () => {
     // this product cannot make.
     expect(db.find("prospects", { id: PROSPECT })?.do_not_contact).toBe(true);
     expect(db.find("prospects", { id: PROSPECT })?.do_not_contact_reason).toBe("opted out on LinkedIn");
+  });
+});
+
+const CONVERSATION = "77777777-7777-4777-8777-777777777777";
+
+describe("holds on a conversation", () => {
+  function conversationHarness() {
+    const { db } = harness();
+    db.seed("conversations", [
+      { id: CONVERSATION, workspace_id: WORKSPACE, prospect_id: PROSPECT, needs_human: false },
+    ]);
+    return db;
+  }
+
+  it("sending a reply clears the reply hold but never a booking hold", async () => {
+    // The bug this exists to stop: a prospect accepts a time, the calendar
+    // write fails, someone is asked to book it by hand — and the confirmation
+    // reply going out moments later wipes the only record of that.
+    const db = conversationHarness();
+    const { clearHold, flagForHuman } = await import("../src/holds.js");
+
+    await flagForHuman(db.asDb(), CONVERSATION, "calendar write failed, book this manually", "booking");
+    await clearHold(db.asDb(), CONVERSATION, "reply");
+
+    const conversation = db.find("conversations", { id: CONVERSATION })!;
+    expect(conversation.needs_human).toBe(true);
+    expect(conversation.needs_human_reason).toBe("calendar write failed, book this manually");
+  });
+
+  it("clears a reply hold once the reply is sent", async () => {
+    const db = conversationHarness();
+    const { clearHold, flagForHuman } = await import("../src/holds.js");
+
+    await flagForHuman(db.asDb(), CONVERSATION, "pricing question");
+    await clearHold(db.asDb(), CONVERSATION, "reply");
+
+    const conversation = db.find("conversations", { id: CONVERSATION })!;
+    expect(conversation.needs_human).toBe(false);
+    expect(conversation.needs_human_kind).toBeNull();
   });
 });

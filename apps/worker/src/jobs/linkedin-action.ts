@@ -5,6 +5,7 @@ import { recordEvent } from "../context.js";
 import { applyHealth, recordAction, toUsage, type AccountRecord, ACCOUNT_USAGE_COLUMNS } from "../accounts.js";
 import { syncConversationToCrm } from "../crm.js";
 import { loadExclusions } from "../exclusions.js";
+import { clearHold } from "../holds.js";
 import type { LinkedInActionJob } from "../queues.js";
 
 /**
@@ -259,7 +260,10 @@ async function sendApprovedReply(
     sent_at: new Date().toISOString(),
   });
   await db.from("reply_drafts").update({ status: "sent", resolved_at: new Date().toISOString() }).eq("id", draft.id);
-  await db.from("conversations").update({ needs_human: false, needs_human_reason: null }).eq("id", conversation.id);
+  // Only the reply hold. A conversation also waiting on a manual booking stays
+  // flagged: the reply going out now says nothing about whether that meeting
+  // reached anyone's diary.
+  await clearHold(db, conversation.id, "reply");
   await recordEvent(db, {
     workspaceId: draft.workspace_id,
     name: "reply.sent",

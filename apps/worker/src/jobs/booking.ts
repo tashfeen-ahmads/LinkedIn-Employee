@@ -1,6 +1,7 @@
 import { formatSlot } from "@le/calendar";
 import type { CalendarBinding } from "../calendar.js";
 import type { WorkerContext } from "../context.js";
+import { flagForHuman } from "../holds.js";
 import { recordEvent } from "../context.js";
 
 export interface BookingInput {
@@ -66,10 +67,10 @@ export async function tryBookMeeting(ctx: WorkerContext, input: BookingInput): P
   } catch (error) {
     // A failed calendar write must not silently drop a booked meeting: leave
     // the conversation for a human instead.
-    await ctx.db
-      .from("conversations")
-      .update({ needs_human: true, needs_human_reason: "calendar write failed, book this manually" })
-      .eq("id", input.conversationId);
+    // A booking hold, not a reply hold. Sending the reply that goes out
+    // moments from now must not clear it: the meeting still is not in anyone's
+    // diary, and this flag is the only thing that says so.
+    await flagForHuman(ctx.db, input.conversationId, "calendar write failed, book this manually", "booking");
     console.error("calendar write failed", error);
     return null;
   }
