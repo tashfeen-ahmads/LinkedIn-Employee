@@ -17,6 +17,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@le/agents':
+        specifier: workspace:*
+        version: link:../../packages/agents
       '@le/billing':
         specifier: workspace:*
         version: link:../../packages/billing
@@ -197,6 +200,9 @@ importers:
         specifier: ^2.48.0
         version: 2.116.0
     devDependencies:
+      '@le/agents':
+        specifier: workspace:*
+        version: link:../agents
       '@types/node':
         specifier: ^22.10.0
         version: 22.20.1

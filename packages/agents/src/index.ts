@@ -3,6 +3,7 @@ export * from "./strategy.js";
 export * from "./targeting.js";
 export * from "./reply.js";
 export * from "./scoring.js";
+export * from "./knowledge.js";
 export {
   STRATEGY_PROMPT_VERSION,
 } from "./prompts/strategy.js";

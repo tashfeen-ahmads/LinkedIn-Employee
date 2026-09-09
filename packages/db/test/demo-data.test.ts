@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { KNOWLEDGE_BUDGET_CHARS } from "@le/agents";
 import { normalizeCompany } from "@le/shared";
 import { DEMO } from "../src/seed/demo-data.js";
 
@@ -50,6 +51,18 @@ describe("demo dataset", () => {
     const optedOut = DEMO.prospects.filter((p) => p.doNotContact);
     expect(optedOut.length).toBeGreaterThanOrEqual(1);
     expect(optedOut[0]?.status).toBe("opted_out");
+  });
+
+  it("ships a knowledge base, so the demo can answer a question", () => {
+    // With an empty base the agent may state no product fact at all and every
+    // question is forwarded, which demonstrates the opposite of the product.
+    expect(DEMO.knowledge.length).toBeGreaterThanOrEqual(3);
+    for (const doc of DEMO.knowledge) expect(doc.content.length).toBeGreaterThan(80);
+  });
+
+  it("keeps the whole knowledge base inside one prompt", () => {
+    const total = DEMO.knowledge.reduce((sum, doc) => sum + doc.title.length + doc.content.length, 0);
+    expect(total).toBeLessThan(KNOWLEDGE_BUDGET_CHARS);
   });
 
   it("ships an exclusion list with both kinds on it", () => {

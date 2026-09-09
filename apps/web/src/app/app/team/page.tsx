@@ -115,6 +115,37 @@ async function revokeInvitation(formData: FormData) {
   revalidatePath("/app/team");
 }
 
+/**
+ * The rep's own details. Both are read by the worker and neither could be set:
+ * the bio grounds the writer's voice, and the timezone decides what "working
+ * hours" means — a rep left on the default UTC gets their invitations sent at
+ * the wrong hour of their own day.
+ */
+async function saveMyDetails(formData: FormData) {
+  "use server";
+  const bio = String(formData.get("bio") ?? "").trim();
+  const timezone = String(formData.get("timezone") ?? "").trim();
+
+  const session = await requireSession();
+  const supabase = await createClient();
+  await supabase
+    .from("profiles")
+    .update({ bio: bio || null, ...(isKnownTimezone(timezone) ? { timezone } : {}) })
+    .eq("id", session.userId);
+
+  revalidatePath("/app/team");
+}
+
+/** Validated against the runtime's own list rather than a hand-kept one. */
+function isKnownTimezone(value: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en", { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export default async function TeamPage({
   searchParams,
 }: {
@@ -124,9 +155,9 @@ export default async function TeamPage({
   const session = await requireSession();
   const supabase = await createClient();
 
-  // Five independent reads on a page people open often; sequential awaits cost
-  // five round trips where one batch does.
-  const [{ data: members }, { data: accounts }, { data: calendar }, { data: crm }, { data: invitations }] =
+  // Six independent reads on a page people open often; sequential awaits cost
+  // six round trips where one batch does.
+  const [{ data: members }, { data: accounts }, { data: calendar }, { data: crm }, { data: invitations }, { data: me }] =
     await Promise.all([
       supabase
         .from("memberships")
@@ -156,6 +187,7 @@ export default async function TeamPage({
         .is("accepted_at", null)
         .is("revoked_at", null)
         .order("created_at", { ascending: false }),
+      supabase.from("profiles").select("bio, timezone").eq("id", session.userId).maybeSingle(),
     ]);
 
   const canManage = ["owner", "admin", "manager"].includes(session.role);
@@ -174,6 +206,32 @@ export default async function TeamPage({
       ) : null}
 
       <section className="card" style={{ marginTop: "1.25rem" }}>
+        <h3>You</h3>
+        <p className="small muted" style={{ marginTop: 0 }}>
+          The agent writes in your voice and sends inside your working day, so both of these change
+          what a prospect receives.
+        </p>
+        <form action={saveMyDetails}>
+          <label className="field">
+            <span>How you would describe yourself to a prospect</span>
+            <textarea
+              name="bio"
+              rows={3}
+              defaultValue={me?.bio ?? ""}
+              placeholder="Twelve years in logistics ops before this. I care about the boring parts."
+            />
+          </label>
+          <label className="field" style={{ maxWidth: 320 }}>
+            <span>Your timezone</span>
+            <input name="timezone" defaultValue={me?.timezone ?? "UTC"} placeholder="Europe/London" />
+          </label>
+          <button className="btn secondary" type="submit">
+            Save
+          </button>
+        </form>
+      </section>
+
+      <section className="card" style={{ marginTop: "1rem" }}>
         <h3>Your LinkedIn account</h3>
         {mine ? (
           <>

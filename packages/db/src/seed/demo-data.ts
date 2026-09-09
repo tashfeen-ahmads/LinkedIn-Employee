@@ -59,6 +59,7 @@ export const DEMO: {
   conversations: DemoConversation[];
   meeting: { prospect: string; inDays: number; durationMinutes: number };
   exclusions: Array<{ kind: "company" | "person"; rawValue: string; reason: string }>;
+  knowledge: Array<{ title: string; content: string }>;
 } = {
   workspace: {
     name: "Northwind Systems",
@@ -386,6 +387,28 @@ export const DEMO: {
     inDays: 3,
     durationMinutes: 30,
   },
+
+  // Without these the agent may state no product fact at all, and every
+  // question a prospect asks is forwarded to a human. Pricing is deliberately
+  // included: the reply gate hands pricing questions to a person anyway, and
+  // the difference is whether the person answers from scratch or confirms.
+  knowledge: [
+    {
+      title: "Pricing",
+      content:
+        "Northwind is priced per lane, per month. A lane is one origin-destination pair you ship regularly. £180 per lane per month, minimum five lanes, billed annually or monthly at a 15% premium. Implementation is £2,500 one-off and takes about three weeks. There is no per-user charge and no charge for carrier accounts.",
+    },
+    {
+      title: "Security and data",
+      content:
+        "Data is held in the EU (Ireland) and never leaves it. SOC 2 Type II, audited annually; the report is available under NDA. We are a data processor under GDPR and sign a DPA on request. Customer data is not used to train any model. Access is SSO via Okta or Entra ID, and we support SCIM provisioning.",
+    },
+    {
+      title: "What we do not do",
+      content:
+        "We do not broker freight or take a margin on it — we are software, not a 3PL. We do not do customs paperwork. We do not integrate with SAP TM today; it is on the roadmap with no date, and saying otherwise is the one thing that loses these deals.",
+    },
+  ],
 
   // The two reasons a team actually reaches for this list: an account someone
   // else already owns, and a person who asked a colleague to stop.

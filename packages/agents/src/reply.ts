@@ -10,6 +10,7 @@ import {
   type RulesOfEngagement,
 } from "@le/shared";
 import { callStructured, type AgentContext } from "./client.js";
+import { renderKnowledge } from "./knowledge.js";
 import {
   CLASSIFY_PROMPT_VERSION,
   CLASSIFY_SYSTEM,
@@ -164,9 +165,4 @@ function renderHistory(history: ConversationTurn[]): string {
   return history
     .map((turn) => `[${turn.at}] ${turn.role === "rep" ? "Us" : "Prospect"}: ${turn.text}`)
     .join("\n");
-}
-
-function renderKnowledge(docs: Array<{ title: string; content: string }>): string {
-  if (docs.length === 0) return "(empty — you may not state any product fact beyond the business profile)";
-  return docs.map((d) => `## ${d.title}\n${d.content}`).join("\n\n");
 }

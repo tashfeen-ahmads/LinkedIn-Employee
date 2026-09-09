@@ -11,6 +11,7 @@ const NAV = [
   { href: "/app/inbox", label: "Inbox" },
   { href: "/app/meetings", label: "Meetings" },
   { href: "/app/reporting", label: "Reporting" },
+  { href: "/app/knowledge", label: "Knowledge" },
   { href: "/app/exclusions", label: "Exclusions" },
   { href: "/app/team", label: "Team" },
   { href: "/app/billing", label: "Billing" },

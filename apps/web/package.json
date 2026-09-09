@@ -11,6 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@le/agents": "workspace:*",
     "@le/db": "workspace:*",
     "@le/shared": "workspace:*",
     "@supabase/ssr": "^0.12.7",

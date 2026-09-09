@@ -190,6 +190,15 @@ export async function seedDemo(db: Db, now: Date = new Date()): Promise<SeedResu
     status: "scheduled",
   } as never);
 
+  await db.from("knowledge_documents").insert(
+    DEMO.knowledge.map((doc) => ({
+      workspace_id: workspaceId,
+      title: doc.title,
+      content: doc.content,
+      source: "demo",
+    })) as never,
+  );
+
   await db.from("exclusions").insert(
     DEMO.exclusions.map((entry) => ({
       workspace_id: workspaceId,

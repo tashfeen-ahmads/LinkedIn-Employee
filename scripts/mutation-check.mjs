@@ -378,6 +378,22 @@ const MUTATIONS = [
     pkg: "@le/crm",
   },
   {
+    id: "knowledge/no-truncation",
+    rule: "A document too long for the prompt is left out whole, never trimmed to fit",
+    file: "packages/agents/src/knowledge.ts",
+    from: "    if (used + cost <= budget) {",
+    to: "    if (true) {",
+    pkg: "@le/agents",
+  },
+  {
+    id: "knowledge/names-omissions",
+    rule: "The agent is told which documents it has not read, so it hands off instead of guessing",
+    file: "packages/agents/src/knowledge.ts",
+    from: "  if (omitted.length === 0) return body;",
+    to: "  return body;",
+    pkg: "@le/agents",
+  },
+  {
     id: "holds/booking-survives-a-reply",
     rule: "Sending a reply never clears a hold asking someone to book a meeting by hand",
     file: "apps/worker/src/holds.ts",

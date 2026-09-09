@@ -22,6 +22,7 @@
     "@supabase/supabase-js": "^2.48.0"
   },
   "devDependencies": {
+    "@le/agents": "workspace:*",
     "typescript": "^5.9.0",
     "vitest": "^3.2.0",
     "@types/node": "^22.10.0",
