@@ -24,8 +24,8 @@ export interface BookingInput {
  * not something to guess at.
  */
 export async function tryBookMeeting(ctx: WorkerContext, input: BookingInput): Promise<string | null> {
-  if (input.offeredSlots.length === 0) return null;
-
+  // No separate empty-list guard: matchOfferedSlot returns null for an empty
+  // list, and this is the check that stops everything. One gate, testable.
   const chosen = matchOfferedSlot(input.message, input.offeredSlots, input.binding.timezone);
   if (!chosen) return null;
 

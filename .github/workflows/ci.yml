@@ -38,6 +38,12 @@ jobs:
 
       - run: pnpm test
 
+      # Proves the safety tests actually bite. A green suite says nothing on its
+      # own: a test can pass because the code is right, or because it never
+      # reaches the code.
+      - name: Mutation check on the safety rules
+        run: node scripts/mutation-check.mjs
+
       # The eval dataset's own consistency checks run here. The eval itself
       # needs an API key and is run deliberately, not on every push.
       - name: Check migration is applied in one piece

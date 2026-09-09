@@ -1,0 +1,374 @@
+#!/usr/bin/env node
+/**
+ * Mutation check for the safety-critical rules.
+ *
+ * A passing test suite proves nothing on its own: a test can pass because the
+ * code is right, or because the test never reaches the code. One of ours did
+ * exactly that — it set needsHuman true, which routes to hold-for-human, so it
+ * never touched the branch it claimed to cover.
+ *
+ * This breaks each rule on purpose and demands that some test notice. A
+ * SURVIVED line means the rule in question is currently unguarded.
+ *
+ *   node scripts/mutation-check.mjs            # all mutations
+ *   node scripts/mutation-check.mjs rate       # only ids containing "rate"
+ */
+import { execSync } from "node:child_process";
+import { readFileSync, writeFileSync } from "node:fs";
+
+/**
+ * Each mutation states the rule it breaks, so a SURVIVED line reads as a
+ * sentence about the product rather than a diff.
+ */
+const MUTATIONS = [
+  {
+    id: "limiter/daily-invite-cap",
+    rule: "An account past its daily invite cap must not send",
+    file: "packages/linkedin/src/rate-limit.ts",
+    from: "if (usage.invitesToday >= dailyInviteCap(usage.connectedAt, now)) {",
+    to: "if (false) {",
+    pkg: "@le/linkedin",
+  },
+  {
+    id: "limiter/weekly-ceiling",
+    rule: "The weekly invitation ceiling is absolute",
+    file: "packages/linkedin/src/rate-limit.ts",
+    from: "if (usage.invitesThisWeek >= LINKEDIN_LIMITS.invitesPerWeek) {",
+    to: "if (false) {",
+    pkg: "@le/linkedin",
+  },
+  {
+    id: "limiter/working-hours",
+    rule: "Nothing sends outside the rep's working hours",
+    file: "packages/linkedin/src/rate-limit.ts",
+    from: "if (!isWithinWorkingHours(now, usage.workingHours, usage.timezone)) {",
+    to: "if (false) {",
+    pkg: "@le/linkedin",
+  },
+  {
+    id: "limiter/min-gap",
+    rule: "Two actions never happen back to back",
+    file: "packages/linkedin/src/rate-limit.ts",
+    from: "if (elapsed < LINKEDIN_LIMITS.minGapMs) {",
+    to: "if (false) {",
+    pkg: "@le/linkedin",
+  },
+  {
+    id: "limiter/warmup-ramp",
+    rule: "A new account starts at the low cap and ramps",
+    file: "packages/linkedin/src/rate-limit.ts",
+    from: "if (days >= warmupDays) return invitesPerDayMax;",
+    to: "return invitesPerDayMax;",
+    pkg: "@le/linkedin",
+  },
+  {
+    id: "gate/approval-mode",
+    rule: "Approval mode holds every reply",
+    file: "packages/agents/src/reply.ts",
+    from: 'if (rules.mode === "approval") {',
+    to: "if (false) {",
+    pkg: "@le/agents",
+  },
+  {
+    id: "gate/pricing",
+    rule: "A pricing question always reaches a human",
+    file: "packages/agents/src/reply.ts",
+    from: "if (rules.handOffOnPricing && classification.mentionsPricing) {",
+    to: "if (false) {",
+    pkg: "@le/agents",
+  },
+  {
+    id: "gate/legal",
+    rule: "A legal or security question always reaches a human",
+    file: "packages/agents/src/reply.ts",
+    from: "if (rules.handOffOnLegal && classification.mentionsLegalOrCompliance) {",
+    to: "if (false) {",
+    pkg: "@le/agents",
+  },
+  {
+    id: "gate/low-confidence",
+    rule: "An unconfident classification reaches a human",
+    file: "packages/agents/src/reply.ts",
+    from: "if (classification.confidence < rules.minConfidence) {",
+    to: "if (false) {",
+    pkg: "@le/agents",
+  },
+  {
+    id: "gate/opt-out",
+    rule: "An opt-out stops the sequence, whatever else is true",
+    file: "packages/agents/src/reply.ts",
+    from: "if (classification.optOut) {",
+    to: "if (false) {",
+    pkg: "@le/agents",
+  },
+  {
+    id: "optout/phrase-matching",
+    rule: "Opt-out phrases are caught deterministically, not only by the model",
+    file: "packages/agents/src/reply.ts",
+    from: "return OPT_OUT_PHRASES.some((phrase) => normalized.includes(phrase));",
+    to: "return false;",
+    pkg: "@le/agents",
+  },
+  {
+    id: "slots/working-hours",
+    rule: "No slot is offered outside working hours",
+    file: "packages/calendar/src/slots.ts",
+    // Both bounds must go: for a 30-minute slot either check alone still
+    // constrains the other, so mutating one is a no-op that proves nothing.
+    from:
+      "      withinWorkingHours(start, workingHours, timezone) &&\n" +
+      "      withinWorkingHours(new Date(end.getTime() - 60_000), workingHours, timezone) &&",
+    to: "      true &&",
+    pkg: "@le/calendar",
+  },
+  {
+    id: "slots/conflicts",
+    rule: "No slot is offered over an existing meeting",
+    file: "packages/calendar/src/slots.ts",
+    from: "!overlapsAny(cursor, cursor + durationMs, blocks)",
+    to: "true",
+    pkg: "@le/calendar",
+  },
+  {
+    id: "slots/min-notice",
+    rule: "Nothing is offered sooner than the minimum notice",
+    file: "packages/calendar/src/slots.ts",
+    from: "const earliest = new Date(Math.max(from.getTime(), Date.now() + minNoticeHours * 3_600_000));",
+    to: "const earliest = new Date(from.getTime());",
+    pkg: "@le/calendar",
+  },
+  {
+    id: "booking/negation",
+    rule: "A declined slot is never booked",
+    file: "apps/worker/src/jobs/booking.ts",
+    from: "if (NEGATION.test(text)) return false;",
+    to: "",
+    pkg: "@le/worker",
+  },
+  {
+    id: "booking/unoffered-slot",
+    rule: "Only a slot we actually offered can be booked",
+    file: "apps/worker/src/jobs/booking.ts",
+    from: "  if (!chosen) return null;",
+    to: "  const _unused = chosen;",
+    pkg: "@le/worker",
+  },
+  {
+    id: "booking/ambiguity",
+    rule: "An ambiguous acceptance books nothing",
+    file: "apps/worker/src/jobs/booking.ts",
+    from: "if (ordinalMatches.length > 1) return null;",
+    to: "",
+    pkg: "@le/worker",
+  },
+  {
+    id: "webhook/signature",
+    rule: "An unsigned or wrongly signed webhook is rejected",
+    file: "packages/linkedin/src/unipile.ts",
+    from: "if (!input.signature || !verifySignature(input.body, input.signature, this.webhookSecret)) {",
+    to: "if (false) {",
+    pkg: "@le/linkedin",
+  },
+  {
+    id: "webhook/fails-closed",
+    rule: "A missing webhook secret rejects rather than accepts",
+    file: "packages/linkedin/src/unipile.ts",
+    from: "if (!this.webhookSecret) {",
+    to: "if (false) {",
+    pkg: "@le/linkedin",
+  },
+  {
+    id: "api/bearer-check",
+    rule: "The internal API rejects a wrong secret",
+    file: "apps/worker/src/server.ts",
+    from: "if (!constantTimeEquals(presented, secret)) return c.json({ error: \"unauthorized\" }, 401);",
+    to: "",
+    pkg: "@le/worker",
+  },
+  {
+    id: "api/fails-closed",
+    rule: "An unconfigured internal API rejects rather than opens",
+    file: "apps/worker/src/server.ts",
+    from: 'if (!secret) return c.json({ error: "worker is not configured for internal calls" }, 503);',
+    to: "",
+    pkg: "@le/worker",
+  },
+  {
+    id: "api/membership",
+    rule: "Credentials cannot be bound to a workspace you are not in",
+    file: "apps/worker/src/server.ts",
+    from: "  return Boolean(data);",
+    to: "  return true;",
+    pkg: "@le/worker",
+  },
+  {
+    id: "pipeline/do-not-contact",
+    rule: "A do-not-contact prospect is never messaged",
+    file: "apps/worker/src/jobs/linkedin-action.ts",
+    from: "if (prospect.do_not_contact) {",
+    to: "if (false) {",
+    pkg: "@le/worker",
+  },
+  {
+    id: "pipeline/approved-reply-limiter",
+    rule: "An approved reply still passes the rate limiter",
+    file: "apps/worker/src/jobs/linkedin-action.ts",
+    from: "if (!replyDecision.allowed) {",
+    to: "if (false) {",
+    pkg: "@le/worker",
+  },
+  {
+    id: "pipeline/reply-stops-sequence",
+    rule: "A reply stops the scheduled follow-ups",
+    file: "apps/worker/src/jobs/inbound.ts",
+    from: 'if (canTransition(cp.status as CampaignProspectStatus, "replied")) {',
+    to: "if (false) {",
+    pkg: "@le/worker",
+  },
+  {
+    id: "pipeline/webhook-idempotency",
+    rule: "A redelivered webhook is not answered twice",
+    file: "apps/worker/src/jobs/inbound.ts",
+    from: "if (existing) return;",
+    to: "",
+    pkg: "@le/worker",
+  },
+  {
+    id: "billing/trial-expiry",
+    rule: "An expired trial stops outreach",
+    file: "apps/worker/src/jobs/campaign-tick.ts",
+    from: "if (!entitled.get(campaign.workspace_id)) continue;",
+    to: "",
+    pkg: "@le/worker",
+  },
+  {
+    id: "billing/canceled-subscription",
+    rule: "A canceled subscription stops sending",
+    file: "packages/billing/src/entitlement.ts",
+    from: 'if (billing.subscriptionStatus === "canceled" || billing.subscriptionStatus === "unpaid") {',
+    to: "if (false) {",
+    pkg: "@le/billing",
+  },
+  {
+    id: "billing/read-never-blocked",
+    rule: "Reading is never blocked, whatever the billing state",
+    file: "packages/billing/src/entitlement.ts",
+    from: 'return { canSend: false, canRead: true, reason: "trial_expired", trialDaysLeft: 0 };',
+    to: 'return { canSend: false, canRead: false, reason: "trial_expired", trialDaysLeft: 0 };',
+    pkg: "@le/billing",
+  },
+  {
+    id: "invites/email-binding",
+    rule: "An invitation only admits the address it was sent to",
+    file: "apps/web/src/lib/invitations.ts",
+    from: "if (invite.email.trim().toLowerCase() !== userEmail.trim().toLowerCase()) {",
+    to: "if (false) {",
+    pkg: "@le/web",
+  },
+  {
+    id: "invites/expiry",
+    rule: "An expired invitation is refused",
+    file: "apps/web/src/lib/invitations.ts",
+    from: 'if (Date.parse(invite.expires_at) <= now.getTime()) return { ok: false, reason: "expired" };',
+    to: "",
+    pkg: "@le/web",
+  },
+  {
+    id: "invites/revocation",
+    rule: "A revoked invitation stays revoked",
+    file: "apps/web/src/lib/invitations.ts",
+    from: 'if (invite.revoked_at) return { ok: false, reason: "revoked" };',
+    to: "",
+    pkg: "@le/web",
+  },
+  {
+    id: "crypto/auth-tag",
+    rule: "Tampered ciphertext is rejected",
+    file: "apps/worker/src/crypto.ts",
+    from: "decipher.setAuthTag(Buffer.from(tagPart, \"base64url\"));",
+    to: "",
+    pkg: "@le/worker",
+  },
+  {
+    id: "retention/live-activity",
+    rule: "Retention spares a prospect with an open campaign or upcoming meeting",
+    file: "apps/worker/src/jobs/retention.ts",
+    from: "if (await hasLiveActivity(db, workspace.id, prospect.id, now)) continue;",
+    to: "",
+    pkg: "@le/worker",
+  },
+  {
+    id: "retention/tombstone",
+    rule: "Erasure leaves a do-not-contact tombstone",
+    file: "apps/worker/src/jobs/retention.ts",
+    from: "      do_not_contact: true,\n      do_not_contact_reason: `erased: ${input.reason}`,",
+    to: "      do_not_contact: false,\n      do_not_contact_reason: null,",
+    pkg: "@le/worker",
+  },
+  {
+    id: "crm/html-escaping",
+    rule: "Prospect text cannot inject markup into a CRM note",
+    file: "packages/crm/src/hubspot.ts",
+    from: "return `<b>${who}</b><br><br>${escapeHtml(activity.body).replace(/\\n/g, \"<br>\")}`;",
+    to: "return `<b>${who}</b><br><br>${activity.body}`;",
+    pkg: "@le/crm",
+  },
+];
+
+const filter = process.argv[2];
+const selected = filter ? MUTATIONS.filter((m) => m.id.includes(filter)) : MUTATIONS;
+
+if (selected.length === 0) {
+  console.error(`No mutations match "${filter}"`);
+  process.exit(2);
+}
+
+console.log(`Running ${selected.length} mutations\n`);
+
+const survived = [];
+const inapplicable = [];
+
+for (const mutation of selected) {
+  const original = readFileSync(mutation.file, "utf8");
+
+  if (!original.includes(mutation.from)) {
+    // The code moved and the mutation no longer describes it. That is a
+    // failure of this file, not of the tests, and it must be loud: a stale
+    // mutation silently stops checking anything.
+    inapplicable.push(mutation);
+    console.log(`  STALE     ${mutation.id} — target text not found in ${mutation.file}`);
+    continue;
+  }
+
+  writeFileSync(mutation.file, original.replace(mutation.from, mutation.to));
+
+  let caught = false;
+  try {
+    execSync(`pnpm --filter ${mutation.pkg} test`, { stdio: "pipe" });
+  } catch {
+    // A non-zero exit means a test failed, which is what we want.
+    caught = true;
+  } finally {
+    writeFileSync(mutation.file, original);
+  }
+
+  if (caught) {
+    console.log(`  caught    ${mutation.id}`);
+  } else {
+    survived.push(mutation);
+    console.log(`  SURVIVED  ${mutation.id} — ${mutation.rule}`);
+  }
+}
+
+console.log(`\n${selected.length - survived.length - inapplicable.length}/${selected.length} caught`);
+
+if (survived.length) {
+  console.log("\nUnguarded rules — a test should fail when each of these breaks:");
+  for (const mutation of survived) console.log(`  ${mutation.id}: ${mutation.rule}`);
+}
+if (inapplicable.length) {
+  console.log("\nStale mutations — update scripts/mutation-check.mjs to match the code:");
+  for (const mutation of inapplicable) console.log(`  ${mutation.id} (${mutation.file})`);
+}
+
+process.exit(survived.length + inapplicable.length > 0 ? 1 : 0);

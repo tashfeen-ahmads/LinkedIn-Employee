@@ -9,7 +9,8 @@ plan. This file is for whoever works on the code next.
 pnpm install
 pnpm build          # packages compile to dist/; apps typecheck against those
 pnpm typecheck
-pnpm test           # 241 tests, no network, no API key needed
+pnpm test           # 246 tests, no network, no API key needed
+node scripts/mutation-check.mjs   # proves the safety tests actually bite
 pnpm --filter @le/web dev
 pnpm --filter @le/worker dev
 ```
@@ -70,12 +71,20 @@ covering the query shapes the worker uses. It is not a Postgres emulator; where
 it cannot be faithful it throws rather than returning something a real database
 never would.
 
-When you add a test for a safety rule, check it actually bites: break the rule
-on purpose and confirm the test fails. Several of these tests initially passed
-against broken code — including one that set `needsHuman: true`, which routes
-to hold-for-human and never reaches the branch it claimed to cover. A test that
-passes for the wrong reason is worse than no test, because it stops anyone
-looking again.
+When you add a test for a safety rule, add a mutation to
+`scripts/mutation-check.mjs` too. It breaks each rule on purpose and requires
+that some test notice; CI runs it on every push.
+
+This is not ceremony. Twice a test here passed for the wrong reason — once by
+setting `needsHuman: true`, which routes to hold-for-human and never reaches
+the branch it claimed to cover, and once by using a phrase the acceptance
+matcher rejects outright. Both were green. Neither would have caught a
+regression. A test that passes for the wrong reason is worse than no test,
+because it stops anyone looking again.
+
+A `SURVIVED` line names an unguarded rule. A `STALE` line means the code moved
+and the mutation no longer matches — fix the mutation, or it silently stops
+checking anything.
 
 The classification eval (`packages/agents/evals/`) costs money and needs an API
 key, so it is not in CI and **has not been run yet**. Run it before the first
