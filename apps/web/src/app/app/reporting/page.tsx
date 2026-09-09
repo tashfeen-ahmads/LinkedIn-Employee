@@ -1,4 +1,11 @@
-import { FUNNEL_STAGES, MIN_FOR_RATE, RATE_TARGETS, countFunnel, funnelRates } from "@le/shared";
+import {
+  FUNNEL_STAGES,
+  MIN_FOR_RATE,
+  RATE_TARGETS,
+  countFunnel,
+  funnelRates,
+  type FunnelRow,
+} from "@le/shared";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 
@@ -30,19 +37,19 @@ export default async function ReportingPage() {
   const { data: rows } = campaignIds.length
     ? await supabase
         .from("campaign_prospects")
-        .select("campaign_id, status")
+        .select("campaign_id, status, invited_at, accepted_at, replied_at")
         .eq("workspace_id", session.workspaceId)
         .in("campaign_id", campaignIds)
     : { data: [] };
 
   const ownerByCampaign = new Map((campaigns ?? []).map((c) => [c.id, c.owner_user_id]));
-  const statusesByRep = new Map<string, string[]>();
-  const statusesByCampaign = new Map<string, string[]>();
+  const byRep = new Map<string, FunnelRow[]>();
+  const byCampaign = new Map<string, FunnelRow[]>();
 
   for (const row of rows ?? []) {
     const owner = ownerByCampaign.get(row.campaign_id);
-    if (owner) statusesByRep.set(owner, [...(statusesByRep.get(owner) ?? []), row.status]);
-    statusesByCampaign.set(row.campaign_id, [...(statusesByCampaign.get(row.campaign_id) ?? []), row.status]);
+    if (owner) byRep.set(owner, [...(byRep.get(owner) ?? []), row]);
+    byCampaign.set(row.campaign_id, [...(byCampaign.get(row.campaign_id) ?? []), row]);
   }
 
   // A rep sees their own row; anyone who can manage the team sees everyone.
@@ -52,7 +59,7 @@ export default async function ReportingPage() {
   const reps = visible
     .map((membership) => {
       const profile = membership.profiles as unknown as { full_name: string | null; email: string } | null;
-      const counts = countFunnel(statusesByRep.get(membership.user_id) ?? []);
+      const counts = countFunnel(byRep.get(membership.user_id) ?? []);
       return {
         userId: membership.user_id,
         name: profile?.full_name ?? profile?.email ?? "Unknown",
@@ -63,7 +70,7 @@ export default async function ReportingPage() {
     })
     .sort((a, b) => b.counts.meetings - a.counts.meetings || b.counts.invited - a.counts.invited);
 
-  const workspaceCounts = countFunnel((rows ?? []).map((r) => r.status));
+  const workspaceCounts = countFunnel(rows ?? []);
   const workspaceRates = funnelRates(workspaceCounts);
   const peak = Math.max(1, ...reps.map((r) => r.counts.invited));
 
@@ -182,7 +189,7 @@ export default async function ReportingPage() {
                 {campaigns
                   .filter((campaign) => canSeeTeam || campaign.owner_user_id === session.userId)
                   .map((campaign) => {
-                    const counts = countFunnel(statusesByCampaign.get(campaign.id) ?? []);
+                    const counts = countFunnel(byCampaign.get(campaign.id) ?? []);
                     const rates = funnelRates(counts);
                     return (
                       <tr key={campaign.id}>

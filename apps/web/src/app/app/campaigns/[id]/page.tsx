@@ -160,7 +160,7 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
       .order("step_number"),
     supabase
       .from("campaign_prospects")
-      .select("id, status, status_reason, prospects (id, first_name, last_name, title, company, linkedin_url, fit_score)")
+      .select("id, status, status_reason, invited_at, accepted_at, replied_at, prospects (id, first_name, last_name, title, company, linkedin_url, fit_score)")
       .eq("campaign_id", id)
       .order("created_at"),
     supabase.from("linkedin_accounts").select("status, display_name").eq("id", campaign.linkedin_account_id).maybeSingle(),
@@ -168,7 +168,7 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
 
   const rows = members ?? [];
   const queued = rows.filter((row) => row.status === "queued");
-  const counts = countFunnel(rows.map((row) => row.status));
+  const counts = countFunnel(rows);
   const blockers = launchBlockers({
     connectionNote: campaign.connection_note,
     steps: (steps ?? []).map((s) => ({ message: s.message, delayDays: s.delay_days })),

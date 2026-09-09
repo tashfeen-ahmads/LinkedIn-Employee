@@ -8,7 +8,7 @@ export default async function OverviewPage() {
   const supabase = await createClient();
 
   const [{ data: rows }, { data: profiles }] = await Promise.all([
-    supabase.from("campaign_prospects").select("status").eq("workspace_id", session.workspaceId),
+    supabase.from("campaign_prospects").select("status, invited_at, accepted_at, replied_at").eq("workspace_id", session.workspaceId),
     supabase
       .from("customer_profiles")
       .select("id, name, priority, approved_at, do_not_pursue")
@@ -18,7 +18,7 @@ export default async function OverviewPage() {
 
   // One definition of the funnel, shared with the reporting page: two copies
   // would drift and quietly disagree about the same numbers.
-  const tally = countFunnel((rows ?? []).map((r) => r.status));
+  const tally = countFunnel(rows ?? []);
   const counts = FUNNEL_STAGES.map((stage) => ({ label: stage.label, value: tally[stage.key] }));
 
   const invited = tally.invited;

@@ -1,4 +1,4 @@
-import { LINKEDIN_LIMITS } from "@le/shared";
+import { LINKEDIN_LIMITS, countFunnel } from "@le/shared";
 import type { WorkerContext } from "../context.js";
 import { pollHealth } from "../accounts.js";
 import { recordEvent } from "../context.js";
@@ -179,17 +179,18 @@ async function flagPoorAcceptanceRates(ctx: WorkerContext): Promise<void> {
 
     const { data: rows } = await ctx.db
       .from("campaign_prospects")
-      .select("status")
+      .select("status, invited_at, accepted_at, replied_at")
       .in("campaign_id", campaignIds);
 
-    const invited = (rows ?? []).filter((row) => row.status !== "queued").length;
+    // The same funnel the reporting page shows. This had its own fourth
+    // definition, which counted a withdrawn invitation as never sent and an
+    // excluded prospect as never accepted — so it warned about accounts whose
+    // real acceptance rate was fine.
+    const counts = countFunnel(rows ?? []);
     // Below this there is not enough signal to judge a campaign by.
-    if (invited < MIN_INVITES_FOR_RATE) continue;
+    if (counts.invited < MIN_INVITES_FOR_RATE) continue;
 
-    const accepted = (rows ?? []).filter(
-      (row) => !["queued", "invited", "failed", "closed"].includes(row.status),
-    ).length;
-    const rate = accepted / invited;
+    const rate = counts.accepted / counts.invited;
     if (rate >= LINKEDIN_LIMITS.minHealthyAcceptanceRate) continue;
 
     await recordEvent(ctx.db, {
@@ -197,7 +198,7 @@ async function flagPoorAcceptanceRates(ctx: WorkerContext): Promise<void> {
       name: "linkedin.account.low_acceptance",
       subjectType: "linkedin_account",
       subjectId: account.id,
-      payload: { lowAcceptanceRate: Number(rate.toFixed(3)), invited },
+      payload: { lowAcceptanceRate: Number(rate.toFixed(3)), invited: counts.invited },
     });
   }
 }

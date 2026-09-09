@@ -536,6 +536,22 @@ const MUTATIONS = [
     pkg: "@le/shared",
   },
   {
+    id: "funnel/counts-what-happened",
+    rule: "A stage that happened stays counted after a terminal status overwrites it",
+    file: "packages/shared/src/funnel.ts",
+    from: "const invited = accepted || (row.invited_at || at(\"invited\") ? 1 : 0);",
+    to: 'const invited = accepted || (at("invited") ? 1 : 0);',
+    pkg: "@le/shared",
+  },
+  {
+    id: "funnel/monotonic",
+    rule: "Reaching a later stage implies every earlier one, whatever the row says",
+    file: "packages/shared/src/funnel.ts",
+    from: "const accepted = replied || (row.accepted_at || at(\"accepted\") ? 1 : 0);",
+    to: 'const accepted = row.accepted_at || at("accepted") ? 1 : 0;',
+    pkg: "@le/shared",
+  },
+  {
     id: "funnel/min-sample",
     rule: "A rate is withheld until there is enough of a sample to mean anything",
     file: "packages/shared/src/funnel.ts",
