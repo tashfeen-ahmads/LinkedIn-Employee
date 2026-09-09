@@ -24,10 +24,16 @@ export async function runTargetingJob(ctx: WorkerContext, job: TargetingJob): Pr
 
   const { data: profileRow } = await db
     .from("customer_profiles")
-    .select("id, spec, business_profile_id, do_not_pursue")
+    .select("id, spec, business_profile_id, do_not_pursue, approved_at")
     .eq("id", job.customerProfileId)
     .single();
   if (!profileRow || profileRow.do_not_pursue) return null;
+
+  // The Strategy Agent writes profiles; it does not approve them. Searching
+  // LinkedIn against a description of a customer nobody has read is how a
+  // campaign ends up aimed at the wrong market, and the search itself costs
+  // Sales Navigator credits.
+  if (!profileRow.approved_at) return null;
 
   const profile = CustomerProfileSchema.parse(profileRow.spec);
 

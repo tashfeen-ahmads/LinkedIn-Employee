@@ -62,8 +62,8 @@ export default async function OverviewPage() {
       <section>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <h2 style={{ fontSize: "1.15rem", margin: 0 }}>Customer profiles</h2>
-          <Link href="/app/campaigns" className="btn secondary small">
-            Campaigns
+          <Link href="/app/strategy" className="btn secondary small">
+            Review and approve
           </Link>
         </div>
         {profiles?.length ? (

@@ -5,6 +5,7 @@ import { entitlementFor, entitlementMessage } from "@le/billing";
 
 const NAV = [
   { href: "/app", label: "Overview" },
+  { href: "/app/strategy", label: "Strategy" },
   { href: "/app/prospects", label: "Prospects" },
   { href: "/app/campaigns", label: "Campaigns" },
   { href: "/app/inbox", label: "Inbox" },

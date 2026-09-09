@@ -47,7 +47,10 @@ export async function seedDemo(db: Db, now: Date = new Date()): Promise<SeedResu
       name: profile.name,
       spec: profile as never,
       priority: profile.priority,
-      approved_at: iso(now, -9),
+      // Only the profile that has a campaign is approved. The other one sits
+      // where every real second profile sits: written by the agent, waiting for
+      // someone to read it, and unable to search until they do.
+      approved_at: profile.priority === 1 ? iso(now, -9) : null,
     });
     profileIds.set(profile.name, id);
   }

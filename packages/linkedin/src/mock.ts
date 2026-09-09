@@ -20,6 +20,8 @@ export class MockLinkedInProvider implements LinkedInProvider {
   health: AccountHealth = "ok";
   inbox: InboundMessage[] = [];
   candidates: ProspectPage = { items: [], cursor: null };
+  /** Every search performed, so a test can prove one did not happen. */
+  readonly searches: Array<{ accountId: string; query: SearchQuery }> = [];
 
   async createHostedAuthLink(): Promise<HostedAuthLink> {
     return { url: "https://example.test/hosted-auth", expiresAt: new Date(Date.now() + 3_600_000).toISOString() };
@@ -29,7 +31,8 @@ export class MockLinkedInProvider implements LinkedInProvider {
     return this.health;
   }
 
-  async searchProspects(_input: { accountId: string; query: SearchQuery }): Promise<ProspectPage> {
+  async searchProspects(input: { accountId: string; query: SearchQuery }): Promise<ProspectPage> {
+    this.searches.push({ accountId: input.accountId, query: input.query });
     return this.candidates;
   }
 

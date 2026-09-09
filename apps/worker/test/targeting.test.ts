@@ -94,6 +94,7 @@ function harness() {
       spec: CUSTOMER_PROFILE,
       priority: 1,
       do_not_pursue: false,
+      approved_at: "2026-09-01T09:00:00Z",
     },
   ]);
 
@@ -174,6 +175,21 @@ describe("runTargetingJob", () => {
 
     const scored = scoreMock.mock.calls[0]?.[1] as { candidates: Array<{ providerId: string }> };
     expect(scored.candidates.map((c) => c.providerId)).toEqual(["p2"]);
+  });
+
+  it("does nothing with a profile a human has not approved", async () => {
+    // The Strategy Agent writes profiles; it does not approve them. Searching
+    // against an unread description of a customer is how a campaign ends up
+    // aimed at the wrong market.
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    db.find("customer_profiles", { id: PROFILE })!.approved_at = null;
+    linkedin.candidates = { items: [candidate("p1", "https://www.linkedin.com/in/jane-one")], cursor: null };
+
+    expect(await runTargetingJob(ctx, job)).toBeNull();
+    expect(db.rows("campaigns")).toHaveLength(0);
+    // Not even the search runs: Sales Navigator credits are finite.
+    expect(linkedin.searches).toHaveLength(0);
   });
 
   it("never puts an excluded account in front of the scoring model", async () => {

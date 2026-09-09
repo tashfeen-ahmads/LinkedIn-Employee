@@ -378,6 +378,22 @@ const MUTATIONS = [
     pkg: "@le/crm",
   },
   {
+    id: "strategy/targeting-needs-approval",
+    rule: "Targeting refuses a customer profile no human has approved",
+    file: "apps/worker/src/jobs/targeting.ts",
+    from: "if (!profileRow.approved_at) return null;",
+    to: "if (false) return null;",
+    pkg: "@le/worker",
+  },
+  {
+    id: "strategy/empty-search",
+    rule: "A search must have something to match on, or it returns anyone",
+    file: "apps/web/src/lib/profile-form.ts",
+    from: "    filters.keywords.length === 0",
+    to: "    false",
+    pkg: "@le/web",
+  },
+  {
     id: "launch/inactive-account",
     rule: "A campaign never launches from an account that is not connected and healthy",
     file: "apps/web/src/lib/campaign.ts",
