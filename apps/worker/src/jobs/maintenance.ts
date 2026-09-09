@@ -1,6 +1,7 @@
 import { LINKEDIN_LIMITS } from "@le/shared";
 import type { WorkerContext } from "../context.js";
 import { pollHealth } from "../accounts.js";
+import { recordEvent } from "../context.js";
 import { runRetentionSweep } from "./retention.js";
 import type { Queues } from "../queues.js";
 
@@ -12,7 +13,9 @@ import type { Queues } from "../queues.js";
  *    down and with it the risk of a limit;
  *  - close campaign prospects whose sequence has run out;
  *  - erase prospect data held past the workspace's retention limit;
- *  - re-enqueue approved replies that were never dispatched.
+ *  - re-enqueue approved replies that were never dispatched;
+ *  - flag accounts whose acceptance rate has fallen far enough to attract
+ *    LinkedIn's attention.
  */
 export async function runMaintenance(
   ctx: WorkerContext,
@@ -35,6 +38,7 @@ export async function runMaintenance(
   }
 
   await sweepApprovedDrafts(ctx, queues, now);
+  await flagPoorAcceptanceRates(ctx);
   await withdrawStaleInvites(ctx, now);
   await closeExhaustedSequences(ctx, now);
 
@@ -135,3 +139,54 @@ async function sweepApprovedDrafts(ctx: WorkerContext, queues: Queues, now: Date
     );
   }
 }
+
+/**
+ * Warns about an account whose invitations are being ignored.
+ *
+ * A low acceptance rate is the signal LinkedIn itself watches: it means the
+ * targeting is wrong or the note reads as spam, and continuing at volume is
+ * how an account gets restricted. This does not pause anything — the rate is a
+ * judgement about campaign quality, not evidence of a violation — but the rep
+ * is told, and the digest carries it.
+ */
+async function flagPoorAcceptanceRates(ctx: WorkerContext): Promise<void> {
+  const { data: accounts } = await ctx.db
+    .from("linkedin_accounts")
+    .select("id, workspace_id, status")
+    .eq("status", "active");
+
+  for (const account of accounts ?? []) {
+    const { data: campaigns } = await ctx.db
+      .from("campaigns")
+      .select("id")
+      .eq("linkedin_account_id", account.id);
+    const campaignIds = (campaigns ?? []).map((campaign) => campaign.id);
+    if (campaignIds.length === 0) continue;
+
+    const { data: rows } = await ctx.db
+      .from("campaign_prospects")
+      .select("status")
+      .in("campaign_id", campaignIds);
+
+    const invited = (rows ?? []).filter((row) => row.status !== "queued").length;
+    // Below this there is not enough signal to judge a campaign by.
+    if (invited < MIN_INVITES_FOR_RATE) continue;
+
+    const accepted = (rows ?? []).filter(
+      (row) => !["queued", "invited", "failed", "closed"].includes(row.status),
+    ).length;
+    const rate = accepted / invited;
+    if (rate >= LINKEDIN_LIMITS.minHealthyAcceptanceRate) continue;
+
+    await recordEvent(ctx.db, {
+      workspaceId: account.workspace_id,
+      name: "linkedin.account.paused",
+      subjectType: "linkedin_account",
+      subjectId: account.id,
+      payload: { lowAcceptanceRate: Number(rate.toFixed(3)), invited },
+    });
+  }
+}
+
+/** Fewer invitations than this and the rate is noise, not a signal. */
+const MIN_INVITES_FOR_RATE = 40;

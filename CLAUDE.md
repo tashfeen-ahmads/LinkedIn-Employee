@@ -9,7 +9,7 @@ plan. This file is for whoever works on the code next.
 pnpm install
 pnpm build          # packages compile to dist/; apps typecheck against those
 pnpm typecheck
-pnpm test           # 239 tests, no network, no API key needed
+pnpm test           # 241 tests, no network, no API key needed
 pnpm --filter @le/web dev
 pnpm --filter @le/worker dev
 ```

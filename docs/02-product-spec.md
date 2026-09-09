@@ -95,7 +95,10 @@ Process per inbound message:
 - Automatic pause on LinkedIn warning, captcha, password reset, or an unusual login screen.
   The rep is notified and must re-authorize.
 - Withdraw pending invites older than 21 days automatically.
-- Never message someone a teammate contacted in the last 90 days.
+- Never message someone a teammate has already contacted. Prospects are unique
+  per workspace and the Targeting Agent excludes every one already on file, so
+  the exclusion is permanent rather than time-limited — stricter than the
+  90-day window originally proposed, and simpler to reason about.
 - Every AI-sent message is logged with the prompt version and can be reviewed.
 - Opt-out phrases ("stop", "not interested", "remove me") end the sequence immediately.
 - Prospect data retention default 12 months, deletable per workspace (GDPR / CCPA).

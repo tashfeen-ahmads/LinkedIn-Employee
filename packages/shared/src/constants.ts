@@ -29,9 +29,10 @@ export const LINKEDIN_LIMITS = {
    * sweep runs weekly and this threshold stays above that floor.
    */
   withdrawAfterDays: 21,
-  /** Do not contact anyone a teammate contacted within this window. */
-  teamDedupeDays: 90,
-  /** Acceptance rate below which the account is flagged for review. */
+  /**
+   * Acceptance rate below which an account is flagged for review by the
+   * nightly sweep. Low acceptance is the signal LinkedIn itself watches.
+   */
   minHealthyAcceptanceRate: 0.3,
 } as const;
 

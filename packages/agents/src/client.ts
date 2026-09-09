@@ -49,6 +49,10 @@ export async function callStructured<T extends z.ZodTypeAny>(
   call: StructuredCall<T>,
 ): Promise<z.infer<T>> {
   const startedAt = Date.now();
+  // A refusal and an unparsable response are both recorded by the success path
+  // above before they throw. Without this flag the catch records a second,
+  // token-less row and every refusal is counted twice in cost reporting.
+  let usageRecorded = false;
   try {
     const response = await ctx.client.messages.parse({
       model: call.model,
@@ -70,6 +74,7 @@ export async function callStructured<T extends z.ZodTypeAny>(
       cacheReadTokens: response.usage.cache_read_input_tokens ?? 0,
       latencyMs: Date.now() - startedAt,
     });
+    usageRecorded = true;
 
     if (response.stop_reason === "refusal") {
       throw new AgentRefusalError(call.agent, response.stop_details?.category ?? null);
@@ -79,6 +84,7 @@ export async function callStructured<T extends z.ZodTypeAny>(
     }
     return response.parsed_output as z.infer<T>;
   } catch (error) {
+    if (usageRecorded) throw error;
     await ctx.onUsage?.({
       agent: call.agent,
       model: call.model,

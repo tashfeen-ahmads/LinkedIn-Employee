@@ -97,3 +97,76 @@ describe("containsOptOut", () => {
     }
   });
 });
+
+describe("callStructured usage accounting", () => {
+  it("records one usage row per call, not two, when the model refuses", async () => {
+    const { callStructured, AgentRefusalError } = await import("../src/client.js");
+    const { z } = await import("zod");
+    const rows: unknown[] = [];
+
+    const ctx = {
+      client: {
+        messages: {
+          parse: async () => ({
+            usage: { input_tokens: 100, output_tokens: 0, cache_read_input_tokens: 0 },
+            stop_reason: "refusal",
+            stop_details: { category: "cyber" },
+            parsed_output: null,
+          }),
+        },
+      },
+      onUsage: (usage: unknown) => {
+        rows.push(usage);
+      },
+    } as never;
+
+    await expect(
+      callStructured(ctx, {
+        agent: "test",
+        model: "claude-haiku-4-5",
+        promptVersion: "v1",
+        schema: z.object({ ok: z.boolean() }),
+        system: [{ type: "text" as const, text: "system" }],
+        userContent: "hello",
+      }),
+    ).rejects.toBeInstanceOf(AgentRefusalError);
+
+    // A second, token-less row would double-count every refusal in the cost
+    // reporting the llm_calls table exists for.
+    expect(rows).toHaveLength(1);
+    expect((rows[0] as { inputTokens: number }).inputTokens).toBe(100);
+  });
+
+  it("still records a row when the call itself throws", async () => {
+    const { callStructured } = await import("../src/client.js");
+    const { z } = await import("zod");
+    const rows: unknown[] = [];
+
+    const ctx = {
+      client: {
+        messages: {
+          parse: async () => {
+            throw new Error("network down");
+          },
+        },
+      },
+      onUsage: (usage: unknown) => {
+        rows.push(usage);
+      },
+    } as never;
+
+    await expect(
+      callStructured(ctx, {
+        agent: "test",
+        model: "claude-haiku-4-5",
+        promptVersion: "v1",
+        schema: z.object({ ok: z.boolean() }),
+        system: [{ type: "text" as const, text: "system" }],
+        userContent: "hello",
+      }),
+    ).rejects.toThrow("network down");
+
+    expect(rows).toHaveLength(1);
+    expect((rows[0] as { error?: string }).error).toContain("network down");
+  });
+});
