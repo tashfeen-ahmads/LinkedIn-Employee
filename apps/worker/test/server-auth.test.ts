@@ -154,3 +154,38 @@ describe("internal API authentication", () => {
     expect((await app.request("/health")).status).toBe(200);
   });
 });
+
+describe("request validation", () => {
+  it("rejects a strategy request with nothing to work from", async () => {
+    const { app, added } = makeApp();
+    const res = await app.request("/jobs/strategy", {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${SECRET}` },
+      body: JSON.stringify({
+        workspaceId: "11111111-1111-4111-8111-111111111111",
+        userId: "22222222-2222-4222-8222-222222222222",
+      }),
+    });
+
+    // Otherwise this becomes three failed queue attempts and a dead job nobody
+    // ever sees, instead of an answer the caller can act on.
+    expect(res.status).toBe(400);
+    expect(added).toHaveLength(0);
+  });
+
+  it("accepts a strategy request carrying only a description", async () => {
+    const { app, added } = makeApp();
+    const res = await app.request("/jobs/strategy", {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${SECRET}` },
+      body: JSON.stringify({
+        workspaceId: "11111111-1111-4111-8111-111111111111",
+        userId: "22222222-2222-4222-8222-222222222222",
+        description: "We sell revenue tooling to B2B teams.",
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(added).toHaveLength(1);
+  });
+});

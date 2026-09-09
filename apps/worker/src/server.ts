@@ -17,14 +17,22 @@ import { eraseProspect, exportWorkspace } from "./jobs/retention.js";
 import { inviteEmail } from "@le/email";
 import { trySend } from "./email.js";
 
-const StrategyRequest = z.object({
-  workspaceId: z.string().uuid(),
-  userId: z.string().uuid(),
-  websiteUrl: z.string().optional(),
-  linkedinCompanyUrl: z.string().optional(),
-  description: z.string().optional(),
-  existingCustomers: z.array(z.string()).optional(),
-});
+const StrategyRequest = z
+  .object({
+    workspaceId: z.string().uuid(),
+    userId: z.string().uuid(),
+    websiteUrl: z.string().optional(),
+    linkedinCompanyUrl: z.string().optional(),
+    description: z.string().optional(),
+    existingCustomers: z.array(z.string()).optional(),
+  })
+  // The agent refuses to invent an ICP from nothing, so a request carrying
+  // nothing would enqueue a job that fails three times and dies unseen. Reject
+  // it here, where the caller can still be told.
+  .refine(
+    (input) => Boolean(input.websiteUrl || input.linkedinCompanyUrl || input.description),
+    { message: "need a website, a LinkedIn page, or a description to work from" },
+  );
 
 const TargetingRequest = z.object({
   workspaceId: z.string().uuid(),
