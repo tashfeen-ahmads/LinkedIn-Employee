@@ -8,6 +8,7 @@ import type {
   LinkedInProvider,
   ProspectPage,
   ProviderProfile,
+  ProviderRelation,
   SearchQuery,
 } from "./provider.js";
 
@@ -31,6 +32,7 @@ const ROUTES = {
   chats: "/api/v1/chats",
   chatMessages: (id: string) => `/api/v1/chats/${id}/messages`,
   messages: "/api/v1/messages",
+  relations: "/api/v1/users/relations",
 } as const;
 
 export interface UnipileConfig {
@@ -222,6 +224,32 @@ export class UnipileProvider implements LinkedInProvider {
     } catch (err) {
       return toActionError(err);
     }
+  }
+
+  /**
+   * The account's connections, newest first.
+   *
+   * `since` filters client-side rather than in the query: the provider's own
+   * cursor is opaque and its date filtering is the part of this API most likely
+   * to differ from the docs, and a connection missed here means a follow-up
+   * that never sends. Over-fetching a page is the cheaper mistake.
+   */
+  async listRelations(input: { accountId: string; since?: string; limit?: number }): Promise<ProviderRelation[]> {
+    const params = new URLSearchParams({ account_id: input.accountId, limit: String(input.limit ?? 100) });
+    const response = await this.request<{ items?: Array<Record<string, unknown>> }>(
+      `${ROUTES.relations}?${params.toString()}`,
+    );
+
+    const relations = (response.items ?? []).map((item) => ({
+      providerId: String(item.member_id ?? item.provider_id ?? item.id ?? ""),
+      connectedAt: typeof item.created_at === "string" ? item.created_at : null,
+    }));
+
+    const known = relations.filter((relation) => relation.providerId);
+    if (!input.since) return known;
+    // A relation with no date is kept: not knowing when someone connected is
+    // not evidence that they did not.
+    return known.filter((relation) => !relation.connectedAt || relation.connectedAt >= input.since!);
   }
 
   async listNewMessages(input: { accountId: string; since: string }): Promise<InboundMessage[]> {

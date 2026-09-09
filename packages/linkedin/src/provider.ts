@@ -37,6 +37,13 @@ export interface ProspectPage {
   cursor: string | null;
 }
 
+/** One connection the account has, as the provider reports it. */
+export interface ProviderRelation {
+  providerId: string;
+  /** ISO datetime the connection was made, when the provider says. */
+  connectedAt: string | null;
+}
+
 export interface InboundMessage {
   providerMessageId: string;
   providerChatId: string;
@@ -71,6 +78,12 @@ export interface LinkedInProvider {
   withdrawInvitation(input: { accountId: string; invitationId: string }): Promise<ActionResult>;
   sendMessage(input: { accountId: string; chatId?: string; providerId?: string; text: string }): Promise<ActionResult>;
   listNewMessages(input: { accountId: string; since: string }): Promise<InboundMessage[]>;
+  /**
+   * The account's connections, newest first. This is how an accepted
+   * invitation is noticed: LinkedIn sends no acceptance event, and an
+   * invitation leaving the pending list could equally mean it was declined.
+   */
+  listRelations(input: { accountId: string; since?: string; limit?: number }): Promise<ProviderRelation[]>;
   /** Verify a provider webhook signature. Returns the parsed messages it carries. */
   parseWebhook(input: { body: string; signature?: string }): InboundMessage[];
 }

@@ -292,6 +292,32 @@ describe("campaign pipeline", () => {
     expect(db.find("campaign_prospects", { id: CP })?.status).toBe("invited");
   });
 
+  it("carries a prospect from invitation to follow-up once they accept", async () => {
+    // The loop that was broken end to end: nothing ever set `accepted`, which
+    // is the status the follow-up scheduler waits for, so no campaign sent its
+    // second message to anyone, ever.
+    const { db, ctx, queues, linkedin, enqueued } = harness({
+      trialEndsAt: new Date(NOW.getTime() + 30 * 86_400_000).toISOString(),
+    });
+    const { detectAcceptedInvitations } = await import("../src/jobs/acceptance.js");
+
+    await runLinkedInAction(ctx, { kind: "invite", workspaceId: WORKSPACE, campaignProspectId: CP });
+    expect(db.find("campaign_prospects", { id: CP })?.status).toBe("invited");
+
+    linkedin.relations = [{ providerId: "prov_jane", connectedAt: NOW.toISOString() }];
+    await detectAcceptedInvitations(ctx, NOW);
+    expect(db.find("campaign_prospects", { id: CP })?.status).toBe("accepted");
+
+    // The follow-up falls due two days later, which is a Saturday here, so the
+    // next working day is when it actually goes out.
+    const later = new Date(NOW.getTime() + 5 * 86_400_000);
+    await runCampaignTick(db.asDb(), queues, later);
+
+    const followUp = enqueued.find((job) => (job.data as { kind?: string }).kind === "follow_up");
+    expect(followUp).toBeDefined();
+    expect((followUp?.data as { stepNumber: number }).stepNumber).toBe(1);
+  });
+
   it("stops the sequence when the prospect replies", async () => {
     const { db, ctx, queues } = harness();
     const cp = db.find("campaign_prospects", { id: CP })!;

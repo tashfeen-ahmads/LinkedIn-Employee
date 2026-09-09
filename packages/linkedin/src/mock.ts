@@ -6,6 +6,7 @@ import type {
   LinkedInProvider,
   ProspectPage,
   ProviderProfile,
+  ProviderRelation,
   SearchQuery,
 } from "./provider.js";
 
@@ -22,6 +23,8 @@ export class MockLinkedInProvider implements LinkedInProvider {
   candidates: ProspectPage = { items: [], cursor: null };
   /** Every search performed, so a test can prove one did not happen. */
   readonly searches: Array<{ accountId: string; query: SearchQuery }> = [];
+  /** Connections the account has, i.e. who accepted an invitation. */
+  relations: ProviderRelation[] = [];
 
   async createHostedAuthLink(): Promise<HostedAuthLink> {
     return { url: "https://example.test/hosted-auth", expiresAt: new Date(Date.now() + 3_600_000).toISOString() };
@@ -29,6 +32,11 @@ export class MockLinkedInProvider implements LinkedInProvider {
 
   async getAccountHealth(): Promise<AccountHealth> {
     return this.health;
+  }
+
+  async listRelations(input: { since?: string }): Promise<ProviderRelation[]> {
+    if (!input.since) return this.relations;
+    return this.relations.filter((r) => !r.connectedAt || r.connectedAt >= input.since!);
   }
 
   async searchProspects(input: { accountId: string; query: SearchQuery }): Promise<ProspectPage> {

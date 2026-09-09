@@ -9,7 +9,7 @@ plan. This file is for whoever works on the code next.
 pnpm install
 pnpm build          # packages compile to dist/; apps typecheck against those
 pnpm typecheck
-pnpm test           # 327 tests, no network, no API key needed
+pnpm test           # 335 tests, no network, no API key needed
 node scripts/mutation-check.mjs   # proves the safety tests actually bite
 pnpm --filter @le/web dev
 pnpm --filter @le/worker dev
@@ -118,6 +118,11 @@ key, so it is not in CI and **has not been run yet**. Run it before the first
 live campaign and record the number in its README.
 
 ## Known gaps
+
+- Acceptance is detected by polling connections nightly
+  (`apps/worker/src/jobs/acceptance.ts`), so a follow-up can be up to a day
+  later than its configured delay. Unipile exposes no acceptance webhook; if
+  one appears, that is where to use it.
 
 - The email follow-up channel for prospects who accept an invitation then go
   quiet. Roadmap item for quarter two; the email layer it would need already

@@ -2,6 +2,7 @@ import { LINKEDIN_LIMITS } from "@le/shared";
 import type { WorkerContext } from "../context.js";
 import { pollHealth } from "../accounts.js";
 import { recordEvent } from "../context.js";
+import { detectAcceptedInvitations } from "./acceptance.js";
 import { runRetentionSweep } from "./retention.js";
 import type { Queues } from "../queues.js";
 
@@ -9,6 +10,8 @@ import type { Queues } from "../queues.js";
  * Nightly housekeeping:
  *  - poll every connected account's health, so a restriction is caught within
  *    a day even if no action happened to hit it;
+ *  - notice which invitations were accepted, which is what starts the
+ *    follow-up sequence;
  *  - withdraw stale pending invitations, which keeps the pending-invite count
  *    down and with it the risk of a limit;
  *  - close campaign prospects whose sequence has run out;
@@ -36,6 +39,9 @@ export async function runMaintenance(
       console.error("health poll failed", account.id, err);
     }
   }
+
+  const accepted = await detectAcceptedInvitations(ctx, now);
+  if (accepted > 0) console.log(`${accepted} invitations accepted since the last check`);
 
   await sweepApprovedDrafts(ctx, queues, now);
   await flagPoorAcceptanceRates(ctx);
@@ -188,7 +194,7 @@ async function flagPoorAcceptanceRates(ctx: WorkerContext): Promise<void> {
 
     await recordEvent(ctx.db, {
       workspaceId: account.workspace_id,
-      name: "linkedin.account.paused",
+      name: "linkedin.account.low_acceptance",
       subjectType: "linkedin_account",
       subjectId: account.id,
       payload: { lowAcceptanceRate: Number(rate.toFixed(3)), invited },
