@@ -130,18 +130,38 @@ export async function applyHealth(
   return health === "warning";
 }
 
-/** Reset daily counters at the rep's local midnight, weekly ones on Monday. */
+/**
+ * Resets the daily counters on a new day, and the weekly ones when the last
+ * reset fell in an earlier week.
+ *
+ * Comparing week numbers rather than checking for Monday matters: an account
+ * idle over a weekend would never see a Monday reset and would stay capped for
+ * a full extra week.
+ */
 export async function resetCountersIfNeeded(db: Db, account: AccountRecord, today: string): Promise<AccountRecord> {
   if (account.counters_reset_on === today) return account;
-  const isMonday = new Date(`${today}T00:00:00Z`).getUTCDay() === 1;
+
+  const newWeek =
+    !account.counters_reset_on || isoWeekStart(account.counters_reset_on) !== isoWeekStart(today);
+
   const update = {
     invites_today: 0,
     messages_today: 0,
     counters_reset_on: today,
-    ...(isMonday ? { invites_this_week: 0 } : {}),
+    ...(newWeek ? { invites_this_week: 0 } : {}),
   };
   await db.from("linkedin_accounts").update(update).eq("id", account.id);
   return { ...account, ...update };
+}
+
+/** The Monday of the week a YYYY-MM-DD date falls in, as YYYY-MM-DD. */
+export function isoWeekStart(date: string): string {
+  const parsed = new Date(`${date}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) return date;
+  // getUTCDay: 0 = Sunday, so Sunday belongs to the week that began six days ago.
+  const daysSinceMonday = (parsed.getUTCDay() + 6) % 7;
+  parsed.setUTCDate(parsed.getUTCDate() - daysSinceMonday);
+  return parsed.toISOString().slice(0, 10);
 }
 
 export async function pollHealth(

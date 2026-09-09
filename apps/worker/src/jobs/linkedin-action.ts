@@ -196,10 +196,29 @@ async function sendApprovedReply(
 
   const { data: account } = await db
     .from("linkedin_accounts")
-    .select("id, workspace_id, provider_account_id, status")
+    .select(
+      "id, workspace_id, user_id, provider_account_id, status, connected_at, invites_today, invites_this_week, messages_today, counters_reset_on, last_action_at, working_hours",
+    )
     .eq("id", conversation.linkedin_account_id)
     .single();
   if (!account?.provider_account_id || account.status !== "active") return;
+
+  // A human approving a draft does not exempt it from the caps: it is still a
+  // message leaving a real LinkedIn account, and the limiter is the only thing
+  // between a campaign and a restriction. Rule 1 in CLAUDE.md.
+  const { data: replyProfile } = await db
+    .from("profiles")
+    .select("timezone")
+    .eq("id", account.user_id)
+    .single();
+  const replyDecision = checkAction(
+    "message",
+    toUsage(account as AccountRecord, replyProfile?.timezone ?? "UTC"),
+    new Date(),
+  );
+  if (!replyDecision.allowed) {
+    throw new RescheduleError(replyDecision.reason, replyDecision.retryAfterMs);
+  }
 
   const { data: prospect } = await db
     .from("prospects")

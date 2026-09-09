@@ -131,13 +131,15 @@ export async function handleInboundMessage(
   const decision = applyRules(classification, rules);
 
   if (decision.action === "stop_sequence") {
-    await db
-      .from("prospects")
-      .update({
-        do_not_contact: classification.optOut,
-        do_not_contact_reason: classification.optOut ? "opted out on LinkedIn" : null,
-      })
-      .eq("id", prospect.id);
+    // Only ever set the flag, never clear it. A prospect who opted out last
+    // month and later sends a neutral "not interested" must not be quietly
+    // returned to the contactable pool. Rule 5 in CLAUDE.md.
+    if (classification.optOut) {
+      await db
+        .from("prospects")
+        .update({ do_not_contact: true, do_not_contact_reason: "opted out on LinkedIn" })
+        .eq("id", prospect.id);
+    }
     if (campaignProspect) {
       await db
         .from("campaign_prospects")

@@ -1,5 +1,5 @@
 import { serve } from "@hono/node-server";
-import { Worker } from "bullmq";
+import { DelayedError, Worker } from "bullmq";
 import { loadEnv } from "./config.js";
 import { createWorkerContext } from "./context.js";
 import { createConnection, createQueues, QUEUE_NAMES, scheduleRepeatables } from "./queues.js";
@@ -43,7 +43,10 @@ const workers = [
       } catch (err) {
         if (err instanceof RescheduleError) {
           await job.moveToDelayed(Date.now() + err.retryAfterMs, job.token);
-          return;
+          // BullMQ requires this throw: without it the worker tries to complete
+          // a job it has just moved to the delayed set, and the reschedule
+          // fails instead of happening.
+          throw new DelayedError();
         }
         throw err;
       }
@@ -54,7 +57,7 @@ const workers = [
     connection,
     concurrency: 4,
   }),
-  new Worker(QUEUE_NAMES.maintenance, () => runMaintenance(ctx), { connection, concurrency: 1 }),
+  new Worker(QUEUE_NAMES.maintenance, () => runMaintenance(ctx, queues), { connection, concurrency: 1 }),
   new Worker(QUEUE_NAMES.digest, () => runDailyDigest(ctx), { connection, concurrency: 1 }),
 ];
 

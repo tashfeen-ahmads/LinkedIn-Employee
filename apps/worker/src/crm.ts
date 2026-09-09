@@ -79,6 +79,10 @@ export async function resolveCrm(db: Db, env: Env, workspaceId: string): Promise
           refreshToken: tokens.refreshToken,
           clientId: env.SALESFORCE_CLIENT_ID,
           clientSecret: env.SALESFORCE_CLIENT_SECRET,
+          // A sandbox org authenticates against test.salesforce.com. Omitting
+          // this sends the refresh to production, which fails and marks a
+          // working connection as needing re-auth.
+          loginUrl: env.SALESFORCE_LOGIN_URL,
         });
         await db
           .from("integrations")

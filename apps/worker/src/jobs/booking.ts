@@ -134,10 +134,22 @@ export function matchOfferedSlot(message: string, offered: string[], timezone: s
   return candidates.length === 1 ? candidates[0]! : null;
 }
 
+const ACCEPTANCE = /\b(works|work for me|sounds good|let'?s do|perfect|great|book|schedule|confirm|see you|yes|sure|that one|i'?ll take)\b/;
+
+/**
+ * A negation anywhere in the message disqualifies it.
+ *
+ * "Tuesday doesn't work for me" contains "work for me" and would otherwise
+ * book the slot the prospect just declined — the worst possible outcome, since
+ * the rep then shows up to a meeting the other person believes they refused.
+ * Rejecting the whole message is the right trade: an unbooked acceptance costs
+ * one reply, a booked refusal costs the relationship.
+ */
+const NEGATION = /\b(does\s?n'?t|doesn't|do\s?n'?t|don't|can'?t|cannot|won'?t|not|no longer|unable|unfortunately|instead|rather|another|different|reschedule|move)\b/;
+
 function looksLikeAcceptance(text: string): boolean {
-  return /\b(works|work for me|sounds good|let'?s do|perfect|great|book|schedule|confirm|see you|yes|sure|that one|i'?ll take)\b/.test(
-    text,
-  );
+  if (NEGATION.test(text)) return false;
+  return ACCEPTANCE.test(text);
 }
 
 function mentionsSlot(text: string, iso: string, timezone: string): boolean {
@@ -155,6 +167,7 @@ function mentionsSlot(text: string, iso: string, timezone: string): boolean {
   const weekday = get("weekday");
   const day = get("day");
   const hour12 = get("hour");
+  const minute = get("minute");
   const dayPeriod = get("dayPeriod");
 
   const mentionsDay =
@@ -165,7 +178,16 @@ function mentionsSlot(text: string, iso: string, timezone: string): boolean {
 
   // A bare day reference is enough when only one slot falls on that day; the
   // caller checks for exactly one candidate.
-  const timePattern = new RegExp(`\\b${hour12}\\s*(:00)?\\s*(${dayPeriod})?\\b`);
-  const textHasAnyTime = /\b\d{1,2}\s*(:\d{2})?\s*(am|pm)\b/.test(text);
-  return textHasAnyTime ? timePattern.test(text) : true;
+  const statedTime = text.match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\b(?!\s*(st|nd|rd|th))/);
+  if (!statedTime) return true;
+
+  // Minutes are compared, not ignored: "Tuesday at 3:30" must not match the
+  // 3:00 slot we actually offered.
+  const statedHour = statedTime[1];
+  const statedMinute = statedTime[2] ?? "00";
+  const statedPeriod = statedTime[3];
+  if (statedHour !== hour12) return false;
+  if (statedMinute !== minute.padStart(2, "0")) return false;
+  if (statedPeriod && statedPeriod !== dayPeriod) return false;
+  return true;
 }

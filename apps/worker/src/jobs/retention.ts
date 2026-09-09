@@ -128,6 +128,9 @@ export async function runRetentionSweep(ctx: WorkerContext, now: Date = new Date
     for (const prospect of stale ?? []) {
       // Already erased down to a tombstone; nothing left to remove.
       if (prospect.do_not_contact) continue;
+      // An old row that was messaged recently is not stale. Retention runs
+      // from the last contact, or from creation when there never was one.
+      if (prospect.last_contacted_at && prospect.last_contacted_at >= cutoff) continue;
       if (await hasLiveActivity(db, workspace.id, prospect.id, now)) continue;
 
       await eraseProspect(ctx, {

@@ -61,19 +61,47 @@ async function summarise(
 ) {
   const { db } = ctx;
 
+  // Scope everything to this rep's own campaigns. A digest that reports the
+  // team's totals as one person's work is worse than none: it flatters whoever
+  // did least and buries whoever did most.
+  const { data: ownCampaigns } = await db
+    .from("campaigns")
+    .select("id")
+    .eq("workspace_id", workspaceId)
+    .eq("owner_user_id", userId);
+  const campaignIds = (ownCampaigns ?? []).map((campaign) => campaign.id);
+
+  const { data: ownCampaignProspects } = campaignIds.length
+    ? await db.from("campaign_prospects").select("id").in("campaign_id", campaignIds)
+    : { data: [] };
+  const mine = new Set((ownCampaignProspects ?? []).map((row) => row.id));
+
   const { data: events } = await db
     .from("events")
-    .select("name, created_at")
+    .select("name, subject_id, created_at")
     .eq("workspace_id", workspaceId)
     .gte("created_at", since);
 
-  const count = (name: string) => (events ?? []).filter((event) => event.name === name).length;
+  const count = (name: string) =>
+    (events ?? []).filter(
+      (event) => event.name === name && (!event.subject_id || mine.has(event.subject_id)),
+    ).length;
 
-  const { count: awaitingApproval } = await db
+  const { data: pendingDrafts } = await db
     .from("reply_drafts")
-    .select("id", { count: "exact", head: true })
+    .select("id, conversation_id")
     .eq("workspace_id", workspaceId)
     .eq("status", "pending");
+
+  let awaitingApproval = 0;
+  for (const draft of pendingDrafts ?? []) {
+    const { data: conversation } = await db
+      .from("conversations")
+      .select("campaign_id")
+      .eq("id", draft.conversation_id)
+      .maybeSingle();
+    if (!conversation?.campaign_id || campaignIds.includes(conversation.campaign_id)) awaitingApproval++;
+  }
 
   const { data: meetings } = await db
     .from("meetings")
@@ -115,7 +143,7 @@ async function summarise(
     accepted: count("invite.accepted"),
     replies: count("message.received"),
     meetingsBooked: count("meeting.booked"),
-    awaitingApproval: awaitingApproval ?? 0,
+    awaitingApproval,
     upcoming,
     warnings,
   };

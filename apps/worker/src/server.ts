@@ -634,7 +634,15 @@ export function createServer(ctx: WorkerContext, queues: Queues): Hono {
       payload: event as never,
       workspace_id: workspaceIdFrom(event.data.object),
     });
-    if (insertError) return c.json({ received: true, duplicate: true });
+    if (insertError) {
+      // Only a primary-key collision means "already handled". Treating every
+      // failure as a duplicate returns 200 to Stripe and silently drops a
+      // subscription change, so anything else asks Stripe to retry.
+      const duplicate = /duplicate|unique|23505/i.test(insertError.message);
+      if (duplicate) return c.json({ received: true, duplicate: true });
+      console.error("could not record billing event", insertError.message);
+      return c.json({ error: "could not record event" }, 500);
+    }
 
     await applyBillingEvent(ctx, event);
     return c.json({ received: true });

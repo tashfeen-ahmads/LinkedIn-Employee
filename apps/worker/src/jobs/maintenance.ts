@@ -2,6 +2,7 @@ import { LINKEDIN_LIMITS } from "@le/shared";
 import type { WorkerContext } from "../context.js";
 import { pollHealth } from "../accounts.js";
 import { runRetentionSweep } from "./retention.js";
+import type { Queues } from "../queues.js";
 
 /**
  * Nightly housekeeping:
@@ -10,9 +11,14 @@ import { runRetentionSweep } from "./retention.js";
  *  - withdraw stale pending invitations, which keeps the pending-invite count
  *    down and with it the risk of a limit;
  *  - close campaign prospects whose sequence has run out;
- *  - erase prospect data held past the workspace's retention limit.
+ *  - erase prospect data held past the workspace's retention limit;
+ *  - re-enqueue approved replies that were never dispatched.
  */
-export async function runMaintenance(ctx: WorkerContext, now: Date = new Date()): Promise<void> {
+export async function runMaintenance(
+  ctx: WorkerContext,
+  queues: Queues,
+  now: Date = new Date(),
+): Promise<void> {
   const { db } = ctx;
 
   const { data: accounts } = await db
@@ -28,6 +34,7 @@ export async function runMaintenance(ctx: WorkerContext, now: Date = new Date())
     }
   }
 
+  await sweepApprovedDrafts(ctx, queues, now);
   await withdrawStaleInvites(ctx, now);
   await closeExhaustedSequences(ctx, now);
 
@@ -92,5 +99,39 @@ async function closeExhaustedSequences(ctx: WorkerContext, now: Date): Promise<v
         .update({ status: "closed", status_reason: "sequence completed", closed_at: now.toISOString() })
         .eq("id", row.id);
     }
+  }
+}
+
+/**
+ * Re-enqueues replies a human approved but that never reached LinkedIn.
+ *
+ * The web app enqueues the send itself; if the worker was down at that moment
+ * the row sits approved forever and the prospect is simply left hanging. This
+ * is the safety net the inbox promises.
+ *
+ * A short grace period avoids racing the enqueue that just happened.
+ */
+async function sweepApprovedDrafts(ctx: WorkerContext, queues: Queues, now: Date): Promise<void> {
+  const cutoff = new Date(now.getTime() - 10 * 60_000).toISOString();
+  const { data: stranded } = await ctx.db
+    .from("reply_drafts")
+    .select("id, workspace_id, conversation_id, resolved_at")
+    .eq("status", "approved")
+    .lt("resolved_at", cutoff)
+    .limit(100);
+
+  for (const draft of stranded ?? []) {
+    // The job id is the same one the web app would have used, so a queued job
+    // is not duplicated by this sweep.
+    await queues.linkedinAction.add(
+      "reply",
+      {
+        kind: "reply",
+        workspaceId: draft.workspace_id,
+        conversationId: draft.conversation_id,
+        draftId: draft.id,
+      },
+      { jobId: `reply:${draft.id}` },
+    );
   }
 }

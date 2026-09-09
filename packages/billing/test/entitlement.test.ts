@@ -104,3 +104,19 @@ describe("entitlementMessage", () => {
     expect(entitlementMessage(entitlementFor(billing({ trialEndsAt: inDays(2) }), NOW))).toBeNull();
   });
 });
+
+describe("trial boundary", () => {
+  it("keeps sending on the final day, when the floored day count is already zero", () => {
+    // Ending a seven-day trial after six is a bug the customer notices.
+    const hoursLeft = new Date(NOW.getTime() + 6 * 3_600_000).toISOString();
+    const result = entitlementFor(billing({ trialEndsAt: hoursLeft }), NOW);
+    expect(result.trialDaysLeft).toBe(0);
+    expect(result.canSend).toBe(true);
+    expect(result.reason).toBe("trial_active");
+  });
+
+  it("stops the moment the trial instant passes", () => {
+    const justGone = new Date(NOW.getTime() - 1000).toISOString();
+    expect(entitlementFor(billing({ trialEndsAt: justGone }), NOW).canSend).toBe(false);
+  });
+});

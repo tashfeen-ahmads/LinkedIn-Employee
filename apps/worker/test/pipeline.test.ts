@@ -381,3 +381,84 @@ function inboundJob(text: string) {
 }
 
 export type { LinkedInActionJob };
+
+describe("regressions found in review", () => {
+  it("holds an approved reply back when the daily message cap is spent", async () => {
+    const { db, ctx, linkedin } = harness();
+    db.find("linkedin_accounts", { id: ACCOUNT })!.messages_today = 50;
+    db.seed("conversations", [
+      { id: "conv1", workspace_id: WORKSPACE, prospect_id: PROSPECT, linkedin_account_id: ACCOUNT },
+    ]);
+    db.seed("reply_drafts", [
+      {
+        id: "draft1",
+        workspace_id: WORKSPACE,
+        conversation_id: "conv1",
+        body: "Approved by a human",
+        status: "approved",
+        prompt_version: "v1",
+      },
+    ]);
+
+    // A human approving a draft does not exempt it from the caps.
+    await expect(
+      runLinkedInAction(ctx, {
+        kind: "reply",
+        workspaceId: WORKSPACE,
+        conversationId: "conv1",
+        draftId: "draft1",
+      }),
+    ).rejects.toThrow(/rate limited/i);
+    expect(linkedin.sentMessages).toHaveLength(0);
+  });
+
+  it("sends an approved reply when the account has room", async () => {
+    const { db, ctx, linkedin } = harness();
+    db.seed("conversations", [
+      { id: "conv1", workspace_id: WORKSPACE, prospect_id: PROSPECT, linkedin_account_id: ACCOUNT },
+    ]);
+    db.seed("reply_drafts", [
+      {
+        id: "draft1",
+        workspace_id: WORKSPACE,
+        conversation_id: "conv1",
+        body: "Approved by a human",
+        status: "approved",
+        prompt_version: "v1",
+      },
+    ]);
+
+    await runLinkedInAction(ctx, {
+      kind: "reply",
+      workspaceId: WORKSPACE,
+      conversationId: "conv1",
+      draftId: "draft1",
+    });
+
+    expect(linkedin.sentMessages).toHaveLength(1);
+    expect(db.find("linkedin_accounts", { id: ACCOUNT })?.messages_today).toBe(1);
+  });
+
+  it("never clears an existing opt-out when a later message is merely negative", async () => {
+    const { db, ctx, queues } = harness();
+    const prospect = db.find("prospects", { id: PROSPECT })!;
+    prospect.do_not_contact = true;
+    prospect.do_not_contact_reason = "opted out on LinkedIn";
+    // Sentiment must be neutral and needsHuman false, or applyRules routes to
+    // hold_for_human and the stop_sequence branch under test never runs. An
+    // earlier version of this test passed for exactly that reason.
+    classifyMock.mockResolvedValue(
+      classification({ intent: "not_interested", sentiment: "neutral", needsHuman: false, optOut: false }),
+    );
+
+    await handleInboundMessage(ctx, queues, inboundJob("Still not for us"));
+
+    // Guard the guard: confirm the branch actually executed.
+    expect(db.find("campaign_prospects", { id: CP })?.status).toBe("negative");
+
+    // Returning an opted-out person to the contactable pool is the one mistake
+    // this product cannot make.
+    expect(db.find("prospects", { id: PROSPECT })?.do_not_contact).toBe(true);
+    expect(db.find("prospects", { id: PROSPECT })?.do_not_contact_reason).toBe("opted out on LinkedIn");
+  });
+});

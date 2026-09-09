@@ -34,6 +34,24 @@ describe("matchOfferedSlot", () => {
     expect(matchOfferedSlot("Wednesday at 3pm works", OFFERED, "UTC")).toBeNull();
   });
 
+  it("refuses a declined slot that happens to contain acceptance words", () => {
+    // "doesn't work for me" contains "work for me". Booking here would put the
+    // rep in a meeting the prospect believes they refused.
+    expect(matchOfferedSlot("Tuesday doesn't work for me", OFFERED, "UTC")).toBeNull();
+    expect(matchOfferedSlot("Wednesday won't work, sorry", OFFERED, "UTC")).toBeNull();
+    expect(matchOfferedSlot("Friday is no good, can we do another time?", OFFERED, "UTC")).toBeNull();
+  });
+
+  it("refuses a counter-proposal on an offered day", () => {
+    expect(matchOfferedSlot("Wednesday works but could we do 11 instead?", OFFERED, "UTC")).toBeNull();
+  });
+
+  it("compares minutes, not just the hour", () => {
+    // 2026-09-11T16:00Z was offered; 4:30 is a different time.
+    expect(matchOfferedSlot("Friday at 4:30pm works", OFFERED, "UTC")).toBeNull();
+    expect(matchOfferedSlot("Friday at 4:00pm works", OFFERED, "UTC")).toBe(OFFERED[2]);
+  });
+
   it("books nothing when no slots were offered", () => {
     expect(matchOfferedSlot("Yes, that works", [], "UTC")).toBeNull();
   });

@@ -120,8 +120,24 @@ export function checkAction(kind: ActionKind, usage: AccountUsage, now: Date = n
   return { allowed: true };
 }
 
+/**
+ * Milliseconds until midnight in the given zone.
+ *
+ * Computed from the zone's own hour *and minute* rather than by subtracting a
+ * UTC remainder: zones offset by a half or quarter hour (Asia/Kolkata,
+ * Australia/Eucla) would otherwise be wrong by that amount, and the caller
+ * would retry before the counters had actually reset.
+ */
 export function msUntilNextLocalMidnight(now: Date, timezone: string): number {
-  const { hour } = zonedParts(now, timezone);
-  const hoursLeft = 24 - hour;
-  return hoursLeft * 3_600_000 - (now.getTime() % 3_600_000);
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    hour: "numeric",
+    minute: "numeric",
+    second: "numeric",
+    hour12: false,
+  }).formatToParts(now);
+
+  const read = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? "0");
+  const elapsed = (read("hour") % 24) * 3_600_000 + read("minute") * 60_000 + read("second") * 1000;
+  return 86_400_000 - elapsed;
 }

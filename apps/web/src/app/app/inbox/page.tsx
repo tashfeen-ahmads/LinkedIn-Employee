@@ -25,7 +25,8 @@ async function approveDraft(formData: FormData) {
     .eq("id", draftId)
     .eq("workspace_id", session.workspaceId);
 
-  // Approved rows are picked up by the worker's sweep if this call fails.
+  // If this fails, the worker's maintenance sweep re-enqueues approved drafts,
+  // so an approved reply is never silently lost.
   await callWorker("/jobs/send-reply", { workspaceId: session.workspaceId, draftId });
 
   revalidatePath("/app/inbox");

@@ -56,7 +56,11 @@ export function entitlementFor(billing: WorkspaceBilling, now: Date = new Date()
   }
 
   if (billing.plan === "trial") {
-    if (trialDaysLeft !== null && trialDaysLeft > 0) {
+    // Compare the instant, not the floored day count: trialDaysLeft is 0 for
+    // the whole of the final day, and reading it as expiry would end a
+    // seven-day trial after six.
+    const endsAt = billing.trialEndsAt ? Date.parse(billing.trialEndsAt) : NaN;
+    if (Number.isFinite(endsAt) && endsAt > now.getTime()) {
       return { canSend: true, canRead: true, reason: "trial_active", trialDaysLeft };
     }
     return { canSend: false, canRead: true, reason: "trial_expired", trialDaysLeft: 0 };

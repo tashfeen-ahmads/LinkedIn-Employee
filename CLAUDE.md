@@ -9,7 +9,7 @@ plan. This file is for whoever works on the code next.
 pnpm install
 pnpm build          # packages compile to dist/; apps typecheck against those
 pnpm typecheck
-pnpm test           # 230 tests, no network, no API key needed
+pnpm test           # 239 tests, no network, no API key needed
 pnpm --filter @le/web dev
 pnpm --filter @le/worker dev
 ```
@@ -72,7 +72,10 @@ never would.
 
 When you add a test for a safety rule, check it actually bites: break the rule
 on purpose and confirm the test fails. Several of these tests initially passed
-against broken code.
+against broken code — including one that set `needsHuman: true`, which routes
+to hold-for-human and never reaches the branch it claimed to cover. A test that
+passes for the wrong reason is worse than no test, because it stops anyone
+looking again.
 
 The classification eval (`packages/agents/evals/`) costs money and needs an API
 key, so it is not in CI and **has not been run yet**. Run it before the first

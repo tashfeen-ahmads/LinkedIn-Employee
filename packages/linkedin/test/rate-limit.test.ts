@@ -125,3 +125,24 @@ describe("nextGapMs", () => {
     }
   });
 });
+
+describe("msUntilNextLocalMidnight", () => {
+  it("is exact in a whole-hour zone", async () => {
+    const { msUntilNextLocalMidnight } = await import("../src/rate-limit.js");
+    // 14:00 UTC leaves ten hours.
+    expect(msUntilNextLocalMidnight(MIDWEEK_AFTERNOON, "UTC")).toBe(10 * 3_600_000);
+  });
+
+  it("is exact in a half-hour zone", async () => {
+    const { msUntilNextLocalMidnight } = await import("../src/rate-limit.js");
+    // 14:00 UTC is 19:30 in Kolkata, so 4h30m remain — not 5h.
+    expect(msUntilNextLocalMidnight(MIDWEEK_AFTERNOON, "Asia/Kolkata")).toBe(4 * 3_600_000 + 30 * 60_000);
+  });
+
+  it("never returns a negative or zero wait", async () => {
+    const { msUntilNextLocalMidnight } = await import("../src/rate-limit.js");
+    for (const zone of ["UTC", "Asia/Kolkata", "America/Los_Angeles", "Pacific/Chatham"]) {
+      expect(msUntilNextLocalMidnight(MIDWEEK_AFTERNOON, zone), zone).toBeGreaterThan(0);
+    }
+  });
+});
