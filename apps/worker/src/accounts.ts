@@ -56,24 +56,18 @@ export function toUsage(account: AccountRecord, timezone: string): AccountUsage 
 /**
  * Increment the counters that the rate limiter reads. Done after a successful
  * action so a provider failure does not consume a rep's daily allowance.
+ *
+ * One statement in the database rather than a read and a write here. Two
+ * actions in flight both read the same number and both write it back plus one,
+ * so a send goes uncounted and the account passes its cap — the one thing these
+ * counters exist to prevent. Doing it in SQL also removes the standing rule
+ * that the worker may never run as more than one instance.
  */
 export async function recordAction(db: Db, accountId: string, kind: "invite" | "message"): Promise<void> {
-  const { data } = await db
-    .from("linkedin_accounts")
-    .select("invites_today, invites_this_week, messages_today")
-    .eq("id", accountId)
-    .single();
-  if (!data) return;
-
-  await db
-    .from("linkedin_accounts")
-    .update({
-      invites_today: kind === "invite" ? data.invites_today + 1 : data.invites_today,
-      invites_this_week: kind === "invite" ? data.invites_this_week + 1 : data.invites_this_week,
-      messages_today: kind === "message" ? data.messages_today + 1 : data.messages_today,
-      last_action_at: new Date().toISOString(),
-    })
-    .eq("id", accountId);
+  const { error } = await db.rpc("record_linkedin_action", { p_account_id: accountId, p_kind: kind });
+  // Loudly: an uncounted action is an account creeping past its daily cap, and
+  // the next check would happily allow another.
+  if (error) throw new Error(`could not record ${kind} against account ${accountId}: ${error.message}`);
 }
 
 /**

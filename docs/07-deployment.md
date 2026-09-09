@@ -67,9 +67,11 @@ Two generated secrets matter:
   dispatch. Without it the worker returns 503 rather than accepting unsigned
   work, which is deliberate.
 
-One machine, always on. The LinkedIn action queue runs at concurrency 1 because
-its per-account counters would race across instances; scale by adding accounts,
-not machines.
+Always on. The LinkedIn action queue runs at concurrency 1 to keep one
+account's actions properly paced, but the per-account counters are incremented
+by `record_linkedin_action` in one statement, so a second instance does not
+double-send or lose a count. Sends are paced per account either way; more
+machines buy throughput across accounts, not within one.
 
 Confirm it is up: `curl https://<worker>/health` returns `{"ok":true}`.
 

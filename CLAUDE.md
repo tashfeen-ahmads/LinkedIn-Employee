@@ -9,7 +9,7 @@ plan. This file is for whoever works on the code next.
 pnpm install
 pnpm build          # packages compile to dist/; apps typecheck against those
 pnpm typecheck
-pnpm test           # 323 tests, no network, no API key needed
+pnpm test           # 327 tests, no network, no API key needed
 node scripts/mutation-check.mjs   # proves the safety tests actually bite
 pnpm --filter @le/web dev
 pnpm --filter @le/worker dev
@@ -33,37 +33,41 @@ tests that were verified by deliberately breaking the code.
    It re-checks the rate limiter immediately before sending, because minutes
    pass between scheduling and sending. Do not add a second path to the
    provider.
-2. **The caps in `packages/shared/src/constants.ts` are product rules, not
+2. **The counters the limiter reads are incremented in one SQL statement**
+   (`record_linkedin_action`, called by `recordAction`). Reading a counter and
+   writing back read + 1 loses one of two concurrent sends, which is an account
+   quietly passing its cap. A failed write raises rather than being swallowed.
+3. **The caps in `packages/shared/src/constants.ts` are product rules, not
    tunables.** They come from the vendor consensus recorded in
    `docs/06-research.md` section 2. Per-account overrides may only go lower.
    Unipile applies no limits of its own, so this file is the only thing between
    a campaign and a restricted account.
-3. **The reply gate (`applyRules` in `packages/agents/src/reply.ts`) is pure and
+4. **The reply gate (`applyRules` in `packages/agents/src/reply.ts`) is pure and
    stays pure.** Autopilot changes what happens to a clean message, never what
    counts as clean.
-4. **The model never invents a datetime.** `packages/calendar/src/slots.ts`
+5. **The model never invents a datetime.** `packages/calendar/src/slots.ts`
    produces the only times that reach a prospect; the model picks from that
    list. Booking matches an acceptance against the slots we actually offered.
-5. **Opt-outs are checked deterministically as well as by the model**
+6. **Opt-outs are checked deterministically as well as by the model**
    (`containsOptOut`). Sending after "remove me" is the one mistake this
    product cannot make.
-6. **Webhooks and the internal API fail closed.** A missing secret rejects
+7. **Webhooks and the internal API fail closed.** A missing secret rejects
    rather than accepts; see `apps/worker/src/server.ts`.
-7. **Targeting refuses a customer profile nobody has approved**
+8. **Targeting refuses a customer profile nobody has approved**
    (`approved_at` in `apps/worker/src/jobs/targeting.ts`). The Strategy Agent
    writes profiles; it does not approve them. Approval happens on
    `/app/strategy` and nowhere else.
-8. **Nothing held for a human is invisible.** `/app/inbox` lists conversations,
+9. **Nothing held for a human is invisible.** `/app/inbox` lists conversations,
    not drafts: a conversation can be flagged with no draft at all, and while the
    page listed drafts those were shown to nobody. Holds carry a kind
    (`apps/worker/src/holds.ts`) so sending a reply clears the reply hold and
    never the one asking someone to book a meeting by hand.
-9. **The knowledge base is never truncated to fit the prompt**
-   (`selectKnowledge` in `packages/agents/src/knowledge.ts`). A document too
-   long is left out whole and named to the model as unread. Half a pricing page
-   is answered from confidently, and the wrong price reaches the prospect
-   looking like the right one.
-10. **The shared exclusion list is checked immediately before every send**, not
+10. **The knowledge base is never truncated to fit the prompt**
+    (`selectKnowledge` in `packages/agents/src/knowledge.ts`). A document too
+    long is left out whole and named to the model as unread. Half a pricing
+    page is answered from confidently, and the wrong price reaches the prospect
+    looking like the right one.
+11. **The shared exclusion list is checked immediately before every send**, not
     only when a campaign is built (`matchExclusion` in
     `packages/shared/src/exclusions.ts`). A campaign launched this morning
     already has invitations queued against every name on it; an account added

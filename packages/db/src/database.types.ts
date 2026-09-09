@@ -380,7 +380,12 @@ export type Database = {
     // signature here intersects with Tables and collapses every row type to
     // `never`. This is the idiom the Supabase generator emits.
     Views: { [_ in never]: never };
-    Functions: { [_ in never]: never };
+    Functions: {
+      record_linkedin_action: {
+        Args: { p_account_id: string; p_kind: "invite" | "message" };
+        Returns: { invites_today: number; invites_this_week: number; messages_today: number }[];
+      };
+    };
     Enums: {
       membership_role: MembershipRole;
       linkedin_account_status: LinkedinAccountStatus;

@@ -33,8 +33,10 @@ const workers = [
     connection,
     concurrency: 1,
   }),
-  // Concurrency 1 on purpose: LinkedIn actions are paced, and parallel workers
-  // would race the per-account counters the limiter reads.
+  // Concurrency 1 on purpose: LinkedIn actions are paced, and two sends leaving
+  // one account at the same instant is what the minimum gap exists to stop. The
+  // counters themselves are safe either way — record_linkedin_action increments
+  // them in one statement.
   new Worker<LinkedInActionJob>(
     QUEUE_NAMES.linkedinAction,
     async (job) => {

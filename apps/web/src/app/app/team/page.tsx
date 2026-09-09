@@ -136,6 +136,33 @@ async function saveMyDetails(formData: FormData) {
   revalidatePath("/app/team");
 }
 
+/**
+ * When this account is allowed to act. Read by the rate limiter before every
+ * send and never settable until now, so every rep was on the same 8am-to-6pm
+ * weekday default whatever their day actually looks like.
+ */
+async function saveWorkingHours(formData: FormData) {
+  "use server";
+  const start = Number(formData.get("start"));
+  const end = Number(formData.get("end"));
+  const days = [1, 2, 3, 4, 5, 6, 0].filter((day) => formData.get(`day-${day}`) === "on");
+
+  // A window that is empty or inverted would either send nothing or send at
+  // three in the morning; neither is a setting anyone means to choose.
+  if (!Number.isInteger(start) || !Number.isInteger(end)) return;
+  if (start < 0 || end > 24 || start >= end || days.length === 0) return;
+
+  const session = await requireSession();
+  const supabase = await createClient();
+  await supabase
+    .from("linkedin_accounts")
+    .update({ working_hours: { start, end, days } as never })
+    .eq("workspace_id", session.workspaceId)
+    .eq("user_id", session.userId);
+
+  revalidatePath("/app/team");
+}
+
 /** Validated against the runtime's own list rather than a hand-kept one. */
 function isKnownTimezone(value: string): boolean {
   try {
@@ -165,7 +192,7 @@ export default async function TeamPage({
         .eq("workspace_id", session.workspaceId),
       supabase
         .from("linkedin_accounts")
-        .select("user_id, status, display_name, invites_today, invites_this_week, messages_today, has_sales_navigator")
+        .select("user_id, status, display_name, invites_today, invites_this_week, messages_today, has_sales_navigator, working_hours")
         .eq("workspace_id", session.workspaceId),
       supabase
         .from("integrations")
@@ -194,6 +221,7 @@ export default async function TeamPage({
   const appUrl = process.env.APP_URL ?? "http://localhost:3000";
   const accountByUser = new Map((accounts ?? []).map((a) => [a.user_id, a]));
   const mine = accountByUser.get(session.userId);
+  const hours = readWorkingHours(mine?.working_hours);
 
   return (
     <>
@@ -244,6 +272,37 @@ export default async function TeamPage({
               <Usage label="Invites this week" used={mine.invites_this_week} cap={LINKEDIN_LIMITS.invitesPerWeek} />
               <Usage label="Messages today" used={mine.messages_today} cap={LINKEDIN_LIMITS.messagesPerDay} />
             </div>
+
+            <form action={saveWorkingHours} style={{ marginTop: "1.5rem" }}>
+              <p className="small muted" style={{ margin: "0 0 0.5rem" }}>
+                Nothing is sent from this account outside these hours, read in your timezone above.
+              </p>
+              <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "flex-end" }}>
+                <label className="field" style={{ width: 110, marginBottom: 0 }}>
+                  <span>From</span>
+                  <input type="number" name="start" min={0} max={23} defaultValue={hours.start} />
+                </label>
+                <label className="field" style={{ width: 110, marginBottom: 0 }}>
+                  <span>To</span>
+                  <input type="number" name="end" min={1} max={24} defaultValue={hours.end} />
+                </label>
+                <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", paddingBottom: "0.5rem" }}>
+                  {DAYS.map((day) => (
+                    <label key={day.value} className="small" style={{ display: "flex", gap: "0.25rem" }}>
+                      <input
+                        type="checkbox"
+                        name={`day-${day.value}`}
+                        defaultChecked={hours.days.includes(day.value)}
+                      />
+                      {day.label}
+                    </label>
+                  ))}
+                </div>
+                <button className="btn secondary small" type="submit">
+                  Save hours
+                </button>
+              </div>
+            </form>
           </>
         ) : (
           <>
@@ -453,6 +512,27 @@ export default async function TeamPage({
       </section>
     </>
   );
+}
+
+const DAYS = [
+  { value: 1, label: "Mon" },
+  { value: 2, label: "Tue" },
+  { value: 3, label: "Wed" },
+  { value: 4, label: "Thu" },
+  { value: 5, label: "Fri" },
+  { value: 6, label: "Sat" },
+  { value: 0, label: "Sun" },
+] as const;
+
+/** The same shape and fallback the worker's limiter applies to this column. */
+function readWorkingHours(value: unknown): { start: number; end: number; days: number[] } {
+  const fallback = { start: 8, end: 18, days: [1, 2, 3, 4, 5] };
+  if (!value || typeof value !== "object") return fallback;
+  const hours = value as Partial<{ start: number; end: number; days: number[] }>;
+  if (typeof hours.start === "number" && typeof hours.end === "number" && Array.isArray(hours.days)) {
+    return { start: hours.start, end: hours.end, days: hours.days };
+  }
+  return fallback;
 }
 
 function Usage({ label, used, cap }: { label: string; used: number; cap: number }) {

@@ -56,6 +56,38 @@ export class FakeDb {
     return this as unknown as Db;
   }
 
+  /**
+   * The database functions the worker calls. Implemented synchronously between
+   * awaits, which is what makes it a fair stand-in here: a read-and-write in
+   * the worker interleaves under Promise.all and loses an increment, and this
+   * does not — the same difference the real function makes in Postgres.
+   */
+  async rpc(name: string, args: Row): Promise<{ data: unknown; error: { message: string } | null }> {
+    if (name !== "record_linkedin_action") {
+      throw new Error(`fake-db has no implementation of ${name}()`);
+    }
+    const account = this.find("linkedin_accounts", { id: args.p_account_id as string });
+    if (!account) return { data: [], error: null };
+
+    const invite = args.p_kind === "invite" ? 1 : 0;
+    const message = args.p_kind === "message" ? 1 : 0;
+    account.invites_today = (account.invites_today as number) + invite;
+    account.invites_this_week = (account.invites_this_week as number) + invite;
+    account.messages_today = (account.messages_today as number) + message;
+    account.last_action_at = new Date().toISOString();
+
+    return {
+      data: [
+        {
+          invites_today: account.invites_today,
+          invites_this_week: account.invites_this_week,
+          messages_today: account.messages_today,
+        },
+      ],
+      error: null,
+    };
+  }
+
   from(table: string): QueryBuilder {
     return new QueryBuilder(this, table, this.uniqueKeys[table]);
   }
