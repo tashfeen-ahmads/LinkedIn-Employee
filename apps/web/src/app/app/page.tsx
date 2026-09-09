@@ -1,15 +1,7 @@
 import Link from "next/link";
+import { FUNNEL_STAGES, countFunnel } from "@le/shared";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
-
-/** The funnel, counted from campaign_prospects rather than stored separately. */
-const FUNNEL: Array<{ label: string; statuses: string[] }> = [
-  { label: "Invited", statuses: ["invited", "accepted", "messaged_1", "messaged_2", "messaged_3", "replied", "positive", "negative", "meeting_booked"] },
-  { label: "Accepted", statuses: ["accepted", "messaged_1", "messaged_2", "messaged_3", "replied", "positive", "negative", "meeting_booked"] },
-  { label: "Replied", statuses: ["replied", "positive", "negative", "meeting_booked"] },
-  { label: "Positive", statuses: ["positive", "meeting_booked"] },
-  { label: "Meetings", statuses: ["meeting_booked"] },
-];
 
 export default async function OverviewPage() {
   const session = await requireSession();
@@ -24,15 +16,14 @@ export default async function OverviewPage() {
       .order("priority", { ascending: true }),
   ]);
 
-  const statuses = (rows ?? []).map((r) => r.status);
-  const counts = FUNNEL.map((stage) => ({
-    label: stage.label,
-    value: statuses.filter((s) => stage.statuses.includes(s)).length,
-  }));
+  // One definition of the funnel, shared with the reporting page: two copies
+  // would drift and quietly disagree about the same numbers.
+  const tally = countFunnel((rows ?? []).map((r) => r.status));
+  const counts = FUNNEL_STAGES.map((stage) => ({ label: stage.label, value: tally[stage.key] }));
 
-  const invited = counts[0]?.value ?? 0;
-  const accepted = counts[1]?.value ?? 0;
-  const replied = counts[2]?.value ?? 0;
+  const invited = tally.invited;
+  const accepted = tally.accepted;
+  const replied = tally.replied;
 
   return (
     <>

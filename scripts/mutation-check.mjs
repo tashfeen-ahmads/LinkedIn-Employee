@@ -377,6 +377,22 @@ const MUTATIONS = [
     to: "return `<b>${who}</b><br><br>${activity.body}`;",
     pkg: "@le/crm",
   },
+  {
+    id: "funnel/cumulative-stages",
+    rule: "A funnel stage counts everyone who passed it, not only those sitting on it",
+    file: "packages/shared/src/funnel.ts",
+    from: '{ key: "accepted", label: "Accepted", statuses: AT_LEAST_ACCEPTED },',
+    to: '{ key: "accepted", label: "Accepted", statuses: ["accepted"] },',
+    pkg: "@le/shared",
+  },
+  {
+    id: "funnel/min-sample",
+    rule: "A rate is withheld until there is enough of a sample to mean anything",
+    file: "packages/shared/src/funnel.ts",
+    from: "counts.invited >= MIN_FOR_RATE ? counts.accepted / counts.invited : null",
+    to: "counts.accepted / counts.invited",
+    pkg: "@le/shared",
+  },
 ];
 
 const filter = process.argv[2];

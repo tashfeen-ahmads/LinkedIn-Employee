@@ -9,3 +9,6 @@ coverage
 !.env.example
 .DS_Store
 supabase/.temp
+
+# TypeScript incremental build state — a build artifact, not source.
+*.tsbuildinfo
