@@ -86,6 +86,13 @@ pnpm --filter @le/worker dev    # http://localhost:4000
 
 Set `LINKEDIN_PROVIDER=mock` to develop the full flow without touching LinkedIn.
 
+To see the product with something on the screen, seed a demo workspace — a week
+into a campaign, with one reply held back over a pricing question:
+
+```bash
+SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... pnpm --filter @le/db seed
+```
+
 Apply the database schema with the Supabase CLI:
 
 ```bash
@@ -103,3 +110,4 @@ pnpm db:types                   # regenerate packages/db/src/database.types.ts
 | [04 · Roadmap](docs/04-roadmap.md) | 12-week plan, design-partner programme, risks |
 | [05 · Go-to-market](docs/05-go-to-market.md) | Positioning, landing page, launch campaign, onboarding funnel |
 | [06 · Research](docs/06-research.md) | Sourced findings on Unipile, LinkedIn limits, competitors, intent data |
+| [07 · Deployment](docs/07-deployment.md) | Provisioning order, secrets, and the checks to run before the first prospect |

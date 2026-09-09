@@ -9,7 +9,7 @@ plan. This file is for whoever works on the code next.
 pnpm install
 pnpm build          # packages compile to dist/; apps typecheck against those
 pnpm typecheck
-pnpm test           # 249 tests, no network, no API key needed
+pnpm test           # 259 tests, no network, no API key needed
 node scripts/mutation-check.mjs   # proves the safety tests actually bite
 pnpm --filter @le/web dev
 pnpm --filter @le/worker dev
@@ -20,7 +20,9 @@ Build before typechecking: the apps resolve `@le/*` through each package's
 touch. If a query result infers as `never`, rebuild `@le/db` first.
 
 Set `LINKEDIN_PROVIDER=mock`, `CALENDAR_PROVIDER=mock` and `CRM_PROVIDER=mock`
-to run the whole flow without touching anyone's real account.
+to run the whole flow without touching anyone's real account, then
+`pnpm --filter @le/db seed` to put a worked example on every screen. Deployment
+and provisioning are in `docs/07-deployment.md`.
 
 ## The rules that are not negotiable
 

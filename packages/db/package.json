@@ -14,7 +14,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run",
+    "seed": "tsx src/seed/run.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.48.0"
@@ -22,6 +23,7 @@
   "devDependencies": {
     "typescript": "^5.9.0",
     "vitest": "^3.2.0",
-    "@types/node": "^22.10.0"
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.0"
   }
 }

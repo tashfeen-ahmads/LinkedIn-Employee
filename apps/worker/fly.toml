@@ -1,0 +1,31 @@
+# One machine, always on. The LinkedIn action queue runs at concurrency 1 and
+# the counters it reads are per account, so a second instance would race them —
+# scale by adding accounts, not by adding machines.
+app = "linkedin-employee-worker"
+primary_region = "lhr"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  WORKER_PORT = "4000"
+  NODE_ENV = "production"
+
+[http_service]
+  internal_port = 4000
+  force_https = true
+  # Never scaled to zero: the campaign tick and the nightly sweeps must fire
+  # whether or not anyone has made a request.
+  auto_stop_machines = false
+  auto_start_machines = false
+  min_machines_running = 1
+
+  [http_service.checks]
+    [http_service.checks.health]
+      path = "/health"
+      interval = "30s"
+      timeout = "5s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

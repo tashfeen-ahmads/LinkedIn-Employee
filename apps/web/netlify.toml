@@ -1,0 +1,23 @@
+# Netlify deploys the web app only. The worker is a long-running process with
+# queues and schedulers, so it does not belong on a serverless host — see
+# apps/worker/Dockerfile and docs/07-deployment.md.
+
+[build]
+  base = "apps/web"
+  command = "cd ../.. && pnpm install --frozen-lockfile && pnpm build --filter @le/web..."
+  publish = "apps/web/.next"
+
+[build.environment]
+  NODE_VERSION = "22"
+  NEXT_TELEMETRY_DISABLED = "1"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
