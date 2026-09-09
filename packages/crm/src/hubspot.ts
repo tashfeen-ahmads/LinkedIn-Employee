@@ -1,3 +1,4 @@
+import { escapeHtml } from "@le/shared";
 import {
   CrmError,
   isRetryableStatus,
@@ -152,13 +153,6 @@ export function renderActivity(activity: CrmActivity): string {
   return `<b>${who}</b><br><br>${escapeHtml(activity.body).replace(/\n/g, "<br>")}`;
 }
 
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
 
 /** Scopes needed for contacts plus engagement logging. */
 export const HUBSPOT_SCOPES = [

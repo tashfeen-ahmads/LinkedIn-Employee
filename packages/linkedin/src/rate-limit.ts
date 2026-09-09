@@ -1,11 +1,12 @@
-import { LINKEDIN_LIMITS } from "@le/shared";
+import {
+  LINKEDIN_LIMITS,
+  isWithinWorkingHours as sharedIsWithinWorkingHours,
+  msUntilNextLocalMidnight as sharedMsUntilNextLocalMidnight,
+  zonedParts as sharedZonedParts,
+  type WorkingHours,
+} from "@le/shared";
 
-export interface WorkingHours {
-  start: number;
-  end: number;
-  /** 0 = Sunday. */
-  days: number[];
-}
+export type { WorkingHours };
 
 export interface AccountUsage {
   connectedAt: Date;
@@ -46,26 +47,10 @@ export function dailyInviteCap(connectedAt: Date, now: Date = new Date()): numbe
   return Math.floor(invitesPerDayStart + step * days);
 }
 
-/** Hour and weekday of `now` in the given IANA time zone. */
-export function zonedParts(now: Date, timezone: string): { hour: number; weekday: number } {
-  const fmt = new Intl.DateTimeFormat("en-US", {
-    timeZone: timezone,
-    hour: "numeric",
-    hour12: false,
-    weekday: "short",
-  });
-  const parts = fmt.formatToParts(now);
-  const hour = Number(parts.find((p) => p.type === "hour")?.value ?? "0");
-  const weekdayName = parts.find((p) => p.type === "weekday")?.value ?? "Sun";
-  const weekday = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(weekdayName);
-  return { hour: hour % 24, weekday: weekday < 0 ? 0 : weekday };
-}
-
-export function isWithinWorkingHours(now: Date, hours: WorkingHours, timezone: string): boolean {
-  const { hour, weekday } = zonedParts(now, timezone);
-  if (!hours.days.includes(weekday)) return false;
-  return hour >= hours.start && hour < hours.end;
-}
+/** Re-exported so callers here keep one import for everything time-related. */
+export const zonedParts = sharedZonedParts;
+export const isWithinWorkingHours = sharedIsWithinWorkingHours;
+export const msUntilNextLocalMidnight = sharedMsUntilNextLocalMidnight;
 
 /** Milliseconds until the next working-hours window opens. */
 export function msUntilWorkingHours(now: Date, hours: WorkingHours, timezone: string): number {
@@ -120,24 +105,3 @@ export function checkAction(kind: ActionKind, usage: AccountUsage, now: Date = n
   return { allowed: true };
 }
 
-/**
- * Milliseconds until midnight in the given zone.
- *
- * Computed from the zone's own hour *and minute* rather than by subtracting a
- * UTC remainder: zones offset by a half or quarter hour (Asia/Kolkata,
- * Australia/Eucla) would otherwise be wrong by that amount, and the caller
- * would retry before the counters had actually reset.
- */
-export function msUntilNextLocalMidnight(now: Date, timezone: string): number {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: timezone,
-    hour: "numeric",
-    minute: "numeric",
-    second: "numeric",
-    hour12: false,
-  }).formatToParts(now);
-
-  const read = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? "0");
-  const elapsed = (read("hour") % 24) * 3_600_000 + read("minute") * 60_000 + read("second") * 1000;
-  return 86_400_000 - elapsed;
-}

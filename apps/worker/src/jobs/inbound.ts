@@ -98,7 +98,7 @@ export async function handleInboundMessage(
     occurredAt: job.receivedAt,
   });
 
-  const campaignProspect = await stopSequence(ctx, conversation.id, prospect.id);
+  const campaignProspect = await stopSequence(ctx, prospect.id);
   const campaignId = campaignProspect?.campaign_id ?? null;
 
   const { data: campaign } = campaignId
@@ -280,7 +280,6 @@ async function flagForHuman(ctx: WorkerContext, conversationId: string, workspac
 /** A reply ends the automated sequence; the conversation takes over. */
 async function stopSequence(
   ctx: WorkerContext,
-  conversationId: string,
   prospectId: string,
 ): Promise<{ id: string; campaign_id: string } | null> {
   const { data: cp } = await ctx.db
@@ -301,7 +300,6 @@ async function stopSequence(
   } else {
     await ctx.db.from("campaign_prospects").update({ next_action_at: null }).eq("id", cp.id);
   }
-  void conversationId;
   return { id: cp.id, campaign_id: cp.campaign_id };
 }
 

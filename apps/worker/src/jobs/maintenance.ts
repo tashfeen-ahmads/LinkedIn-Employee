@@ -92,12 +92,20 @@ async function closeExhaustedSequences(ctx: WorkerContext, now: Date): Promise<v
     .is("next_action_at", null)
     .limit(500);
 
-  for (const row of rows ?? []) {
+  // One count per distinct campaign, not one per prospect: 500 exhausted
+  // prospects usually belong to a handful of campaigns.
+  const stepCounts = new Map<string, number>();
+  for (const campaignId of new Set((rows ?? []).map((row) => row.campaign_id))) {
     const { count } = await ctx.db
       .from("campaign_steps")
       .select("id", { count: "exact", head: true })
-      .eq("campaign_id", row.campaign_id);
-    if ((count ?? 0) <= row.last_step_sent) {
+      .eq("campaign_id", campaignId);
+    stepCounts.set(campaignId, count ?? 0);
+  }
+
+  for (const row of rows ?? []) {
+    const count = stepCounts.get(row.campaign_id) ?? 0;
+    if (count <= row.last_step_sent) {
       await ctx.db
         .from("campaign_prospects")
         .update({ status: "closed", status_reason: "sequence completed", closed_at: now.toISOString() })

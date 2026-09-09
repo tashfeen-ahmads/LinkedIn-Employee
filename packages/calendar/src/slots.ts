@@ -1,11 +1,8 @@
+import { isWithinWorkingHours, type WorkingHours } from "@le/shared";
 import type { BusyInterval } from "./provider.js";
 
-export interface WorkingHours {
-  start: number;
-  end: number;
-  /** 0 = Sunday. */
-  days: number[];
-}
+export type { WorkingHours };
+export { isWithinWorkingHours };
 
 export interface SlotOptions {
   from: Date;
@@ -58,8 +55,8 @@ export function findFreeSlots(options: SlotOptions): string[] {
     const end = new Date(cursor + durationMs);
 
     if (
-      withinWorkingHours(start, workingHours, timezone) &&
-      withinWorkingHours(new Date(end.getTime() - 60_000), workingHours, timezone) &&
+      isWithinWorkingHours(start, workingHours, timezone) &&
+      isWithinWorkingHours(new Date(end.getTime() - 60_000), workingHours, timezone) &&
       !overlapsAny(cursor, cursor + durationMs, blocks)
     ) {
       // At most one slot per day, so three options span three days rather than
@@ -99,25 +96,6 @@ export function mergeIntervals(intervals: BusyInterval[]): BusyInterval[] {
 
 function overlapsAny(start: number, end: number, blocks: Array<{ start: number; end: number }>): boolean {
   return blocks.some((block) => start < block.end && end > block.start);
-}
-
-export function withinWorkingHours(date: Date, hours: WorkingHours, timezone: string): boolean {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: timezone,
-    hour: "numeric",
-    minute: "numeric",
-    hour12: false,
-    weekday: "short",
-  }).formatToParts(date);
-
-  const hour = Number(parts.find((p) => p.type === "hour")?.value ?? "0") % 24;
-  const minute = Number(parts.find((p) => p.type === "minute")?.value ?? "0");
-  const weekdayName = parts.find((p) => p.type === "weekday")?.value ?? "Sun";
-  const weekday = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].indexOf(weekdayName);
-
-  if (!hours.days.includes(weekday < 0 ? 0 : weekday)) return false;
-  const minutesIntoDay = hour * 60 + minute;
-  return minutesIntoDay >= hours.start * 60 && minutesIntoDay <= hours.end * 60;
 }
 
 function dayKeyFor(date: Date, timezone: string): string {

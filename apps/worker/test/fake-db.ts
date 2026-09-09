@@ -4,7 +4,7 @@ import type { Db } from "@le/db";
 type Row = Record<string, unknown>;
 
 interface Filter {
-  kind: "eq" | "in" | "not-in" | "is" | "lt" | "lte" | "gte" | "gt";
+  kind: "eq" | "in" | "not-in" | "is" | "lt" | "lte" | "gte";
   column: string;
   value: unknown;
 }
@@ -260,8 +260,6 @@ function matches(row: Row, filter: Filter): boolean {
       return value !== null && value !== undefined && String(value) <= String(filter.value);
     case "gte":
       return value !== null && value !== undefined && String(value) >= String(filter.value);
-    case "gt":
-      return value !== null && value !== undefined && String(value) > String(filter.value);
     default:
       return true;
   }

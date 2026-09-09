@@ -8,40 +8,32 @@ import { revalidatePath } from "next/cache";
 import { createInviteToken, inviteExpiry, INVITE_TTL_DAYS } from "@/lib/invitations";
 
 /**
+ * Starts a provider's hosted consent flow. Five of these existed, identical
+ * but for the path, so a change to the call shape meant five edits in one file.
+ */
+function connectAction(path: string) {
+  return async function connect() {
+    "use server";
+    const session = await requireSession();
+    const result = await callWorker<{ url?: string }>(path, {
+      workspaceId: session.workspaceId,
+      userId: session.userId,
+    });
+    if (result?.url) redirect(result.url);
+  };
+}
+
+const connectLinkedIn = connectAction("/auth/linkedin/link");
+const connectCalendar = connectAction("/auth/google/link");
+const connectMicrosoftCalendar = connectAction("/auth/microsoft/link");
+const connectHubSpot = connectAction("/auth/hubspot/link");
+const connectSalesforce = connectAction("/auth/salesforce/link");
+
+/**
  * Team and connection management. Each rep connects their own LinkedIn account
  * through the provider's hosted flow, so no password ever reaches us and no
  * login is ever shared.
  */
-async function connectLinkedIn() {
-  "use server";
-  const session = await requireSession();
-  const result = await callWorker<{ url?: string }>("/auth/linkedin/link", {
-    workspaceId: session.workspaceId,
-    userId: session.userId,
-  });
-  if (result?.url) redirect(result.url);
-}
-
-async function connectCalendar() {
-  "use server";
-  const session = await requireSession();
-  const result = await callWorker<{ url?: string }>("/auth/google/link", {
-    workspaceId: session.workspaceId,
-    userId: session.userId,
-  });
-  if (result?.url) redirect(result.url);
-}
-
-async function connectHubSpot() {
-  "use server";
-  const session = await requireSession();
-  const result = await callWorker<{ url?: string }>("/auth/hubspot/link", {
-    workspaceId: session.workspaceId,
-    userId: session.userId,
-  });
-  if (result?.url) redirect(result.url);
-}
-
 /**
  * Invites a teammate. Seat limits are enforced here rather than at acceptance:
  * telling someone their invitation is invalid after they clicked it is a worse
@@ -123,26 +115,6 @@ async function revokeInvitation(formData: FormData) {
   revalidatePath("/app/team");
 }
 
-async function connectMicrosoftCalendar() {
-  "use server";
-  const session = await requireSession();
-  const result = await callWorker<{ url?: string }>("/auth/microsoft/link", {
-    workspaceId: session.workspaceId,
-    userId: session.userId,
-  });
-  if (result?.url) redirect(result.url);
-}
-
-async function connectSalesforce() {
-  "use server";
-  const session = await requireSession();
-  const result = await callWorker<{ url?: string }>("/auth/salesforce/link", {
-    workspaceId: session.workspaceId,
-    userId: session.userId,
-  });
-  if (result?.url) redirect(result.url);
-}
-
 export default async function TeamPage({
   searchParams,
 }: {
@@ -152,38 +124,39 @@ export default async function TeamPage({
   const session = await requireSession();
   const supabase = await createClient();
 
-  const { data: members } = await supabase
-    .from("memberships")
-    .select("id, role, user_id, profiles(full_name, email, timezone)")
-    .eq("workspace_id", session.workspaceId);
-
-  const { data: accounts } = await supabase
-    .from("linkedin_accounts")
-    .select("user_id, status, display_name, invites_today, invites_this_week, messages_today, has_sales_navigator")
-    .eq("workspace_id", session.workspaceId);
-
-  const { data: calendar } = await supabase
-    .from("integrations")
-    .select("kind, status")
-    .eq("workspace_id", session.workspaceId)
-    .eq("user_id", session.userId)
-    .in("kind", ["google_calendar", "microsoft_calendar"])
-    .maybeSingle();
-
-  const { data: crm } = await supabase
-    .from("integrations")
-    .select("kind, status")
-    .eq("workspace_id", session.workspaceId)
-    .in("kind", ["hubspot", "salesforce", "webhook"])
-    .maybeSingle();
-
-  const { data: invitations } = await supabase
-    .from("invitations")
-    .select("id, email, role, token, expires_at, created_at")
-    .eq("workspace_id", session.workspaceId)
-    .is("accepted_at", null)
-    .is("revoked_at", null)
-    .order("created_at", { ascending: false });
+  // Five independent reads on a page people open often; sequential awaits cost
+  // five round trips where one batch does.
+  const [{ data: members }, { data: accounts }, { data: calendar }, { data: crm }, { data: invitations }] =
+    await Promise.all([
+      supabase
+        .from("memberships")
+        .select("id, role, user_id, profiles(full_name, email, timezone)")
+        .eq("workspace_id", session.workspaceId),
+      supabase
+        .from("linkedin_accounts")
+        .select("user_id, status, display_name, invites_today, invites_this_week, messages_today, has_sales_navigator")
+        .eq("workspace_id", session.workspaceId),
+      supabase
+        .from("integrations")
+        .select("kind, status")
+        .eq("workspace_id", session.workspaceId)
+        .eq("user_id", session.userId)
+        .in("kind", ["google_calendar", "microsoft_calendar"])
+        .maybeSingle(),
+      supabase
+        .from("integrations")
+        .select("kind, status")
+        .eq("workspace_id", session.workspaceId)
+        .in("kind", ["hubspot", "salesforce", "webhook"])
+        .maybeSingle(),
+      supabase
+        .from("invitations")
+        .select("id, email, role, token, expires_at, created_at")
+        .eq("workspace_id", session.workspaceId)
+        .is("accepted_at", null)
+        .is("revoked_at", null)
+        .order("created_at", { ascending: false }),
+    ]);
 
   const canManage = ["owner", "admin", "manager"].includes(session.role);
   const appUrl = process.env.APP_URL ?? "http://localhost:3000";

@@ -1,18 +1,12 @@
+import { escapeHtml } from "@le/shared";
+
+export { escapeHtml };
 /**
  * A deliberately small HTML layer. Every template renders a text part too,
  * because a plain-text alternative is what keeps a transactional email out of
  * the spam folder — and this product's whole premise is that its customers
  * cannot afford deliverability problems.
  */
-
-export function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
 
 export interface LayoutOptions {
   title: string;

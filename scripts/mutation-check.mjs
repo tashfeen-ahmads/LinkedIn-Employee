@@ -116,8 +116,8 @@ const MUTATIONS = [
     // Both bounds must go: for a 30-minute slot either check alone still
     // constrains the other, so mutating one is a no-op that proves nothing.
     from:
-      "      withinWorkingHours(start, workingHours, timezone) &&\n" +
-      "      withinWorkingHours(new Date(end.getTime() - 60_000), workingHours, timezone) &&",
+      "      isWithinWorkingHours(start, workingHours, timezone) &&\n" +
+      "      isWithinWorkingHours(new Date(end.getTime() - 60_000), workingHours, timezone) &&",
     to: "      true &&",
     pkg: "@le/calendar",
   },

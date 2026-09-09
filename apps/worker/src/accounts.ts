@@ -23,6 +23,14 @@ export interface AccountRecord {
 
 const DEFAULT_HOURS: WorkingHours = { start: 8, end: 18, days: [1, 2, 3, 4, 5] };
 
+/**
+ * Every column `toUsage` reads. Selecting less silently produces undefined
+ * fields and a limiter that decides on nothing, so the list lives beside the
+ * function that needs it rather than being retyped at each call site.
+ */
+export const ACCOUNT_USAGE_COLUMNS =
+  "id, workspace_id, user_id, provider_account_id, status, connected_at, invites_today, invites_this_week, messages_today, counters_reset_on, last_action_at, working_hours";
+
 export function parseWorkingHours(value: unknown): WorkingHours {
   if (value && typeof value === "object") {
     const v = value as Partial<WorkingHours>;

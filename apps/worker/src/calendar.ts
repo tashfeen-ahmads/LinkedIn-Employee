@@ -10,7 +10,7 @@ import {
 } from "@le/calendar";
 import type { Db } from "@le/db";
 import type { Env } from "./config.js";
-import { decryptJson, encryptJson } from "./crypto.js";
+import { loadRefreshedCredential } from "./oauth-credentials.js";
 
 export interface CalendarBinding {
   provider: CalendarProvider;
@@ -43,74 +43,31 @@ export async function resolveCalendar(
     .eq("status", "active")
     .maybeSingle();
 
-  if (!integration?.credentials_encrypted) return null;
-  if (!env.CREDENTIALS_KEY) return null;
+  if (!integration?.credentials_encrypted || !env.CREDENTIALS_KEY) return null;
 
-  if (integration.kind === "microsoft_calendar") {
-    if (!env.MICROSOFT_CLIENT_ID || !env.MICROSOFT_CLIENT_SECRET) return null;
-    try {
-      let tokens = decryptJson<{ accessToken: string; refreshToken?: string; expiresAt: number }>(
-        integration.credentials_encrypted,
-        env.CREDENTIALS_KEY,
-      );
-      if (tokens.expiresAt <= Date.now()) {
-        if (!tokens.refreshToken) throw new Error("no refresh token");
-        tokens = await refreshMicrosoftAccessToken({
-          refreshToken: tokens.refreshToken,
-          clientId: env.MICROSOFT_CLIENT_ID,
-          clientSecret: env.MICROSOFT_CLIENT_SECRET,
-          tenant: env.MICROSOFT_TENANT,
-        });
-        await db
-          .from("integrations")
-          .update({ credentials_encrypted: encryptJson(tokens, env.CREDENTIALS_KEY) })
-          .eq("id", integration.id);
-      }
-      return {
-        provider: new MicrosoftCalendarProvider(),
-        accessToken: tokens.accessToken,
-        timezone: input.timezone,
-      };
-    } catch {
-      await db.from("integrations").update({ status: "reauth_required" }).eq("id", integration.id);
-      return null;
-    }
-  }
+  const microsoft = integration.kind === "microsoft_calendar";
+  const clientId = microsoft ? env.MICROSOFT_CLIENT_ID : env.GOOGLE_CLIENT_ID;
+  const clientSecret = microsoft ? env.MICROSOFT_CLIENT_SECRET : env.GOOGLE_CLIENT_SECRET;
+  if (!clientId || !clientSecret) return null;
 
-  if (!env.GOOGLE_CLIENT_ID || !env.GOOGLE_CLIENT_SECRET) return null;
-
-  let tokens: { accessToken: string; refreshToken?: string; expiresAt: number };
-  try {
-    tokens = decryptJson(integration.credentials_encrypted, env.CREDENTIALS_KEY);
-  } catch {
-    await db.from("integrations").update({ status: "error" }).eq("id", integration.id);
-    return null;
-  }
-
-  if (tokens.expiresAt <= Date.now()) {
-    if (!tokens.refreshToken) {
-      await db.from("integrations").update({ status: "reauth_required" }).eq("id", integration.id);
-      return null;
-    }
-    try {
-      const refreshed = await refreshGoogleAccessToken({
-        refreshToken: tokens.refreshToken,
-        clientId: env.GOOGLE_CLIENT_ID,
-        clientSecret: env.GOOGLE_CLIENT_SECRET,
-      });
-      tokens = refreshed;
-      await db
-        .from("integrations")
-        .update({ credentials_encrypted: encryptJson(refreshed, env.CREDENTIALS_KEY) })
-        .eq("id", integration.id);
-    } catch {
-      await db.from("integrations").update({ status: "reauth_required" }).eq("id", integration.id);
-      return null;
-    }
-  }
+  const tokens = await loadRefreshedCredential(db, {
+    integrationId: integration.id,
+    credentialsEncrypted: integration.credentials_encrypted,
+    key: env.CREDENTIALS_KEY,
+    refresh: (current) =>
+      microsoft
+        ? refreshMicrosoftAccessToken({
+            refreshToken: current.refreshToken!,
+            clientId,
+            clientSecret,
+            tenant: env.MICROSOFT_TENANT,
+          })
+        : refreshGoogleAccessToken({ refreshToken: current.refreshToken!, clientId, clientSecret }),
+  });
+  if (!tokens) return null;
 
   return {
-    provider: new GoogleCalendarProvider(),
+    provider: microsoft ? new MicrosoftCalendarProvider() : new GoogleCalendarProvider(),
     accessToken: tokens.accessToken,
     timezone: input.timezone,
   };

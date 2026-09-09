@@ -46,7 +46,7 @@ export async function runTargetingJob(ctx: WorkerContext, job: TargetingJob): Pr
 
   // Anyone this workspace already knows about is excluded, whichever rep owns
   // them. This is the cross-rep duplicate prevention promised in the spec.
-  const known = await loadKnownUrls(ctx, job.workspaceId);
+  const known = await loadKnownUrls(ctx, job.workspaceId, page.items.map((c) => c.linkedinUrl));
   const fresh = page.items.filter((c) => !known.has(normalizeLinkedInUrl(c.linkedinUrl)));
   if (fresh.length === 0) return null;
 
@@ -139,7 +139,27 @@ export async function runTargetingJob(ctx: WorkerContext, job: TargetingJob): Pr
   return campaign.id;
 }
 
-async function loadKnownUrls(ctx: WorkerContext, workspaceId: string): Promise<Set<string>> {
-  const { data } = await ctx.db.from("prospects").select("linkedin_url").eq("workspace_id", workspaceId).limit(50_000);
+/**
+ * Which of these candidates the workspace already has.
+ *
+ * Asks about the candidates rather than downloading every prospect the
+ * workspace has ever seen: the old query pulled up to 50,000 rows to filter a
+ * page of fifty, so its cost grew with the customer's history rather than with
+ * the work being done.
+ */
+async function loadKnownUrls(
+  ctx: WorkerContext,
+  workspaceId: string,
+  candidateUrls: string[],
+): Promise<Set<string>> {
+  const normalized = [...new Set(candidateUrls.map(normalizeLinkedInUrl))];
+  if (normalized.length === 0) return new Set();
+
+  const { data } = await ctx.db
+    .from("prospects")
+    .select("linkedin_url")
+    .eq("workspace_id", workspaceId)
+    .in("linkedin_url", normalized);
+
   return new Set((data ?? []).map((p) => normalizeLinkedInUrl(p.linkedin_url)));
 }

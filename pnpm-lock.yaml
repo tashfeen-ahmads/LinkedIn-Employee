@@ -157,6 +157,10 @@ importers:
         version: 3.2.7(@types/node@22.20.1)(tsx@4.23.13)
 
   packages/calendar:
+    dependencies:
+      '@le/shared':
+        specifier: workspace:*
+        version: link:../shared
     devDependencies:
       '@types/node':
         specifier: ^22.10.0
@@ -169,6 +173,10 @@ importers:
         version: 3.2.7(@types/node@22.20.1)(tsx@4.23.13)
 
   packages/crm:
+    dependencies:
+      '@le/shared':
+        specifier: workspace:*
+        version: link:../shared
     devDependencies:
       '@types/node':
         specifier: ^22.10.0
@@ -197,6 +205,10 @@ importers:
         version: 3.2.7(@types/node@22.20.1)(tsx@4.23.13)
 
   packages/email:
+    dependencies:
+      '@le/shared':
+        specifier: workspace:*
+        version: link:../shared
     devDependencies:
       '@types/node':
         specifier: ^22.10.0

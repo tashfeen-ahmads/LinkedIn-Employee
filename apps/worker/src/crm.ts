@@ -10,7 +10,7 @@ import {
 } from "@le/crm";
 import type { Db } from "@le/db";
 import type { Env } from "./config.js";
-import { decryptJson, encryptJson } from "./crypto.js";
+import { loadRefreshedCredential } from "./oauth-credentials.js";
 
 export interface CrmBinding {
   provider: CrmProvider;
@@ -34,69 +34,53 @@ export async function resolveCrm(db: Db, env: Env, workspaceId: string): Promise
     .in("kind", ["hubspot", "salesforce", "webhook"])
     .eq("status", "active");
 
-  const hubspot = integrations?.find((i) => i.kind === "hubspot");
-  if (hubspot?.credentials_encrypted && env.CREDENTIALS_KEY && env.HUBSPOT_CLIENT_ID && env.HUBSPOT_CLIENT_SECRET) {
-    try {
-      let tokens = decryptJson<{ accessToken: string; refreshToken: string; expiresAt: number }>(
-        hubspot.credentials_encrypted,
-        env.CREDENTIALS_KEY,
-      );
-      if (tokens.expiresAt <= Date.now()) {
-        tokens = await refreshHubSpotToken({
-          refreshToken: tokens.refreshToken,
-          clientId: env.HUBSPOT_CLIENT_ID,
-          clientSecret: env.HUBSPOT_CLIENT_SECRET,
-        });
-        await db
-          .from("integrations")
-          .update({ credentials_encrypted: encryptJson(tokens, env.CREDENTIALS_KEY) })
-          .eq("id", hubspot.id);
-      }
-      return { provider: new HubSpotProvider(), accessToken: tokens.accessToken };
-    } catch {
-      await db.from("integrations").update({ status: "reauth_required" }).eq("id", hubspot.id);
-    }
-  }
+  // HubSpot then Salesforce then webhook: a workspace should not have two
+  // CRMs writing the same activity twice, so the first connected one wins.
+  const oauthCrms = [
+    {
+      kind: "hubspot" as const,
+      clientId: env.HUBSPOT_CLIENT_ID,
+      clientSecret: env.HUBSPOT_CLIENT_SECRET,
+      refresh: refreshHubSpotToken,
+      build: () => new HubSpotProvider(),
+    },
+    {
+      kind: "salesforce" as const,
+      clientId: env.SALESFORCE_CLIENT_ID,
+      clientSecret: env.SALESFORCE_CLIENT_SECRET,
+      refresh: (input: { refreshToken: string; clientId: string; clientSecret: string }) =>
+        // A sandbox org authenticates against test.salesforce.com; omitting
+        // this sends the refresh to production and fails a working connection.
+        refreshSalesforceToken({ ...input, loginUrl: env.SALESFORCE_LOGIN_URL }),
+      build: (tokens: { instanceUrl?: string }) =>
+        new SalesforceProvider({ instanceUrl: tokens.instanceUrl ?? "" }),
+    },
+  ];
 
-  const salesforce = integrations?.find((i) => i.kind === "salesforce");
-  if (
-    salesforce?.credentials_encrypted &&
-    env.CREDENTIALS_KEY &&
-    env.SALESFORCE_CLIENT_ID &&
-    env.SALESFORCE_CLIENT_SECRET
-  ) {
-    try {
-      let tokens = decryptJson<{
-        accessToken: string;
-        refreshToken?: string;
-        instanceUrl: string;
-        expiresAt: number;
-      }>(salesforce.credentials_encrypted, env.CREDENTIALS_KEY);
+  for (const crm of oauthCrms) {
+    const integration = integrations?.find((i) => i.kind === crm.kind);
+    if (!integration?.credentials_encrypted || !env.CREDENTIALS_KEY) continue;
+    if (!crm.clientId || !crm.clientSecret) continue;
 
-      if (tokens.expiresAt <= Date.now()) {
-        if (!tokens.refreshToken) throw new Error("no refresh token");
-        tokens = await refreshSalesforceToken({
-          refreshToken: tokens.refreshToken,
-          clientId: env.SALESFORCE_CLIENT_ID,
-          clientSecret: env.SALESFORCE_CLIENT_SECRET,
-          // A sandbox org authenticates against test.salesforce.com. Omitting
-          // this sends the refresh to production, which fails and marks a
-          // working connection as needing re-auth.
-          loginUrl: env.SALESFORCE_LOGIN_URL,
-        });
-        await db
-          .from("integrations")
-          .update({ credentials_encrypted: encryptJson(tokens, env.CREDENTIALS_KEY) })
-          .eq("id", salesforce.id);
-      }
+    const tokens = await loadRefreshedCredential<{
+      accessToken: string;
+      refreshToken?: string;
+      expiresAt: number;
+      instanceUrl?: string;
+    }>(db, {
+      integrationId: integration.id,
+      credentialsEncrypted: integration.credentials_encrypted,
+      key: env.CREDENTIALS_KEY,
+      refresh: (current) =>
+        crm.refresh({
+          refreshToken: current.refreshToken!,
+          clientId: crm.clientId!,
+          clientSecret: crm.clientSecret!,
+        }) as never,
+    });
+    if (!tokens) continue;
 
-      return {
-        provider: new SalesforceProvider({ instanceUrl: tokens.instanceUrl }),
-        accessToken: tokens.accessToken,
-      };
-    } catch {
-      await db.from("integrations").update({ status: "reauth_required" }).eq("id", salesforce.id);
-    }
+    return { provider: crm.build(tokens), accessToken: tokens.accessToken };
   }
 
   const webhook = integrations?.find((i) => i.kind === "webhook");
@@ -138,23 +122,7 @@ export async function syncConversationToCrm(
       .single();
     if (!prospect) return;
 
-    const contactId =
-      prospect.crm_contact_id ??
-      (await binding.provider.upsertContact({
-        accessToken: binding.accessToken,
-        contact: {
-          linkedinUrl: prospect.linkedin_url,
-          firstName: prospect.first_name ?? undefined,
-          lastName: prospect.last_name ?? undefined,
-          company: prospect.company ?? undefined,
-          jobTitle: prospect.title ?? undefined,
-          source: "LinkedIn Employee",
-        },
-      }));
-
-    if (contactId !== prospect.crm_contact_id) {
-      await db.from("prospects").update({ crm_contact_id: contactId }).eq("id", prospect.id);
-    }
+    const contactId = await resolveContactId(db, binding, prospect);
 
     await binding.provider.logActivity({
       accessToken: binding.accessToken,
@@ -189,23 +157,12 @@ export async function syncMeetingToCrm(
 
     const { data: prospect } = await db
       .from("prospects")
-      .select("id, first_name, last_name, company, linkedin_url, crm_contact_id")
+      .select("id, first_name, last_name, title, company, linkedin_url, crm_contact_id")
       .eq("id", meeting.prospect_id)
       .single();
     if (!prospect) return;
 
-    const contactId =
-      prospect.crm_contact_id ??
-      (await binding.provider.upsertContact({
-        accessToken: binding.accessToken,
-        contact: {
-          linkedinUrl: prospect.linkedin_url,
-          firstName: prospect.first_name ?? undefined,
-          lastName: prospect.last_name ?? undefined,
-          company: prospect.company ?? undefined,
-          source: "LinkedIn Employee",
-        },
-      }));
+    const contactId = await resolveContactId(db, binding, prospect);
 
     const name = `${prospect.first_name ?? ""} ${prospect.last_name ?? ""}`.trim() || "LinkedIn contact";
     const crmEventId = await binding.provider.logMeeting({
@@ -220,13 +177,7 @@ export async function syncMeetingToCrm(
       },
     });
 
-    await db
-      .from("meetings")
-      .update({ crm_event_id: crmEventId })
-      .eq("id", meeting.id);
-    if (contactId !== prospect.crm_contact_id) {
-      await db.from("prospects").update({ crm_contact_id: contactId }).eq("id", prospect.id);
-    }
+    await db.from("meetings").update({ crm_event_id: crmEventId }).eq("id", meeting.id);
   } catch (error) {
     logCrmFailure("meeting", error);
   }
@@ -238,4 +189,42 @@ function logCrmFailure(what: string, error: unknown): void {
     return;
   }
   console.error(`crm ${what} sync failed:`, error);
+}
+
+/**
+ * The CRM's id for this prospect, creating the record if it does not exist yet
+ * and remembering it so the next sync does not look it up again.
+ *
+ * Both sync paths needed this and each had its own copy; the meeting one had
+ * already lost the job title.
+ */
+async function resolveContactId(
+  db: Db,
+  binding: CrmBinding,
+  prospect: {
+    id: string;
+    linkedin_url: string;
+    first_name: string | null;
+    last_name: string | null;
+    company: string | null;
+    title?: string | null;
+    crm_contact_id: string | null;
+  },
+): Promise<string> {
+  if (prospect.crm_contact_id) return prospect.crm_contact_id;
+
+  const contactId = await binding.provider.upsertContact({
+    accessToken: binding.accessToken,
+    contact: {
+      linkedinUrl: prospect.linkedin_url,
+      firstName: prospect.first_name ?? undefined,
+      lastName: prospect.last_name ?? undefined,
+      company: prospect.company ?? undefined,
+      jobTitle: prospect.title ?? undefined,
+      source: "LinkedIn Employee",
+    },
+  });
+
+  await db.from("prospects").update({ crm_contact_id: contactId }).eq("id", prospect.id);
+  return contactId;
 }

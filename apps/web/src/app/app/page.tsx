@@ -15,10 +15,14 @@ export default async function OverviewPage() {
   const session = await requireSession();
   const supabase = await createClient();
 
-  const { data: rows } = await supabase
-    .from("campaign_prospects")
-    .select("status")
-    .eq("workspace_id", session.workspaceId);
+  const [{ data: rows }, { data: profiles }] = await Promise.all([
+    supabase.from("campaign_prospects").select("status").eq("workspace_id", session.workspaceId),
+    supabase
+      .from("customer_profiles")
+      .select("id, name, priority, approved_at, do_not_pursue")
+      .eq("workspace_id", session.workspaceId)
+      .order("priority", { ascending: true }),
+  ]);
 
   const statuses = (rows ?? []).map((r) => r.status);
   const counts = FUNNEL.map((stage) => ({
@@ -29,12 +33,6 @@ export default async function OverviewPage() {
   const invited = counts[0]?.value ?? 0;
   const accepted = counts[1]?.value ?? 0;
   const replied = counts[2]?.value ?? 0;
-
-  const { data: profiles } = await supabase
-    .from("customer_profiles")
-    .select("id, name, priority, approved_at, do_not_pursue")
-    .eq("workspace_id", session.workspaceId)
-    .order("priority", { ascending: true });
 
   return (
     <>

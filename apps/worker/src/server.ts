@@ -11,6 +11,7 @@ import {
 } from "@le/billing";
 import { decryptJson, encryptJson } from "./crypto.js";
 import type { MiddlewareHandler } from "hono";
+import type { IntegrationKind } from "@le/db";
 import type { Queues } from "./queues.js";
 import type { WorkerContext } from "./context.js";
 import { eraseProspect, exportWorkspace } from "./jobs/retention.js";
@@ -239,206 +240,12 @@ export function createServer(ctx: WorkerContext, queues: Queues): Hono {
 
   // Google Calendar connect. The Reply Agent cannot offer a time until this is
   // done, so the flow is deliberately two clicks: consent, then callback.
-  app.post("/auth/google/link", async (c) => {
-    const parsed = LinkRequest.safeParse(await c.req.json().catch(() => null));
-    if (!parsed.success) return c.json({ error: "invalid request" }, 400);
-    if (!ctx.env.GOOGLE_CLIENT_ID || !ctx.env.CREDENTIALS_KEY) {
-      return c.json({ error: "google calendar is not configured" }, 501);
-    }
-    if (!(await assertMembership(ctx.db, parsed.data.workspaceId, parsed.data.userId))) {
-      return c.json({ error: "not a member of that workspace" }, 403);
-    }
-
-    const url = googleConsentUrl({
-      clientId: ctx.env.GOOGLE_CLIENT_ID,
-      redirectUri: `${ctx.env.WORKER_URL}/auth/google/callback`,
-      state: encodeState(parsed.data.workspaceId, parsed.data.userId, ctx.env.CREDENTIALS_KEY),
-    });
-    return c.json({ url });
-  });
-
-  app.get("/auth/google/callback", async (c) => {
-    const code = c.req.query("code");
-    const state = c.req.query("state");
-    if (!code || !state) return c.redirect(`${ctx.env.APP_URL}/app/team?error=missing_code`);
-    if (!ctx.env.GOOGLE_CLIENT_ID || !ctx.env.GOOGLE_CLIENT_SECRET || !ctx.env.CREDENTIALS_KEY) {
-      return c.redirect(`${ctx.env.APP_URL}/app/team?error=not_configured`);
-    }
-
-    let claims: { workspaceId: string; userId: string; issuedAt: number };
-    try {
-      claims = decryptState(state, ctx.env.CREDENTIALS_KEY);
-    } catch {
-      return c.redirect(`${ctx.env.APP_URL}/app/team?error=bad_state`);
-    }
-    // A consent link older than an hour is not honoured.
-    if (Date.now() - claims.issuedAt > 3_600_000) {
-      return c.redirect(`${ctx.env.APP_URL}/app/team?error=expired`);
-    }
-
-    try {
-      const tokens = await exchangeGoogleCode({
-        code,
-        clientId: ctx.env.GOOGLE_CLIENT_ID,
-        clientSecret: ctx.env.GOOGLE_CLIENT_SECRET,
-        redirectUri: `${ctx.env.WORKER_URL}/auth/google/callback`,
-      });
-
-      if (!tokens.refreshToken) {
-        // Without a refresh token the connection dies in an hour; make the rep
-        // re-consent rather than storing something that will silently expire.
-        return c.redirect(`${ctx.env.APP_URL}/app/team?error=no_refresh_token`);
-      }
-
-      await ctx.db.from("integrations").upsert(
-        {
-          workspace_id: claims.workspaceId,
-          user_id: claims.userId,
-          kind: "google_calendar",
-          credentials_encrypted: encryptJson(tokens, ctx.env.CREDENTIALS_KEY),
-          status: "active",
-        },
-        { onConflict: "workspace_id,kind,user_id" },
-      );
-
-      return c.redirect(`${ctx.env.APP_URL}/app/team?calendar=connected`);
-    } catch (error) {
-      console.error("google callback failed", error);
-      return c.redirect(`${ctx.env.APP_URL}/app/team?error=exchange_failed`);
-    }
-  });
-
-  app.post("/auth/microsoft/link", async (c) => {
-    const parsed = LinkRequest.safeParse(await c.req.json().catch(() => null));
-    if (!parsed.success) return c.json({ error: "invalid request" }, 400);
-    if (!ctx.env.MICROSOFT_CLIENT_ID || !ctx.env.CREDENTIALS_KEY) {
-      return c.json({ error: "microsoft calendar is not configured" }, 501);
-    }
-    if (!(await assertMembership(ctx.db, parsed.data.workspaceId, parsed.data.userId))) {
-      return c.json({ error: "not a member of that workspace" }, 403);
-    }
-
-    const url = microsoftConsentUrl({
-      clientId: ctx.env.MICROSOFT_CLIENT_ID,
-      redirectUri: `${ctx.env.WORKER_URL}/auth/microsoft/callback`,
-      state: encodeState(parsed.data.workspaceId, parsed.data.userId, ctx.env.CREDENTIALS_KEY),
-      tenant: ctx.env.MICROSOFT_TENANT,
-    });
-    return c.json({ url });
-  });
-
-  app.get("/auth/microsoft/callback", async (c) => {
-    const code = c.req.query("code");
-    const state = c.req.query("state");
-    if (!code || !state) return c.redirect(`${ctx.env.APP_URL}/app/team?error=missing_code`);
-    if (!ctx.env.MICROSOFT_CLIENT_ID || !ctx.env.MICROSOFT_CLIENT_SECRET || !ctx.env.CREDENTIALS_KEY) {
-      return c.redirect(`${ctx.env.APP_URL}/app/team?error=not_configured`);
-    }
-
-    let claims: { workspaceId: string; userId: string; issuedAt: number };
-    try {
-      claims = decryptState(state, ctx.env.CREDENTIALS_KEY);
-    } catch {
-      return c.redirect(`${ctx.env.APP_URL}/app/team?error=bad_state`);
-    }
-    if (Date.now() - claims.issuedAt > 3_600_000) {
-      return c.redirect(`${ctx.env.APP_URL}/app/team?error=expired`);
-    }
-
-    try {
-      const tokens = await exchangeMicrosoftCode({
-        code,
-        clientId: ctx.env.MICROSOFT_CLIENT_ID,
-        clientSecret: ctx.env.MICROSOFT_CLIENT_SECRET,
-        redirectUri: `${ctx.env.WORKER_URL}/auth/microsoft/callback`,
-        tenant: ctx.env.MICROSOFT_TENANT,
-      });
-      if (!tokens.refreshToken) {
-        return c.redirect(`${ctx.env.APP_URL}/app/team?error=no_refresh_token`);
-      }
-
-      await ctx.db.from("integrations").upsert(
-        {
-          workspace_id: claims.workspaceId,
-          user_id: claims.userId,
-          kind: "microsoft_calendar",
-          credentials_encrypted: encryptJson(tokens, ctx.env.CREDENTIALS_KEY),
-          status: "active",
-        },
-        { onConflict: "workspace_id,kind,user_id" },
-      );
-
-      return c.redirect(`${ctx.env.APP_URL}/app/team?calendar=connected`);
-    } catch (error) {
-      console.error("microsoft callback failed", error);
-      return c.redirect(`${ctx.env.APP_URL}/app/team?error=exchange_failed`);
-    }
-  });
-
-  app.post("/auth/hubspot/link", async (c) => {
-    const parsed = LinkRequest.safeParse(await c.req.json().catch(() => null));
-    if (!parsed.success) return c.json({ error: "invalid request" }, 400);
-    if (!ctx.env.HUBSPOT_CLIENT_ID || !ctx.env.CREDENTIALS_KEY) {
-      return c.json({ error: "hubspot is not configured" }, 501);
-    }
-    if (!(await assertMembership(ctx.db, parsed.data.workspaceId, parsed.data.userId))) {
-      return c.json({ error: "not a member of that workspace" }, 403);
-    }
-
-    const url = hubspotConsentUrl({
-      clientId: ctx.env.HUBSPOT_CLIENT_ID,
-      redirectUri: `${ctx.env.WORKER_URL}/auth/hubspot/callback`,
-      state: encodeState(parsed.data.workspaceId, parsed.data.userId, ctx.env.CREDENTIALS_KEY),
-    });
-    return c.json({ url });
-  });
-
-  app.get("/auth/hubspot/callback", async (c) => {
-    const code = c.req.query("code");
-    const state = c.req.query("state");
-    if (!code || !state) return c.redirect(`${ctx.env.APP_URL}/app/team?error=missing_code`);
-    if (!ctx.env.HUBSPOT_CLIENT_ID || !ctx.env.HUBSPOT_CLIENT_SECRET || !ctx.env.CREDENTIALS_KEY) {
-      return c.redirect(`${ctx.env.APP_URL}/app/team?error=not_configured`);
-    }
-
-    let claims: { workspaceId: string; userId: string; issuedAt: number };
-    try {
-      claims = decryptState(state, ctx.env.CREDENTIALS_KEY);
-    } catch {
-      return c.redirect(`${ctx.env.APP_URL}/app/team?error=bad_state`);
-    }
-    if (Date.now() - claims.issuedAt > 3_600_000) {
-      return c.redirect(`${ctx.env.APP_URL}/app/team?error=expired`);
-    }
-
-    try {
-      const tokens = await exchangeHubSpotCode({
-        code,
-        clientId: ctx.env.HUBSPOT_CLIENT_ID,
-        clientSecret: ctx.env.HUBSPOT_CLIENT_SECRET,
-        redirectUri: `${ctx.env.WORKER_URL}/auth/hubspot/callback`,
-      });
-
-      // A CRM connection is workspace-wide, not per rep: every rep's activity
-      // should land in the same HubSpot portal.
-      await ctx.db.from("integrations").upsert(
-        {
-          workspace_id: claims.workspaceId,
-          user_id: null,
-          kind: "hubspot",
-          credentials_encrypted: encryptJson(tokens, ctx.env.CREDENTIALS_KEY),
-          status: "active",
-        },
-        { onConflict: "workspace_id,kind,user_id" },
-      );
-
-      return c.redirect(`${ctx.env.APP_URL}/app/team?crm=connected`);
-    } catch (error) {
-      console.error("hubspot callback failed", error);
-      return c.redirect(`${ctx.env.APP_URL}/app/team?error=exchange_failed`);
-    }
-  });
-
+  
+  
+  
+  
+  
+  
   // Delivers an invitation that the web app has already created and
   // authorised. The token is read here rather than accepted from the caller,
   // so this endpoint cannot be used to mail an arbitrary string as an invite.
@@ -485,6 +292,8 @@ export function createServer(ctx: WorkerContext, queues: Queues): Hono {
     return c.json({ delivered });
   });
 
+  for (const integration of OAUTH_INTEGRATIONS) registerOAuthIntegration(app, ctx, integration);
+
   // Data subject rights. Both are internal calls, so they inherit the shared
   // secret and the membership check.
   app.post("/jobs/erase-prospect", async (c) => {
@@ -512,73 +321,8 @@ export function createServer(ctx: WorkerContext, queues: Queues): Hono {
     return c.json(await exportWorkspace(ctx, parsed.data.workspaceId));
   });
 
-  app.post("/auth/salesforce/link", async (c) => {
-    const parsed = LinkRequest.safeParse(await c.req.json().catch(() => null));
-    if (!parsed.success) return c.json({ error: "invalid request" }, 400);
-    if (!ctx.env.SALESFORCE_CLIENT_ID || !ctx.env.CREDENTIALS_KEY) {
-      return c.json({ error: "salesforce is not configured" }, 501);
-    }
-    if (!(await assertMembership(ctx.db, parsed.data.workspaceId, parsed.data.userId))) {
-      return c.json({ error: "not a member of that workspace" }, 403);
-    }
-
-    const url = salesforceConsentUrl({
-      clientId: ctx.env.SALESFORCE_CLIENT_ID,
-      redirectUri: `${ctx.env.WORKER_URL}/auth/salesforce/callback`,
-      state: encodeState(parsed.data.workspaceId, parsed.data.userId, ctx.env.CREDENTIALS_KEY),
-      loginUrl: ctx.env.SALESFORCE_LOGIN_URL,
-    });
-    return c.json({ url });
-  });
-
-  app.get("/auth/salesforce/callback", async (c) => {
-    const code = c.req.query("code");
-    const state = c.req.query("state");
-    if (!code || !state) return c.redirect(`${ctx.env.APP_URL}/app/team?error=missing_code`);
-    if (!ctx.env.SALESFORCE_CLIENT_ID || !ctx.env.SALESFORCE_CLIENT_SECRET || !ctx.env.CREDENTIALS_KEY) {
-      return c.redirect(`${ctx.env.APP_URL}/app/team?error=not_configured`);
-    }
-
-    let claims: { workspaceId: string; userId: string; issuedAt: number };
-    try {
-      claims = decryptState(state, ctx.env.CREDENTIALS_KEY);
-    } catch {
-      return c.redirect(`${ctx.env.APP_URL}/app/team?error=bad_state`);
-    }
-    if (Date.now() - claims.issuedAt > 3_600_000) {
-      return c.redirect(`${ctx.env.APP_URL}/app/team?error=expired`);
-    }
-
-    try {
-      const tokens = await exchangeSalesforceCode({
-        code,
-        clientId: ctx.env.SALESFORCE_CLIENT_ID,
-        clientSecret: ctx.env.SALESFORCE_CLIENT_SECRET,
-        redirectUri: `${ctx.env.WORKER_URL}/auth/salesforce/callback`,
-        loginUrl: ctx.env.SALESFORCE_LOGIN_URL,
-      });
-      if (!tokens.refreshToken) {
-        return c.redirect(`${ctx.env.APP_URL}/app/team?error=no_refresh_token`);
-      }
-
-      await ctx.db.from("integrations").upsert(
-        {
-          workspace_id: claims.workspaceId,
-          user_id: null,
-          kind: "salesforce",
-          credentials_encrypted: encryptJson(tokens, ctx.env.CREDENTIALS_KEY),
-          status: "active",
-        },
-        { onConflict: "workspace_id,kind,user_id" },
-      );
-
-      return c.redirect(`${ctx.env.APP_URL}/app/team?crm=connected`);
-    } catch (error) {
-      console.error("salesforce callback failed", error);
-      return c.redirect(`${ctx.env.APP_URL}/app/team?error=exchange_failed`);
-    }
-  });
-
+  
+  
   // Billing. Checkout and the portal are internal calls; the webhook is public
   // and carries Stripe's own signature.
   app.post("/jobs/checkout", async (c) => {
@@ -712,6 +456,182 @@ function workspaceIdFrom(object: Record<string, unknown>): string | null {
 function asString(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
+
+
+/**
+ * The four OAuth integrations differ in four ways: which credentials configure
+ * them, how a code becomes tokens, what the stored integration is called, and
+ * whether the connection belongs to one rep or the whole workspace. Everything
+ * else — the missing-code check, the signed-state decrypt, the one-hour
+ * consent window, the refusal to store a grant with no refresh token, the
+ * encrypted upsert and the error redirects — was written out four times.
+ *
+ * A bug in any of those was previously four bugs, and adding a fifth provider
+ * meant copying the whole shape again.
+ */
+interface OAuthIntegration {
+  /** Path segment: /auth/<name>/link and /auth/<name>/callback. */
+  name: string;
+  kind: IntegrationKind;
+  /** Whose connection this is. A calendar is one rep's; a CRM is the team's. */
+  scope: "user" | "workspace";
+  /** Query flag on the success redirect, so the UI can say what connected. */
+  connectedFlag: "calendar" | "crm";
+  /** Null when the provider is not configured, which returns 501 rather than 500. */
+  consentUrl(ctx: WorkerContext, input: { state: string; redirectUri: string }): string | null;
+  /**
+   * Returns whatever token shape the provider gives back. It is stored
+   * encrypted and handed straight to that provider's own refresh function, so
+   * this layer only needs to know whether a refresh token came with it.
+   */
+  exchange(ctx: WorkerContext, input: { code: string; redirectUri: string }): Promise<{ refreshToken?: string }>;
+}
+
+function registerOAuthIntegration(app: Hono, ctx: WorkerContext, integration: OAuthIntegration): void {
+  const redirectUri = `${ctx.env.WORKER_URL}/auth/${integration.name}/callback`;
+  const back = (query: string) => `${ctx.env.APP_URL}/app/team?${query}`;
+
+  app.post(`/auth/${integration.name}/link`, async (c) => {
+    const parsed = LinkRequest.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "invalid request" }, 400);
+    if (!ctx.env.CREDENTIALS_KEY) return c.json({ error: `${integration.name} is not configured` }, 501);
+    if (!(await assertMembership(ctx.db, parsed.data.workspaceId, parsed.data.userId))) {
+      return c.json({ error: "not a member of that workspace" }, 403);
+    }
+
+    const url = integration.consentUrl(ctx, {
+      state: encodeState(parsed.data.workspaceId, parsed.data.userId, ctx.env.CREDENTIALS_KEY),
+      redirectUri,
+    });
+    if (!url) return c.json({ error: `${integration.name} is not configured` }, 501);
+    return c.json({ url });
+  });
+
+  app.get(`/auth/${integration.name}/callback`, async (c) => {
+    const code = c.req.query("code");
+    const state = c.req.query("state");
+    if (!code || !state) return c.redirect(back("error=missing_code"));
+    if (!ctx.env.CREDENTIALS_KEY) return c.redirect(back("error=not_configured"));
+
+    let claims: { workspaceId: string; userId: string; issuedAt: number };
+    try {
+      claims = decryptState(state, ctx.env.CREDENTIALS_KEY);
+    } catch {
+      return c.redirect(back("error=bad_state"));
+    }
+    // A consent link older than an hour is not honoured.
+    if (Date.now() - claims.issuedAt > 3_600_000) return c.redirect(back("error=expired"));
+
+    try {
+      const tokens = await integration.exchange(ctx, { code, redirectUri });
+
+      // Without a refresh token the connection dies within the hour; make the
+      // rep re-consent rather than storing something that will silently expire.
+      if (!tokens.refreshToken) return c.redirect(back("error=no_refresh_token"));
+
+      await ctx.db.from("integrations").upsert(
+        {
+          workspace_id: claims.workspaceId,
+          user_id: integration.scope === "user" ? claims.userId : null,
+          kind: integration.kind,
+          credentials_encrypted: encryptJson(tokens, ctx.env.CREDENTIALS_KEY),
+          status: "active",
+        },
+        { onConflict: "workspace_id,kind,user_id" },
+      );
+
+      return c.redirect(back(`${integration.connectedFlag}=connected`));
+    } catch (error) {
+      console.error(`${integration.name} callback failed`, error);
+      return c.redirect(back("error=exchange_failed"));
+    }
+  });
+}
+
+const OAUTH_INTEGRATIONS: OAuthIntegration[] = [
+  {
+    name: "google",
+    kind: "google_calendar",
+    scope: "user",
+    connectedFlag: "calendar",
+    consentUrl: (ctx, { state, redirectUri }) =>
+      ctx.env.GOOGLE_CLIENT_ID
+        ? googleConsentUrl({ clientId: ctx.env.GOOGLE_CLIENT_ID, redirectUri, state })
+        : null,
+    exchange: (ctx, { code, redirectUri }) =>
+      exchangeGoogleCode({
+        code,
+        clientId: ctx.env.GOOGLE_CLIENT_ID!,
+        clientSecret: ctx.env.GOOGLE_CLIENT_SECRET!,
+        redirectUri,
+      }),
+  },
+  {
+    name: "microsoft",
+    kind: "microsoft_calendar",
+    scope: "user",
+    connectedFlag: "calendar",
+    consentUrl: (ctx, { state, redirectUri }) =>
+      ctx.env.MICROSOFT_CLIENT_ID
+        ? microsoftConsentUrl({
+            clientId: ctx.env.MICROSOFT_CLIENT_ID,
+            redirectUri,
+            state,
+            tenant: ctx.env.MICROSOFT_TENANT,
+          })
+        : null,
+    exchange: (ctx, { code, redirectUri }) =>
+      exchangeMicrosoftCode({
+        code,
+        clientId: ctx.env.MICROSOFT_CLIENT_ID!,
+        clientSecret: ctx.env.MICROSOFT_CLIENT_SECRET!,
+        redirectUri,
+        tenant: ctx.env.MICROSOFT_TENANT,
+      }),
+  },
+  {
+    name: "hubspot",
+    kind: "hubspot",
+    // A CRM connection is workspace-wide: every rep's activity should land in
+    // the same portal.
+    scope: "workspace",
+    connectedFlag: "crm",
+    consentUrl: (ctx, { state, redirectUri }) =>
+      ctx.env.HUBSPOT_CLIENT_ID
+        ? hubspotConsentUrl({ clientId: ctx.env.HUBSPOT_CLIENT_ID, redirectUri, state })
+        : null,
+    exchange: (ctx, { code, redirectUri }) =>
+      exchangeHubSpotCode({
+        code,
+        clientId: ctx.env.HUBSPOT_CLIENT_ID!,
+        clientSecret: ctx.env.HUBSPOT_CLIENT_SECRET!,
+        redirectUri,
+      }),
+  },
+  {
+    name: "salesforce",
+    kind: "salesforce",
+    scope: "workspace",
+    connectedFlag: "crm",
+    consentUrl: (ctx, { state, redirectUri }) =>
+      ctx.env.SALESFORCE_CLIENT_ID
+        ? salesforceConsentUrl({
+            clientId: ctx.env.SALESFORCE_CLIENT_ID,
+            redirectUri,
+            state,
+            loginUrl: ctx.env.SALESFORCE_LOGIN_URL,
+          })
+        : null,
+    exchange: (ctx, { code, redirectUri }) =>
+      exchangeSalesforceCode({
+        code,
+        clientId: ctx.env.SALESFORCE_CLIENT_ID!,
+        clientSecret: ctx.env.SALESFORCE_CLIENT_SECRET!,
+        redirectUri,
+        loginUrl: ctx.env.SALESFORCE_LOGIN_URL,
+      }),
+  },
+];
 
 /**
  * Constant-time bearer check. A missing secret fails closed: an unauthenticated

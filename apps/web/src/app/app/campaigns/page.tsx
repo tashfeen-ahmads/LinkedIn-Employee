@@ -26,16 +26,14 @@ export default async function CampaignsPage() {
   const session = await requireSession();
   const supabase = await createClient();
 
-  const { data: campaigns } = await supabase
-    .from("campaigns")
-    .select("id, name, status, connection_note, daily_invite_cap, reply_mode, launched_at, created_at")
-    .eq("workspace_id", session.workspaceId)
-    .order("created_at", { ascending: false });
-
-  const { data: counts } = await supabase
-    .from("campaign_prospects")
-    .select("campaign_id, status")
-    .eq("workspace_id", session.workspaceId);
+  const [{ data: campaigns }, { data: counts }] = await Promise.all([
+    supabase
+      .from("campaigns")
+      .select("id, name, status, connection_note, daily_invite_cap, reply_mode, launched_at, created_at")
+      .eq("workspace_id", session.workspaceId)
+      .order("created_at", { ascending: false }),
+    supabase.from("campaign_prospects").select("campaign_id, status").eq("workspace_id", session.workspaceId),
+  ]);
 
   const byCampaign = new Map<string, { queued: number; total: number }>();
   for (const row of counts ?? []) {

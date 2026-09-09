@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { findFreeSlots, formatSlot, mergeIntervals, withinWorkingHours } from "../src/slots.js";
+import { findFreeSlots, formatSlot, mergeIntervals, isWithinWorkingHours } from "../src/slots.js";
 
 const WORKING = { start: 9, end: 17, days: [1, 2, 3, 4, 5] };
 // Monday 2026-09-07, 08:00 UTC.
@@ -37,7 +37,7 @@ describe("findFreeSlots", () => {
 
   it("never offers a time outside working hours", () => {
     for (const slot of findFreeSlots(options())) {
-      expect(withinWorkingHours(new Date(slot), WORKING, "UTC")).toBe(true);
+      expect(isWithinWorkingHours(new Date(slot), WORKING, "UTC")).toBe(true);
     }
   });
 
@@ -88,7 +88,7 @@ describe("findFreeSlots", () => {
   it("honours the rep's own time zone", () => {
     const slots = findFreeSlots(options({ timezone: "America/New_York", maxSlots: 2 }));
     for (const slot of slots) {
-      expect(withinWorkingHours(new Date(slot), WORKING, "America/New_York")).toBe(true);
+      expect(isWithinWorkingHours(new Date(slot), WORKING, "America/New_York")).toBe(true);
       // 09:00 in New York is 13:00 UTC, so a UTC-morning slot would be a bug.
       expect(new Date(slot).getUTCHours()).toBeGreaterThanOrEqual(13);
     }
@@ -98,7 +98,7 @@ describe("findFreeSlots", () => {
     const slots = findFreeSlots(options({ durationMinutes: 60, maxSlots: 8 }));
     for (const slot of slots) {
       const end = new Date(Date.parse(slot) + 60 * 60_000 - 60_000);
-      expect(withinWorkingHours(end, WORKING, "UTC")).toBe(true);
+      expect(isWithinWorkingHours(end, WORKING, "UTC")).toBe(true);
     }
   });
 });

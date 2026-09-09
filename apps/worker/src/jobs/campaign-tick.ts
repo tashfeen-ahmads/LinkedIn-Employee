@@ -3,7 +3,7 @@ import { entitlementFor } from "@le/billing";
 import { checkAction, dailyInviteCap, nextGapMs } from "@le/linkedin";
 import type { Db } from "@le/db";
 import type { Queues } from "../queues.js";
-import { resetCountersIfNeeded, toUsage, type AccountRecord } from "../accounts.js";
+import { resetCountersIfNeeded, toUsage, type AccountRecord, ACCOUNT_USAGE_COLUMNS } from "../accounts.js";
 
 /**
  * The pacing loop. Runs every few minutes and, for each running campaign, asks
@@ -23,8 +23,10 @@ export async function runCampaignTick(db: Db, queues: Queues, now: Date = new Da
   if (!campaigns?.length) return 0;
 
   let enqueued = 0;
-  // One entitlement lookup per workspace, not per campaign.
+  // One lookup per workspace and per account, not per campaign: several
+  // running campaigns commonly share both.
   const entitled = new Map<string, boolean>();
+  const accounts = new Map<string, { account: AccountRecord; timezone: string } | null>();
 
   for (const campaign of campaigns) {
     // A trial that has ended, or a subscription that has, stops outreach here.
@@ -34,26 +36,16 @@ export async function runCampaignTick(db: Db, queues: Queues, now: Date = new Da
     }
     if (!entitled.get(campaign.workspace_id)) continue;
 
-    const { data: accountRow } = await db
-      .from("linkedin_accounts")
-      .select(
-        "id, workspace_id, user_id, provider_account_id, status, connected_at, invites_today, invites_this_week, messages_today, counters_reset_on, last_action_at, working_hours",
-      )
-      .eq("id", campaign.linkedin_account_id)
-      .single();
-    if (!accountRow) continue;
+    if (!accounts.has(campaign.linkedin_account_id)) {
+      accounts.set(
+        campaign.linkedin_account_id,
+        await loadAccount(db, campaign.linkedin_account_id, today),
+      );
+    }
+    const loaded = accounts.get(campaign.linkedin_account_id);
+    if (!loaded) continue;
 
-    // Only an active account gets work. Paused, warned, restricted and
-    // reauth-required accounts are all left alone until a human intervenes.
-    if (accountRow.status !== "active") continue;
-
-    const account = await resetCountersIfNeeded(db, accountRow as AccountRecord, today);
-    const { data: profile } = await db
-      .from("profiles")
-      .select("timezone")
-      .eq("id", account.user_id)
-      .single();
-    const usage = toUsage(account, profile?.timezone ?? "UTC");
+    const usage = toUsage(loaded.account, loaded.timezone);
 
     // Follow-ups first: a conversation already started is worth more than a
     // new invitation, and both draw on the same daily message budget.
@@ -169,4 +161,27 @@ async function canWorkspaceSend(db: Db, workspaceId: string, now: Date): Promise
     },
     now,
   ).canSend;
+}
+
+/**
+ * An account ready for the limiter, or null when it must not be given work.
+ *
+ * Only an active account gets work: paused, warned, restricted and
+ * reauth-required accounts are all left alone until a human intervenes.
+ */
+async function loadAccount(
+  db: Db,
+  accountId: string,
+  today: string,
+): Promise<{ account: AccountRecord; timezone: string } | null> {
+  const { data: accountRow } = await db
+    .from("linkedin_accounts")
+    .select(ACCOUNT_USAGE_COLUMNS)
+    .eq("id", accountId)
+    .single();
+  if (!accountRow || accountRow.status !== "active") return null;
+
+  const account = await resetCountersIfNeeded(db, accountRow as AccountRecord, today);
+  const { data: profile } = await db.from("profiles").select("timezone").eq("id", account.user_id).single();
+  return { account, timezone: profile?.timezone ?? "UTC" };
 }

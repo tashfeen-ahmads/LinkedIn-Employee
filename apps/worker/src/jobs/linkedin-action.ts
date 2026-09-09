@@ -2,7 +2,7 @@ import { checkAction } from "@le/linkedin";
 import { canTransition, type CampaignProspectStatus } from "@le/shared";
 import type { WorkerContext } from "../context.js";
 import { recordEvent } from "../context.js";
-import { applyHealth, recordAction, toUsage, type AccountRecord } from "../accounts.js";
+import { applyHealth, recordAction, toUsage, type AccountRecord, ACCOUNT_USAGE_COLUMNS } from "../accounts.js";
 import { syncConversationToCrm } from "../crm.js";
 import type { LinkedInActionJob } from "../queues.js";
 
@@ -44,9 +44,7 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
 
   const { data: accountRow } = await db
     .from("linkedin_accounts")
-    .select(
-      "id, workspace_id, user_id, provider_account_id, status, connected_at, invites_today, invites_this_week, messages_today, counters_reset_on, last_action_at, working_hours",
-    )
+    .select(ACCOUNT_USAGE_COLUMNS)
     .eq("id", campaign.linkedin_account_id)
     .single();
   if (!accountRow || accountRow.status !== "active" || !accountRow.provider_account_id) return;
@@ -196,9 +194,7 @@ async function sendApprovedReply(
 
   const { data: account } = await db
     .from("linkedin_accounts")
-    .select(
-      "id, workspace_id, user_id, provider_account_id, status, connected_at, invites_today, invites_this_week, messages_today, counters_reset_on, last_action_at, working_hours",
-    )
+    .select(ACCOUNT_USAGE_COLUMNS)
     .eq("id", conversation.linkedin_account_id)
     .single();
   if (!account?.provider_account_id || account.status !== "active") return;
