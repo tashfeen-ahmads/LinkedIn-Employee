@@ -6,6 +6,8 @@ import type { WorkerContext } from "../src/context.js";
 
 const WORKSPACE = "11111111-1111-4111-8111-111111111111";
 const USER = "22222222-2222-4222-8222-222222222222";
+const CAMPAIGN = "33333333-3333-4333-8333-333333333333";
+const CONVERSATION = "44444444-4444-4444-8444-444444444444";
 const NOW = new Date("2026-09-09T07:00:00Z");
 
 function harness() {
@@ -102,6 +104,72 @@ describe("runDailyDigest", () => {
 
     await runDailyDigest(ctx, NOW);
     expect(email.sent[0]?.text).toContain("Jane Doe (Northwind)");
+  });
+
+  it("counts a reply and a booked meeting, which are recorded against a conversation", async () => {
+    // The bug this pins: events name their subject by type, and matching a
+    // conversation id against the set of campaign-prospect ids never hits. Both
+    // of these numbers were structurally zero in every digest ever sent, and
+    // the tests above missed it by seeding events with no subject at all.
+    const { db, ctx, email } = harness();
+    db.seed("campaigns", [{ id: CAMPAIGN, workspace_id: WORKSPACE, owner_user_id: USER }]);
+    db.seed("conversations", [{ id: CONVERSATION, workspace_id: WORKSPACE, campaign_id: CAMPAIGN }]);
+    db.seed("events", [
+      {
+        workspace_id: WORKSPACE,
+        name: "message.received",
+        subject_type: "conversation",
+        subject_id: CONVERSATION,
+        created_at: new Date(NOW.getTime() - 3_600_000).toISOString(),
+      },
+      {
+        workspace_id: WORKSPACE,
+        name: "meeting.booked",
+        subject_type: "conversation",
+        subject_id: CONVERSATION,
+        created_at: new Date(NOW.getTime() - 3_600_000).toISOString(),
+      },
+    ]);
+
+    expect(await runDailyDigest(ctx, NOW)).toBe(1);
+    expect(email.sent[0]?.text).toContain("1 reply");
+    expect(email.sent[0]?.text).toContain("1 meeting");
+  });
+
+  it("does not report another rep's conversation as this rep's", async () => {
+    const { db, ctx, email } = harness();
+    db.seed("campaigns", [{ id: CAMPAIGN, workspace_id: WORKSPACE, owner_user_id: "99999999-9999-4999-8999-999999999999" }]);
+    db.seed("conversations", [{ id: CONVERSATION, workspace_id: WORKSPACE, campaign_id: CAMPAIGN }]);
+    db.seed("events", [
+      {
+        workspace_id: WORKSPACE,
+        name: "message.received",
+        subject_type: "conversation",
+        subject_id: CONVERSATION,
+        created_at: new Date(NOW.getTime() - 3_600_000).toISOString(),
+      },
+    ]);
+
+    // Nothing of this rep's happened, so there is nothing to send them.
+    expect(await runDailyDigest(ctx, NOW)).toBe(0);
+    expect(email.sent).toHaveLength(0);
+  });
+
+  it("carries the low acceptance warning the nightly sweep records", async () => {
+    const { db, ctx, email } = harness();
+    const accountId = db.rows("linkedin_accounts")[0]!.id as string;
+    db.seed("events", [
+      {
+        workspace_id: WORKSPACE,
+        name: "linkedin.account.low_acceptance",
+        subject_type: "linkedin_account",
+        subject_id: accountId,
+        created_at: new Date(NOW.getTime() - 3_600_000).toISOString(),
+      },
+    ]);
+
+    expect(await runDailyDigest(ctx, NOW)).toBe(1);
+    expect(email.sent[0]?.text).toContain("three in ten");
   });
 
   it("does nothing at all when email is not configured", async () => {

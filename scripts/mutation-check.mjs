@@ -432,6 +432,22 @@ const MUTATIONS = [
     pkg: "@le/worker",
   },
   {
+    id: "digest/event-subject-types",
+    rule: "A digest counts an event against the id space its subject actually lives in",
+    file: "apps/worker/src/jobs/digest.ts",
+    from: "const owned = mine[event.subject_type];",
+    to: "const owned = mine.campaign_prospect;",
+    pkg: "@le/worker",
+  },
+  {
+    id: "digest/low-acceptance-warning",
+    rule: "The low acceptance warning the nightly sweep records reaches the rep",
+    file: "apps/worker/src/jobs/digest.ts",
+    from: "  if (lowAcceptance) {",
+    to: "  if (false) {",
+    pkg: "@le/worker",
+  },
+  {
     id: "pricing/unpriced-is-not-free",
     rule: "A model we cannot price reports unknown cost, never zero",
     file: "packages/shared/src/pricing.ts",

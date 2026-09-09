@@ -67,7 +67,7 @@ export async function runDailyDigest(ctx: WorkerContext, now: Date = new Date())
 }
 
 interface WorkspaceActivity {
-  events: Array<{ name: string; subject_id: string | null }>;
+  events: Array<{ name: string; subject_type: string | null; subject_id: string | null }>;
   /** Pending draft ids mapped to the campaign their conversation belongs to. */
   pendingByCampaign: Array<string | null>;
 }
@@ -81,7 +81,11 @@ async function loadWorkspaceActivity(
   const { db } = ctx;
 
   const [{ data: events }, { data: pendingDrafts }] = await Promise.all([
-    db.from("events").select("name, subject_id, created_at").eq("workspace_id", workspaceId).gte("created_at", since),
+    db
+      .from("events")
+      .select("name, subject_type, subject_id, created_at")
+      .eq("workspace_id", workspaceId)
+      .gte("created_at", since),
     db.from("reply_drafts").select("id, conversation_id").eq("workspace_id", workspaceId).eq("status", "pending"),
   ]);
 
@@ -92,7 +96,11 @@ async function loadWorkspaceActivity(
   const campaignByConversation = new Map((conversations ?? []).map((c) => [c.id, c.campaign_id]));
 
   return {
-    events: (events ?? []).map((e) => ({ name: e.name, subject_id: e.subject_id })),
+    events: (events ?? []).map((e) => ({
+      name: e.name,
+      subject_type: e.subject_type,
+      subject_id: e.subject_id,
+    })),
     pendingByCampaign: (pendingDrafts ?? []).map((d) => campaignByConversation.get(d.conversation_id) ?? null),
   };
 }
@@ -116,14 +124,35 @@ async function summarise(
     .eq("owner_user_id", userId);
   const campaignIds = new Set((ownCampaigns ?? []).map((campaign) => campaign.id));
 
-  const { data: ownCampaignProspects } = campaignIds.size
-    ? await db.from("campaign_prospects").select("id").in("campaign_id", [...campaignIds])
-    : { data: [] };
-  const mine = new Set((ownCampaignProspects ?? []).map((row) => row.id));
+  // Events name their subject by type, and the two types are different id
+  // spaces. Matching a conversation id against the set of campaign-prospect ids
+  // never hits, so "replies" and "meetings booked" were structurally zero in
+  // every digest ever sent — and a rep whose only news was a reply got no email
+  // at all, because the summary looked empty.
+  const [{ data: ownCampaignProspects }, { data: ownConversations }] = await Promise.all([
+    campaignIds.size
+      ? db.from("campaign_prospects").select("id").in("campaign_id", [...campaignIds])
+      : Promise.resolve({ data: [] as Array<{ id: string }> }),
+    campaignIds.size
+      ? db.from("conversations").select("id").in("campaign_id", [...campaignIds])
+      : Promise.resolve({ data: [] as Array<{ id: string }> }),
+  ]);
+
+  const mine: Record<string, Set<string>> = {
+    campaign_prospect: new Set((ownCampaignProspects ?? []).map((row) => row.id)),
+    conversation: new Set((ownConversations ?? []).map((row) => row.id)),
+  };
 
   const count = (name: string) =>
-    shared.events.filter((event) => event.name === name && (!event.subject_id || mine.has(event.subject_id)))
-      .length;
+    shared.events.filter((event) => {
+      if (event.name !== name) return false;
+      // An event with no subject, or one of a kind this rep does not own an id
+      // space for, belongs to nobody in particular: everyone sees it rather
+      // than nobody.
+      if (!event.subject_id || !event.subject_type) return true;
+      const owned = mine[event.subject_type];
+      return owned ? owned.has(event.subject_id) : true;
+    }).length;
 
   // A draft on a conversation with no campaign belongs to nobody in
   // particular, so every rep sees it rather than none of them.
@@ -157,15 +186,25 @@ async function summarise(
 
   const { data: account } = await db
     .from("linkedin_accounts")
-    .select("status, status_detail")
+    .select("id, status, status_detail")
     .eq("workspace_id", workspaceId)
     .eq("user_id", userId)
     .maybeSingle();
+  const accountId = account?.id ?? null;
 
   const warnings: string[] = [];
   if (account && account.status !== "active") {
     warnings.push(
       `Your LinkedIn account is ${account.status.replace(/_/g, " ")} — sending is paused until it is reconnected.`,
+    );
+  }
+  // The nightly sweep records this and said the digest carried it. It did not.
+  const lowAcceptance = shared.events.find(
+    (event) => event.name === "linkedin.account.low_acceptance" && event.subject_id === accountId,
+  );
+  if (lowAcceptance) {
+    warnings.push(
+      "Fewer than three in ten of your invitations are being accepted. That is the number LinkedIn watches; it usually means the targeting or the note needs a look.",
     );
   }
 
