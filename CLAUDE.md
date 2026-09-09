@@ -9,7 +9,7 @@ plan. This file is for whoever works on the code next.
 pnpm install
 pnpm build          # packages compile to dist/; apps typecheck against those
 pnpm typecheck
-pnpm test           # 341 tests, no network, no API key needed
+pnpm test           # 362 tests, no network, no API key needed
 node scripts/mutation-check.mjs   # proves the safety tests actually bite
 pnpm --filter @le/web dev
 pnpm --filter @le/worker dev
@@ -84,7 +84,11 @@ tests that were verified by deliberately breaking the code.
   regression traces back to the change that caused it. Bump the version
   constant when you edit a prompt.
 - Prompt-cache the stable context (business profile, customer profile, rep bio)
-  and leave the varying part after the breakpoint.
+  and leave the varying part after the breakpoint. `/app/usage` shows whether
+  it is working; a low cached share there means a breakpoint moved.
+- Model prices live in `packages/shared/src/pricing.ts` and are the one thing
+  here that changes without anyone touching the repo. A model missing from that
+  table costs `null`, never zero.
 - Tenant tables all carry `workspace_id` and RLS. The worker uses the service
   role, so it must filter by `workspace_id` itself — RLS will not save you
   there.

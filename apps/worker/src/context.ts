@@ -1,3 +1,4 @@
+import { estimateCostUsd } from "@le/shared";
 import { createAnthropic, type AgentContext } from "@le/agents";
 import { createServiceClient, type Db } from "@le/db";
 import { MockLinkedInProvider, UnipileProvider, type LinkedInProvider } from "@le/linkedin";
@@ -47,6 +48,14 @@ export function createWorkerContext(env: Env): WorkerContext {
             output_tokens: usage.outputTokens,
             cache_read_tokens: usage.cacheReadTokens,
             latency_ms: usage.latencyMs,
+            // Priced here rather than at read time: the rates change, and what
+            // a call cost is a fact about the day it ran.
+            cost_usd: estimateCostUsd({
+              model: usage.model,
+              inputTokens: usage.inputTokens,
+              outputTokens: usage.outputTokens,
+              cacheReadTokens: usage.cacheReadTokens,
+            }),
             error: usage.error ?? null,
           });
           if (error) console.error("failed to record llm usage", error.message);
