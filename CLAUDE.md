@@ -9,7 +9,7 @@ plan. This file is for whoever works on the code next.
 pnpm install
 pnpm build          # packages compile to dist/; apps typecheck against those
 pnpm typecheck
-pnpm test           # 365 tests, no network, no API key needed
+pnpm test           # 374 tests, no network, no API key needed
 node scripts/mutation-check.mjs   # proves the safety tests actually bite
 pnpm --filter @le/web dev
 pnpm --filter @le/worker dev
@@ -52,7 +52,10 @@ tests that were verified by deliberately breaking the code.
    (`containsOptOut`). Sending after "remove me" is the one mistake this
    product cannot make.
 7. **Webhooks and the internal API fail closed.** A missing secret rejects
-   rather than accepts; see `apps/worker/src/server.ts`.
+   rather than accepts; see `apps/worker/src/server.ts`. That includes
+   `/webhooks/unipile/accounts`, where a forged delivery would bind a
+   stranger's LinkedIn account to a rep's row and send every campaign message
+   from it.
 8. **Targeting refuses a customer profile nobody has approved**
    (`approved_at` in `apps/worker/src/jobs/targeting.ts`). The Strategy Agent
    writes profiles; it does not approve them. Approval happens on

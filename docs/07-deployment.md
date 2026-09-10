@@ -96,9 +96,17 @@ Create an account, take the DSN and an access token, and point its
 new-messages webhook at `$WORKER_URL/webhooks/unipile/messages` with a signing
 secret.
 
+The hosted-auth notification goes to `$WORKER_URL/webhooks/unipile/accounts`.
+The worker passes that URL with every connect link, so there is nothing to
+configure, but the URL has to be reachable from Unipile: this delivery is what
+binds a rep's LinkedIn account to their row, and until it arrives their account
+has no provider id and every job skips it. A rep who completes the hosted login
+and then finds that nothing ever sends is almost always this.
+
 **Set `UNIPILE_WEBHOOK_SECRET`.** The worker rejects unsigned deliveries rather
-than trusting them, so an unset secret means inbound replies are refused —
-which is the right failure, but it looks like the integration is broken.
+than trusting them, so an unset secret means inbound replies are refused and no
+account can finish connecting — which is the right failure, but it looks like
+the integration is broken.
 
 ## 6. Stripe
 

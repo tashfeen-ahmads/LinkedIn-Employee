@@ -220,7 +220,12 @@ export default async function TeamPage({
   const canManage = ["owner", "admin", "manager"].includes(session.role);
   const appUrl = process.env.APP_URL ?? "http://localhost:3000";
   const accountByUser = new Map((accounts ?? []).map((a) => [a.user_id, a]));
-  const mine = accountByUser.get(session.userId);
+  const found = accountByUser.get(session.userId);
+  // A row that is still `connecting` has no provider id, so nothing can send
+  // from it. Treating it as connected showed usage bars for an account that
+  // does not work yet, and took away the only button that could fix it.
+  const mine = found?.status === "connecting" ? undefined : found;
+  const awaitingProvider = found?.status === "connecting";
   const hours = readWorkingHours(mine?.working_hours);
 
   return (
@@ -307,12 +312,13 @@ export default async function TeamPage({
         ) : (
           <>
             <p className="small muted">
-              Not connected yet. You will sign in to LinkedIn on their hosted page; we never see your
-              password.
+              {awaitingProvider
+                ? "Waiting for LinkedIn to confirm the connection. This usually takes a few seconds; if the page still says this in a minute, start again."
+                : "Not connected yet. You will sign in to LinkedIn on their hosted page; we never see your password."}
             </p>
             <form action={connectLinkedIn}>
               <button className="btn" type="submit">
-                Connect LinkedIn
+                {awaitingProvider ? "Start again" : "Connect LinkedIn"}
               </button>
             </form>
           </>

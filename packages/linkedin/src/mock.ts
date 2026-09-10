@@ -5,6 +5,7 @@ import type {
   InboundMessage,
   LinkedInProvider,
   ProspectPage,
+  ConnectedAccount,
   ProviderProfile,
   ProviderRelation,
   SearchQuery,
@@ -25,6 +26,13 @@ export class MockLinkedInProvider implements LinkedInProvider {
   readonly searches: Array<{ accountId: string; query: SearchQuery }> = [];
   /** Connections the account has, i.e. who accepted an invitation. */
   relations: ProviderRelation[] = [];
+
+  /** What parseAccountWebhook returns; set by a test to simulate a delivery. */
+  connectedAccounts: ConnectedAccount[] = [];
+
+  parseAccountWebhook(): ConnectedAccount[] {
+    return this.connectedAccounts;
+  }
 
   async createHostedAuthLink(): Promise<HostedAuthLink> {
     return { url: "https://example.test/hosted-auth", expiresAt: new Date(Date.now() + 3_600_000).toISOString() };

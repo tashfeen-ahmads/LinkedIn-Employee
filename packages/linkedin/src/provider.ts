@@ -7,6 +7,20 @@ export interface HostedAuthLink {
   expiresAt: string;
 }
 
+/**
+ * An account the provider has finished connecting.
+ *
+ * `reference` is the value we handed the hosted flow to identify the rep, so a
+ * notification can be matched back to the row that started it. Without it a
+ * connected account belongs to nobody.
+ */
+export interface ConnectedAccount {
+  providerAccountId: string;
+  reference: string;
+  displayName?: string;
+  status: AccountHealth;
+}
+
 export interface ProviderProfile {
   providerId: string;
   linkedinUrl: string;
@@ -70,7 +84,19 @@ export interface ActionResult {
 export interface LinkedInProvider {
   readonly name: string;
   /** Start the hosted login flow. The rep's password never reaches our servers. */
-  createHostedAuthLink(input: { userId: string; successUrl: string; failureUrl: string }): Promise<HostedAuthLink>;
+  createHostedAuthLink(input: {
+    userId: string;
+    successUrl: string;
+    failureUrl: string;
+    /** Where the provider posts once the rep finishes signing in. */
+    notifyUrl?: string;
+  }): Promise<HostedAuthLink>;
+  /**
+   * Verify and parse a provider notification that an account finished
+   * connecting. Until one arrives the account has no provider id and every job
+   * skips it, so this is the step that makes a connected account real.
+   */
+  parseAccountWebhook(input: { body: string; signature?: string }): ConnectedAccount[];
   getAccountHealth(accountId: string): Promise<AccountHealth>;
   searchProspects(input: { accountId: string; query: SearchQuery; cursor?: string; limit?: number }): Promise<ProspectPage>;
   getProfile(input: { accountId: string; providerId: string }): Promise<ProviderProfile>;

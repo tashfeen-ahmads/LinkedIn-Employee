@@ -81,8 +81,22 @@ export async function applyHealth(
   notify?: { email: EmailProvider | null; appUrl: string },
 ): Promise<boolean> {
   if (health === "ok") {
-    if (account.status === "warning") {
-      await db.from("linkedin_accounts").update({ status: "active", status_detail: null }).eq("id", account.id);
+    // Any paused state, not only `warning`. A LinkedIn restriction is usually
+    // temporary and this poll is the only thing that watches for it lifting —
+    // restoring nothing but warnings left a recovered account paused for good,
+    // with no path back except disconnecting and starting again.
+    if (account.status !== "active" && account.status !== "connecting") {
+      await db
+        .from("linkedin_accounts")
+        .update({ status: "active", status_detail: null, paused_at: null })
+        .eq("id", account.id);
+      await recordEvent(db, {
+        workspaceId: account.workspace_id,
+        name: "linkedin.account.recovered",
+        subjectType: "linkedin_account",
+        subjectId: account.id,
+        payload: { from: account.status },
+      });
     }
     return true;
   }

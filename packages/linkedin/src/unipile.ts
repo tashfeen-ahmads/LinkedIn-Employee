@@ -7,6 +7,7 @@ import type {
   InboundMessage,
   LinkedInProvider,
   ProspectPage,
+  ConnectedAccount,
   ProviderProfile,
   ProviderRelation,
   SearchQuery,
@@ -103,6 +104,7 @@ export class UnipileProvider implements LinkedInProvider {
     userId: string;
     successUrl: string;
     failureUrl: string;
+    notifyUrl?: string;
   }): Promise<HostedAuthLink> {
     const expiresOn = new Date(Date.now() + 60 * 60_000).toISOString();
     const body = {
@@ -110,9 +112,14 @@ export class UnipileProvider implements LinkedInProvider {
       providers: ["LINKEDIN"],
       api_url: this.dsn,
       expiresOn,
+      // Echoed back on the notification, and the only thing tying a connected
+      // account to the rep who started the flow.
       name: input.userId,
       success_redirect_url: input.successUrl,
       failure_redirect_url: input.failureUrl,
+      // The redirect tells the rep's browser it worked; this tells us. Without
+      // it the account has no provider id and every job skips it silently.
+      ...(input.notifyUrl ? { notify_url: input.notifyUrl } : {}),
     };
     const res = await this.request<{ url: string }>(ROUTES.hostedAuth, {
       method: "POST",
@@ -274,6 +281,43 @@ export class UnipileProvider implements LinkedInProvider {
     const items = "items" in parsed && Array.isArray(parsed.items) ? parsed.items : [parsed as RawUnipileMessage];
     return items.filter((m) => !m.is_sender).map((m) => toInboundMessage(m, m.account_id ?? ""));
   }
+
+  parseAccountWebhook(input: { body: string; signature?: string }): ConnectedAccount[] {
+    // Fails closed for the same reason the message webhook does, and one more:
+    // a forged delivery would bind a stranger's LinkedIn account to a rep's
+    // row, and every message the campaign sends would leave that account.
+    if (!this.webhookSecret) {
+      throw new Error("Unipile webhook secret is not configured; refusing to accept unverified deliveries");
+    }
+    if (!input.signature || !verifySignature(input.body, input.signature, this.webhookSecret)) {
+      throw new Error("Invalid Unipile webhook signature");
+    }
+
+    const parsed = JSON.parse(input.body) as RawUnipileAccount | { items?: RawUnipileAccount[] };
+    const items = "items" in parsed && Array.isArray(parsed.items) ? parsed.items : [parsed as RawUnipileAccount];
+
+    return items
+      .map((item) => ({
+        providerAccountId: String(item.account_id ?? item.id ?? ""),
+        // `name` is what we passed into the hosted flow.
+        reference: String(item.name ?? item.reference ?? ""),
+        displayName: typeof item.account_name === "string" ? item.account_name : undefined,
+        status: mapAccountStatus(String(item.status ?? "OK")),
+      }))
+      // A notification naming neither the account nor the rep cannot be acted
+      // on, and guessing which row it meant is how the wrong account gets
+      // bound to the wrong person.
+      .filter((account) => account.providerAccountId && account.reference);
+  }
+}
+
+interface RawUnipileAccount {
+  id?: string;
+  account_id?: string;
+  name?: string;
+  reference?: string;
+  account_name?: string;
+  status?: string;
 }
 
 interface RawUnipileMessage {

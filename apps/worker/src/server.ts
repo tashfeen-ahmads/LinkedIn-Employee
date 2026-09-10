@@ -184,6 +184,9 @@ export function createServer(ctx: WorkerContext, queues: Queues): Hono {
       userId: parsed.data.userId,
       successUrl: `${ctx.env.APP_URL}/app/team?connected=1`,
       failureUrl: `${ctx.env.APP_URL}/app/team?error=connection_failed`,
+      // The redirect tells the rep's browser it worked. This tells us, and
+      // until it arrives the account has no provider id, so every job skips it.
+      notifyUrl: `${ctx.env.WORKER_URL}/webhooks/unipile/accounts`,
     });
 
     await ctx.db.from("linkedin_accounts").upsert(
@@ -236,6 +239,59 @@ export function createServer(ctx: WorkerContext, queues: Queues): Hono {
     }
 
     return c.json({ received: messages.length });
+  });
+
+  /**
+   * The provider telling us a rep finished signing in.
+   *
+   * This is the step that makes a connected account real. The link flow writes
+   * a row with status `connecting` and no provider id, and every job checks for
+   * both — so without this the rep completes the hosted login, sees a success
+   * redirect, and nothing ever sends from their account. Not one invitation,
+   * with no error anywhere to explain it.
+   */
+  app.post("/webhooks/unipile/accounts", async (c) => {
+    const body = await c.req.text();
+    const signature = c.req.header("x-unipile-signature") ?? undefined;
+
+    let accounts;
+    try {
+      accounts = ctx.linkedin.parseAccountWebhook({ body, signature });
+    } catch (err) {
+      console.error("rejected account webhook", err);
+      return c.json({ error: "invalid signature" }, 401);
+    }
+
+    let bound = 0;
+    for (const account of accounts) {
+      // Matched on the reference we handed the hosted flow, and only against a
+      // row that is actually waiting for it. An already-connected account is
+      // not re-bound by a replayed delivery.
+      const { data: pending } = await ctx.db
+        .from("linkedin_accounts")
+        .select("id")
+        .eq("user_id", account.reference)
+        .in("status", ["connecting", "reauth_required", "restricted"])
+        .maybeSingle();
+      if (!pending) continue;
+
+      await ctx.db
+        .from("linkedin_accounts")
+        .update({
+          provider_account_id: account.providerAccountId,
+          display_name: account.displayName ?? null,
+          status: account.status === "ok" ? "active" : "reauth_required",
+          status_detail: null,
+          // Starts the warm-up ramp. A freshly connected account sends at the
+          // low daily cap until it has some age on it.
+          connected_at: new Date().toISOString(),
+          paused_at: null,
+        })
+        .eq("id", pending.id);
+      bound++;
+    }
+
+    return c.json({ received: accounts.length, bound });
   });
 
   // Google Calendar connect. The Reply Agent cannot offer a time until this is
