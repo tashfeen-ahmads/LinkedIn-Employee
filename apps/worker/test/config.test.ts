@@ -4,7 +4,7 @@ import { loadEnv } from "../src/config.js";
 const complete = {
   NEXT_PUBLIC_SUPABASE_URL: "https://x.supabase.co",
   SUPABASE_SERVICE_ROLE_KEY: "service-key",
-  ANTHROPIC_API_KEY: "sk-ant-test",
+  OPENAI_API_KEY: "sk-test",
   UNIPILE_DSN: "https://api1.unipile.com:13111",
   UNIPILE_ACCESS_TOKEN: "token",
 };
@@ -18,9 +18,24 @@ describe("loadEnv", () => {
   });
 
   it("names what is missing rather than failing obscurely at runtime", () => {
-    const { ANTHROPIC_API_KEY, ...withoutKey } = complete;
-    void ANTHROPIC_API_KEY;
-    expect(() => loadEnv(withoutKey)).toThrow(/ANTHROPIC_API_KEY/);
+    const { UNIPILE_DSN, ...withoutDsn } = complete;
+    void UNIPILE_DSN;
+    expect(() => loadEnv(withoutDsn)).toThrow(/UNIPILE_DSN/);
+  });
+
+  it("refuses an environment with no model provider at all", () => {
+    // Rejected at boot, not at the first agent call — which would be an hour
+    // after someone signed up, and would look like a broken product rather
+    // than a missing setting.
+    const { OPENAI_API_KEY, ...withoutKey } = complete;
+    void OPENAI_API_KEY;
+    expect(() => loadEnv(withoutKey)).toThrow(/OPENAI_API_KEY/);
+  });
+
+  it("takes either provider's key", () => {
+    const { OPENAI_API_KEY, ...rest } = complete;
+    void OPENAI_API_KEY;
+    expect(() => loadEnv({ ...rest, ANTHROPIC_API_KEY: "sk-ant-test" })).not.toThrow();
   });
 
   it("allows the mock provider so development never touches LinkedIn", () => {

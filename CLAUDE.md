@@ -9,7 +9,7 @@ plan. This file is for whoever works on the code next.
 pnpm install
 pnpm build          # packages compile to dist/; apps typecheck against those
 pnpm typecheck
-pnpm test           # 410 tests, no network, no API key needed
+pnpm test           # 419 tests, no network, no API key needed
 node scripts/mutation-check.mjs   # proves the safety tests actually bite
 node scripts/preflight.mjs        # is a deployment actually able to send?
 pnpm --filter @le/web dev
@@ -19,6 +19,17 @@ pnpm --filter @le/worker dev
 Build before typechecking: the apps resolve `@le/*` through each package's
 `dist/`, so a stale build produces confusing type errors in files you did not
 touch. If a query result infers as `never`, rebuild `@le/db` first.
+
+The agents run on whichever model provider has a key: `OPENAI_API_KEY` selects
+GPT-5 and GPT-5-mini, `ANTHROPIC_API_KEY` selects Opus and Haiku, and the seam
+between them is `createLlmClient` in `packages/agents/src/llm.ts`. Nothing above
+that file knows which one answered. A deployment with neither key is refused at
+boot, not at the first agent call.
+
+Tables live in the `le` schema, not `public` — this deployment shares a Supabase
+project with an unrelated product. `DB_SCHEMA` in `packages/db/src/client.ts` is
+the one definition; `scripts/schema-install.mjs` generates the install for it.
+Going live is `docs/08-go-live.md`.
 
 Set `LINKEDIN_PROVIDER=mock`, `CALENDAR_PROVIDER=mock` and `CRM_PROVIDER=mock`
 to run the whole flow without touching anyone's real account, then

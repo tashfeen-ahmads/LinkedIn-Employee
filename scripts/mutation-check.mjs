@@ -671,6 +671,30 @@ const MUTATIONS = [
     to: "if (false) return;",
     pkg: "@le/worker",
   },
+  {
+    id: "llm/cached-tokens-not-double-counted",
+    rule: "A cached token is billed once — OpenAI counts it inside input_tokens, the cost model does not",
+    file: "packages/agents/src/llm.ts",
+    from: "inputTokens: Math.max(0, inputTokens - cacheReadTokens),",
+    to: "inputTokens,",
+    pkg: "@le/agents",
+  },
+  {
+    id: "llm/provider-never-falls-back",
+    rule: "A named provider whose key is missing fails, rather than silently running on the other one",
+    file: "packages/agents/src/llm.ts",
+    from: 'if (!env.OPENAI_API_KEY) throw new Error("LLM_PROVIDER=openai but OPENAI_API_KEY is not set");',
+    to: "if (!env.OPENAI_API_KEY) return new AnthropicClient({ apiKey: env.ANTHROPIC_API_KEY });",
+    pkg: "@le/agents",
+  },
+  {
+    id: "llm/refusal-is-not-an-answer",
+    rule: "A refusal is surfaced, never returned as prose a prospect could receive",
+    file: "packages/agents/src/llm.ts",
+    from: "refusal: findRefusal(response),",
+    to: "refusal: null,",
+    pkg: "@le/agents",
+  },
 ];
 
 const filter = process.argv[2];

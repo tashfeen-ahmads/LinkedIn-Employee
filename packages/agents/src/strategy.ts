@@ -1,4 +1,4 @@
-import { MODELS, StrategyOutputSchema, type StrategyOutput } from "@le/shared";
+import { StrategyOutputSchema, type StrategyOutput } from "@le/shared";
 import { callStructured, type AgentContext } from "./client.js";
 import { STRATEGY_PROMPT_VERSION, STRATEGY_SYSTEM, strategyUserPrompt } from "./prompts/strategy.js";
 
@@ -22,12 +22,12 @@ export async function runStrategyAgent(ctx: AgentContext, input: StrategyInput):
 
   return callStructured(ctx, {
     agent: "strategy",
-    model: MODELS.writer,
+    model: ctx.client.models.writer,
     promptVersion: STRATEGY_PROMPT_VERSION,
     schema: StrategyOutputSchema,
     // The system prompt is identical for every workspace, so it caches across
     // all strategy runs rather than only within one.
-    system: [{ type: "text", text: STRATEGY_SYSTEM, cache_control: { type: "ephemeral" } }],
+    system: [{ text: STRATEGY_SYSTEM, cached: true }],
     userContent: strategyUserPrompt(input),
     effort: "high",
     maxTokens: 16000,

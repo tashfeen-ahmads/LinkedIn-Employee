@@ -1,5 +1,4 @@
 import {
-  MODELS,
   OPT_OUT_PHRASES,
   ReplyClassificationSchema,
   ReplyDraftSchema,
@@ -31,10 +30,10 @@ export async function classifyReply(
 ): Promise<ReplyClassification> {
   const classification = await callStructured(ctx, {
     agent: "reply.classify",
-    model: MODELS.classifier,
+    model: ctx.client.models.classifier,
     promptVersion: CLASSIFY_PROMPT_VERSION,
     schema: ReplyClassificationSchema,
-    system: [{ type: "text", text: CLASSIFY_SYSTEM, cache_control: { type: "ephemeral" } }],
+    system: [{ text: CLASSIFY_SYSTEM, cached: true }],
     userContent: [
       `Knowledge base topics available to the agent: ${input.knowledgeTitles.join(", ") || "none"}`,
       `\nConversation so far:\n${renderHistory(input.history)}`,
@@ -136,12 +135,12 @@ export async function draftReply(ctx: AgentContext, input: DraftInput): Promise<
 
   return callStructured(ctx, {
     agent: "reply.draft",
-    model: MODELS.writer,
+    model: ctx.client.models.writer,
     promptVersion: DRAFT_PROMPT_VERSION,
     schema: ReplyDraftSchema,
     // Everything above is identical for every message in a campaign; caching it
     // means each reply mostly pays for the new conversation only.
-    system: [{ type: "text", text: stableContext, cache_control: { type: "ephemeral" } }],
+    system: [{ text: stableContext, cached: true }],
     userContent: [
       `Conversation so far:\n${renderHistory(input.history)}`,
       `\nThe prospect just wrote:\n"""\n${input.message}\n"""`,

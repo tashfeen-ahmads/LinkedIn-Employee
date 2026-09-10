@@ -50,9 +50,22 @@ export const OPT_OUT_PHRASES = [
   "leave me alone",
 ] as const;
 
+/**
+ * The two model roles this product uses, per provider.
+ *
+ * `writer` is customer-visible prose — profiles, campaign copy, reply drafts —
+ * where a clumsy sentence is what a prospect judges the sender by. `classifier`
+ * is high-volume triage, where the job is a label and the deciding factor is
+ * cost per thousand.
+ *
+ * Which provider answers is a deployment choice (`createLlmClient` in
+ * @le/agents, decided by whichever API key is present). Both rows live here so
+ * MODEL_PRICING can be checked against every model the product can call — an
+ * unpriced model reports its spend as unknown forever.
+ */
 export const MODELS = {
-  /** Customer-visible writing: profiles, campaign copy, reply drafts. */
-  writer: "claude-opus-5",
-  /** High-volume classification and scoring. */
-  classifier: "claude-haiku-4-5",
+  openai: { writer: "gpt-5", classifier: "gpt-5-mini" },
+  anthropic: { writer: "claude-opus-5", classifier: "claude-haiku-4-5" },
 } as const;
+
+export type LlmProvider = keyof typeof MODELS;

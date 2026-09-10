@@ -3,7 +3,15 @@ import { z } from "zod";
 const EnvSchema = z.object({
   NEXT_PUBLIC_SUPABASE_URL: z.string().min(1),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
-  ANTHROPIC_API_KEY: z.string().min(1),
+  /**
+   * The model provider. One key is enough: whichever of these is set decides,
+   * and LLM_PROVIDER only matters when both are. A deployment with neither is
+   * rejected below rather than at the first agent call, which would be an hour
+   * after signup and look like a broken product rather than a missing setting.
+   */
+  OPENAI_API_KEY: z.string().min(1).optional(),
+  ANTHROPIC_API_KEY: z.string().min(1).optional(),
+  LLM_PROVIDER: z.enum(["openai", "anthropic"]).optional(),
   REDIS_URL: z.string().default("redis://localhost:6379"),
   UNIPILE_DSN: z.string().min(1),
   UNIPILE_ACCESS_TOKEN: z.string().min(1),
@@ -45,6 +53,14 @@ const EnvSchema = z.object({
   CREDENTIALS_KEY: z.string().length(64).optional(),
   /** Minutes a booked intro call runs for. */
   MEETING_DURATION_MINUTES: z.coerce.number().int().min(15).max(120).default(30),
+}).superRefine((env, ctx) => {
+  if (!env.OPENAI_API_KEY && !env.ANTHROPIC_API_KEY) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["OPENAI_API_KEY"],
+      message: "set OPENAI_API_KEY or ANTHROPIC_API_KEY",
+    });
+  }
 });
 
 export type Env = z.infer<typeof EnvSchema>;

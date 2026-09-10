@@ -74,11 +74,11 @@ describe("runStrategyAgent input guard", () => {
     let called = false;
     const ctx = {
       client: {
-        messages: {
-          parse: async () => {
-            called = true;
-            throw new Error("stop here — the guard let it through, which is the point");
-          },
+        provider: "openai",
+        models: { writer: "gpt-5", classifier: "gpt-5-mini" },
+        complete: async () => {
+          called = true;
+          throw new Error("stop here — the guard let it through, which is the point");
         },
       },
     } as never;

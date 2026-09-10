@@ -5,8 +5,10 @@ import { MODEL_PRICING, cacheHitRate, estimateCostUsd, formatUsd } from "../src/
 describe("MODEL_PRICING", () => {
   it("prices every model the product actually calls", () => {
     // A model used but unpriced reports its spend as unknown forever.
-    for (const model of Object.values(MODELS)) {
-      expect(MODEL_PRICING[model], model).toBeDefined();
+    for (const roles of Object.values(MODELS)) {
+      for (const model of Object.values(roles)) {
+        expect(MODEL_PRICING[model], model).toBeDefined();
+      }
     }
   });
 

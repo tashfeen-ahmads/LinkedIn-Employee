@@ -1,6 +1,5 @@
-import Anthropic from "@anthropic-ai/sdk";
-import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import type { z } from "zod";
+import type { Effort, LlmClient, LlmSystemBlock } from "./llm.js";
 
 export interface LlmUsage {
   agent: string;
@@ -17,12 +16,8 @@ export interface LlmUsage {
 export type UsageSink = (usage: LlmUsage) => void | Promise<void>;
 
 export interface AgentContext {
-  client: Anthropic;
+  client: LlmClient;
   onUsage?: UsageSink;
-}
-
-export function createAnthropic(apiKey?: string): Anthropic {
-  return new Anthropic(apiKey ? { apiKey } : {});
 }
 
 export interface StructuredCall<T extends z.ZodTypeAny> {
@@ -30,19 +25,24 @@ export interface StructuredCall<T extends z.ZodTypeAny> {
   model: string;
   promptVersion: string;
   schema: T;
-  system: Array<{ type: "text"; text: string; cache_control?: { type: "ephemeral" } }>;
+  system: LlmSystemBlock[];
   userContent: string;
   maxTokens?: number;
-  effort?: "low" | "medium" | "high" | "xhigh" | "max";
+  effort?: Effort;
 }
 
 /**
- * One structured call to Claude, validated against a Zod schema before the
+ * One structured call to a model, validated against a Zod schema before the
  * result is allowed anywhere near the database.
  *
- * The system blocks are cached: for reply drafting the business profile,
- * customer profile and rep bio are identical across every message in a
- * campaign, so only the new conversation is charged at full rate.
+ * Which provider answers is decided once, in `createLlmClient`. Everything
+ * here — the usage accounting, the refusal handling, the schema guarantee — is
+ * the same either way, which is the point of the seam.
+ *
+ * The system blocks are ordered stable-content-first and the stable ones are
+ * marked: for reply drafting the business profile, customer profile and rep bio
+ * are identical across every message in a campaign, so only the new
+ * conversation is charged at full rate.
  */
 export async function callStructured<T extends z.ZodTypeAny>(
   ctx: AgentContext,
@@ -54,35 +54,33 @@ export async function callStructured<T extends z.ZodTypeAny>(
   // token-less row and every refusal is counted twice in cost reporting.
   let usageRecorded = false;
   try {
-    const response = await ctx.client.messages.parse({
+    const response = await ctx.client.complete({
       model: call.model,
-      max_tokens: call.maxTokens ?? 16000,
+      maxTokens: call.maxTokens ?? 16000,
       system: call.system,
-      messages: [{ role: "user", content: call.userContent }],
-      output_config: {
-        format: zodOutputFormat(call.schema),
-        ...(call.effort ? { effort: call.effort } : {}),
-      },
+      user: call.userContent,
+      schema: call.schema,
+      effort: call.effort,
     });
 
     await ctx.onUsage?.({
       agent: call.agent,
       model: call.model,
       promptVersion: call.promptVersion,
-      inputTokens: response.usage.input_tokens ?? 0,
-      outputTokens: response.usage.output_tokens ?? 0,
-      cacheReadTokens: response.usage.cache_read_input_tokens ?? 0,
+      inputTokens: response.usage.inputTokens,
+      outputTokens: response.usage.outputTokens,
+      cacheReadTokens: response.usage.cacheReadTokens,
       latencyMs: Date.now() - startedAt,
     });
     usageRecorded = true;
 
-    if (response.stop_reason === "refusal") {
-      throw new AgentRefusalError(call.agent, response.stop_details?.category ?? null);
+    if (response.refusal !== null) {
+      throw new AgentRefusalError(call.agent, response.refusal);
     }
-    if (response.parsed_output == null) {
+    if (response.parsed == null) {
       throw new Error(`${call.agent}: model returned no parsable output`);
     }
-    return response.parsed_output as z.infer<T>;
+    return response.parsed as z.infer<T>;
   } catch (error) {
     if (usageRecorded) throw error;
     await ctx.onUsage?.({

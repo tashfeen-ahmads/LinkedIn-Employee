@@ -38,12 +38,6 @@ const REQUIRED = [
     why: "The worker bypasses RLS and filters by workspace itself.",
     fix: "Supabase → Project Settings → API → service_role. Never expose this to a browser.",
   },
-  {
-    key: "ANTHROPIC_API_KEY",
-    why: "Every agent call.",
-    fix: "console.anthropic.com → API keys",
-    check: (v) => (v.startsWith("sk-ant-") ? null : "does not start with sk-ant-"),
-  },
   { key: "REDIS_URL", why: "The job queues.", fix: "Upstash, Railway or a Redis on the worker host" },
   { key: "UNIPILE_DSN", why: "Reaching LinkedIn at all.", fix: "Unipile dashboard → API → DSN" },
   { key: "UNIPILE_ACCESS_TOKEN", why: "Reaching LinkedIn at all.", fix: "Unipile dashboard → API" },
@@ -94,6 +88,25 @@ const OPTIONAL = [
   ["HUBSPOT_CLIENT_ID", "CRM sync."],
 ];
 
+// The model provider is a pair, not a single variable: either key is enough,
+// and reporting "ANTHROPIC_API_KEY missing" to a deployment that runs on
+// OpenAI would send someone to buy a key they do not need.
+{
+  const openai = process.env.OPENAI_API_KEY;
+  const anthropic = process.env.ANTHROPIC_API_KEY;
+  const named = process.env.LLM_PROVIDER;
+  if (!openai && !anthropic) {
+    fail("OPENAI_API_KEY", "No model provider. Every agent call needs one.", "platform.openai.com → API keys (or set ANTHROPIC_API_KEY instead).");
+  } else if (named === "openai" && !openai) {
+    fail("OPENAI_API_KEY", "LLM_PROVIDER=openai but the key is missing.", "Set OPENAI_API_KEY, or unset LLM_PROVIDER.");
+  } else if (named === "anthropic" && !anthropic) {
+    fail("ANTHROPIC_API_KEY", "LLM_PROVIDER=anthropic but the key is missing.", "Set ANTHROPIC_API_KEY, or unset LLM_PROVIDER.");
+  } else {
+    const provider = named ?? (openai ? "openai" : "anthropic");
+    ok("model provider", `${provider}${named ? "" : " (chosen by the key that is set)"}`);
+  }
+}
+
 for (const item of REQUIRED) {
   const value = process.env[item.key];
   if (!value) fail(item.key, item.why, item.fix);
@@ -143,18 +156,32 @@ if (workerUrl && !workerUrl.startsWith("http://localhost")) {
   await probe("worker /health", `${workerUrl.replace(/\/$/, "")}/health`, '"ok"');
 }
 
+/** Kept in step with DB_SCHEMA in packages/db/src/client.ts. */
+const DB_SCHEMA = "le";
+
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 if (supabaseUrl && serviceKey) {
   try {
-    // One row from a table only the migrations create. A 404 here means the
-    // project exists but nothing has been applied to it.
+    // One row from a table only the migrations create, asked in the schema the
+    // app actually uses (Accept-Profile is how PostgREST addresses a schema
+    // other than public). A 404 here means the project exists but nothing has
+    // been applied to it — or that PostgREST has not been told to expose the
+    // schema, which fails identically and is the more likely of the two.
     const response = await fetch(`${supabaseUrl}/rest/v1/workspaces?select=id&limit=1`, {
-      headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` },
+      headers: {
+        apikey: serviceKey,
+        Authorization: `Bearer ${serviceKey}`,
+        "Accept-Profile": DB_SCHEMA,
+      },
       signal: AbortSignal.timeout(8000),
     });
-    if (response.status === 404 || response.status === 400) {
-      fail("migrations", "the workspaces table is not there", "Apply packages/db/supabase/migrations in order, 0001 first.");
+    if (response.status === 404 || response.status === 400 || response.status === 406) {
+      fail(
+        "migrations",
+        `no workspaces table in the "${DB_SCHEMA}" schema`,
+        `Run: node scripts/schema-install.mjs | psql "$DATABASE_URL" — then add "${DB_SCHEMA}" to Supabase → Settings → API → Exposed schemas.`,
+      );
     } else if (!response.ok) {
       fail("supabase", `HTTP ${response.status}`, "Check the service role key.");
     } else {

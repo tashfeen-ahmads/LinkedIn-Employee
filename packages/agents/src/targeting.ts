@@ -1,7 +1,6 @@
 import {
   CampaignPlanSchema,
   FitScoreBatchSchema,
-  MODELS,
   type BusinessProfile,
   type CampaignPlan,
   type CustomerProfile,
@@ -64,18 +63,14 @@ export async function scoreProspects(
     batches.map((batch) =>
       callStructured(ctx, {
         agent: "targeting.fit",
-        model: MODELS.classifier,
+        model: ctx.client.models.classifier,
         promptVersion: FIT_SCORE_PROMPT_VERSION,
         schema: FitScoreBatchSchema,
         system: [
-          { type: "text", text: FIT_SCORE_SYSTEM },
+          { text: FIT_SCORE_SYSTEM },
           // The ICP is constant across every batch in this run, so it is worth
           // a cache breakpoint: only the prospect list varies.
-          {
-            type: "text",
-            text: `Ideal customer profile:\n${profileText}`,
-            cache_control: { type: "ephemeral" },
-          },
+          { text: `Ideal customer profile:\n${profileText}`, cached: true },
         ],
         userContent: `Score every prospect below. Return one entry per providerId, no more, no fewer.\n\n${JSON.stringify(
           batch.map(toScoringView),
@@ -147,12 +142,12 @@ export async function buildCampaign(
 
   return callStructured(ctx, {
     agent: "targeting.campaign",
-    model: MODELS.writer,
+    model: ctx.client.models.writer,
     promptVersion: CAMPAIGN_PROMPT_VERSION,
     schema: CampaignPlanSchema,
     system: [
-      { type: "text", text: CAMPAIGN_SYSTEM },
-      { type: "text", text: context, cache_control: { type: "ephemeral" } },
+      { text: CAMPAIGN_SYSTEM },
+      { text: context, cached: true },
     ],
     userContent: [
       `Write the campaign. Daily invite cap is ${input.dailyInviteCap}; set dailyInviteCap to that number.`,

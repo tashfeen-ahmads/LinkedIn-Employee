@@ -21,6 +21,8 @@ export interface ModelPrice {
 }
 
 export const MODEL_PRICING: Record<string, ModelPrice> = {
+  "gpt-5": { input: 1.25, output: 10, cacheRead: 0.125 },
+  "gpt-5-mini": { input: 0.25, output: 2, cacheRead: 0.025 },
   "claude-opus-5": { input: 15, output: 75, cacheRead: 1.5 },
   "claude-haiku-4-5": { input: 1, output: 5, cacheRead: 0.1 },
 };

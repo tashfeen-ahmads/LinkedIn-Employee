@@ -1,5 +1,5 @@
 import { estimateCostUsd } from "@le/shared";
-import { createAnthropic, type AgentContext } from "@le/agents";
+import { createLlmClient, type AgentContext } from "@le/agents";
 import { createServiceClient, type Db } from "@le/db";
 import { MockLinkedInProvider, UnipileProvider, type LinkedInProvider } from "@le/linkedin";
 import type { EmailProvider } from "@le/email";
@@ -17,7 +17,7 @@ export interface WorkerContext {
 
 export function createWorkerContext(env: Env): WorkerContext {
   const db = createServiceClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
-  const client = createAnthropic(env.ANTHROPIC_API_KEY);
+  const client = createLlmClient(env);
 
   const linkedin: LinkedInProvider =
     env.LINKEDIN_PROVIDER === "mock"

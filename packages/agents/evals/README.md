@@ -7,7 +7,7 @@ whether a human must. That decision is the product's main safety boundary, so it
 is measured rather than assumed.
 
 ```bash
-ANTHROPIC_API_KEY=sk-ant-... pnpm --filter @le/agents eval:classify
+OPENAI_API_KEY=sk-... pnpm --filter @le/agents eval:classify
 ```
 
 The run costs roughly one Haiku call per case and exits non-zero if

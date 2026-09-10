@@ -1,7 +1,10 @@
 /**
  * Hand-maintained subset of the generated Supabase types.
- * Regenerate with `pnpm db:types` once a project is linked; this file exists so
- * the packages typecheck before any Supabase project is provisioned.
+ *
+ * Kept by hand rather than generated: `supabase gen types` emits the `public`
+ * schema, and ours is not `public` — see DB_SCHEMA in client.ts. Add a column
+ * to a migration and add it here in the same commit, or the query that reads it
+ * infers as `never` and the error lands three files away.
  */
 
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
@@ -352,7 +355,11 @@ export type LlmCallRow = {
 };
 
 export type Database = {
-  public: {
+  // Keyed by the schema the tables actually live in (see DB_SCHEMA in
+  // client.ts). Not `public`: this deployment shares its Supabase project with
+  // an unrelated product that already owns that schema's `memberships`,
+  // `conversations` and `messages`.
+  le: {
     Tables: {
       workspaces: Table<WorkspaceRow>;
       billing_events: Table<BillingEventRow>;

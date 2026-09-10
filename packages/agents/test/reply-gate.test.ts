@@ -106,14 +106,13 @@ describe("callStructured usage accounting", () => {
 
     const ctx = {
       client: {
-        messages: {
-          parse: async () => ({
-            usage: { input_tokens: 100, output_tokens: 0, cache_read_input_tokens: 0 },
-            stop_reason: "refusal",
-            stop_details: { category: "cyber" },
-            parsed_output: null,
-          }),
-        },
+        provider: "openai",
+        models: { writer: "gpt-5", classifier: "gpt-5-mini" },
+        complete: async () => ({
+          parsed: null,
+          refusal: "cyber",
+          usage: { inputTokens: 100, outputTokens: 0, cacheReadTokens: 0 },
+        }),
       },
       onUsage: (usage: unknown) => {
         rows.push(usage);
@@ -123,7 +122,7 @@ describe("callStructured usage accounting", () => {
     await expect(
       callStructured(ctx, {
         agent: "test",
-        model: "claude-haiku-4-5",
+        model: "gpt-5-mini",
         promptVersion: "v1",
         schema: z.object({ ok: z.boolean() }),
         system: [{ type: "text" as const, text: "system" }],
@@ -144,10 +143,10 @@ describe("callStructured usage accounting", () => {
 
     const ctx = {
       client: {
-        messages: {
-          parse: async () => {
-            throw new Error("network down");
-          },
+        provider: "openai",
+        models: { writer: "gpt-5", classifier: "gpt-5-mini" },
+        complete: async () => {
+          throw new Error("network down");
         },
       },
       onUsage: (usage: unknown) => {
@@ -158,7 +157,7 @@ describe("callStructured usage accounting", () => {
     await expect(
       callStructured(ctx, {
         agent: "test",
-        model: "claude-haiku-4-5",
+        model: "gpt-5-mini",
         promptVersion: "v1",
         schema: z.object({ ok: z.boolean() }),
         system: [{ type: "text" as const, text: "system" }],

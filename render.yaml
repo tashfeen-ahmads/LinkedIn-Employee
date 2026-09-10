@@ -57,8 +57,15 @@ services:
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
         sync: false
-      - key: ANTHROPIC_API_KEY
+      # The model provider. Either key configures the agents; whichever is set
+      # decides, and LLM_PROVIDER only matters if both are (see
+      # createLlmClient in packages/agents/src/llm.ts). The worker refuses to
+      # start with neither, rather than failing at the first agent call an hour
+      # after someone signs up.
+      - key: OPENAI_API_KEY
         sync: false
+      - key: LLM_PROVIDER
+        value: openai
       - key: UNIPILE_DSN
         sync: false
       - key: UNIPILE_ACCESS_TOKEN

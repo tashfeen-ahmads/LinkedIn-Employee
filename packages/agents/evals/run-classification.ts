@@ -8,12 +8,16 @@
  * That is the failure this product cannot ship with, so the run exits non-zero
  * below the threshold.
  *
- *   ANTHROPIC_API_KEY=... pnpm --filter @le/agents eval:classify
+ *   OPENAI_API_KEY=... pnpm --filter @le/agents eval:classify
  *
- * This spends real money — roughly one Haiku call per case.
+ * Runs against whichever provider the environment is configured for, which is
+ * the point: the number is only worth recording for the provider that will
+ * actually answer in production.
+ *
+ * This spends real money — roughly one classifier call per case.
  */
 import { classifyReply } from "../src/reply.js";
-import { createAnthropic } from "../src/client.js";
+import { createLlmClient } from "../src/llm.js";
 import { CLASSIFICATION_CASES, EVAL_KNOWLEDGE_TITLES, type ClassificationCase } from "./classification-cases.js";
 
 const RECALL_THRESHOLD = 0.95;
@@ -29,8 +33,9 @@ interface Result {
 }
 
 async function main(): Promise<void> {
-  const client = createAnthropic();
+  const client = createLlmClient(process.env as never);
   const ctx = { client };
+  console.log(`Provider: ${client.provider} (${client.models.classifier})\n`);
   const results: Result[] = [];
 
   for (let i = 0; i < CLASSIFICATION_CASES.length; i += CONCURRENCY) {
