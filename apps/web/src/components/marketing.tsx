@@ -5,6 +5,7 @@ import { Forecast } from "./forecast";
 import { GateSimulator } from "./gate-simulator";
 import { Reveal, Stagger, StaggerItem } from "./reveal";
 import { Wordmark } from "./logo";
+import { AgentTimeline } from "./agent-timeline";
 
 /**
  * Marketing page sections. Structure mirrors docs/05-go-to-market.md section 2.
@@ -116,6 +117,7 @@ const STEPS = [
   {
     n: "01",
     agent: "Strategy Agent",
+    model: "Claude Opus, once per workspace",
     lead: "Tell it about your business once.",
     points: [
       "Share your website and LinkedIn page.",
@@ -125,6 +127,7 @@ const STEPS = [
   {
     n: "02",
     agent: "Targeting Agent",
+    model: "Claude Haiku for scoring, Opus for copy",
     lead: "Pick who to pursue.",
     points: [
       "It builds a ranked prospect list, showing the fit score and the intent signals behind every row.",
@@ -134,6 +137,7 @@ const STEPS = [
   {
     n: "03",
     agent: "Reply Agent",
+    model: "Claude Haiku to classify, Opus to write",
     lead: "Set the rules, then let it work.",
     points: [
       "Decide when it may answer and when a human must step in: pricing, legal, negative sentiment, anything it is unsure about.",
@@ -143,6 +147,7 @@ const STEPS = [
   {
     n: "04",
     agent: "You",
+    model: "Judgement",
     lead: "Close.",
     points: [
       "Meetings land in your calendar with a one-page brief on who you are meeting and why they matched.",
@@ -157,13 +162,17 @@ export function HowItWorks() {
       <div className="container stack-6">
         <Reveal>
           <div className="stack-3">
-            <p className="eyebrow">How it works</p>
-            <h2>Four agents, one job each.</h2>
+            <p className="eyebrow">The four agents</p>
+            <h2>Watch one campaign, day by day.</h2>
             <p className="lede prose">
-              Each one hands its work to the next, and every handover stops for a person. That is the
-              difference between something you can leave running and something you cannot.
+              Each agent does one job and hands its work to the next. Step through a real one below — every beat names who acted, and the square markers are the moments
+              nothing moves without you.
             </p>
           </div>
+        </Reveal>
+
+        <Reveal>
+          <AgentTimeline />
         </Reveal>
 
         <Reveal>
@@ -184,6 +193,10 @@ export function HowItWorks() {
                     <li key={point}>{point}</li>
                   ))}
                 </ul>
+                <div className="cluster agent-io">
+                  <span className="tiny subtle">Runs on</span>
+                  <span className="pill plain">{step.model}</span>
+                </div>
               </article>
             </StaggerItem>
           ))}

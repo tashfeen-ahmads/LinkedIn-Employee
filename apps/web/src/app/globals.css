@@ -897,3 +897,73 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
   .footer-grid { grid-template-columns: minmax(0, 1fr); }
   .footer-base > :last-child { text-align: left; }
 }
+
+/* ---------------------------------------------------------- the timeline */
+
+.timeline { border-radius: var(--radius-lg); }
+
+.timeline-track {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+/* The rail sits behind the nodes and fills to the one you are on. */
+.timeline-rail {
+  position: absolute;
+  left: 7px;
+  right: 7px;
+  top: 7px;
+  height: 2px;
+  background: var(--border);
+  border-radius: var(--radius-pill);
+  z-index: 0;
+}
+.timeline-rail-fill { height: 100%; background: var(--accent); border-radius: var(--radius-pill); }
+
+.timeline-node { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); position: relative; z-index: 1; }
+.timeline-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--border-strong);
+  background: var(--surface-raised);
+  padding: 0;
+  cursor: pointer;
+  transition: transform 140ms ease, border-color 140ms ease, background 140ms ease;
+}
+.timeline-dot:hover { transform: scale(1.18); border-color: var(--accent); }
+.timeline-dot.is-past { border-color: var(--accent); background: var(--accent); }
+.timeline-dot.is-active { border-color: var(--accent); background: var(--accent); transform: scale(1.25); }
+/* A step that needs a person is a square, not another colour — the palette
+   check said two of the three hues this wanted were indistinguishable. */
+.timeline-dot.is-human { border-radius: 4px; }
+.timeline-day { font-size: 0.6875rem; color: var(--text-subtle); }
+
+.timeline-panel {
+  min-height: 12.5rem;
+  padding: var(--space-5);
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+.timeline-quote {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-left: 2px solid var(--accent);
+  background: var(--surface-raised);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  color: var(--text);
+}
+
+@media (max-width: 640px) {
+  .timeline-track { overflow-x: auto; padding-bottom: var(--space-2); }
+  .timeline-node { min-width: 44px; }
+  .timeline-panel { min-height: 15rem; padding: var(--space-4); }
+}
+
+/* The model each agent runs on, set apart from the prose above it. */
+.agent-io { margin-top: auto; padding-top: var(--space-3); border-top: 1px solid var(--border); width: 100%; }
