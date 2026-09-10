@@ -75,6 +75,18 @@ machines buy throughput across accounts, not within one.
 
 Confirm it is up: `curl https://<worker>/health` returns `{"ok":true}`.
 
+**Check the whole thing at once** rather than reading the rest of this file
+twice:
+
+```bash
+node scripts/preflight.mjs --worker https://<worker>
+```
+
+It reads every credential this deployment needs, says what each one is for and
+where to get it, probes the worker, and asks Supabase whether the migrations
+have actually been applied. It exits non-zero while anything is blocking, so it
+can sit in a deploy pipeline as well as in a terminal.
+
 ### Putting the site up before anything else exists
 
 The landing page is static and the app behind it reports its own absence, so the

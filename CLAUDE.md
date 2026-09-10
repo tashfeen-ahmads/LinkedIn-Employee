@@ -11,6 +11,7 @@ pnpm build          # packages compile to dist/; apps typecheck against those
 pnpm typecheck
 pnpm test           # 374 tests, no network, no API key needed
 node scripts/mutation-check.mjs   # proves the safety tests actually bite
+node scripts/preflight.mjs        # is a deployment actually able to send?
 pnpm --filter @le/web dev
 pnpm --filter @le/worker dev
 ```
