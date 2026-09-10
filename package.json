@@ -8,7 +8,7 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
-    "db:types": "supabase gen types typescript --local > packages/db/src/database.types.ts"
+    "db:types": "echo 'Types are hand-maintained: our tables live in the le schema, and gen types emits public. See packages/db/src/database.types.ts' && exit 1"
   },
   "devDependencies": {
     "turbo": "^2.5.0",
