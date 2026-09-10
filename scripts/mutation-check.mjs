@@ -695,6 +695,30 @@ const MUTATIONS = [
     to: "refusal: null,",
     pkg: "@le/agents",
   },
+  {
+    id: "search/tier-follows-the-account",
+    rule: "The search tier follows the account's actual subscription, not an assumption that everyone pays for Sales Navigator",
+    file: "apps/worker/src/jobs/targeting.ts",
+    from: 'const searchTier = account.has_sales_navigator ? "sales_navigator" : "classic";',
+    to: 'const searchTier = "sales_navigator";',
+    pkg: "@le/worker",
+  },
+  {
+    id: "search/dropped-filters-are-named",
+    rule: "A filter classic search cannot apply is reported, never silently dropped from the list a human approves",
+    file: "packages/linkedin/src/unipile.ts",
+    from: 'if (query.seniorities?.length) droppedFilters.push("seniority");',
+    to: "if (false) droppedFilters.push('seniority');",
+    pkg: "@le/linkedin",
+  },
+  {
+    id: "search/classic-is-the-default",
+    rule: "An unspecified tier means classic — assuming a paid seat fails silently and returns nothing",
+    file: "packages/linkedin/src/unipile.ts",
+    from: 'const tier = input.tier ?? "classic";',
+    to: 'const tier = input.tier ?? "sales_navigator";',
+    pkg: "@le/linkedin",
+  },
 ];
 
 const filter = process.argv[2];

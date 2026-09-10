@@ -142,7 +142,7 @@ describe("runTargetingJob", () => {
   it("creates a draft campaign, never a running one", async () => {
     const { db, ctx, linkedin } = harness();
     const { runTargetingJob } = await import("../src/jobs/targeting.js");
-    linkedin.candidates = { items: [candidate("p1", "https://www.linkedin.com/in/jane-one")], cursor: null };
+    linkedin.candidates = { items: [candidate("p1", "https://www.linkedin.com/in/jane-one")], cursor: null, droppedFilters: [] };
     scoreMock.mockResolvedValue([ranked("https://www.linkedin.com/in/jane-one", "p1", 90)]);
 
     const campaignId = await runTargetingJob(ctx, job);
@@ -184,7 +184,7 @@ describe("runTargetingJob", () => {
     const { db, ctx, linkedin } = harness();
     const { runTargetingJob } = await import("../src/jobs/targeting.js");
     db.find("customer_profiles", { id: PROFILE })!.approved_at = null;
-    linkedin.candidates = { items: [candidate("p1", "https://www.linkedin.com/in/jane-one")], cursor: null };
+    linkedin.candidates = { items: [candidate("p1", "https://www.linkedin.com/in/jane-one")], cursor: null, droppedFilters: [] };
 
     expect(await runTargetingJob(ctx, job)).toBeNull();
     expect(db.rows("campaigns")).toHaveLength(0);
@@ -244,7 +244,7 @@ describe("runTargetingJob", () => {
     const { db, ctx, linkedin } = harness();
     const { runTargetingJob } = await import("../src/jobs/targeting.js");
     db.seed("prospects", [{ workspace_id: WORKSPACE, linkedin_url: "linkedin.com/in/jane-one" }]);
-    linkedin.candidates = { items: [candidate("p1", "https://www.linkedin.com/in/jane-one")], cursor: null };
+    linkedin.candidates = { items: [candidate("p1", "https://www.linkedin.com/in/jane-one")], cursor: null, droppedFilters: [] };
 
     expect(await runTargetingJob(ctx, job)).toBeNull();
     expect(scoreMock).not.toHaveBeenCalled();
@@ -254,7 +254,7 @@ describe("runTargetingJob", () => {
   it("does nothing when nothing clears the fit threshold", async () => {
     const { db, ctx, linkedin } = harness();
     const { runTargetingJob } = await import("../src/jobs/targeting.js");
-    linkedin.candidates = { items: [candidate("p1", "https://www.linkedin.com/in/a")], cursor: null };
+    linkedin.candidates = { items: [candidate("p1", "https://www.linkedin.com/in/a")], cursor: null, droppedFilters: [] };
     scoreMock.mockResolvedValue([ranked("https://www.linkedin.com/in/a", "p1", 55)]);
 
     expect(await runTargetingJob(ctx, job)).toBeNull();
@@ -266,7 +266,7 @@ describe("runTargetingJob", () => {
     const { db, ctx, linkedin } = harness();
     const { runTargetingJob } = await import("../src/jobs/targeting.js");
     db.find("customer_profiles", { id: PROFILE })!.do_not_pursue = true;
-    linkedin.candidates = { items: [candidate("p1", "https://www.linkedin.com/in/a")], cursor: null };
+    linkedin.candidates = { items: [candidate("p1", "https://www.linkedin.com/in/a")], cursor: null, droppedFilters: [] };
 
     expect(await runTargetingJob(ctx, job)).toBeNull();
     expect(linkedin.sentInvitations).toHaveLength(0);
@@ -277,7 +277,7 @@ describe("runTargetingJob", () => {
     const { db, ctx, linkedin } = harness();
     const { runTargetingJob } = await import("../src/jobs/targeting.js");
     db.find("linkedin_accounts", { id: ACCOUNT })!.status = "restricted";
-    linkedin.candidates = { items: [candidate("p1", "https://www.linkedin.com/in/a")], cursor: null };
+    linkedin.candidates = { items: [candidate("p1", "https://www.linkedin.com/in/a")], cursor: null, droppedFilters: [] };
 
     expect(await runTargetingJob(ctx, job)).toBeNull();
     expect(db.rows("campaigns")).toHaveLength(0);
@@ -286,7 +286,7 @@ describe("runTargetingJob", () => {
   it("stores prospects under the canonical URL so a later run dedupes against them", async () => {
     const { db, ctx, linkedin } = harness();
     const { runTargetingJob } = await import("../src/jobs/targeting.js");
-    linkedin.candidates = { items: [candidate("p1", "https://UK.LinkedIn.com/in/Jane-One/?trk=abc")], cursor: null };
+    linkedin.candidates = { items: [candidate("p1", "https://UK.LinkedIn.com/in/Jane-One/?trk=abc")], cursor: null, droppedFilters: [] };
     scoreMock.mockResolvedValue([ranked("https://UK.LinkedIn.com/in/Jane-One/?trk=abc", "p1", 88)]);
 
     await runTargetingJob(ctx, job);
@@ -297,7 +297,7 @@ describe("runTargetingJob", () => {
   it("writes the campaign steps in order with their delays", async () => {
     const { db, ctx, linkedin } = harness();
     const { runTargetingJob } = await import("../src/jobs/targeting.js");
-    linkedin.candidates = { items: [candidate("p1", "https://www.linkedin.com/in/a")], cursor: null };
+    linkedin.candidates = { items: [candidate("p1", "https://www.linkedin.com/in/a")], cursor: null, droppedFilters: [] };
     scoreMock.mockResolvedValue([ranked("https://www.linkedin.com/in/a", "p1", 90)]);
 
     await runTargetingJob(ctx, job);
@@ -311,7 +311,7 @@ describe("runTargetingJob", () => {
     const { ctx, linkedin } = harness();
     const { runTargetingJob } = await import("../src/jobs/targeting.js");
     const { LINKEDIN_LIMITS } = await import("@le/shared");
-    linkedin.candidates = { items: [candidate("p1", "https://www.linkedin.com/in/a")], cursor: null };
+    linkedin.candidates = { items: [candidate("p1", "https://www.linkedin.com/in/a")], cursor: null, droppedFilters: [] };
     scoreMock.mockResolvedValue([ranked("https://www.linkedin.com/in/a", "p1", 90)]);
 
     await runTargetingJob(ctx, job);
@@ -323,7 +323,7 @@ describe("runTargetingJob", () => {
   it("records what it did, for the audit trail", async () => {
     const { db, ctx, linkedin } = harness();
     const { runTargetingJob } = await import("../src/jobs/targeting.js");
-    linkedin.candidates = { items: [candidate("p1", "https://www.linkedin.com/in/a")], cursor: null };
+    linkedin.candidates = { items: [candidate("p1", "https://www.linkedin.com/in/a")], cursor: null, droppedFilters: [] };
     scoreMock.mockResolvedValue([ranked("https://www.linkedin.com/in/a", "p1", 90)]);
 
     await runTargetingJob(ctx, job);
@@ -331,5 +331,54 @@ describe("runTargetingJob", () => {
     const event = db.rows("events").find((e) => e.name === "campaign.created");
     expect(event).toBeTruthy();
     expect((event?.payload as { prospects: number }).prospects).toBe(1);
+  });
+
+  it("searches classic when the account has no Sales Navigator seat", async () => {
+    // Sales Navigator is a separate ~$120/month subscription. Searching a tier
+    // the account does not have returns nothing, and "no prospects found"
+    // reads as a bad customer profile rather than a missing seat.
+    const { ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    linkedin.candidates = { items: [candidate("p1", "https://www.linkedin.com/in/a")], cursor: null, droppedFilters: [] };
+    scoreMock.mockResolvedValue([ranked("https://www.linkedin.com/in/a", "p1", 90)]);
+
+    await runTargetingJob(ctx, job);
+
+    expect(linkedin.searches[0]?.tier).toBe("classic");
+  });
+
+  it("searches Sales Navigator when the account says it has one", async () => {
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    db.find("linkedin_accounts", { id: ACCOUNT })!.has_sales_navigator = true;
+    linkedin.candidates = { items: [candidate("p1", "https://www.linkedin.com/in/a")], cursor: null, droppedFilters: [] };
+    scoreMock.mockResolvedValue([ranked("https://www.linkedin.com/in/a", "p1", 90)]);
+
+    await runTargetingJob(ctx, job);
+
+    expect(linkedin.searches[0]?.tier).toBe("sales_navigator");
+  });
+
+  it("records the filters the search could not apply, on the campaign a human reviews", async () => {
+    // The campaign page reads this. Without it the reviewer sees a plausible
+    // list built from half the profile they approved, and nothing says so.
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    linkedin.candidates = {
+      items: [candidate("p1", "https://www.linkedin.com/in/a")],
+      cursor: null,
+      droppedFilters: ["seniority", "company size"],
+    };
+    scoreMock.mockResolvedValue([ranked("https://www.linkedin.com/in/a", "p1", 90)]);
+
+    await runTargetingJob(ctx, job);
+
+    const campaign = db.rows("campaigns")[0];
+    expect((campaign?.rules as { droppedFilters: string[] }).droppedFilters).toEqual([
+      "seniority",
+      "company size",
+    ]);
+    const event = db.rows("events").find((e) => e.name === "campaign.created");
+    expect((event?.payload as { searchTier: string }).searchTier).toBe("classic");
   });
 });

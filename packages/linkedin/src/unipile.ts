@@ -7,6 +7,7 @@ import type {
   InboundMessage,
   LinkedInProvider,
   ProspectPage,
+  SearchTier,
   ConnectedAccount,
   ProviderProfile,
   ProviderRelation,
@@ -144,16 +145,20 @@ export class UnipileProvider implements LinkedInProvider {
     query: SearchQuery;
     cursor?: string;
     limit?: number;
+    tier?: SearchTier;
   }): Promise<ProspectPage> {
+    const tier = input.tier ?? "classic";
     const params = new URLSearchParams({ account_id: input.accountId, limit: String(input.limit ?? 50) });
     if (input.cursor) params.set("cursor", input.cursor);
+    const { body, droppedFilters } = toUnipileSearchBody(input.query, tier);
     const res = await this.request<{ items?: UnipileRawProfile[]; cursor?: string | null }>(
       `${ROUTES.search}?${params.toString()}`,
-      { method: "POST", body: JSON.stringify(toUnipileSearchBody(input.query)) },
+      { method: "POST", body: JSON.stringify(body) },
     );
     return {
       items: (res.items ?? []).map(toProspectCandidate),
       cursor: res.cursor ?? null,
+      droppedFilters,
     };
   }
 
@@ -344,16 +349,56 @@ function toInboundMessage(m: RawUnipileMessage, fallbackAccountId: string): Inbo
   };
 }
 
-function toUnipileSearchBody(query: SearchQuery): Record<string, unknown> {
+/**
+ * The search body, and what the tier could not express.
+ *
+ * Sales Navigator takes the whole customer profile. Classic search takes
+ * keywords, titles, industry and location, and has no concept of seniority or
+ * company headcount — so on classic those two are folded into the keyword
+ * string, where they act as a weak text hint rather than a filter, and both are
+ * reported as dropped. A filter that quietly becomes a suggestion is worse than
+ * one that is missing, because the result still looks like what was asked for.
+ */
+function toUnipileSearchBody(
+  query: SearchQuery,
+  tier: SearchTier,
+): { body: Record<string, unknown>; droppedFilters: string[] } {
+  if (tier === "sales_navigator") {
+    return {
+      body: {
+        api: "sales_navigator",
+        category: "people",
+        keywords: query.keywords?.join(" ") || undefined,
+        title: query.titles?.length ? { include: query.titles, exclude: query.excludeTitles ?? [] } : undefined,
+        seniority: query.seniorities?.length ? { include: query.seniorities } : undefined,
+        industry: query.industries?.length ? { include: query.industries } : undefined,
+        company_headcount: query.companyHeadcount?.length ? query.companyHeadcount : undefined,
+        location: query.geographies?.length ? { include: query.geographies } : undefined,
+      },
+      droppedFilters: [],
+    };
+  }
+
+  const droppedFilters: string[] = [];
+  if (query.seniorities?.length) droppedFilters.push("seniority");
+  if (query.companyHeadcount?.length) droppedFilters.push("company size");
+  // Classic search has no exclude list. The scoring pass still sees every
+  // candidate's title, so an excluded title is caught there rather than here —
+  // it costs model spend it would not have cost on Sales Navigator.
+  if (query.excludeTitles?.length) droppedFilters.push("excluded titles");
+
+  const keywords = [...(query.keywords ?? []), ...(query.seniorities ?? [])].filter(Boolean);
+
   return {
-    api: "sales_navigator",
-    category: "people",
-    keywords: query.keywords?.join(" ") || undefined,
-    title: query.titles?.length ? { include: query.titles, exclude: query.excludeTitles ?? [] } : undefined,
-    seniority: query.seniorities?.length ? { include: query.seniorities } : undefined,
-    industry: query.industries?.length ? { include: query.industries } : undefined,
-    company_headcount: query.companyHeadcount?.length ? query.companyHeadcount : undefined,
-    location: query.geographies?.length ? { include: query.geographies } : undefined,
+    body: {
+      api: "classic",
+      category: "people",
+      keywords: keywords.join(" ") || undefined,
+      title: query.titles?.length ? { include: query.titles } : undefined,
+      industry: query.industries?.length ? { include: query.industries } : undefined,
+      location: query.geographies?.length ? { include: query.geographies } : undefined,
+    },
+    droppedFilters,
   };
 }
 

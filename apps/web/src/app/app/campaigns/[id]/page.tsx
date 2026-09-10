@@ -139,6 +139,24 @@ async function launchState(campaignId: string, workspaceId: string) {
   };
 }
 
+/**
+ * What the search could not filter on, as the targeting job recorded it.
+ *
+ * Read defensively: `rules` is jsonb written by the worker, and a campaign
+ * created before this existed has none. A crash on the campaign page would be a
+ * worse outcome than a missing notice.
+ */
+function droppedSearchFilters(rules: unknown): string[] {
+  if (!rules || typeof rules !== "object") return [];
+  const value = (rules as { droppedFilters?: unknown }).droppedFilters;
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function listInWords(items: string[]): string {
+  if (items.length <= 1) return items[0] ?? "";
+  return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+}
+
 export default async function CampaignPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const session = await requireSession();
@@ -146,7 +164,7 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
 
   const { data: campaign } = await supabase
     .from("campaigns")
-    .select("id, name, status, connection_note, daily_invite_cap, reply_mode, launched_at, linkedin_account_id")
+    .select("id, name, status, connection_note, daily_invite_cap, reply_mode, launched_at, linkedin_account_id, rules")
     .eq("id", id)
     .eq("workspace_id", session.workspaceId)
     .maybeSingle();
@@ -177,6 +195,7 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
     accountStatus: account?.status ?? null,
   });
   const days = daysToSendAll(queued.length, campaign.daily_invite_cap);
+  const dropped = droppedSearchFilters(campaign.rules);
   const running = campaign.status === "running";
   const reached = FUNNEL_STAGES.filter((stage) => counts[stage.key] > 0);
 
@@ -212,6 +231,19 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
           </button>
         </form>
       </div>
+
+      {dropped.length > 0 ? (
+        <div className="notice" style={{ marginTop: "1.25rem" }}>
+          <strong>This list was built without Sales Navigator</strong>
+          <p className="small" style={{ margin: "0.35rem 0 0" }}>
+            Classic LinkedIn search cannot filter on {listInWords(dropped)}, so{" "}
+            {dropped.length === 1 ? "that part" : "those parts"} of your customer profile
+            {dropped.length === 1 ? " was" : " were"} not applied. Everyone below still matched on
+            title, industry and location, and each was scored against the full profile — read the
+            names before launching, and expect more of them to be wrong than usual.
+          </p>
+        </div>
+      ) : null}
 
       {blockers.length > 0 && !running ? (
         <div className="notice danger" style={{ marginTop: "1.25rem" }}>

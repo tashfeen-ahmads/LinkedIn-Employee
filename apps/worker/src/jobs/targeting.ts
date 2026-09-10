@@ -46,15 +46,21 @@ export async function runTargetingJob(ctx: WorkerContext, job: TargetingJob): Pr
 
   const { data: account } = await db
     .from("linkedin_accounts")
-    .select("id, provider_account_id, status")
+    .select("id, provider_account_id, status, has_sales_navigator")
     .eq("id", job.linkedinAccountId)
     .single();
   if (!account?.provider_account_id || account.status !== "active") return null;
 
+  // Sales Navigator is a separate paid seat, and searching a tier the account
+  // does not have returns nothing at all — which reads on screen as "your
+  // customer profile matched nobody" rather than "you are not subscribed".
+  // The column already existed and nothing read it.
+  const searchTier = account.has_sales_navigator ? "sales_navigator" : "classic";
   const page = await ctx.linkedin.searchProspects({
     accountId: account.provider_account_id,
     query: profile.salesNavFilters,
     limit: job.limit,
+    tier: searchTier,
   });
 
   // Anyone this workspace already knows about is excluded, whichever rep owns
@@ -97,6 +103,10 @@ export async function runTargetingJob(ctx: WorkerContext, job: TargetingJob): Pr
       connection_note: plan.connectionNote,
       daily_invite_cap: plan.dailyInviteCap,
       stop_conditions: plan.stopConditions as never,
+      // Carried on the campaign, not only in the event log, because the person
+      // who reviews this list before launching is the one who needs to know
+      // the search could not honour part of the profile they approved.
+      rules: { searchTier, droppedFilters: page.droppedFilters } as never,
     })
     .select("id")
     .single();
@@ -155,7 +165,12 @@ export async function runTargetingJob(ctx: WorkerContext, job: TargetingJob): Pr
     actorUserId: job.userId,
     subjectType: "campaign",
     subjectId: campaign.id,
-    payload: { prospects: insertedProspects?.length ?? 0, searched: page.items.length },
+    payload: {
+      prospects: insertedProspects?.length ?? 0,
+      searched: page.items.length,
+      searchTier,
+      droppedFilters: page.droppedFilters,
+    },
   });
 
   return campaign.id;

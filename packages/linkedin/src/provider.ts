@@ -49,7 +49,21 @@ export interface ProspectPage {
   items: ProspectCandidate[];
   /** Opaque cursor for the next page, or null when the result set is exhausted. */
   cursor: string | null;
+  /**
+   * Filters the search tier could not apply, named as the customer profile
+   * named them.
+   *
+   * Classic LinkedIn search takes a fraction of the filters Sales Navigator
+   * does. Dropping the rest silently would return a list that looks like the
+   * profile asked for and is not — the reviewer sees plausible names, approves
+   * them, and the campaign is aimed slightly wrong for a month. Reported
+   * instead, so the screen and the campaign record can say so.
+   */
+  droppedFilters: string[];
 }
+
+/** Which LinkedIn search surface an account is entitled to. */
+export type SearchTier = "sales_navigator" | "classic";
 
 /** One connection the account has, as the provider reports it. */
 export interface ProviderRelation {
@@ -98,7 +112,20 @@ export interface LinkedInProvider {
    */
   parseAccountWebhook(input: { body: string; signature?: string }): ConnectedAccount[];
   getAccountHealth(accountId: string): Promise<AccountHealth>;
-  searchProspects(input: { accountId: string; query: SearchQuery; cursor?: string; limit?: number }): Promise<ProspectPage>;
+  searchProspects(input: {
+    accountId: string;
+    query: SearchQuery;
+    cursor?: string;
+    limit?: number;
+    /**
+     * Defaults to classic. Sales Navigator is a paid seat on top of LinkedIn
+     * itself, so assuming it is the safe-by-default mistake: a search sent to
+     * a tier the account does not have returns nothing, and "no prospects
+     * found" reads like a bad customer profile rather than a missing
+     * subscription.
+     */
+    tier?: SearchTier;
+  }): Promise<ProspectPage>;
   getProfile(input: { accountId: string; providerId: string }): Promise<ProviderProfile>;
   sendInvitation(input: { accountId: string; providerId: string; note?: string }): Promise<ActionResult>;
   withdrawInvitation(input: { accountId: string; invitationId: string }): Promise<ActionResult>;

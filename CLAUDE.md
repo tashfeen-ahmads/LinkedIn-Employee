@@ -9,7 +9,7 @@ plan. This file is for whoever works on the code next.
 pnpm install
 pnpm build          # packages compile to dist/; apps typecheck against those
 pnpm typecheck
-pnpm test           # 419 tests, no network, no API key needed
+pnpm test           # 427 tests, no network, no API key needed
 node scripts/mutation-check.mjs   # proves the safety tests actually bite
 node scripts/preflight.mjs        # is a deployment actually able to send?
 pnpm --filter @le/web dev
@@ -82,7 +82,17 @@ tests that were verified by deliberately breaking the code.
     long is left out whole and named to the model as unread. Half a pricing
     page is answered from confidently, and the wrong price reaches the prospect
     looking like the right one.
-11. **The shared exclusion list is checked immediately before every send**, not
+11. **Prospect search runs on the tier the account actually has**
+    (`has_sales_navigator` → `tier` in `apps/worker/src/jobs/targeting.ts`).
+    Sales Navigator is a separate ~$120/month seat, and a search sent to a tier
+    an account does not have returns nothing at all — which reads on screen as
+    "your customer profile matched nobody" rather than "you are not
+    subscribed". Classic search cannot express seniority, company size or
+    excluded titles, so those are named in `droppedFilters` and shown on the
+    campaign before anyone launches it. A filter that silently becomes a
+    suggestion is worse than one that is missing: the list still looks like
+    what was asked for.
+12. **The shared exclusion list is checked immediately before every send**, not
     only when a campaign is built (`matchExclusion` in
     `packages/shared/src/exclusions.ts`). A campaign launched this morning
     already has invitations queued against every name on it; an account added

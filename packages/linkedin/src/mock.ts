@@ -9,6 +9,7 @@ import type {
   ProviderProfile,
   ProviderRelation,
   SearchQuery,
+  SearchTier,
 } from "./provider.js";
 
 /**
@@ -21,9 +22,9 @@ export class MockLinkedInProvider implements LinkedInProvider {
   readonly sentMessages: Array<{ accountId: string; text: string; chatId?: string; providerId?: string }> = [];
   health: AccountHealth = "ok";
   inbox: InboundMessage[] = [];
-  candidates: ProspectPage = { items: [], cursor: null };
+  candidates: ProspectPage = { items: [], cursor: null, droppedFilters: [] };
   /** Every search performed, so a test can prove one did not happen. */
-  readonly searches: Array<{ accountId: string; query: SearchQuery }> = [];
+  readonly searches: Array<{ accountId: string; query: SearchQuery; tier: SearchTier }> = [];
   /** Connections the account has, i.e. who accepted an invitation. */
   relations: ProviderRelation[] = [];
 
@@ -47,8 +48,12 @@ export class MockLinkedInProvider implements LinkedInProvider {
     return this.relations.filter((r) => !r.connectedAt || r.connectedAt >= input.since!);
   }
 
-  async searchProspects(input: { accountId: string; query: SearchQuery }): Promise<ProspectPage> {
-    this.searches.push({ accountId: input.accountId, query: input.query });
+  async searchProspects(input: {
+    accountId: string;
+    query: SearchQuery;
+    tier?: SearchTier;
+  }): Promise<ProspectPage> {
+    this.searches.push({ accountId: input.accountId, query: input.query, tier: input.tier ?? "classic" });
     return this.candidates;
   }
 

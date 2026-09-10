@@ -163,6 +163,30 @@ async function saveWorkingHours(formData: FormData) {
   revalidatePath("/app/team");
 }
 
+/**
+ * Whether this rep has a Sales Navigator seat.
+ *
+ * It decides which search the Targeting Agent runs, and getting it wrong is
+ * silent in both directions: claim a seat you do not have and the search
+ * returns nothing, which reads as "your customer profile matched nobody";
+ * leave it off when you do have one and every campaign is built from classic
+ * search with half the profile ignored.
+ */
+async function saveSalesNavigator(formData: FormData) {
+  "use server";
+  const has = formData.get("hasSalesNavigator") === "on";
+
+  const session = await requireSession();
+  const supabase = await createClient();
+  await supabase
+    .from("linkedin_accounts")
+    .update({ has_sales_navigator: has })
+    .eq("workspace_id", session.workspaceId)
+    .eq("user_id", session.userId);
+
+  revalidatePath("/app/team");
+}
+
 /** Validated against the runtime's own list rather than a hand-kept one. */
 function isKnownTimezone(value: string): boolean {
   try {
@@ -277,6 +301,28 @@ export default async function TeamPage({
               <Usage label="Invites this week" used={mine.invites_this_week} cap={LINKEDIN_LIMITS.invitesPerWeek} />
               <Usage label="Messages today" used={mine.messages_today} cap={LINKEDIN_LIMITS.messagesPerDay} />
             </div>
+
+            <form action={saveSalesNavigator} style={{ marginTop: "1.25rem" }}>
+              <label className="small" style={{ display: "flex", gap: "0.4rem", alignItems: "flex-start" }}>
+                <input
+                  type="checkbox"
+                  name="hasSalesNavigator"
+                  defaultChecked={mine.has_sales_navigator}
+                  style={{ marginTop: "0.2rem" }}
+                />
+                <span>
+                  This account has Sales Navigator
+                  <span className="tiny subtle" style={{ display: "block" }}>
+                    Without it, prospect search cannot filter on seniority or company size, and
+                    campaigns say so before you launch them. With it, the full customer profile is
+                    used.
+                  </span>
+                </span>
+              </label>
+              <button className="btn small" type="submit" style={{ marginTop: "0.6rem" }}>
+                Save
+              </button>
+            </form>
 
             <form action={saveWorkingHours} style={{ marginTop: "1.5rem" }}>
               <p className="small muted" style={{ margin: "0 0 0.5rem" }}>

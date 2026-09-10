@@ -18,7 +18,7 @@ a dashboard.
 | Database | Installed. Supabase project `presence-prod`, schema `le` — 21 tables, RLS on all of them, 45 policies. |
 | Frontend | Deploys on every push to `claude/linkedin-sales-enablement-cpzkyu` → `lnkdn-agentic-employees.netlify.app`. Supabase URL, anon key, site URL and app URL are set. |
 | Backend blueprint | `render.yaml` at the repo root. Not yet deployed — needs a Render account. |
-| Code | 419 tests, 82 mutations, CI green. `pnpm test` needs no network and no key. |
+| Code | 427 tests, 85 mutations, CI green. `pnpm test` needs no network and no key. |
 
 ### Why the schema is `le` and not `public`
 
@@ -81,6 +81,21 @@ Setting `ANTHROPIC_API_KEY` instead switches the whole product to Claude with no
 code change — the provider is chosen by whichever key exists
 (`createLlmClient`). Setting neither stops the worker at boot rather than at the
 first signup.
+
+### 3b. Sales Navigator — optional, and worth deciding deliberately
+
+Sales Navigator is ~$120/seat/month, which is more than everything else on this
+list combined and, unlike Unipile's floor, does not amortise across reps.
+
+The product no longer assumes it. `/app/team` has a checkbox per LinkedIn
+account; tick it only if that account really has a seat. Untick it and prospect
+search runs on classic LinkedIn search, which cannot filter on seniority,
+company size or excluded titles — the campaign page says so in as many words
+before you launch, and every candidate is still scored against the full customer
+profile, so the filtering moves from the search to the scoring pass.
+
+Start without it. Add a seat if the first fortnight shows the shortlist is too
+noisy to review.
 
 ### 4. Unipile — 30 minutes, and the long pole
 
