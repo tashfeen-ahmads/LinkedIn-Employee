@@ -1,3 +1,7 @@
+# At the repository root on purpose: this is where Netlify looks when a repo is
+# imported from Git, so importing needs no settings typed into the UI. The base
+# directory below is what points it at the web app.
+#
 # Netlify deploys the web app only. The worker is a long-running process with
 # queues and schedulers, so it does not belong on a serverless host — see
 # apps/worker/Dockerfile and docs/07-deployment.md.
@@ -5,7 +9,8 @@
 [build]
   base = "apps/web"
   command = "cd ../.. && pnpm install --frozen-lockfile && pnpm build --filter @le/web..."
-  publish = "apps/web/.next"
+  # Relative to base, which is apps/web.
+  publish = ".next"
 
 [build.environment]
   NODE_VERSION = "22"

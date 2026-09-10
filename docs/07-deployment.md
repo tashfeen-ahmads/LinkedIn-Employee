@@ -75,6 +75,19 @@ machines buy throughput across accounts, not within one.
 
 Confirm it is up: `curl https://<worker>/health` returns `{"ok":true}`.
 
+### Putting the site up before anything else exists
+
+The landing page is static and the app behind it reports its own absence, so the
+site can be live before Supabase is. On Netlify: **Add new site → Import an
+existing project**, pick this repository, and accept what it offers — the
+`netlify.toml` at the repository root already sets the base directory, the build
+command and the Next.js plugin, so there is nothing to type.
+
+Leave `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` unset until
+step 1 is done. Sign-in then says the trial is not open yet rather than
+returning a 500, and every screen behind it sends people there. Setting those
+two variables is what opens the app; nothing else changes.
+
 ## 4. OAuth applications
 
 Each callback is `$WORKER_URL/auth/<provider>/callback`.
