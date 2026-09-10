@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase-server";
+import { isAppConfigured } from "@/lib/config";
 import { callWorker } from "@/lib/worker";
 
 /**
@@ -66,6 +67,8 @@ export default async function OnboardingPage({
 }: {
   searchParams: Promise<{ error?: string }>;
 }) {
+  if (!isAppConfigured()) redirect("/login");
+
   const params = await searchParams;
   const supabase = await createClient();
   const {

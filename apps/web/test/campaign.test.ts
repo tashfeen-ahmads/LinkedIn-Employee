@@ -88,3 +88,29 @@ describe("daysToSendAll", () => {
     expect(daysToSendAll(0, 20)).toBeNull();
   });
 });
+
+describe("isAppConfigured", () => {
+  it("is false until Supabase credentials exist", async () => {
+    // The marketing site deploys before its database. Every screen behind it
+    // reads this rather than building a client from undefined and throwing.
+    const { isAppConfigured } = await import("../src/lib/config.js");
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    try {
+      delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+      delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+      expect(isAppConfigured()).toBe(false);
+
+      process.env.NEXT_PUBLIC_SUPABASE_URL = "https://project.supabase.co";
+      expect(isAppConfigured(), "a url with no key is not configured").toBe(false);
+
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = "anon";
+      expect(isAppConfigured()).toBe(true);
+    } finally {
+      if (url) process.env.NEXT_PUBLIC_SUPABASE_URL = url;
+      else delete process.env.NEXT_PUBLIC_SUPABASE_URL;
+      if (key) process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = key;
+      else delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    }
+  });
+});

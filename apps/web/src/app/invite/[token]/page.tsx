@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase-server";
+import { isAppConfigured } from "@/lib/config";
 import { checkInvite, inviteRejectionMessage } from "@/lib/invitations";
 import { SiteFooter, SiteHeader } from "@/components/marketing";
 
@@ -53,6 +54,8 @@ export default async function InvitePage({
   params: Promise<{ token: string }>;
   searchParams: Promise<{ error?: string }>;
 }) {
+  if (!isAppConfigured()) redirect("/login");
+
   const { token } = await params;
   const { error } = await searchParams;
   const supabase = await createClient();

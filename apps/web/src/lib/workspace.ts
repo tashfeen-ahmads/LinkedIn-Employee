@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "./supabase-server";
+import { isAppConfigured } from "./config";
 
 export interface Session {
   userId: string;
@@ -12,6 +13,10 @@ export interface Session {
 
 /** Resolves the signed-in user's workspace, or sends them where they need to go. */
 export async function requireSession(): Promise<Session> {
+  // Nothing here can work without a database, and the sign-in page is where
+  // that gets explained.
+  if (!isAppConfigured()) redirect("/login");
+
   const supabase = await createClient();
   const {
     data: { user },

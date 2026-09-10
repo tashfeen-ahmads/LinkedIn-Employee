@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase-server";
+import { isAppConfigured } from "@/lib/config";
 import { SiteFooter, SiteHeader } from "@/components/marketing";
 
 /**
@@ -30,6 +31,30 @@ export default async function LoginPage({
   searchParams: Promise<{ sent?: string; error?: string; invite?: string }>;
 }) {
   const params = await searchParams;
+
+  // Deployed ahead of its database, which is how the marketing site gets to be
+  // live first. Saying so is better than a sign-in form that returns a 500.
+  if (!isAppConfigured()) {
+    return (
+      <>
+        <SiteHeader />
+        <main style={{ padding: "5rem 0" }}>
+          <div className="narrow" style={{ maxWidth: 460 }}>
+            <h1 style={{ fontSize: "1.9rem" }}>Not open yet</h1>
+            <p className="muted">
+              We are still setting this up. Trials open once the first campaigns have run under
+              supervision — we would rather be late than have the first thing our software does be
+              something a stranger receives by mistake.
+            </p>
+            <p className="muted">
+              <a href="/">Back to the site</a>
+            </p>
+          </div>
+        </main>
+        <SiteFooter />
+      </>
+    );
+  }
 
   return (
     <>
