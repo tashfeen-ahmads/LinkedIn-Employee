@@ -11,25 +11,26 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@le/agents": "workspace:*",
-    "@le/db": "workspace:*",
-    "@le/linkedin": "workspace:*",
-    "@le/shared": "workspace:*",
-    "bullmq": "^5.34.0",
-    "hono": "^4.6.0",
     "@hono/node-server": "^1.13.0",
-    "ioredis": "^5.4.0",
-    "zod": "^4.1.0",
+    "@le/agents": "workspace:*",
+    "@le/billing": "workspace:*",
     "@le/calendar": "workspace:*",
     "@le/crm": "workspace:*",
-    "@le/billing": "workspace:*",
-    "@le/email": "workspace:*"
+    "@le/db": "workspace:*",
+    "@le/email": "workspace:*",
+    "@le/linkedin": "workspace:*",
+    "@le/shared": "workspace:*",
+    "@sentry/node": "^10.74.0",
+    "bullmq": "^5.34.0",
+    "hono": "^4.6.0",
+    "ioredis": "^5.4.0",
+    "zod": "^4.1.0"
   },
   "devDependencies": {
+    "@le/calendar": "workspace:*",
     "@types/node": "^22.10.0",
     "tsx": "^4.19.0",
     "typescript": "^5.9.0",
-    "vitest": "^3.2.0",
-    "@le/calendar": "workspace:*"
+    "vitest": "^3.2.0"
   }
 }

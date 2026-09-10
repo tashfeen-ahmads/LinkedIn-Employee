@@ -967,3 +967,7 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
 
 /* The model each agent runs on, set apart from the prose above it. */
 .agent-io { margin-top: auto; padding-top: var(--space-3); border-top: 1px solid var(--border); width: 100%; }
+
+/* A rule with a label in it, for "or use an email link". */
+.or-rule { display: flex; align-items: center; gap: var(--space-3); margin-block: var(--space-4); }
+.or-rule::before, .or-rule::after { content: ""; flex: 1; height: 1px; background: var(--border); }

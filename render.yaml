@@ -1,0 +1,101 @@
+# Render blueprint. Everything the backend needs, in one file, so the worker
+# and its Redis come up together rather than being wired by hand in a UI.
+#
+#   Render → New → Blueprint → point it at this repository
+#
+# The secrets marked sync:false are prompted for on first deploy and never
+# stored here. Nothing in this file is a credential.
+
+services:
+  - type: web
+    name: linkedin-employee-worker
+    runtime: docker
+    plan: starter
+    region: frankfurt
+    dockerfilePath: ./apps/worker/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+
+    # Never scaled to zero and never scaled out. The campaign tick and the
+    # nightly sweeps have to fire whether or not anyone made a request, and the
+    # LinkedIn queue runs at concurrency 1 so one account's actions stay paced.
+    # The per-account counters are safe across instances — record_linkedin_action
+    # increments them in one statement — but the pacing is not.
+    numInstances: 1
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: WORKER_PORT
+        value: 4000
+
+      # Render sets RENDER_EXTERNAL_URL itself; the worker needs it under its
+      # own name because it is the redirect target for four OAuth apps and the
+      # Unipile webhooks.
+      - key: WORKER_URL
+        fromService:
+          type: web
+          name: linkedin-employee-worker
+          envVarKey: RENDER_EXTERNAL_URL
+
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: linkedin-employee-redis
+          property: connectionString
+
+      # Generated once by Render and never seen by anyone. Both are 32 bytes;
+      # CREDENTIALS_KEY must be hex because it is an AES key.
+      - key: INTERNAL_API_SECRET
+        generateValue: true
+      - key: CREDENTIALS_KEY
+        sync: false
+
+      - key: APP_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: UNIPILE_DSN
+        sync: false
+      - key: UNIPILE_ACCESS_TOKEN
+        sync: false
+      - key: UNIPILE_WEBHOOK_SECRET
+        sync: false
+
+      - key: SENTRY_DSN
+        sync: false
+      - key: SENTRY_ENVIRONMENT
+        value: production
+
+      - key: EMAIL_PROVIDER
+        value: resend
+      - key: RESEND_API_KEY
+        sync: false
+      - key: EMAIL_FROM
+        sync: false
+
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+
+# Render's free key-value tier is evicted under memory pressure, which for a job
+# queue means losing queued sends with no error anywhere. Paid on purpose.
+keyValue:
+  - name: linkedin-employee-redis
+    plan: starter
+    region: frankfurt
+    maxmemoryPolicy: noeviction
+    ipAllowList: []
+
+previews:
+  generation: off

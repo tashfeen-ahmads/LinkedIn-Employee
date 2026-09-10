@@ -11,11 +11,11 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@le/linkedin": "workspace:*",
     "@le/agents": "workspace:*",
     "@le/billing": "workspace:*",
     "@le/db": "workspace:*",
     "@le/email": "workspace:*",
+    "@le/linkedin": "workspace:*",
     "@le/shared": "workspace:*",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.116.0",

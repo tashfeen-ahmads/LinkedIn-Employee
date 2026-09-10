@@ -1,4 +1,7 @@
 import { serve } from "@hono/node-server";
+// Before anything else, so a failure during start-up is reported rather than
+// lost to a container that exits.
+import { initObservability, reportJobFailure, Sentry } from "./observability.js";
 import { DelayedError, Worker } from "bullmq";
 import { loadEnv } from "./config.js";
 import { createWorkerContext } from "./context.js";
@@ -12,6 +15,8 @@ import { runTargetingJob } from "./jobs/targeting.js";
 import { runMaintenance } from "./jobs/maintenance.js";
 import { runDailyDigest } from "./jobs/digest.js";
 import { createServer } from "./server.js";
+
+initObservability();
 
 const env = loadEnv();
 const ctx = createWorkerContext(env);
@@ -64,8 +69,23 @@ const workers = [
 ];
 
 for (const worker of workers) {
-  worker.on("failed", (job, err) => console.error(`[${worker.name}] job ${job?.id} failed:`, err.message));
+  worker.on("failed", (job, err) => {
+    // A rescheduled action is the limiter doing its job, not a failure. Every
+    // one of those in an error tracker would bury the ones that matter.
+    if (err instanceof RescheduleError || err?.name === "DelayedError") return;
+    reportJobFailure(worker.name, job?.id, err, { attempts: job?.attemptsMade, data: job?.name });
+  });
 }
+
+// A rejection nobody handled is how this process dies without explaining
+// itself. Report it, then let the platform restart us.
+process.on("unhandledRejection", (reason) => {
+  reportJobFailure("process", undefined, reason);
+});
+process.on("uncaughtException", (error) => {
+  reportJobFailure("process", undefined, error);
+  void Sentry.flush(2000).then(() => process.exit(1));
+});
 
 const server = serve({ fetch: createServer(ctx, queues).fetch, port: env.WORKER_PORT });
 console.log(`worker listening on :${env.WORKER_PORT}, provider=${ctx.linkedin.name}`);
@@ -73,6 +93,8 @@ console.log(`worker listening on :${env.WORKER_PORT}, provider=${ctx.linkedin.na
 async function shutdown(signal: string): Promise<void> {
   console.log(`${signal} received, draining`);
   server.close();
+  // Flush before the queues close, or a failure during shutdown never reports.
+  await Sentry.flush(2000);
   await Promise.all(workers.map((w) => w.close()));
   await connection.quit();
   process.exit(0);
