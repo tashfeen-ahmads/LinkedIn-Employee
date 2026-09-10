@@ -150,7 +150,7 @@ body {
 a { color: inherit; text-decoration: none; }
 a:hover { text-decoration: underline; text-underline-offset: 3px; }
 
-:where(a, button, input, textarea, select, summary):focus-visible {
+:where(a, button, input:not([type="range"]), textarea, select, summary):focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
   border-radius: var(--radius-sm);
@@ -731,3 +731,86 @@ figure { margin: 0; }
   .signal-list li { grid-template-columns: 4px minmax(0, 1fr) auto; }
   .signal-list li > .tiny.subtle { display: none; }
 }
+
+/* --------------------------------------------------------- live widgets */
+
+.warn-text { color: var(--warning); }
+
+/* A chip is a preset, not a button that submits anything. */
+.chip {
+  font: inherit;
+  font-size: 0.8125rem;
+  padding: 0.3rem 0.6rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: border-color 130ms ease, color 130ms ease, background 130ms ease;
+}
+.chip:hover { border-color: var(--border-strong); color: var(--text); }
+.chip[aria-pressed="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent-border);
+  color: var(--accent);
+}
+
+.sim { border-radius: var(--radius-lg); }
+/* The verdict panel holds its height so the page does not jump as the answer
+   changes under the reader's hands. */
+.sim-result {
+  min-height: 5.25rem;
+  padding: var(--space-4);
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+}
+
+.forecast {
+  border-radius: var(--radius-lg);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-6);
+}
+@media (max-width: 780px) { .forecast { grid-template-columns: minmax(0, 1fr); gap: var(--space-5); } }
+
+.forecast-output {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-4);
+}
+.forecast-bars { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+.forecast-track { height: 8px; border-radius: var(--radius-pill); background: var(--surface-sunken); overflow: hidden; margin-top: 0.3rem; }
+.forecast-fill { height: 100%; border-radius: var(--radius-pill); background: var(--accent); }
+/* The outcome is the one bar that gets the second hue — it is a different kind
+   of thing from the three counts above it. */
+.forecast-fill.is-outcome { background: var(--accent-2); }
+
+.slider-value { font-size: 0.9375rem; color: var(--text); }
+
+input[type="range"] {
+  width: 100%;
+  appearance: none;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-sunken);
+  cursor: pointer;
+}
+input[type="range"]::-webkit-slider-thumb {
+  appearance: none;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 3px solid var(--surface-raised);
+  box-shadow: var(--shadow-sm);
+}
+input[type="range"]::-moz-range-thumb {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 3px solid var(--surface-raised);
+}
+input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }

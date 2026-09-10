@@ -9,6 +9,7 @@ import {
   Safety,
   Signals,
   TheGate,
+  Volume,
 } from "@/components/marketing";
 import { FaqSchema, SoftwareSchema } from "@/components/schema";
 import { SITE, pageMeta } from "@/lib/site";
@@ -29,6 +30,7 @@ export default function HomePage() {
       <TheGate />
       <Signals />
       <Safety />
+      <Volume />
       <Extras />
       <Pricing />
       <Faq />

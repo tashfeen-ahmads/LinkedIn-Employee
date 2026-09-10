@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { LINKEDIN_LIMITS } from "@le/shared";
 import { Pipeline, ReplyGate, WarmupRamp } from "./diagrams";
+import { Forecast } from "./forecast";
+import { GateSimulator } from "./gate-simulator";
 import { Reveal, Stagger, StaggerItem } from "./reveal";
 
 /**
@@ -195,12 +197,41 @@ export function TheGate() {
             <h2>It knows when to stop.</h2>
             <p className="lede prose">
               Anyone can draft a reply. The reason this can be left running is what it refuses to
-              answer — and those conditions are the same on autopilot as they are on approval mode.
+              answer. Type something a prospect might send and watch which rule catches it — the
+              opt-out check below is the product&rsquo;s own code, running here in your browser.
             </p>
           </div>
         </Reveal>
         <Reveal>
+          <GateSimulator />
+        </Reveal>
+
+        <Reveal>
           <ReplyGate />
+        </Reveal>
+      </div>
+    </section>
+  );
+}
+
+/** The forecast, whose sliders run into the real caps. */
+export function Volume() {
+  return (
+    <section className="section">
+      <div className="container stack-6">
+        <Reveal>
+          <div className="stack-3">
+            <p className="eyebrow">What a month looks like</p>
+            <h2>Move the sliders until it hits the ceiling.</h2>
+            <p className="lede prose">
+              The daily one stops at {LINKEDIN_LIMITS.invitesPerDayMax} because the product stops
+              there, and the weekly ceiling clamps the total underneath it. You will find the limit by
+              dragging into it, which is a better way to learn it than reading a paragraph.
+            </p>
+          </div>
+        </Reveal>
+        <Reveal>
+          <Forecast />
         </Reveal>
       </div>
     </section>
