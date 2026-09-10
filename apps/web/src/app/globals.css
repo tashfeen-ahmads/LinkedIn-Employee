@@ -971,3 +971,36 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
 /* A rule with a label in it, for "or use an email link". */
 .or-rule { display: flex; align-items: center; gap: var(--space-3); margin-block: var(--space-4); }
 .or-rule::before, .or-rule::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+
+/* The setup checklist. A done row recedes rather than celebrating. */
+.checklist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.checklist-row { display: flex; align-items: flex-start; gap: var(--space-3); padding: var(--space-3) 0; }
+.checklist-row + .checklist-row { border-top: 1px solid var(--border); }
+.checklist-row.is-done { color: var(--text-subtle); }
+.checklist-row.is-done .small { color: var(--text-subtle); }
+.checklist-tick {
+  flex: none;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border-strong);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; line-height: 1;
+  margin-top: 2px;
+}
+.checklist-row.is-done .checklist-tick { background: var(--positive); border-color: var(--positive); color: #fff; }
+
+/*
+ * The setup progress meter. Segmented rather than a continuous bar: there are
+ * seven discrete steps, and a smooth fill would imply a percentage nobody
+ * measured. A required step that is still outstanding is the only segment that
+ * carries the accent, so the eye lands on the thing actually blocking sending.
+ */
+.step-meter { display: flex; gap: 3px; }
+.step-meter span {
+  height: 4px;
+  flex: 1;
+  border-radius: 2px;
+  background: var(--border);
+}
+.step-meter span.is-done { background: var(--positive); }
+.step-meter span.is-next { background: var(--accent); }

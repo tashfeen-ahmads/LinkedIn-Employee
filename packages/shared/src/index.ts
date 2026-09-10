@@ -4,5 +4,6 @@ export * from "./events.js";
 export * from "./exclusions.js";
 export * from "./funnel.js";
 export * from "./html.js";
+export * from "./onboarding.js";
 export * from "./pricing.js";
 export * from "./time.js";

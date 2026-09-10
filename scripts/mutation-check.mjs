@@ -631,6 +631,46 @@ const MUTATIONS = [
     to: "counts.accepted / counts.invited",
     pkg: "@le/shared",
   },
+  {
+    id: "lifecycle/nudge-once",
+    rule: "A step is nudged once and never again — repetition is what makes a reminder spam",
+    file: "apps/worker/src/jobs/lifecycle.ts",
+    from: "const eventName = `onboarding.nudged.${step.key}`;",
+    to: "const eventName = `onboarding.nudged.${step.key}.${Math.random()}`;",
+    pkg: "@le/worker",
+  },
+  {
+    id: "lifecycle/grace-days",
+    rule: "Nobody is nudged in their first days — someone who signed up an hour ago is reading, not stalled",
+    file: "apps/worker/src/jobs/lifecycle.ts",
+    from: "if (daysIn < GRACE_DAYS) return 0;",
+    to: "if (false) return 0;",
+    pkg: "@le/worker",
+  },
+  {
+    id: "lifecycle/no-trial-dunning",
+    rule: "A workspace that has already subscribed is never warned that its trial is ending",
+    file: "apps/worker/src/jobs/lifecycle.ts",
+    from: 'if (workspace.subscription_status === "active" || !workspace.trial_ends_at) return 0;',
+    to: "if (false) return 0;",
+    pkg: "@le/worker",
+  },
+  {
+    id: "onboarding/welcome-once",
+    rule: "The welcome email is sent once per workspace, however often strategy is re-run",
+    file: "apps/worker/src/jobs/strategy.ts",
+    from: "if (already) return;",
+    to: "if (false) return;",
+    pkg: "@le/worker",
+  },
+  {
+    id: "booking/first-meeting-only",
+    rule: "The meeting email announces the first booking only, never every one",
+    file: "apps/worker/src/jobs/booking.ts",
+    from: "if ((count ?? 0) !== 1) return;",
+    to: "if (false) return;",
+    pkg: "@le/worker",
+  },
 ];
 
 const filter = process.argv[2];

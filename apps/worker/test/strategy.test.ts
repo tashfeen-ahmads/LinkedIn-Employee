@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { MockEmailProvider } from "@le/email";
 import { FakeDb } from "./fake-db.js";
 import type { WorkerContext } from "../src/context.js";
 
@@ -58,19 +59,20 @@ const OUTPUT = {
   customerProfiles: [profile("Ops leaders", 1), profile("Founders", 2), profile("Agency owners", 3)],
 };
 
-function harness() {
+function harness(options: { email?: boolean } = {}) {
   const db = new FakeDb();
   db.seed("workspaces", [{ id: WORKSPACE, name: "Acme", plan: "trial" }]);
   db.seed("profiles", [{ id: USER, email: "sam@acme.test", full_name: "Sam Patel" }]);
 
+  const email = options.email ? new MockEmailProvider() : null;
   const ctx = {
     db: db.asDb(),
-    email: null,
-    env: {} as WorkerContext["env"],
+    email,
+    env: { APP_URL: "https://app.test" } as WorkerContext["env"],
     agentsFor: () => ({ client: {} as never }),
   } as unknown as WorkerContext;
 
-  return { db, ctx };
+  return { db, ctx, email };
 }
 
 beforeEach(() => {
@@ -185,5 +187,42 @@ describe("runStrategyJob", () => {
 
     const input = strategyMock.mock.calls[0]?.[1] as { websiteText?: string };
     expect(input.websiteText).toContain("revenue tooling");
+  });
+
+  it("welcomes the owner while the agent is still reading their site", async () => {
+    const { ctx, email } = harness({ email: true });
+    const { runStrategyJob } = await import("../src/jobs/strategy.js");
+
+    await runStrategyJob(ctx, { workspaceId: WORKSPACE, userId: USER, websiteUrl: "https://acme.test" });
+
+    expect(email!.sent).toHaveLength(1);
+    expect(email!.sent[0]?.to).toBe("sam@acme.test");
+    expect(email!.sent[0]?.text).toContain("Acme");
+  });
+
+  it("welcomes a workspace once, however often the agent is re-run", async () => {
+    // Re-running strategy is a normal thing to do when the first profiles were
+    // wrong. A second welcome on day nine reads as a product with no memory.
+    const { ctx, email } = harness({ email: true });
+    const { runStrategyJob } = await import("../src/jobs/strategy.js");
+
+    await runStrategyJob(ctx, { workspaceId: WORKSPACE, userId: USER, websiteUrl: "https://acme.test" });
+    await runStrategyJob(ctx, { workspaceId: WORKSPACE, userId: USER, websiteUrl: "https://acme.test" });
+
+    expect(email!.sent).toHaveLength(1);
+  });
+
+  it("still writes the profiles when the welcome email cannot be sent", async () => {
+    // Email is a notification channel, never a step the job depends on.
+    const { db, ctx, email } = harness({ email: true });
+    email!.send = async () => {
+      throw new Error("resend unavailable");
+    };
+    const { runStrategyJob } = await import("../src/jobs/strategy.js");
+
+    const id = await runStrategyJob(ctx, { workspaceId: WORKSPACE, userId: USER, websiteUrl: "https://acme.test" });
+
+    expect(id).toBeTruthy();
+    expect(db.rows("customer_profiles")).toHaveLength(3);
   });
 });

@@ -1,20 +1,68 @@
 import Link from "next/link";
 import { FUNNEL_STAGES, countFunnel } from "@le/shared";
 import { requireSession } from "@/lib/workspace";
+import { SetupChecklist } from "@/components/setup-checklist";
 import { createClient } from "@/lib/supabase-server";
 
 export default async function OverviewPage() {
   const session = await requireSession();
   const supabase = await createClient();
 
-  const [{ data: rows }, { data: profiles }] = await Promise.all([
+  const head = { count: "exact" as const, head: true };
+  const [
+    { data: rows },
+    { data: profiles },
+    business,
+    approved,
+    account,
+    campaign,
+    launched,
+    calendar,
+    knowledge,
+  ] = await Promise.all([
     supabase.from("campaign_prospects").select("status, invited_at, accepted_at, replied_at").eq("workspace_id", session.workspaceId),
     supabase
       .from("customer_profiles")
       .select("id, name, priority, approved_at, do_not_pursue")
       .eq("workspace_id", session.workspaceId)
       .order("priority", { ascending: true }),
+    supabase.from("business_profiles").select("id", head).eq("workspace_id", session.workspaceId),
+    supabase
+      .from("customer_profiles")
+      .select("id, approved_at", head)
+      .eq("workspace_id", session.workspaceId)
+      .not("approved_at", "is", null),
+    supabase
+      .from("linkedin_accounts")
+      .select("id, status", head)
+      .eq("workspace_id", session.workspaceId)
+      .eq("status", "active"),
+    supabase.from("campaigns").select("id", head).eq("workspace_id", session.workspaceId),
+    supabase
+      .from("campaigns")
+      .select("id, launched_at", head)
+      .eq("workspace_id", session.workspaceId)
+      .not("launched_at", "is", null),
+    supabase
+      .from("integrations")
+      .select("id, kind", head)
+      .eq("workspace_id", session.workspaceId)
+      .in("kind", ["google_calendar", "microsoft_calendar"]),
+    supabase.from("knowledge_documents").select("id", head).eq("workspace_id", session.workspaceId),
   ]);
+
+  const any = (result: { count: number | null }) => (result.count ?? 0) > 0;
+  // The same seven facts the nudge emails read, from the same shared list of
+  // steps — so the inbox and the dashboard can never disagree.
+  const setup = {
+    hasBusinessProfile: any(business),
+    hasApprovedProfile: any(approved),
+    hasLinkedInAccount: any(account),
+    hasCampaign: any(campaign),
+    hasLaunchedCampaign: any(launched),
+    hasCalendar: any(calendar),
+    hasKnowledge: any(knowledge),
+  };
 
   // One definition of the funnel, shared with the reporting page: two copies
   // would drift and quietly disagree about the same numbers.
@@ -31,6 +79,8 @@ export default async function OverviewPage() {
         <p className="eyebrow">Overview</p>
         <h1>{session.fullName ? `Morning, ${session.fullName.split(" ")[0]}.` : "Overview"}</h1>
       </header>
+
+      <SetupChecklist state={setup} />
 
       <section className="stack-3">
         <div className="grid grid-4">

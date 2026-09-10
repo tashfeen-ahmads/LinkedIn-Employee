@@ -1,6 +1,8 @@
 import { formatSlot } from "@le/calendar";
+import { firstMeetingEmail } from "@le/email";
 import type { CalendarBinding } from "../calendar.js";
 import type { WorkerContext } from "../context.js";
+import { trySend } from "../email.js";
 import { flagForHuman } from "../holds.js";
 import { recordEvent } from "../context.js";
 
@@ -37,7 +39,7 @@ export async function tryBookMeeting(ctx: WorkerContext, input: BookingInput): P
     .single();
   const { data: rep } = await ctx.db
     .from("profiles")
-    .select("full_name")
+    .select("email, full_name")
     .eq("id", input.repUserId)
     .single();
 
@@ -105,7 +107,59 @@ export async function tryBookMeeting(ctx: WorkerContext, input: BookingInput): P
     payload: { startsAt: chosen, readable: formatSlot(chosen, input.binding.timezone) },
   });
 
+  await maybeAnnounceFirstMeeting(ctx, input, {
+    prospectName,
+    prospectCompany: prospect?.company ?? null,
+    repEmail: rep?.email ?? null,
+    repName: rep?.full_name ?? null,
+    when: formatSlot(chosen, input.binding.timezone),
+  });
+
   return meeting?.id ?? null;
+}
+
+/**
+ * The first booked meeting in a workspace gets its own email.
+ *
+ * It is the moment the product either worked or did not, and nobody should
+ * have to find that out by opening a dashboard. Only the first: after that the
+ * morning digest carries them, and an email per meeting is the thing a working
+ * product does to make itself annoying.
+ */
+async function maybeAnnounceFirstMeeting(
+  ctx: WorkerContext,
+  input: BookingInput,
+  details: {
+    prospectName: string;
+    prospectCompany: string | null;
+    repEmail: string | null;
+    repName: string | null;
+    when: string;
+  },
+): Promise<void> {
+  if (!ctx.email || !details.repEmail) return;
+
+  // Counted, not flagged: the meeting just inserted is the first one exactly
+  // when the workspace has one. No extra column, and re-running this cannot
+  // send a second copy.
+  const { count } = await ctx.db
+    .from("meetings")
+    .select("id", { count: "exact", head: true })
+    .eq("workspace_id", input.workspaceId);
+  if ((count ?? 0) !== 1) return;
+
+  await trySend(
+    ctx.email,
+    firstMeetingEmail({
+      to: details.repEmail,
+      repName: details.repName,
+      appUrl: ctx.env.APP_URL,
+      prospectName: details.prospectName,
+      prospectCompany: details.prospectCompany,
+      when: details.when,
+      theirWords: input.message.trim().slice(0, 280),
+    }),
+  );
 }
 
 /**

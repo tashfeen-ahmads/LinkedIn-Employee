@@ -78,9 +78,10 @@ describe("tryBookMeeting", () => {
   const PROSPECT = "55555555-5555-4555-8555-555555555555";
   const CONVERSATION = "66666666-6666-4666-8666-666666666666";
 
-  async function harness() {
+  async function harness(options: { email?: boolean } = {}) {
     const { FakeDb } = await import("./fake-db.js");
     const { MockCalendarProvider } = await import("@le/calendar");
+    const { MockEmailProvider } = await import("@le/email");
     const db = new FakeDb();
 
     db.seed("profiles", [{ id: USER, full_name: "Sam Patel", email: "sam@acme.test" }]);
@@ -99,11 +100,13 @@ describe("tryBookMeeting", () => {
     ]);
 
     const calendar = new MockCalendarProvider();
-    const ctx = { db: db.asDb() } as never;
+    const email = options.email ? new MockEmailProvider() : null;
+    const ctx = { db: db.asDb(), email, env: { APP_URL: "https://app.test" } } as never;
     return {
       db,
       ctx,
       calendar,
+      email,
       binding: { provider: calendar, accessToken: "mock", timezone: "UTC" },
     };
   }
@@ -174,5 +177,44 @@ describe("tryBookMeeting", () => {
     // Marked as a booking, so the reply that goes out moments later does not
     // clear it. Nothing else says the meeting is in nobody's diary.
     expect(conversation.needs_human_kind).toBe("booking");
+  });
+
+  it("emails the rep about their first booked meeting, quoting the prospect", async () => {
+    const { ctx, email, binding } = await harness({ email: true });
+    const { tryBookMeeting } = await import("../src/jobs/booking.js");
+
+    await tryBookMeeting(ctx, {
+      ...base(binding),
+      message: "Tuesday at 2pm works, see you then",
+      offeredSlots: ["2026-09-08T14:00:00Z"],
+    });
+
+    expect(email!.sent).toHaveLength(1);
+    expect(email!.sent[0]?.subject).toBe("Meeting booked with Jane Doe");
+    // Their own words, not a summary of them.
+    expect(email!.sent[0]?.text).toContain("Tuesday at 2pm works, see you then");
+    // The time as the calendar package formats it, in the rep's timezone —
+    // this email must never disagree with the one the prospect was sent.
+    expect(email!.sent[0]?.text).toContain("Tuesday, September 8");
+  });
+
+  it("emails about the first meeting only, never the second", async () => {
+    // A working product that emails on every booking has made itself into a
+    // thing people filter. The digest carries the rest.
+    const { db, ctx, email, binding } = await harness({ email: true });
+    const { tryBookMeeting } = await import("../src/jobs/booking.js");
+
+    await tryBookMeeting(ctx, { ...base(binding), offeredSlots: ["2026-09-08T14:00:00Z"] });
+    db.seed("campaign_prospects", [
+      { workspace_id: WORKSPACE, campaign_id: "camp", prospect_id: PROSPECT, status: "replied" },
+    ]);
+    await tryBookMeeting(ctx, {
+      ...base(binding),
+      message: "Wednesday at 10am works",
+      offeredSlots: ["2026-09-09T10:00:00Z"],
+    });
+
+    expect(db.rows("meetings")).toHaveLength(2);
+    expect(email!.sent).toHaveLength(1);
   });
 });

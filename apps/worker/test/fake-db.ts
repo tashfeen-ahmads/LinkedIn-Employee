@@ -109,7 +109,17 @@ class QueryBuilder implements PromiseLike<{ data: Row[] | null; error: null | { 
     private readonly uniqueKey?: string[],
   ) {}
 
-  select(_columns?: string, options?: { count?: "exact"; head?: boolean }): this {
+  select(columns?: string, options?: { count?: "exact"; head?: boolean }): this {
+    // Columns are otherwise ignored — every row comes back whole, which is
+    // harmless until someone writes an embedded join. PostgREST would return
+    // the related row under that key; this would return the parent row without
+    // it, and the caller would silently take the "no such record" branch. That
+    // exact bug cost an afternoon, so it is now loud.
+    if (columns && /\w\s*\(/.test(columns)) {
+      throw new Error(
+        `FakeDb: embedded joins are not supported (${this.table}.select("${columns}")). Select the foreign key and fetch the related rows separately.`,
+      );
+    }
     if (this.pending.kind === "select") this.pending = { kind: "select" };
     else this.returning = true;
     if (options?.count) this.countMode = options.count;

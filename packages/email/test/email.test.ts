@@ -2,7 +2,15 @@ import { describe, expect, it, vi } from "vitest";
 import { MockEmailProvider } from "../src/mock.js";
 import { ResendProvider } from "../src/resend.js";
 import { EmailError } from "../src/provider.js";
-import { accountPausedEmail, digestEmail, inviteEmail } from "../src/templates.js";
+import {
+  accountPausedEmail,
+  digestEmail,
+  firstMeetingEmail,
+  inviteEmail,
+  onboardingNudgeEmail,
+  trialEndingEmail,
+  welcomeEmail,
+} from "../src/templates.js";
 import { escapeHtml } from "../src/render.js";
 
 describe("inviteEmail", () => {
@@ -155,5 +163,153 @@ describe("MockEmailProvider", () => {
 describe("escapeHtml", () => {
   it("neutralises the characters that break out of an attribute or tag", () => {
     expect(escapeHtml(`<a href="x" onclick='y'>&`)).toBe("&lt;a href=&quot;x&quot; onclick=&#39;y&#39;&gt;&amp;");
+  });
+});
+
+describe("onboardingNudgeEmail", () => {
+  const step = {
+    label: "Approve a customer profile",
+    done: "an approved customer profile",
+    nudge: "Your profiles are written and waiting.",
+    href: "/app/strategy",
+  };
+
+  it("names what is already done before what is not", () => {
+    const message = onboardingNudgeEmail({
+      to: "sam@acme.test",
+      repName: "Sam Patel",
+      appUrl: "https://app.test",
+      step,
+      daysIn: 4,
+      completed: ["your business profile", "your LinkedIn account"],
+    });
+
+    // The credit has to arrive before the ask, or the email reads as an
+    // accusation from a robot with no memory of what this person has done.
+    const text = message.text;
+    expect(text.indexOf("further along")).toBeLessThan(text.indexOf(step.nudge));
+    expect(text).toContain("your business profile and your LinkedIn account are done");
+  });
+
+  it("says nothing about progress when there is none to report", () => {
+    const message = onboardingNudgeEmail({
+      to: "sam@acme.test",
+      repName: null,
+      appUrl: "https://app.test",
+      step,
+      daysIn: 2,
+      completed: [],
+    });
+
+    // "You are further along than you might think — nothing is done" is worse
+    // than saying nothing at all.
+    expect(message.text).not.toContain("further along");
+    expect(message.text).toContain("2 days");
+  });
+
+  it("uses the singular for a single finished step", () => {
+    const message = onboardingNudgeEmail({
+      to: "sam@acme.test",
+      repName: null,
+      appUrl: "https://app.test",
+      step,
+      daysIn: 3,
+      completed: ["your business profile"],
+    });
+
+    expect(message.text).toContain("your business profile is done");
+  });
+
+  it("subjects the email with the step itself, and links straight to it", () => {
+    const message = onboardingNudgeEmail({
+      to: "sam@acme.test",
+      repName: "Sam Patel",
+      appUrl: "https://app.test",
+      step,
+      daysIn: 4,
+      completed: [],
+    });
+
+    expect(message.subject).toBe("Approve a customer profile");
+    expect(message.html).toContain("https://app.test/app/strategy");
+    expect(message.text).toContain("https://app.test/app/strategy");
+  });
+});
+
+describe("trialEndingEmail", () => {
+  const base = {
+    to: "sam@acme.test",
+    repName: "Sam Patel",
+    appUrl: "https://app.test",
+    daysLeft: 3,
+    invited: 0,
+    accepted: 0,
+    meetings: 0,
+  };
+
+  it("refuses to claim a result from a handful of invitations", () => {
+    const message = trialEndingEmail({ ...base, invited: 6, accepted: 2, meetings: 0 });
+
+    // Six invitations during the warm-up is not evidence of anything, and an
+    // email that argues otherwise insults the person reading it.
+    expect(message.text).toContain("not yet a fair test");
+  });
+
+  it("leads with the real numbers once there are enough of them", () => {
+    const message = trialEndingEmail({ ...base, invited: 84, accepted: 31, meetings: 4 });
+
+    expect(message.text).toContain("84 invitations out, 31 accepted, 4 meetings booked");
+    expect(message.text).not.toContain("not yet a fair test");
+  });
+
+  it("promises only what is true: sending stops, nothing is deleted", () => {
+    const message = trialEndingEmail({ ...base, daysLeft: 1 });
+
+    expect(message.subject).toBe("Your trial ends tomorrow");
+    expect(message.text).toContain("sending stops and everything else stays exactly where it is");
+  });
+});
+
+describe("firstMeetingEmail", () => {
+  const base = {
+    to: "sam@acme.test",
+    repName: "Sam Patel",
+    appUrl: "https://app.test",
+    prospectName: "Jane Doe",
+    prospectCompany: "Northwind",
+    when: "Tuesday, September 8 at 2:00 PM GMT",
+    theirWords: "Tuesday at 2pm works, see you then",
+  };
+
+  it("quotes the prospect rather than summarising them", () => {
+    const message = firstMeetingEmail(base);
+
+    expect(message.subject).toBe("Meeting booked with Jane Doe");
+    expect(message.text).toContain("Tuesday at 2pm works, see you then");
+    expect(message.text).toContain("Tuesday, September 8 at 2:00 PM GMT");
+  });
+
+  it("reads correctly for a prospect with no company on file", () => {
+    const message = firstMeetingEmail({ ...base, prospectCompany: null });
+
+    expect(message.text).toContain("Jane Doe, Tuesday");
+    expect(message.text).not.toContain(" at null");
+  });
+});
+
+describe("welcomeEmail", () => {
+  it("says what is happening rather than handing over a task", () => {
+    const message = welcomeEmail({
+      to: "sam@acme.test",
+      repName: "Sam Patel",
+      appUrl: "https://app.test",
+      companyName: "Acme",
+    });
+
+    expect(message.subject).toBe("Your profiles are being written");
+    expect(message.text).toContain("Acme");
+    // The two things that surprise people later, said before they start.
+    expect(message.text).toContain("approval mode");
+    expect(message.text).toContain("ten invitations a day");
   });
 });

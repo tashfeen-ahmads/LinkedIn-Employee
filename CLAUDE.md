@@ -9,7 +9,7 @@ plan. This file is for whoever works on the code next.
 pnpm install
 pnpm build          # packages compile to dist/; apps typecheck against those
 pnpm typecheck
-pnpm test           # 374 tests, no network, no API key needed
+pnpm test           # 410 tests, no network, no API key needed
 node scripts/mutation-check.mjs   # proves the safety tests actually bite
 node scripts/preflight.mjs        # is a deployment actually able to send?
 pnpm --filter @le/web dev
@@ -104,7 +104,11 @@ tests that were verified by deliberately breaking the code.
 `apps/worker/test/fake-db.ts` is an in-memory stand-in for the Supabase client
 covering the query shapes the worker uses. It is not a Postgres emulator; where
 it cannot be faithful it throws rather than returning something a real database
-never would.
+never would. Embedded joins (`select("user_id, profiles(email)")`) are the case
+worth knowing: PostgREST returns the related row, the fake cannot, and for a
+while it returned the parent row without it — so the caller silently took its
+"no such record" branch and the tests were green and wrong. It now throws. Select
+the foreign key and fetch the related rows separately, as `digest.ts` does.
 
 When you add a test for a safety rule, add a mutation to
 `scripts/mutation-check.mjs` too. It breaks each rule on purpose and requires

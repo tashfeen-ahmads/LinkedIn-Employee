@@ -3,6 +3,7 @@ import type { WorkerContext } from "../context.js";
 import { pollHealth } from "../accounts.js";
 import { recordEvent } from "../context.js";
 import { detectAcceptedInvitations } from "./acceptance.js";
+import { runLifecycleEmails } from "./lifecycle.js";
 import { runRetentionSweep } from "./retention.js";
 import type { Queues } from "../queues.js";
 
@@ -18,7 +19,9 @@ import type { Queues } from "../queues.js";
  *  - erase prospect data held past the workspace's retention limit;
  *  - re-enqueue approved replies that were never dispatched;
  *  - flag accounts whose acceptance rate has fallen far enough to attract
- *    LinkedIn's attention.
+ *    LinkedIn's attention;
+ *  - nudge a workspace stuck on one setup step, and warn a trial that is
+ *    nearly up.
  */
 export async function runMaintenance(
   ctx: WorkerContext,
@@ -47,6 +50,9 @@ export async function runMaintenance(
   await flagPoorAcceptanceRates(ctx);
   await withdrawStaleInvites(ctx, now);
   await closeExhaustedSequences(ctx, now);
+
+  const lifecycle = await runLifecycleEmails(ctx, now);
+  if (lifecycle > 0) console.log(`${lifecycle} lifecycle emails sent`);
 
   const erased = await runRetentionSweep(ctx, now);
   if (erased > 0) console.log(`retention sweep erased ${erased} prospects`);
