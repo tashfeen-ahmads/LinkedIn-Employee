@@ -29,6 +29,9 @@ importers:
       '@le/email':
         specifier: workspace:*
         version: link:../../packages/email
+      '@le/linkedin':
+        specifier: workspace:*
+        version: link:../../packages/linkedin
       '@le/shared':
         specifier: workspace:*
         version: link:../../packages/shared

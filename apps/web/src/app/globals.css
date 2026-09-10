@@ -623,3 +623,111 @@ ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: none; }
    into four. */
 h1 { max-width: 18ch; }
 .narrow h1, .prose h1 { max-width: none; }
+
+/* ------------------------------------------------------------- diagrams */
+
+.stack-1 { display: flex; flex-direction: column; gap: var(--space-1); }
+
+figure { margin: 0; }
+
+.chart, .gate, .pipeline {
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+}
+
+.chart-svg { width: 100%; height: auto; overflow: visible; }
+/* Chart ink takes theme tokens, so it reads on either ground. */
+.chart-svg .grid   { stroke: var(--border); stroke-width: 1; }
+.chart-svg .axis   { fill: var(--text-subtle); font-size: 11px; font-family: var(--font-mono); }
+.chart-svg .axis.strong { fill: var(--text-muted); }
+.chart-svg .line   { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; }
+.chart-svg .area   { fill: color-mix(in srgb, var(--accent) 12%, transparent); stroke: none; }
+.chart-svg .marker { stroke: var(--text-subtle); stroke-width: 1; stroke-dasharray: 3 3; }
+.chart-table summary { cursor: pointer; }
+
+/* The reply gate: a spine with each condition branching off it. */
+.gate-body { display: flex; flex-direction: column; gap: var(--space-3); }
+.gate-in, .gate-out { display: flex; flex-direction: column; gap: var(--space-2); align-items: flex-start; }
+.gate-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  /* The spine. One border doing the work of eight arrows. */
+  border-left: 2px solid var(--border-strong);
+}
+.gate-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 24px auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+}
+.gate-row + .gate-row { border-top: 1px solid var(--border); }
+.gate-test { font-size: 0.9375rem; }
+.gate-arrow {
+  height: 1px;
+  background: linear-gradient(90deg, var(--border-strong), var(--text-subtle));
+  position: relative;
+}
+.gate-arrow::after {
+  content: "";
+  position: absolute;
+  right: -1px; top: -3px;
+  border-left: 5px solid var(--text-subtle);
+  border-block: 3.5px solid transparent;
+}
+@media (max-width: 560px) {
+  .gate-row { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
+  .gate-arrow { display: none; }
+}
+
+/* The pipeline: stages with a gate between each. */
+.pipeline-row {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-3);
+  align-items: start;
+}
+.pipeline-stage { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.pipeline-card { height: 100%; }
+.pipeline-end { border-color: var(--accent-border); background: var(--accent-soft); }
+.pipeline-gate { display: flex; justify-content: center; }
+.pipeline-gate .pill { border-style: dashed; }
+@media (max-width: 760px) {
+  .pipeline-row { grid-template-columns: minmax(0, 1fr); }
+  .pipeline-gate { justify-content: flex-start; }
+}
+
+/* A scored prospect, with each signal's contribution drawn beside it. */
+.scored { border-radius: var(--radius-lg); }
+.signal-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.signal-list li {
+  display: grid;
+  grid-template-columns: 4px minmax(0, 12rem) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) 0;
+}
+.signal-list li + li { border-top: 1px solid var(--border); }
+/* The bar is the mark; the number beside it is the label. Height encodes the
+   weight, so the column reads as a ranking without a second axis. */
+.signal-bar {
+  width: 4px;
+  height: var(--weight);
+  min-height: 10px;
+  max-height: 22px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+@media (max-width: 640px) {
+  .signal-list li { grid-template-columns: 4px minmax(0, 1fr) auto; }
+  .signal-list li > .tiny.subtle { display: none; }
+}

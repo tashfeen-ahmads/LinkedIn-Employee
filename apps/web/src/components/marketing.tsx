@@ -1,5 +1,7 @@
 import Link from "next/link";
-import { Reveal } from "./reveal";
+import { LINKEDIN_LIMITS } from "@le/shared";
+import { Pipeline, ReplyGate, WarmupRamp } from "./diagrams";
+import { Reveal, Stagger, StaggerItem } from "./reveal";
 
 /**
  * Marketing page sections. Structure mirrors docs/05-go-to-market.md section 2.
@@ -144,67 +146,188 @@ export function HowItWorks() {
   return (
     <section id="how-it-works" className="section band">
       <div className="container stack-6">
-        <div className="stack-3">
-          <p className="eyebrow">How it works</p>
-          <h2>Four agents, one job each.</h2>
-          <p className="lede prose">
-            Each one hands its work to the next. You stay in control at every handover.
-          </p>
-        </div>
+        <Reveal>
+          <div className="stack-3">
+            <p className="eyebrow">How it works</p>
+            <h2>Four agents, one job each.</h2>
+            <p className="lede prose">
+              Each one hands its work to the next, and every handover stops for a person. That is the
+              difference between something you can leave running and something you cannot.
+            </p>
+          </div>
+        </Reveal>
 
-        {/* Numbered because it is a real sequence: agent two cannot run until a
-            human has approved what agent one wrote. */}
-        <ol className="grid grid-2 steps">
+        <Reveal>
+          <Pipeline />
+        </Reveal>
+
+        <Stagger className="grid grid-2">
           {STEPS.map((step) => (
-            <li key={step.n} className="card interactive stack-3">
-              <div className="cluster" style={{ alignItems: "baseline" }}>
-                <span className="eyebrow">{step.n}</span>
-                <h3>{step.agent}</h3>
-              </div>
-              <p style={{ fontWeight: 550 }}>{step.lead}</p>
-              <ul className="muted small stack-2" style={{ margin: 0, paddingLeft: "1.05rem" }}>
-                {step.points.map((point) => (
-                  <li key={point}>{point}</li>
-                ))}
-              </ul>
-            </li>
+            <StaggerItem key={step.n}>
+              <article className="card interactive stack-3" style={{ height: "100%" }}>
+                <div className="cluster" style={{ alignItems: "baseline" }}>
+                  <span className="eyebrow">{step.n}</span>
+                  <h3>{step.agent}</h3>
+                </div>
+                <p style={{ fontWeight: 550 }}>{step.lead}</p>
+                <ul className="muted small stack-2" style={{ margin: 0, paddingLeft: "1.05rem" }}>
+                  {step.points.map((point) => (
+                    <li key={point}>{point}</li>
+                  ))}
+                </ul>
+              </article>
+            </StaggerItem>
           ))}
-        </ol>
+        </Stagger>
       </div>
     </section>
   );
 }
 
+/** The reply gate, given a section of its own because it is the whole argument. */
+export function TheGate() {
+  return (
+    <section className="section">
+      <div className="container stack-6">
+        <Reveal>
+          <div className="stack-3">
+            <p className="eyebrow">The part that matters</p>
+            <h2>It knows when to stop.</h2>
+            <p className="lede prose">
+              Anyone can draft a reply. The reason this can be left running is what it refuses to
+              answer — and those conditions are the same on autopilot as they are on approval mode.
+            </p>
+          </div>
+        </Reveal>
+        <Reveal>
+          <ReplyGate />
+        </Reveal>
+      </div>
+    </section>
+  );
+}
+
+/** The caps, shown rather than claimed. */
+export function Safety() {
+  return (
+    <section className="section band">
+      <div className="container stack-6">
+        <Reveal>
+          <div className="stack-3">
+            <p className="eyebrow">Account safety</p>
+            <h2>Slow on purpose, for as long as it takes.</h2>
+            <p className="lede prose">
+              The failure that ends a pipeline is not a weak campaign — it is losing the account it
+              runs on. So a new account starts at {LINKEDIN_LIMITS.invitesPerDayStart} invitations a
+              day and takes {Math.round(LINKEDIN_LIMITS.warmupDays / 7)} weeks to reach{" "}
+              {LINKEDIN_LIMITS.invitesPerDayMax}, and never passes {LINKEDIN_LIMITS.invitesPerWeek} in
+              a week however many campaigns are running.
+            </p>
+          </div>
+        </Reveal>
+
+        <Reveal>
+          <WarmupRamp />
+        </Reveal>
+
+        <Stagger className="grid grid-3">
+          {SAFETY_FACTS.map((fact) => (
+            <StaggerItem key={fact.label}>
+              <div className="card tight stat" style={{ height: "100%" }}>
+                <span className="stat-label">{fact.label}</span>
+                <span className="stat-value">{fact.value}</span>
+                <span className="stat-note">{fact.note}</span>
+              </div>
+            </StaggerItem>
+          ))}
+        </Stagger>
+
+        <Reveal>
+          <p className="small subtle prose">
+            Every one of these is read from a single constants file that the sender checks before each
+            action, and a campaign may only ask for less.{" "}
+            <Link href="/linkedin-automation-limits">Where the numbers come from</Link>.
+          </p>
+        </Reveal>
+      </div>
+    </section>
+  );
+}
+
+const SAFETY_FACTS = [
+  {
+    label: "Gap between actions",
+    value: "2–9 min",
+    note: "Randomised, so it never looks like a scheduler",
+  },
+  {
+    label: "Checked before every send",
+    value: "Twice",
+    note: "At planning, and again in the second before it leaves",
+  },
+  {
+    label: "Pauses on a warning",
+    value: "Instantly",
+    note: "And resumes by itself once the account is healthy",
+  },
+];
+
 const SIGNALS = [
-  { label: "Started a new role", detail: "In the last 90 days, when budgets and tooling get revisited." },
-  { label: "Company is hiring", detail: "Open roles in the function you sell into." },
-  { label: "Recent funding", detail: "New capital, new spending decisions." },
-  { label: "Engaged with your content", detail: "Liked or commented on a post of yours." },
-  { label: "Viewed your profile", detail: "Already curious about you." },
-  { label: "Posted recently", detail: "Active on the platform, so a message gets seen." },
+  { label: "Started a new role", detail: "Budgets and tooling get revisited", points: 30, weight: 100 },
+  { label: "Engaged with your content", detail: "Liked or commented on a post", points: 25, weight: 83 },
+  { label: "Viewed your profile", detail: "Already curious about you", points: 25, weight: 83 },
+  { label: "Company is hiring", detail: "Open roles in the function you sell into", points: 20, weight: 67 },
+  { label: "Recent funding", detail: "New capital, new spending decisions", points: 20, weight: 67 },
+  { label: "Follows your company", detail: "Warm before you arrive", points: 15, weight: 50 },
 ];
 
 export function Signals() {
   return (
     <section id="signals" className="section">
       <div className="container stack-6">
-        <div className="stack-3">
-          <p className="eyebrow">The difference</p>
-          <h2>You see why every lead was chosen.</h2>
-          <p className="lede prose">
-            Other tools say &ldquo;high intent&rdquo; and leave it there. Every prospect here carries
-            the signals that put them on your list, so you can argue with the ranking and retrain it.
-          </p>
-        </div>
+        <Reveal>
+          <div className="stack-3">
+            <p className="eyebrow">Why this lead</p>
+            <h2>Every score shows its working.</h2>
+            <p className="lede prose">
+              Other tools print &ldquo;high intent&rdquo; and move on. A score you cannot interrogate
+              is a score you cannot correct — so each prospect carries the signals that produced it,
+              with the weight each one contributed.
+            </p>
+          </div>
+        </Reveal>
 
-        <div className="grid grid-3">
-          {SIGNALS.map((signal) => (
-            <div key={signal.label} className="card interactive tight stack-2">
-              <strong className="small">{signal.label}</strong>
-              <p className="muted tiny">{signal.detail}</p>
+        <Reveal>
+          <div className="card scored stack-4">
+            <div className="between">
+              <div className="stack-1">
+                <strong>Dmitri Kovač</strong>
+                <span className="small muted">Head of RevOps · Halstead Freight · 120 staff</span>
+              </div>
+              <div className="cluster">
+                <span className="pill accent">Fit 92</span>
+                <span className="pill positive">Intent 70</span>
+              </div>
             </div>
-          ))}
-        </div>
+
+            <ul className="signal-list">
+              {SIGNALS.map((signal) => (
+                <li key={signal.label}>
+                  <span className="signal-bar" style={{ ["--weight" as string]: `${signal.weight}%` }} />
+                  <span className="small">{signal.label}</span>
+                  <span className="tiny subtle">{signal.detail}</span>
+                  <span className="tiny mono">+{signal.points}</span>
+                </li>
+              ))}
+            </ul>
+
+            <p className="tiny subtle">
+              Fit decides whether to contact at all. Intent decides who first, and decays to nothing
+              over ninety days — a funding round from last spring is not a reason to message anyone
+              today.
+            </p>
+          </div>
+        </Reveal>
       </div>
     </section>
   );
@@ -230,14 +353,16 @@ export function Extras() {
     <section className="section band">
       <div className="container stack-6">
         <h2>What comes with it.</h2>
-        <div className="grid grid-2">
+        <Stagger className="grid grid-2">
           {EXTRAS.map((extra) => (
-            <article key={extra.title} className="card interactive stack-2">
-              <h3>{extra.title}</h3>
-              <p className="muted small">{extra.body}</p>
-            </article>
+            <StaggerItem key={extra.title}>
+              <article className="card interactive stack-2" style={{ height: "100%" }}>
+                <h3>{extra.title}</h3>
+                <p className="muted small">{extra.body}</p>
+              </article>
+            </StaggerItem>
           ))}
-        </div>
+        </Stagger>
       </div>
     </section>
   );

@@ -11,6 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@le/linkedin": "workspace:*",
     "@le/agents": "workspace:*",
     "@le/billing": "workspace:*",
     "@le/db": "workspace:*",
