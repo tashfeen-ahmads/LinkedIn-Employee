@@ -107,3 +107,43 @@ Note: several rows (browser extension vs. cloud split, and AI-reply presence) ar
 8. HeyReach's public API/webhook design (typed events like `CONNECTION_REQUEST_ACCEPTED`, `MESSAGE_REPLY_RECEIVED`) is a good reference model for our own event schema, even though we'll build on Unipile rather than HeyReach.
 9. Account warm-up is a real, vendor-consistent practice (3–6 weeks manual activity before automation, then a 4–6 week ramp) — our onboarding UX should encode this as a guided warm-up flow, not leave it to user judgment.
 10. Google Calendar's `freebusy.query` and Cal.com's v2 API are both lightweight enough to support "propose a time" in the Reply Agent without requiring full calendar-write scopes initially — start with freebusy read + Cal.com booking-link handoff before building two-way calendar write.
+
+## 9 · Niche and SEO research, September 2026
+
+Searched while rebuilding the marketing site. Two findings matter.
+
+**The category's own reviewers say the quiet part.** Round-ups of AI SDR tools
+open with variations of "most AI SDR tools aren't actually AI; they're
+automation with good marketing," and "LinkedIn account safety is non-negotiable
+in 2026." The buying objection in this market is not *does it work* — it is
+*will this get my account restricted*. That is the argument the site should
+lead with, and it is the one thing this product's architecture is actually
+built around.
+
+**The published safe limits validate `constants.ts`.** Independent sources
+converge on:
+
+| Their figure | Ours |
+|---|---|
+| 20–40 invitations a day, most accounts safest at 20–25 | ramps 10 → 35 |
+| 100–200 a week | 100 |
+| New accounts start 10–15/day and ramp over 2–4 weeks | start 10, ramp over 35 days |
+| Acceptance above 30% is safe; below 15% reads as spam | `minHealthyAcceptanceRate` 0.3 |
+
+We are at or below every one of them, which means the caps can be stated
+publicly as a feature rather than buried.
+
+One more, worth building on: "LinkedIn rarely restricts an account with no
+signal beforehand — there is usually a two to three day window where the
+account starts behaving oddly." That window is exactly what the nightly health
+poll exists to catch.
+
+**Keyword cluster to own.** The highest-volume queries in this niche are
+safety questions, not product questions: "linkedin automation limits 2026",
+"how many connection requests per day", "is linkedin automation safe",
+"linkedin account restricted". Every competitor publishes this article. Ours
+can cite the product's own enforced numbers, which none of theirs can.
+
+Sources: PhantomBuster, Dux-Soup, Zeliq, Fuzzy AI, Yalc, LinkedNav and
+ConnectSafely limit guides; Salesforge, Overloop, Valley and Simular tool
+round-ups. Retrieved September 2026.

@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Bricolage_Grotesque, Instrument_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
+import { SITE } from "@/lib/site";
+import { OrganizationSchema } from "@/components/schema";
 
 /*
  * Three faces, each with a job.
@@ -34,15 +36,33 @@ const jetbrains = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "LinkedIn Employee — your AI SDR for LinkedIn",
-  description:
-    "Finds your buyers on LinkedIn, starts the conversation, and books the meeting. You show up and close.",
+  metadataBase: new URL(SITE.url),
+  // Every page supplies its own title; this is the frame around it, so no page
+  // ever ships with the bare site name as its only title.
+  title: { default: `${SITE.name} — ${SITE.tagline}`, template: `%s · ${SITE.name}` },
+  description: SITE.description,
+  applicationName: SITE.name,
+  alternates: { canonical: SITE.url },
+  openGraph: {
+    type: "website",
+    siteName: SITE.name,
+    locale: SITE.locale,
+    url: SITE.url,
+    title: `${SITE.name} — ${SITE.tagline}`,
+    description: SITE.description,
+    images: [{ url: `${SITE.url}/og`, width: 1200, height: 630, alt: SITE.tagline }],
+  },
+  twitter: { card: "summary_large_image" },
+  robots: { index: true, follow: true, "max-image-preview": "large", "max-snippet": -1 },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${bricolage.variable} ${instrument.variable} ${jetbrains.variable}`}>
-      <body>{children}</body>
+      <body>
+        <OrganizationSchema />
+        {children}
+      </body>
     </html>
   );
 }

@@ -7,23 +7,30 @@ import { Reveal } from "./reveal";
  * we do not ship a stat we have not measured.
  */
 
+const NAV_LINKS = [
+  { href: "/how-it-works", label: "How it works" },
+  { href: "/linkedin-automation-limits", label: "Limits" },
+  { href: "/security", label: "Security" },
+  { href: "/pricing", label: "Pricing" },
+];
+
 export function SiteHeader() {
   return (
     <header className="site-header">
+      <a href="#main" className="skip-link">
+        Skip to content
+      </a>
       <div className="container between" style={{ height: 64, flexWrap: "nowrap" }}>
-        <Link href="/" style={{ fontWeight: 600, letterSpacing: "-0.02em" }}>
+        <Link href="/" className="wordmark">
+          <span className="wordmark-dot" aria-hidden="true" />
           LinkedIn&nbsp;Employee
         </Link>
-        <nav className="cluster-3 small">
-          <a href="#how-it-works" className="muted site-nav-link">
-            How it works
-          </a>
-          <a href="#signals" className="muted site-nav-link">
-            Intent signals
-          </a>
-          <a href="#pricing" className="muted site-nav-link">
-            Pricing
-          </a>
+        <nav className="cluster-3 small" aria-label="Main">
+          {NAV_LINKS.map((link) => (
+            <Link key={link.href} href={link.href} className="muted site-nav-link">
+              {link.label}
+            </Link>
+          ))}
           <Link href="/login" className="btn small">
             Start free trial
           </Link>
@@ -35,7 +42,7 @@ export function SiteHeader() {
 
 export function Hero() {
   return (
-    <section className="section">
+    <section className="section hero-wash">
       <div className="container hero-grid">
         <Reveal>
           <div className="stack-5">
@@ -149,7 +156,7 @@ export function HowItWorks() {
             human has approved what agent one wrote. */}
         <ol className="grid grid-2 steps">
           {STEPS.map((step) => (
-            <li key={step.n} className="card stack-3">
+            <li key={step.n} className="card interactive stack-3">
               <div className="cluster" style={{ alignItems: "baseline" }}>
                 <span className="eyebrow">{step.n}</span>
                 <h3>{step.agent}</h3>
@@ -192,7 +199,7 @@ export function Signals() {
 
         <div className="grid grid-3">
           {SIGNALS.map((signal) => (
-            <div key={signal.label} className="card tight stack-2">
+            <div key={signal.label} className="card interactive tight stack-2">
               <strong className="small">{signal.label}</strong>
               <p className="muted tiny">{signal.detail}</p>
             </div>
@@ -225,7 +232,7 @@ export function Extras() {
         <h2>What comes with it.</h2>
         <div className="grid grid-2">
           {EXTRAS.map((extra) => (
-            <article key={extra.title} className="card stack-2">
+            <article key={extra.title} className="card interactive stack-2">
               <h3>{extra.title}</h3>
               <p className="muted small">{extra.body}</p>
             </article>
@@ -312,7 +319,7 @@ export function Pricing() {
   );
 }
 
-const FAQ = [
+export const FAQ_ITEMS = [
   {
     q: "Is this safe for my LinkedIn account?",
     a: "It is the constraint we designed around. Sending starts at ten connection requests a day and ramps to thirty-five over five weeks, never exceeds one hundred a week, and is spread randomly across your working hours. If LinkedIn shows a warning, a captcha, or an unusual login screen, the account pauses itself and tells you. No tool can promise zero risk — LinkedIn's user agreement prohibits automation — so we tell you that plainly and keep the volume well under the line.",
@@ -337,7 +344,7 @@ export function Faq() {
       <div className="narrow stack-5">
         <h2>Questions worth asking</h2>
         <div className="faq">
-          {FAQ.map((item) => (
+          {FAQ_ITEMS.map((item) => (
             <details key={item.q}>
               <summary>{item.q}</summary>
               <p className="muted small">{item.a}</p>
@@ -352,11 +359,50 @@ export function Faq() {
 export function SiteFooter() {
   return (
     <footer className="site-footer">
-      <div className="container between">
-        <span className="small subtle">© {new Date().getFullYear()} LinkedIn Employee</span>
-        <span className="small subtle">
-          Not affiliated with LinkedIn Corporation. LinkedIn is a trademark of its owner.
-        </span>
+      <div className="container stack-5">
+        <div className="footer-grid">
+          <div className="stack-2">
+            <Link href="/" className="wordmark">
+              <span className="wordmark-dot" aria-hidden="true" />
+              LinkedIn&nbsp;Employee
+            </Link>
+            <p className="small subtle" style={{ maxWidth: "34ch" }}>
+              An AI SDR that works inside limits that keep your account alive.
+            </p>
+          </div>
+
+          <nav className="stack-2 small" aria-label="Product">
+            <span className="eyebrow">Product</span>
+            <Link href="/how-it-works" className="muted">
+              How it works
+            </Link>
+            <Link href="/pricing" className="muted">
+              Pricing
+            </Link>
+            <Link href="/security" className="muted">
+              Security
+            </Link>
+          </nav>
+
+          <nav className="stack-2 small" aria-label="Learn">
+            <span className="eyebrow">Learn</span>
+            <Link href="/linkedin-automation-limits" className="muted">
+              LinkedIn limits 2026
+            </Link>
+            <Link href="/about" className="muted">
+              About
+            </Link>
+          </nav>
+        </div>
+
+        <hr className="divider" />
+
+        <div className="between">
+          <span className="tiny subtle">© {new Date().getFullYear()} LinkedIn Employee</span>
+          <span className="tiny subtle">
+            Not affiliated with LinkedIn Corporation. LinkedIn is a trademark of its owner.
+          </span>
+        </div>
       </div>
     </footer>
   );

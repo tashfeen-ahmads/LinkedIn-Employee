@@ -33,6 +33,9 @@
   --accent-hover:    #2A24C4;
   --accent-soft:     #ECEBFE;
   --accent-border:   #C9C6FB;
+  /* A second hue, used only where the first needs somewhere to travel to: the
+     wordmark, one hero wash. Never for a third kind of button. */
+  --accent-2:        #12A5A0;
 
   /* Semantic colour is separate from the accent and never reused for decoration. */
   --positive:        #0B7A4B;
@@ -86,6 +89,7 @@
     --accent-hover:   #BEBAFF;
     --accent-soft:    #1C1B3A;
     --accent-border:  #322F63;
+    --accent-2:       #3ED9D2;
 
     --positive:       #55CE97;
     --positive-soft:  #0E2A1F;
@@ -115,6 +119,7 @@
   --accent-hover:   #BEBAFF;
   --accent-soft:    #1C1B3A;
   --accent-border:  #322F63;
+  --accent-2:       #3ED9D2;
   --positive:       #55CE97;
   --positive-soft:  #0E2A1F;
   --warning:        #E2A94C;
@@ -522,3 +527,99 @@ ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: none; }
 }
 .faq details[open] summary::after { content: "–"; }
 .faq details > p { margin-top: var(--space-3); }
+
+/* ------------------------------------------------- marketing, continued */
+
+/* Keyboard users get past the nav without tabbing every link. */
+.skip-link {
+  position: absolute;
+  left: var(--space-4);
+  top: -3rem;
+  z-index: 20;
+  padding: 0.5rem 0.9rem;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--text-inverse);
+  font-size: 0.875rem;
+  transition: top 130ms ease;
+}
+.skip-link:focus { top: var(--space-3); text-decoration: none; }
+
+.wordmark { display: inline-flex; align-items: center; gap: 0.5rem; font-weight: 600; letter-spacing: -0.02em; }
+.wordmark:hover { text-decoration: none; }
+.wordmark-dot {
+  width: 10px; height: 10px; border-radius: 3px; flex: none;
+  background: linear-gradient(140deg, var(--accent), var(--accent-2));
+}
+
+.footer-grid {
+  display: grid;
+  gap: var(--space-6);
+  grid-template-columns: minmax(0, 1.6fr) repeat(2, minmax(0, 1fr));
+}
+@media (max-width: 720px) { .footer-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* The four-agent list on /how-it-works: a numbered rail down the left so the
+   sequence is visible without reading the numbers. */
+.agents { list-style: none; margin: 0; padding: 0; }
+.agent-row { display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: var(--space-4); align-items: start; }
+.agent-mark {
+  display: flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-border);
+}
+.agent-mark .eyebrow { color: var(--accent); }
+@media (max-width: 620px) { .agent-row { grid-template-columns: minmax(0, 1fr); } }
+
+/* One atmospheric wash behind the hero. Painted with a pseudo-element on the
+   section rather than a div in the markup, so it cannot be tabbed to, read by
+   a screen reader, or accidentally sit above the content. */
+.hero-wash { position: relative; isolation: isolate; }
+.hero-wash::before {
+  content: "";
+  position: absolute;
+  inset: -20% -10% auto -10%;
+  height: 620px;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(50% 60% at 18% 12%, color-mix(in srgb, var(--accent) 16%, transparent) 0%, transparent 70%),
+    radial-gradient(45% 55% at 88% 8%, color-mix(in srgb, var(--accent-2) 13%, transparent) 0%, transparent 70%);
+  filter: blur(8px);
+}
+
+/* The panel's own quiet lift off the wash. */
+.hero-panel { position: relative; }
+.hero-panel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface-raised) 60%, #fff 40%);
+  opacity: .5;
+}
+
+/* Cards lift a little under the cursor — enough to read as interactive,
+   not enough to make a static grid feel restless. */
+.card.interactive { transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease; }
+.card.interactive:hover {
+  transform: translateY(-2px);
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow);
+}
+
+/* A heading needs more air beneath it than the stack's own gap gives, because
+   its own line-height already crowds the text below. The extra belongs to the
+   heading rather than to every gap in the stack. */
+:is(.stack, .stack-3, .stack-4, .stack-5, .stack-6, .stack-7) > :is(h1, h2) + * {
+  margin-top: var(--space-2);
+}
+
+/* A display headline is capped in its own right — capping the header block
+   caps the paragraph too, and a 40-character measure turns a three-word line
+   into four. */
+h1 { max-width: 18ch; }
+.narrow h1, .prose h1 { max-width: none; }
