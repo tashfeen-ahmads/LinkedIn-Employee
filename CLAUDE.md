@@ -29,7 +29,8 @@ boot, not at the first agent call.
 Tables live in the `le` schema, not `public` — this deployment shares a Supabase
 project with an unrelated product. `DB_SCHEMA` in `packages/db/src/client.ts` is
 the one definition; `scripts/schema-install.mjs` generates the install for it.
-Going live is `docs/08-go-live.md`.
+Going live is `docs/08-go-live.md`; the values to collect first are
+`docs/09-credentials.md`.
 
 Set `LINKEDIN_PROVIDER=mock`, `CALENDAR_PROVIDER=mock` and `CRM_PROVIDER=mock`
 to run the whole flow without touching anyone's real account, then

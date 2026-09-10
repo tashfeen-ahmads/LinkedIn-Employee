@@ -66,6 +66,10 @@ For Google sign-in, Authentication → Providers → Google, with a Google Cloud
 OAuth client whose authorized redirect URI is
 `https://eurlrgolgntdngyaexqr.supabase.co/auth/v1/callback`.
 
+> Every value to collect, with the exact dashboard path and expected shape, is
+> `docs/09-credentials.md`. Gather them all before step 5 — three of them
+> cannot exist until Render does, and that file says which.
+
 ### 3. OpenAI key — 5 minutes
 
 `platform.openai.com` → API keys. The agents run on `gpt-5` for anything a
@@ -111,7 +115,7 @@ In Unipile's dashboard, point two webhooks at the worker once it has a URL:
 
 | Event | URL |
 | --- | --- |
-| Messaging | `<WORKER_URL>/webhooks/unipile` |
+| Messaging | `<WORKER_URL>/webhooks/unipile/messages` |
 | Account status | `<WORKER_URL>/webhooks/unipile/accounts` |
 
 Both must carry the same secret you set as `UNIPILE_WEBHOOK_SECRET`. **A
