@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Reveal } from "./reveal";
 
 /**
  * Marketing page sections. Structure mirrors docs/05-go-to-market.md section 2.
@@ -8,30 +9,19 @@ import Link from "next/link";
 
 export function SiteHeader() {
   return (
-    <header
-      style={{
-        borderBottom: "1px solid var(--border)",
-        position: "sticky",
-        top: 0,
-        background: "var(--bg)",
-        zIndex: 10,
-      }}
-    >
-      <div
-        className="container"
-        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", height: 64 }}
-      >
-        <Link href="/" style={{ fontWeight: 640, letterSpacing: "-0.02em" }}>
+    <header className="site-header">
+      <div className="container between" style={{ height: 64, flexWrap: "nowrap" }}>
+        <Link href="/" style={{ fontWeight: 600, letterSpacing: "-0.02em" }}>
           LinkedIn&nbsp;Employee
         </Link>
-        <nav style={{ display: "flex", alignItems: "center", gap: "1.5rem", fontSize: "0.92rem" }}>
-          <a href="#how-it-works" className="muted">
+        <nav className="cluster-3 small">
+          <a href="#how-it-works" className="muted site-nav-link">
             How it works
           </a>
-          <a href="#signals" className="muted">
+          <a href="#signals" className="muted site-nav-link">
             Intent signals
           </a>
-          <a href="#pricing" className="muted">
+          <a href="#pricing" className="muted site-nav-link">
             Pricing
           </a>
           <Link href="/login" className="btn small">
@@ -45,25 +35,60 @@ export function SiteHeader() {
 
 export function Hero() {
   return (
-    <section style={{ padding: "5rem 0 3.5rem" }}>
-      <div className="container" style={{ maxWidth: 820 }}>
-        <span className="pill accent">AI SDR for LinkedIn</span>
-        <h1 style={{ marginTop: "1rem" }}>Your AI SDR for LinkedIn.</h1>
-        <p style={{ fontSize: "1.2rem", color: "var(--text-muted)", maxWidth: 620 }}>
-          It finds your buyers, starts the conversation, and books the meeting into your calendar. You
-          show up and close.
-        </p>
-        <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", marginTop: "1.75rem" }}>
-          <Link href="/login" className="btn">
-            Start 7-day free trial
-          </Link>
-          <a href="#how-it-works" className="btn secondary">
-            See how it works
-          </a>
-        </div>
-        <p className="small muted" style={{ marginTop: "1.25rem" }}>
-          Every reply is drafted for your approval until you decide to switch a campaign to autopilot.
-        </p>
+    <section className="section">
+      <div className="container hero-grid">
+        <Reveal>
+          <div className="stack-5">
+            <p className="eyebrow">AI SDR for LinkedIn</p>
+            <div className="stack-3">
+              <h1>Your AI SDR for LinkedIn.</h1>
+              <p className="lede prose">
+                It finds your buyers, starts the conversation, and books the meeting into your
+                calendar. You show up and close.
+              </p>
+            </div>
+            <div className="cluster">
+              <Link href="/login" className="btn large">
+                Start 7-day free trial
+              </Link>
+              <a href="#how-it-works" className="btn secondary large">
+                See how it works
+              </a>
+            </div>
+            <p className="small subtle">
+              Every reply is drafted for your approval until you decide to switch a campaign to
+              autopilot.
+            </p>
+          </div>
+        </Reveal>
+
+        {/* The product's whole argument in one panel: it wrote the reply, and it
+            stopped rather than sending it. Saying that is weaker than showing it. */}
+        <Reveal delay={0.12}>
+          <figure className="card raised hero-panel stack-4">
+            <figcaption className="between" style={{ gap: "var(--space-2)" }}>
+              <span className="eyebrow">Your inbox</span>
+              <span className="pill warning">Pricing question</span>
+            </figcaption>
+
+            <div className="thread stack-3">
+              <p className="small">
+                <span className="subtle">Them: </span>
+                Interesting — what does this actually cost for a team of six?
+              </p>
+              <p className="small draft">
+                <span className="subtle">Drafted: </span>
+                Happy to go through it properly — it depends on lanes rather than seats. Can I put
+                fifteen minutes in the diary this week?
+              </p>
+            </div>
+
+            <p className="tiny subtle">
+              Held for you. Pricing, legal, anything negative and anything it is unsure about waits
+              for a person, on every plan.
+            </p>
+          </figure>
+        </Reveal>
       </div>
     </section>
   );
@@ -110,38 +135,34 @@ const STEPS = [
 
 export function HowItWorks() {
   return (
-    <section id="how-it-works" style={{ padding: "4rem 0", background: "var(--surface)" }}>
-      <div className="container">
-        <span className="pill">How it works</span>
-        <h2 style={{ marginTop: "0.9rem" }}>Four agents, one job each.</h2>
-        <p className="muted" style={{ maxWidth: 560 }}>
-          Each one hands its work to the next. You stay in control at every handover.
-        </p>
-        <div
-          style={{
-            display: "grid",
-            gap: "1rem",
-            gridTemplateColumns: "repeat(auto-fit, minmax(255px, 1fr))",
-            marginTop: "2rem",
-          }}
-        >
+    <section id="how-it-works" className="section band">
+      <div className="container stack-6">
+        <div className="stack-3">
+          <p className="eyebrow">How it works</p>
+          <h2>Four agents, one job each.</h2>
+          <p className="lede prose">
+            Each one hands its work to the next. You stay in control at every handover.
+          </p>
+        </div>
+
+        {/* Numbered because it is a real sequence: agent two cannot run until a
+            human has approved what agent one wrote. */}
+        <ol className="grid grid-2 steps">
           {STEPS.map((step) => (
-            <article key={step.n} className="card">
-              <div style={{ display: "flex", alignItems: "baseline", gap: "0.6rem" }}>
-                <span className="mono muted small">{step.n}</span>
-                <h3 style={{ margin: 0 }}>{step.agent}</h3>
+            <li key={step.n} className="card stack-3">
+              <div className="cluster" style={{ alignItems: "baseline" }}>
+                <span className="eyebrow">{step.n}</span>
+                <h3>{step.agent}</h3>
               </div>
-              <p style={{ fontWeight: 560, margin: "0.75rem 0 0.5rem" }}>{step.lead}</p>
-              <ul className="muted small" style={{ margin: 0, paddingLeft: "1.1rem" }}>
+              <p style={{ fontWeight: 550 }}>{step.lead}</p>
+              <ul className="muted small stack-2" style={{ margin: 0, paddingLeft: "1.05rem" }}>
                 {step.points.map((point) => (
-                  <li key={point} style={{ marginBottom: "0.4rem" }}>
-                    {point}
-                  </li>
+                  <li key={point}>{point}</li>
                 ))}
               </ul>
-            </article>
+            </li>
           ))}
-        </div>
+        </ol>
       </div>
     </section>
   );
@@ -158,28 +179,22 @@ const SIGNALS = [
 
 export function Signals() {
   return (
-    <section id="signals" style={{ padding: "4rem 0" }}>
-      <div className="container">
-        <span className="pill">The difference</span>
-        <h2 style={{ marginTop: "0.9rem" }}>You see why every lead was chosen.</h2>
-        <p className="muted" style={{ maxWidth: 620 }}>
-          Other tools say &ldquo;high intent&rdquo; and leave it there. Every prospect here carries the
-          signals that put them on your list, so you can argue with the ranking and retrain it.
-        </p>
-        <div
-          style={{
-            display: "grid",
-            gap: "0.75rem",
-            gridTemplateColumns: "repeat(auto-fit, minmax(230px, 1fr))",
-            marginTop: "1.75rem",
-          }}
-        >
+    <section id="signals" className="section">
+      <div className="container stack-6">
+        <div className="stack-3">
+          <p className="eyebrow">The difference</p>
+          <h2>You see why every lead was chosen.</h2>
+          <p className="lede prose">
+            Other tools say &ldquo;high intent&rdquo; and leave it there. Every prospect here carries
+            the signals that put them on your list, so you can argue with the ranking and retrain it.
+          </p>
+        </div>
+
+        <div className="grid grid-3">
           {SIGNALS.map((signal) => (
-            <div key={signal.label} className="card">
-              <strong style={{ fontSize: "0.95rem" }}>{signal.label}</strong>
-              <p className="muted small" style={{ margin: "0.35rem 0 0" }}>
-                {signal.detail}
-              </p>
+            <div key={signal.label} className="card tight stack-2">
+              <strong className="small">{signal.label}</strong>
+              <p className="muted tiny">{signal.detail}</p>
             </div>
           ))}
         </div>
@@ -205,23 +220,14 @@ const EXTRAS = [
 
 export function Extras() {
   return (
-    <section style={{ padding: "4rem 0", background: "var(--surface)" }}>
-      <div className="container">
+    <section className="section band">
+      <div className="container stack-6">
         <h2>What comes with it.</h2>
-        <div
-          style={{
-            display: "grid",
-            gap: "1rem",
-            gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
-            marginTop: "1.75rem",
-          }}
-        >
+        <div className="grid grid-2">
           {EXTRAS.map((extra) => (
-            <article key={extra.title} className="card">
+            <article key={extra.title} className="card stack-2">
               <h3>{extra.title}</h3>
-              <p className="muted small" style={{ margin: 0 }}>
-                {extra.body}
-              </p>
+              <p className="muted small">{extra.body}</p>
             </article>
           ))}
         </div>
@@ -263,51 +269,43 @@ const PLANS = [
 
 export function Pricing() {
   return (
-    <section id="pricing" style={{ padding: "4rem 0" }}>
-      <div className="container">
-        <h2>Pricing</h2>
-        <p className="muted">Per seat, per month. Seven-day free trial on every plan.</p>
-        <div
-          style={{
-            display: "grid",
-            gap: "1rem",
-            gridTemplateColumns: "repeat(auto-fit, minmax(250px, 1fr))",
-            marginTop: "1.75rem",
-          }}
-        >
+    <section id="pricing" className="section">
+      <div className="container stack-6">
+        <div className="stack-3">
+          <p className="eyebrow">Pricing</p>
+          <h2>Per seat, per month.</h2>
+          <p className="lede prose">Seven-day free trial on every plan. No card to start.</p>
+        </div>
+
+        <div className="grid grid-2">
           {PLANS.map((plan) => (
-            <article
-              key={plan.name}
-              className="card"
-              style={plan.highlight ? { borderColor: "var(--accent)", boxShadow: "var(--shadow)" } : undefined}
-            >
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <h3 style={{ margin: 0 }}>{plan.name}</h3>
+            <article key={plan.name} className={`card stack-4 plan${plan.highlight ? " plan-featured" : ""}`}>
+              <div className="between">
+                <h3>{plan.name}</h3>
                 {plan.highlight ? <span className="pill accent">Most popular</span> : null}
               </div>
-              <p style={{ fontSize: "2rem", fontWeight: 660, margin: "0.6rem 0 0.2rem" }}>
-                {plan.price}
-                <span className="muted" style={{ fontSize: "0.95rem", fontWeight: 400 }}>
-                  {" "}
-                  / seat / mo
-                </span>
+
+              <p className="price">
+                <span className="mono">{plan.price}</span>
+                <span className="small muted"> / seat / mo</span>
               </p>
-              <ul className="small" style={{ margin: "1rem 0 1.25rem", paddingLeft: "1.1rem" }}>
+
+              <ul className="small muted stack-2" style={{ margin: 0, paddingLeft: "1.05rem" }}>
                 {plan.features.map((feature) => (
-                  <li key={feature} style={{ marginBottom: "0.35rem" }}>
-                    {feature}
-                  </li>
+                  <li key={feature}>{feature}</li>
                 ))}
               </ul>
-              <Link href="/login" className="btn secondary small">
+
+              <Link href="/login" className={`btn${plan.highlight ? "" : " secondary"} block`}>
                 Start free trial
               </Link>
             </article>
           ))}
         </div>
-        <p className="small muted" style={{ marginTop: "1.25rem" }}>
-          A LinkedIn Sales Navigator seat is recommended on Pro and Teams and is billed by LinkedIn, not
-          by us.
+
+        <p className="small subtle prose">
+          A LinkedIn Sales Navigator seat is recommended on Pro and Teams and is billed by LinkedIn,
+          not by us.
         </p>
       </div>
     </section>
@@ -335,19 +333,14 @@ const FAQ = [
 
 export function Faq() {
   return (
-    <section style={{ padding: "4rem 0", background: "var(--surface)" }}>
-      <div className="narrow">
+    <section className="section band">
+      <div className="narrow stack-5">
         <h2>Questions worth asking</h2>
-        <div style={{ marginTop: "1.5rem" }}>
+        <div className="faq">
           {FAQ.map((item) => (
-            <details
-              key={item.q}
-              style={{ borderBottom: "1px solid var(--border)", padding: "1rem 0" }}
-            >
-              <summary style={{ cursor: "pointer", fontWeight: 560 }}>{item.q}</summary>
-              <p className="muted" style={{ margin: "0.75rem 0 0" }}>
-                {item.a}
-              </p>
+            <details key={item.q}>
+              <summary>{item.q}</summary>
+              <p className="muted small">{item.a}</p>
             </details>
           ))}
         </div>
@@ -358,13 +351,10 @@ export function Faq() {
 
 export function SiteFooter() {
   return (
-    <footer style={{ borderTop: "1px solid var(--border)", padding: "2.5rem 0" }}>
-      <div
-        className="container"
-        style={{ display: "flex", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}
-      >
-        <span className="small muted">© {new Date().getFullYear()} LinkedIn Employee</span>
-        <span className="small muted">
+    <footer className="site-footer">
+      <div className="container between">
+        <span className="small subtle">© {new Date().getFullYear()} LinkedIn Employee</span>
+        <span className="small subtle">
           Not affiliated with LinkedIn Corporation. LinkedIn is a trademark of its owner.
         </span>
       </div>

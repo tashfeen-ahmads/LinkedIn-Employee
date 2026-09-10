@@ -52,70 +52,50 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     .maybeSingle();
 
   return (
-    <div style={{ display: "flex", minHeight: "100vh" }}>
-      <aside
-        style={{
-          width: 220,
-          borderRight: "1px solid var(--border)",
-          padding: "1.25rem 1rem",
-          background: "var(--surface)",
-          flexShrink: 0,
-        }}
-      >
-        <Link href="/app" style={{ fontWeight: 640, fontSize: "0.95rem" }}>
-          LinkedIn&nbsp;Employee
-        </Link>
-        <p className="small muted" style={{ margin: "0.25rem 0 1.5rem" }}>
-          {session.workspaceName}
-        </p>
-        <nav style={{ display: "grid", gap: "0.15rem" }}>
+    <div className="app">
+      <aside className="app-aside">
+        <div className="stack-2">
+          <Link href="/app" style={{ fontWeight: 600 }}>
+            LinkedIn&nbsp;Employee
+          </Link>
+          <p className="tiny subtle">{session.workspaceName}</p>
+        </div>
+
+        <nav className="nav">
           {NAV.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                padding: "0.45rem 0.6rem",
-                borderRadius: 8,
-                fontSize: "0.92rem",
-              }}
-            >
+            <Link key={item.href} href={item.href}>
               {item.label}
               {item.href === "/app/inbox" && waiting ? (
-                <span className="pill accent">{waiting}</span>
+                <span className="nav-count">{waiting}</span>
               ) : null}
             </Link>
           ))}
         </nav>
       </aside>
 
-      <div style={{ flex: 1, minWidth: 0 }}>
-        {billingMessage ? (
-          <div
-            className={`notice ${entitlement.canSend ? "warning" : "danger"}`}
-            style={{ margin: "1rem 1.5rem 0", borderRadius: "var(--radius)" }}
-          >
-            {billingMessage}{" "}
-            <Link href="/app/billing" style={{ textDecoration: "underline" }}>
-              Billing
-            </Link>
+      <div className="app-main">
+        {billingMessage || (account && account.status !== "active") ? (
+          <div className="stack-3" style={{ padding: "var(--space-4) var(--space-5) 0" }}>
+            {billingMessage ? (
+              <div className={`notice ${entitlement.canSend ? "warning" : "danger"}`}>
+                <p>
+                  {billingMessage} <Link href="/app/billing">Billing</Link>
+                </p>
+              </div>
+            ) : null}
+            {account && account.status !== "active" ? (
+              <div className={`notice ${account.status === "restricted" ? "danger" : "warning"}`}>
+                <p>
+                  <strong>LinkedIn account {account.status.replaceAll("_", " ")}.</strong>{" "}
+                  {account.status_detail ?? "Sending is paused until this is resolved."}{" "}
+                  <Link href="/app/team">Reconnect</Link>
+                </p>
+              </div>
+            ) : null}
           </div>
         ) : null}
-        {account && account.status !== "active" ? (
-          <div
-            className={`notice ${account.status === "restricted" ? "danger" : "warning"}`}
-            style={{ margin: "1rem 1.5rem 0", borderRadius: "var(--radius)" }}
-          >
-            <strong>LinkedIn account {account.status.replace("_", " ")}.</strong>{" "}
-            {account.status_detail ?? "Sending is paused until this is resolved."}{" "}
-            <Link href="/app/team" style={{ textDecoration: "underline" }}>
-              Reconnect
-            </Link>
-          </div>
-        ) : null}
-        <main style={{ padding: "1.75rem 1.5rem 4rem", maxWidth: 1100 }}>{children}</main>
+
+        <main className="app-body stack-6">{children}</main>
       </div>
     </div>
   );

@@ -12,16 +12,17 @@
   },
   "dependencies": {
     "@le/agents": "workspace:*",
+    "@le/billing": "workspace:*",
     "@le/db": "workspace:*",
+    "@le/email": "workspace:*",
     "@le/shared": "workspace:*",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.116.0",
+    "framer-motion": "^13.2.0",
     "next": "^15.1.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "server-only": "^0.0.1",
-    "@le/billing": "workspace:*",
-    "@le/email": "workspace:*"
+    "server-only": "^0.0.1"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

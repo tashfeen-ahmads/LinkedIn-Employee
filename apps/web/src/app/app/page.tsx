@@ -27,52 +27,51 @@ export default async function OverviewPage() {
 
   return (
     <>
-      <h1 style={{ fontSize: "1.6rem" }}>
-        {session.fullName ? `Morning, ${session.fullName.split(" ")[0]}.` : "Overview"}
-      </h1>
+      <header className="page-head">
+        <p className="eyebrow">Overview</p>
+        <h1>{session.fullName ? `Morning, ${session.fullName.split(" ")[0]}.` : "Overview"}</h1>
+      </header>
 
-      <section
-        style={{
-          display: "grid",
-          gap: "0.75rem",
-          gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
-          margin: "1.5rem 0 2.5rem",
-        }}
-      >
-        {counts.map((stage) => (
-          <div key={stage.label} className="card">
-            <p className="small muted" style={{ margin: 0 }}>
-              {stage.label}
-            </p>
-            <p className="mono" style={{ fontSize: "1.9rem", fontWeight: 640, margin: "0.2rem 0 0" }}>
-              {stage.value}
-            </p>
-          </div>
-        ))}
+      <section className="stack-3">
+        <div className="grid grid-4">
+          {counts.map((stage) => (
+            <div key={stage.label} className="card tight stat">
+              <span className="stat-label">{stage.label}</span>
+              <span className="stat-value">{stage.value}</span>
+            </div>
+          ))}
+        </div>
       </section>
 
-      <section style={{ marginBottom: "2.5rem" }}>
-        <h2 style={{ fontSize: "1.15rem" }}>Rates</h2>
-        <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap" }}>
+      <section className="stack-3">
+        <div className="section-head">
+          <h2>Rates</h2>
+          <p className="small subtle">Against the targets a healthy account holds.</p>
+        </div>
+        <div className="grid grid-2">
           <Rate label="Acceptance" numerator={accepted} denominator={invited} target={0.3} />
           <Rate label="Reply" numerator={replied} denominator={accepted} target={0.15} />
         </div>
       </section>
 
-      <section>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <h2 style={{ fontSize: "1.15rem", margin: 0 }}>Customer profiles</h2>
+      <section className="stack-3">
+        <div className="between">
+          <div className="section-head">
+            <h2>Customer profiles</h2>
+            <p className="small subtle">Nothing is searched for until one is approved.</p>
+          </div>
           <Link href="/app/strategy" className="btn secondary small">
             Review and approve
           </Link>
         </div>
+
         {profiles?.length ? (
-          <div className="table-scroll" style={{ marginTop: "1rem" }}>
+          <div className="table-scroll">
             <table>
               <thead>
                 <tr>
                   <th>Profile</th>
-                  <th>Priority</th>
+                  <th className="num">Priority</th>
                   <th>Status</th>
                 </tr>
               </thead>
@@ -80,7 +79,7 @@ export default async function OverviewPage() {
                 {profiles.map((profile) => (
                   <tr key={profile.id}>
                     <td>{profile.name}</td>
-                    <td className="mono">{profile.priority}</td>
+                    <td className="num mono">{profile.priority}</td>
                     <td>
                       {profile.do_not_pursue ? (
                         <span className="pill">Not pursuing</span>
@@ -96,16 +95,23 @@ export default async function OverviewPage() {
             </table>
           </div>
         ) : (
-          <p className="muted" style={{ marginTop: "1rem" }}>
-            The Strategy Agent has not finished yet, or has not been run. Profiles appear here when it
-            does.
-          </p>
+          <div className="empty">
+            <p className="small">
+              The Strategy Agent has not finished yet, or has not been run. Your business profile and
+              three to five customer profiles appear here when it does.
+            </p>
+          </div>
         )}
       </section>
     </>
   );
 }
 
+/**
+ * A rate against its target. The target is drawn as a mark on the bar rather
+ * than written beside the number: "12.4% (target 15%)" makes a reader do the
+ * comparison, a bar does it for them.
+ */
 function Rate({
   label,
   numerator,
@@ -119,27 +125,58 @@ function Rate({
 }) {
   if (denominator === 0) {
     return (
-      <div>
-        <p className="small muted" style={{ margin: 0 }}>
-          {label}
-        </p>
-        <p className="muted" style={{ margin: 0 }}>
-          Not enough data yet
-        </p>
+      <div className="card tight stat">
+        <span className="stat-label">{label}</span>
+        <span className="stat-value subtle">—</span>
+        <span className="stat-note">Not enough data yet</span>
       </div>
     );
   }
+
   const rate = numerator / denominator;
+  const met = rate >= target;
+  // Both bars share a scale that runs to twice the target, so acceptance and
+  // reply can be read against each other rather than each against itself.
+  const scale = target * 2;
+  const width = Math.min(100, (rate / scale) * 100);
+
   return (
-    <div>
-      <p className="small muted" style={{ margin: 0 }}>
-        {label}
-      </p>
-      <p className="mono" style={{ fontSize: "1.35rem", fontWeight: 620, margin: "0.1rem 0" }}>
-        {(rate * 100).toFixed(1)}%
-      </p>
-      <span className={`pill ${rate >= target ? "positive" : "warning"}`}>
-        target {(target * 100).toFixed(0)}%
+    <div className="card tight stat">
+      <span className="stat-label">{label}</span>
+      <span className="stat-value">{(rate * 100).toFixed(1)}%</span>
+      <div
+        aria-hidden="true"
+        style={{
+          position: "relative",
+          height: 6,
+          borderRadius: 999,
+          background: "var(--surface-sunken)",
+          marginBlock: "var(--space-2)",
+        }}
+      >
+        <div
+          style={{
+            width: `${width}%`,
+            height: "100%",
+            borderRadius: 999,
+            background: met ? "var(--positive)" : "var(--warning)",
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            left: "50%",
+            top: -3,
+            width: 2,
+            height: 12,
+            background: "var(--text-subtle)",
+            borderRadius: 1,
+          }}
+        />
+      </div>
+      <span className="stat-note">
+        {numerator.toLocaleString()} of {denominator.toLocaleString()} · target{" "}
+        {(target * 100).toFixed(0)}%
       </span>
     </div>
   );
