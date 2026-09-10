@@ -4,6 +4,7 @@ import { Pipeline, ReplyGate, WarmupRamp } from "./diagrams";
 import { Forecast } from "./forecast";
 import { GateSimulator } from "./gate-simulator";
 import { Reveal, Stagger, StaggerItem } from "./reveal";
+import { Wordmark } from "./logo";
 
 /**
  * Marketing page sections. Structure mirrors docs/05-go-to-market.md section 2.
@@ -24,21 +25,27 @@ export function SiteHeader() {
       <a href="#main" className="skip-link">
         Skip to content
       </a>
-      <div className="container between" style={{ height: 64, flexWrap: "nowrap" }}>
-        <Link href="/" className="wordmark">
-          <span className="wordmark-dot" aria-hidden="true" />
-          LinkedIn&nbsp;Employee
+      <div className="container site-header-inner">
+        <Link href="/" aria-label="LinkedIn Employee, home">
+          <Wordmark />
         </Link>
-        <nav className="cluster-3 small" aria-label="Main">
+
+        <nav className="site-nav" aria-label="Main">
           {NAV_LINKS.map((link) => (
-            <Link key={link.href} href={link.href} className="muted site-nav-link">
+            <Link key={link.href} href={link.href} className="site-nav-link">
               {link.label}
             </Link>
           ))}
+        </nav>
+
+        <div className="site-header-actions">
+          <Link href="/login" className="site-nav-link site-signin">
+            Sign in
+          </Link>
           <Link href="/login" className="btn small">
             Start free trial
           </Link>
-        </nav>
+        </div>
       </div>
     </header>
   );
@@ -512,51 +519,87 @@ export function Faq() {
   );
 }
 
+/** The last thing on every page: one ask, stated plainly. */
+export function ClosingCta() {
+  return (
+    <section className="closing">
+      <div className="container closing-inner">
+        <div className="stack-3">
+          <h2>Start with ten invitations a day.</h2>
+          <p className="lede prose">
+            Seven days free, no card. Your first campaign runs in approval mode, so nothing reaches
+            anyone until you have read it.
+          </p>
+        </div>
+        <div className="cluster">
+          <Link href="/login" className="btn large">
+            Start free trial
+          </Link>
+          <Link href="/how-it-works" className="btn secondary large">
+            See how it works
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+const FOOTER_COLUMNS = [
+  {
+    title: "Product",
+    links: [
+      { href: "/how-it-works", label: "How it works" },
+      { href: "/pricing", label: "Pricing" },
+      { href: "/security", label: "Security and data" },
+      { href: "/login", label: "Sign in" },
+    ],
+  },
+  {
+    title: "Learn",
+    links: [
+      { href: "/linkedin-automation-limits", label: "LinkedIn limits in 2026" },
+      { href: "/about", label: "Why it is built this way" },
+    ],
+  },
+];
+
 export function SiteFooter() {
   return (
     <footer className="site-footer">
-      <div className="container stack-5">
+      <div className="container stack-6">
         <div className="footer-grid">
-          <div className="stack-2">
-            <Link href="/" className="wordmark">
-              <span className="wordmark-dot" aria-hidden="true" />
-              LinkedIn&nbsp;Employee
+          <div className="stack-3">
+            <Link href="/" aria-label="LinkedIn Employee, home">
+              <Wordmark />
             </Link>
-            <p className="small subtle" style={{ maxWidth: "34ch" }}>
-              An AI SDR that works inside limits that keep your account alive.
+            <p className="small muted" style={{ maxWidth: "32ch" }}>
+              An AI SDR that works inside the limits that keep a LinkedIn account alive.
+            </p>
+            <p className="tiny subtle">
+              Built in the open. Every cap on this site is read from the code that enforces it.
             </p>
           </div>
 
-          <nav className="stack-2 small" aria-label="Product">
-            <span className="eyebrow">Product</span>
-            <Link href="/how-it-works" className="muted">
-              How it works
-            </Link>
-            <Link href="/pricing" className="muted">
-              Pricing
-            </Link>
-            <Link href="/security" className="muted">
-              Security
-            </Link>
-          </nav>
-
-          <nav className="stack-2 small" aria-label="Learn">
-            <span className="eyebrow">Learn</span>
-            <Link href="/linkedin-automation-limits" className="muted">
-              LinkedIn limits 2026
-            </Link>
-            <Link href="/about" className="muted">
-              About
-            </Link>
-          </nav>
+          {FOOTER_COLUMNS.map((column) => (
+            <nav key={column.title} className="footer-column" aria-label={column.title}>
+              <span className="eyebrow">{column.title}</span>
+              {column.links.map((link) => (
+                <Link key={link.href} href={link.href} className="footer-link">
+                  {link.label}
+                </Link>
+              ))}
+            </nav>
+          ))}
         </div>
 
         <hr className="divider" />
 
-        <div className="between">
+        <div className="footer-base">
           <span className="tiny subtle">© {new Date().getFullYear()} LinkedIn Employee</span>
           <span className="tiny subtle">
-            Not affiliated with LinkedIn Corporation. LinkedIn is a trademark of its owner.
+            Not affiliated with LinkedIn Corporation. LinkedIn is a trademark of its owner, and
+            automated access is against their user agreement — which is why the limits on this site
+            are what they are.
           </span>
         </div>
       </div>

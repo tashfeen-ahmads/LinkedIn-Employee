@@ -58,7 +58,15 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${bricolage.variable} ${instrument.variable} ${jetbrains.variable}`}>
+    // Stamped light rather than following the visitor's system. The dark palette
+    // is still defined in globals.css behind :root[data-theme="dark"], so a
+    // toggle is a one-line change from here — but the site ships light, on
+    // purpose, rather than becoming a different product on someone's laptop.
+    <html
+      lang="en"
+      data-theme="light"
+      className={`${bricolage.variable} ${instrument.variable} ${jetbrains.variable}`}
+    >
       <body>
         <OrganizationSchema />
         {children}

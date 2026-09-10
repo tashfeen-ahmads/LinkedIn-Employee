@@ -814,3 +814,86 @@ input[type="range"]::-moz-range-thumb {
   border: 3px solid var(--surface-raised);
 }
 input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+
+/* ------------------------------------------------------- brand furniture */
+
+/* The mark. Plate in the accent, bars in white, the outcome bar in the second
+   hue — the same story the funnel on the page tells. */
+.logo-mark { flex: none; display: block; }
+.logo-plate { fill: var(--accent); }
+.logo-bar { fill: #fff; opacity: .95; }
+.logo-bar.is-mid { opacity: .75; }
+.logo-bar.is-outcome { fill: var(--accent-2); opacity: 1; }
+
+.wordmark { display: inline-flex; align-items: center; gap: 0.55rem; }
+.wordmark:hover { text-decoration: none; }
+.wordmark-text {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.0625rem;
+  letter-spacing: -0.025em;
+  color: var(--text);
+  white-space: nowrap;
+}
+/* The second word is the quieter half of the lockup, so the mark and the first
+   word carry the identity and the whole thing still reads at a glance. */
+.wordmark-thin { font-weight: 500; color: var(--text-muted); }
+
+.site-header-inner {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--space-5);
+  height: 68px;
+}
+.site-nav { display: flex; justify-content: center; gap: var(--space-1); }
+.site-nav-link {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  padding: 0.4rem 0.65rem;
+  border-radius: var(--radius-sm);
+  transition: color 130ms ease, background 130ms ease;
+}
+.site-nav-link:hover { color: var(--text); background: var(--surface); text-decoration: none; }
+.site-header-actions { display: flex; align-items: center; gap: var(--space-2); }
+
+@media (max-width: 900px) {
+  .site-header-inner { grid-template-columns: auto auto; }
+  .site-nav { display: none; }
+}
+@media (max-width: 480px) {
+  .site-signin { display: none; }
+  .wordmark-thin { display: none; }
+}
+
+/* The closing band: one ask, on a ground of its own so it reads as the end of
+   the page rather than another section of it. */
+.closing {
+  background: var(--accent-soft);
+  border-top: 1px solid var(--accent-border);
+  padding-block: var(--space-8);
+}
+.closing-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-6);
+  flex-wrap: wrap;
+}
+.closing h2 { max-width: 22ch; }
+
+.site-footer { border-top: 1px solid var(--border); padding-block: var(--space-7) var(--space-6); background: var(--surface); }
+.footer-grid {
+  display: grid;
+  gap: var(--space-6);
+  grid-template-columns: minmax(0, 1.7fr) repeat(2, minmax(0, 1fr));
+}
+.footer-column { display: flex; flex-direction: column; gap: var(--space-2); align-items: flex-start; }
+.footer-link { font-size: 0.9rem; color: var(--text-muted); }
+.footer-link:hover { color: var(--text); }
+.footer-base { display: flex; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; align-items: baseline; }
+.footer-base > :last-child { max-width: 62ch; text-align: right; }
+@media (max-width: 720px) {
+  .footer-grid { grid-template-columns: minmax(0, 1fr); }
+  .footer-base > :last-child { text-align: left; }
+}
