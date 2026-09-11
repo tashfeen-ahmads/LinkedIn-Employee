@@ -19,12 +19,15 @@ export function createWorkerContext(env: Env): WorkerContext {
   const db = createServiceClient(env.NEXT_PUBLIC_SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
   const client = createLlmClient(env);
 
+  // loadEnv has already refused a "unipile" deployment with either value
+  // missing, so the non-null assertions here are the schema's guarantee rather
+  // than an assumption.
   const linkedin: LinkedInProvider =
     env.LINKEDIN_PROVIDER === "mock"
       ? new MockLinkedInProvider()
       : new UnipileProvider({
-          dsn: env.UNIPILE_DSN,
-          accessToken: env.UNIPILE_ACCESS_TOKEN,
+          dsn: env.UNIPILE_DSN!,
+          accessToken: env.UNIPILE_ACCESS_TOKEN!,
           webhookSecret: env.UNIPILE_WEBHOOK_SECRET,
         });
 

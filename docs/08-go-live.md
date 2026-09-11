@@ -132,6 +132,14 @@ message from it.
 
 ### 5. Render — 15 minutes
 
+**This no longer waits for Unipile.** `render.yaml` ships with
+`LINKEDIN_PROVIDER=mock`, so the worker boots, serves `/health`, runs its
+schedulers and talks to the database without any LinkedIn credentials at all.
+Deploy it now, confirm it is healthy, and flip the variable to `unipile` when
+step 4 is done. A worker set to `unipile` without credentials refuses to start
+— which is the failure worth having, rather than one that looks healthy until
+the first send.
+
 Render → New → Blueprint → this repository. `render.yaml` creates the worker and
 a paid Redis (`noeviction`: the free tier evicts under memory pressure, which
 for a job queue means losing queued sends with no error anywhere).

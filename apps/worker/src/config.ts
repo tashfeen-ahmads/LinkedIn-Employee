@@ -13,8 +13,15 @@ const EnvSchema = z.object({
   ANTHROPIC_API_KEY: z.string().min(1).optional(),
   LLM_PROVIDER: z.enum(["openai", "anthropic"]).optional(),
   REDIS_URL: z.string().default("redis://localhost:6379"),
-  UNIPILE_DSN: z.string().min(1),
-  UNIPILE_ACCESS_TOKEN: z.string().min(1),
+  /**
+   * Required only when LINKEDIN_PROVIDER is "unipile", which is the default.
+   * The mock provider exists so the whole flow can run without touching
+   * anyone's real account, and demanding real credentials to use it made the
+   * mock useless for the case it was built for — standing a deployment up
+   * before the LinkedIn subscription exists.
+   */
+  UNIPILE_DSN: z.string().min(1).optional(),
+  UNIPILE_ACCESS_TOKEN: z.string().min(1).optional(),
   /** Required in production: without it, anyone can forge an inbound reply. */
   UNIPILE_WEBHOOK_SECRET: z.string().optional(),
   /** Shared with the web app to authenticate internal job dispatch. */
@@ -60,6 +67,21 @@ const EnvSchema = z.object({
       path: ["OPENAI_API_KEY"],
       message: "set OPENAI_API_KEY or ANTHROPIC_API_KEY",
     });
+  }
+
+  // Checked here rather than at the first send: a worker that boots without
+  // the credentials it needs looks healthy for hours, and the failure surfaces
+  // as a campaign that quietly never started.
+  if (env.LINKEDIN_PROVIDER === "unipile") {
+    for (const key of ["UNIPILE_DSN", "UNIPILE_ACCESS_TOKEN"] as const) {
+      if (!env[key]) {
+        ctx.addIssue({
+          code: "custom",
+          path: [key],
+          message: `required unless LINKEDIN_PROVIDER=mock`,
+        });
+      }
+    }
   }
 });
 

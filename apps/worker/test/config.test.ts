@@ -32,6 +32,25 @@ describe("loadEnv", () => {
     expect(() => loadEnv(withoutKey)).toThrow(/OPENAI_API_KEY/);
   });
 
+  it("runs on the mock LinkedIn provider with no Unipile credentials at all", () => {
+    // The mock exists so a deployment can stand up before the LinkedIn
+    // subscription does. Requiring real credentials to use it defeated that.
+    const { UNIPILE_DSN, UNIPILE_ACCESS_TOKEN, ...withoutUnipile } = complete;
+    void UNIPILE_DSN;
+    void UNIPILE_ACCESS_TOKEN;
+    const env = loadEnv({ ...withoutUnipile, LINKEDIN_PROVIDER: "mock" });
+    expect(env.LINKEDIN_PROVIDER).toBe("mock");
+  });
+
+  it("still demands Unipile credentials when it will actually reach LinkedIn", () => {
+    // Caught at boot, not at the first send — a worker that starts without them
+    // looks healthy for hours and the failure reads as a campaign that never
+    // began.
+    const { UNIPILE_DSN, ...withoutDsn } = complete;
+    void UNIPILE_DSN;
+    expect(() => loadEnv(withoutDsn)).toThrow(/UNIPILE_DSN/);
+  });
+
   it("takes either provider's key", () => {
     const { OPENAI_API_KEY, ...rest } = complete;
     void OPENAI_API_KEY;

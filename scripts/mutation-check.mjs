@@ -719,6 +719,14 @@ const MUTATIONS = [
     to: 'const tier = input.tier ?? "sales_navigator";',
     pkg: "@le/linkedin",
   },
+  {
+    id: "config/unipile-required-when-live",
+    rule: "A worker that will really reach LinkedIn refuses to boot without Unipile credentials, rather than failing at the first send",
+    file: "apps/worker/src/config.ts",
+    from: 'if (env.LINKEDIN_PROVIDER === "unipile") {',
+    to: "if (false) {",
+    pkg: "@le/worker",
+  },
 ];
 
 const filter = process.argv[2];
