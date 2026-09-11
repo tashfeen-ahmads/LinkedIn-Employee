@@ -59,8 +59,16 @@ with a foreign-key error nobody could read.
 | `OPENAI_API_KEY` | Render | `sk-proj-…` or `sk-…` |
 | `LLM_PROVIDER` | Render, already `openai` in render.yaml | — |
 
-Scope the key to a project with a spend limit. Two models get called: `gpt-5`
-for anything a prospect reads, `gpt-5-mini` for classification and fit scoring.
+Scope the key to a project with a spend limit. **Everything runs on
+`gpt-5-mini`** — writing and classification both (`MODELS` in
+`packages/shared/src/constants.ts`). gpt-5 stays priced in
+`packages/shared/src/pricing.ts` so switching the writer back is one word and
+`/app/usage` keeps reporting correctly either way.
+
+That choice is worth revisiting after the first fortnight. Approval mode means a
+human reads every draft before it sends, so the quality of the prose is visible
+immediately rather than inferred — and the eval will not tell you, because it
+scores the classifier and never the writing.
 
 Before the first campaign, spend a few dollars on the eval:
 `OPENAI_API_KEY=sk-… pnpm --filter @le/agents eval:classify`. It has never been

@@ -109,7 +109,7 @@ describe("createLlmClient", () => {
   });
 
   it("names the models each provider actually calls", () => {
-    expect(createLlmClient({ OPENAI_API_KEY: "sk-test" }).models.writer).toBe("gpt-5");
+    expect(createLlmClient({ OPENAI_API_KEY: "sk-test" }).models.writer).toBe("gpt-5-mini");
     expect(createLlmClient({ ANTHROPIC_API_KEY: "sk-ant" }).models.classifier).toBe("claude-haiku-4-5");
   });
 });

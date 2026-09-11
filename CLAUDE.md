@@ -21,7 +21,7 @@ Build before typechecking: the apps resolve `@le/*` through each package's
 touch. If a query result infers as `never`, rebuild `@le/db` first.
 
 The agents run on whichever model provider has a key: `OPENAI_API_KEY` selects
-GPT-5 and GPT-5-mini, `ANTHROPIC_API_KEY` selects Opus and Haiku, and the seam
+GPT-5-mini for both roles, `ANTHROPIC_API_KEY` selects Opus and Haiku, and the seam
 between them is `createLlmClient` in `packages/agents/src/llm.ts`. Nothing above
 that file knows which one answered. A deployment with neither key is refused at
 boot, not at the first agent call.

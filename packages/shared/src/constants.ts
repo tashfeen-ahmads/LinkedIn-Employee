@@ -64,7 +64,12 @@ export const OPT_OUT_PHRASES = [
  * unpriced model reports its spend as unknown forever.
  */
 export const MODELS = {
-  openai: { writer: "gpt-5", classifier: "gpt-5-mini" },
+  // Both roles on gpt-5-mini by choice, not by default: gpt-5's output costs
+  // five times as much, and the first campaigns run in approval mode where a
+  // human reads every draft before it sends. That review is the quality gate
+  // the eval cannot be — it scores the classifier, never the prose. If drafts
+  // start reading like a template, `writer` is the one word to change.
+  openai: { writer: "gpt-5-mini", classifier: "gpt-5-mini" },
   anthropic: { writer: "claude-opus-5", classifier: "claude-haiku-4-5" },
 } as const;
 

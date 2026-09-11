@@ -78,11 +78,12 @@ OAuth client whose authorized redirect URI is
 
 ### 3. OpenAI key — 5 minutes
 
-`platform.openai.com` → API keys. The agents run on `gpt-5` for anything a
-prospect reads and `gpt-5-mini` for classification and fit scoring
-(`MODELS` in `packages/shared/src/constants.ts`).
+`platform.openai.com` → API keys. Both agent roles run on `gpt-5-mini`
+(`MODELS` in `packages/shared/src/constants.ts`) — a deliberate cost choice,
+since gpt-5's output costs five times as much and the first campaigns are
+reviewed by a human before anything sends.
 
-> Check the two prices in `packages/shared/src/pricing.ts` against the published
+> Check the prices in `packages/shared/src/pricing.ts` against the published
 > rates before quoting anyone a cost per meeting. They are the one thing in this
 > repo that changes without anybody touching it, and a stale number there makes
 > `/app/usage` confidently wrong.
