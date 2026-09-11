@@ -39,21 +39,27 @@ door and worth remembering before the first customer demo.
 
 Each of these needs an account I have no credentials for. In this order.
 
-### 1. Expose the `le` schema to PostgREST — 2 minutes
+### 1. Expose the `le` schema to PostgREST — done
 
-Already applied in-database:
+Applied in-database and **verified working** on 2026-09-11: a request carrying
+`Accept-Profile: le` returns 200.
 
 ```sql
 alter role authenticator set pgrst.db_schemas = 'public, graphql_public, le';
 ```
 
-I could not verify it took effect: outbound HTTPS from this session cannot reach
-`*.supabase.co`. **Confirm it in the dashboard** — Supabase → Settings → API →
-Exposed schemas should list `le`. Add it there if it does not.
+No dashboard change was needed — PostgREST honours the role setting. If it ever
+stops working, the dashboard equivalent is Settings → **Data API** → Exposed
+schemas (not Settings → API Keys, which is a different page).
 
-This is the single most misleading failure in the whole list: without it every
-request returns 404, which reads exactly like a migration that never ran.
-`node scripts/preflight.mjs` tells the two apart.
+Worth knowing what the failure looks like: an unexposed schema answers 404, which
+reads exactly like a migration that never ran. `node scripts/preflight.mjs`
+tells the two apart.
+
+**Use the new API key format.** This project answers `401 Invalid API key` to the
+legacy `anon` and `service_role` JWTs, even though the dashboard still lists
+them. The publishable key is in Netlify; create a secret key for Render. See
+`docs/09-credentials.md`.
 
 ### 2. Supabase Auth redirect URLs — 2 minutes
 
@@ -134,7 +140,7 @@ Render prompts for every `sync: false` value:
 | Variable | Where it comes from |
 | --- | --- |
 | `NEXT_PUBLIC_SUPABASE_URL` | `https://eurlrgolgntdngyaexqr.supabase.co` |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Settings → API → service_role |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase → Settings → API Keys → **secret key** (`sb_secret_…`; the legacy service_role JWT is rejected) |
 | `OPENAI_API_KEY` | step 3 |
 | `UNIPILE_DSN`, `UNIPILE_ACCESS_TOKEN`, `UNIPILE_WEBHOOK_SECRET` | step 4 |
 | `CREDENTIALS_KEY` | the second `openssl` line above |

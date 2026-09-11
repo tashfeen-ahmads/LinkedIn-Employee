@@ -18,19 +18,30 @@ straight into the dashboard that needs them.
 
 Project `presence-prod`, schema `le`. Dashboard → Settings → API.
 
+**This project rejects the legacy `anon` / `service_role` JWTs.** They are
+listed in the dashboard and reported as enabled by the management API, but the
+gateway answers `401 Invalid API key` to both. Verified 2026-09-11 by request,
+not by reading the setting — which is the only way this is knowable, because
+nothing in the dashboard says so.
+
+Use the new key format throughout.
+
 | Value | Where | Goes to | Shape |
 | --- | --- | --- | --- |
-| `NEXT_PUBLIC_SUPABASE_URL` | Project URL | Render + Netlify (set) | `https://eurlrgolgntdngyaexqr.supabase.co` |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | anon / publishable | Netlify (set) | long JWT, safe in a browser |
-| `SUPABASE_SERVICE_ROLE_KEY` | **service_role** | Render only | long JWT — bypasses RLS entirely |
+| `NEXT_PUBLIC_SUPABASE_URL` | Settings → Data API | Render + Netlify (set) | `https://eurlrgolgntdngyaexqr.supabase.co` |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Settings → API Keys → **publishable** | Netlify (set) | `sb_publishable_…` — safe in a browser |
+| `SUPABASE_SERVICE_ROLE_KEY` | Settings → API Keys → **secret** (create one) | Render only | `sb_secret_…` — bypasses RLS entirely |
 
-The service role key never goes in Netlify. The web app runs as the signed-in
-user so RLS applies; the worker is the only thing that bypasses it, and it does
-so on the server.
+The env var names keep saying "anon" and "service_role" because that is what
+they mean to the SDK; only the key format changed.
 
-**Check while you are here:** Settings → API → Exposed schemas must list `le`.
-Without it every request 404s in a way that reads exactly like a failed
-migration.
+The secret key never goes in Netlify. The web app runs as the signed-in user so
+RLS applies; the worker is the only thing that bypasses it, and it does so on
+the server.
+
+**Exposed schemas** lives on Settings → **Data API**, not Settings → API Keys.
+For this project `le` is already exposed and verified working — a request with
+`Accept-Profile: le` returns 200.
 
 ## 2. OpenAI
 
@@ -155,8 +166,9 @@ campaign; needed before a second customer.
 
 ## The gathering checklist
 
-- [ ] Supabase service_role key copied
-- [ ] `le` confirmed under Exposed schemas
+- [x] `le` schema exposed — verified by request, 200
+- [x] Netlify carries the publishable key (the legacy anon JWT was rejected)
+- [ ] Supabase **secret key** created (`sb_secret_…`) and stored privately
 - [ ] Supabase Auth: Site URL and redirect URLs set to the Netlify domain
 - [ ] OpenAI key created, spend limit set
 - [ ] Unipile DSN (with port) and access token copied
