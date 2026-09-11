@@ -39,7 +39,17 @@ const REQUIRED = [
     fix: "Supabase → Project Settings → API → service_role. Never expose this to a browser.",
   },
   { key: "REDIS_URL", why: "The job queues.", fix: "Upstash, Railway or a Redis on the worker host" },
-  { key: "UNIPILE_DSN", why: "Reaching LinkedIn at all.", fix: "Unipile dashboard → API → DSN" },
+];
+
+/**
+ * Required only when the deployment will really reach LinkedIn.
+ *
+ * A mock deployment is a legitimate state — it is how the backend goes up
+ * before the subscription exists — and reporting two blocking failures at it
+ * would send someone to buy credentials they do not need yet.
+ */
+const UNIPILE_REQUIRED = [
+  { key: "UNIPILE_DSN", why: "Reaching LinkedIn at all.", fix: "Unipile dashboard → API → DSN (includes the port)" },
   { key: "UNIPILE_ACCESS_TOKEN", why: "Reaching LinkedIn at all.", fix: "Unipile dashboard → API" },
 ];
 
@@ -47,7 +57,7 @@ const IMPORTANT = [
   {
     key: "UNIPILE_WEBHOOK_SECRET",
     why: "Without it the worker refuses every inbound reply AND every account connection — deliberately, because an unsigned webhook could bind a stranger's LinkedIn account to a rep.",
-    fix: "Set the same secret in Unipile's webhook config and here.",
+    fix: "Set the same secret in Unipile's webhook config and here. Not needed while LINKEDIN_PROVIDER=mock.",
   },
   {
     key: "INTERNAL_API_SECRET",
@@ -116,6 +126,18 @@ for (const item of REQUIRED) {
   }
 }
 
+{
+  const live = (process.env.LINKEDIN_PROVIDER ?? "unipile") !== "mock";
+  if (live) {
+    for (const item of UNIPILE_REQUIRED) {
+      process.env[item.key] ? ok(item.key, "set") : fail(item.key, item.why, item.fix);
+    }
+  } else {
+    // Reported once, below, as a warning rather than an ok: running in mock is
+    // a legitimate state and must still never be mistaken for a live one.
+  }
+}
+
 for (const item of IMPORTANT) {
   const value = process.env[item.key];
   if (!value) warn(item.key, item.why, item.fix);
@@ -135,8 +157,8 @@ const mock = process.env.LINKEDIN_PROVIDER === "mock";
 if (mock) {
   warn(
     "LINKEDIN_PROVIDER",
-    "set to mock — nothing will reach a real LinkedIn account",
-    "Unset it, or set it to unipile, when you mean to send for real.",
+    "set to mock — nothing reaches a real LinkedIn account, and no Unipile credentials are needed",
+    "Set it to unipile, with a DSN and access token, when you mean to send for real.",
   );
 }
 
