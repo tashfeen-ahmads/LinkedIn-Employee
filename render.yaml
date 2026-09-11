@@ -66,13 +66,16 @@ services:
         sync: false
       - key: LLM_PROVIDER
         value: openai
-      # Set to "mock" to stand the worker up before the Unipile subscription
-      # exists: everything runs, nothing reaches LinkedIn, and the three values
-      # below can stay empty. Switch to "unipile" once they are filled in — the
-      # worker refuses to boot as "unipile" without them, which is the failure
-      # you want, rather than a healthy-looking worker whose first send fails.
+      # "unipile" once the three values below are filled in; "mock" to stand the
+      # worker up before the subscription exists — everything runs and nothing
+      # reaches LinkedIn. A worker set to "unipile" without credentials refuses
+      # to boot, which is the failure you want, rather than a healthy-looking
+      # worker whose first send fails hours later.
+      #
+      # Either way nothing leaves until a rep connects an account AND a human
+      # launches a campaign.
       - key: LINKEDIN_PROVIDER
-        value: mock
+        value: unipile
       - key: UNIPILE_DSN
         sync: false
       - key: UNIPILE_ACCESS_TOKEN
