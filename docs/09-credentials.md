@@ -43,6 +43,13 @@ the server.
 For this project `le` is already exposed and verified working — a request with
 `Accept-Profile: le` returns 200.
 
+**The signup path is verified too.** Inserting a row into `auth.users` creates
+the matching `le.profiles` row through `on_auth_user_created_le`, carrying the
+email and `full_name` from the signup metadata; deleting the user cascades the
+profile away. Tested against the live database on 2026-09-11 and cleaned up
+after. A broken trigger here would let sign-in succeed and then fail onboarding
+with a foreign-key error nobody could read.
+
 ## 2. OpenAI
 
 `platform.openai.com` → API keys → Create secret key.
@@ -169,7 +176,9 @@ campaign; needed before a second customer.
 - [x] `le` schema exposed — verified by request, 200
 - [x] Netlify carries the publishable key (the legacy anon JWT was rejected)
 - [ ] Supabase **secret key** created (`sb_secret_…`) and stored privately
+- [x] Signup trigger verified against the live database
 - [ ] Supabase Auth: Site URL and redirect URLs set to the Netlify domain
+      (needed before the first login, not before Render)
 - [ ] OpenAI key created, spend limit set
 - [ ] Unipile DSN (with port) and access token copied
 - [ ] Resend domain **verified** (DNS propagated), API key created, from-address on that domain
