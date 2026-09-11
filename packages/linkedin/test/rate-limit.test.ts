@@ -15,6 +15,7 @@ const MIDWEEK_AFTERNOON = new Date("2026-09-09T14:00:00Z");
 function usage(overrides: Partial<AccountUsage> = {}): AccountUsage {
   return {
     connectedAt: new Date("2026-01-01T00:00:00Z"),
+    firstActionAt: new Date("2026-01-01T00:00:00Z"),
     invitesToday: 0,
     invitesThisWeek: 0,
     messagesToday: 0,
@@ -27,21 +28,45 @@ function usage(overrides: Partial<AccountUsage> = {}): AccountUsage {
 
 describe("warm-up ramp", () => {
   it("starts new accounts at the conservative daily cap", () => {
-    const connectedAt = new Date("2026-09-09T00:00:00Z");
-    expect(dailyInviteCap(connectedAt, MIDWEEK_AFTERNOON)).toBe(LINKEDIN_LIMITS.invitesPerDayStart);
+    const firstAction = new Date("2026-09-09T00:00:00Z");
+    expect(dailyInviteCap(firstAction, MIDWEEK_AFTERNOON)).toBe(LINKEDIN_LIMITS.invitesPerDayStart);
   });
 
   it("reaches the maximum only after the full warm-up period", () => {
-    const connectedAt = new Date("2026-09-09T00:00:00Z");
-    const dayBefore = new Date(connectedAt.getTime() + (LINKEDIN_LIMITS.warmupDays - 1) * 86_400_000);
-    const after = new Date(connectedAt.getTime() + LINKEDIN_LIMITS.warmupDays * 86_400_000);
-    expect(dailyInviteCap(connectedAt, dayBefore)).toBeLessThan(LINKEDIN_LIMITS.invitesPerDayMax);
-    expect(dailyInviteCap(connectedAt, after)).toBe(LINKEDIN_LIMITS.invitesPerDayMax);
+    const firstAction = new Date("2026-09-09T00:00:00Z");
+    const dayBefore = new Date(firstAction.getTime() + (LINKEDIN_LIMITS.warmupDays - 1) * 86_400_000);
+    const after = new Date(firstAction.getTime() + LINKEDIN_LIMITS.warmupDays * 86_400_000);
+    expect(dailyInviteCap(firstAction, dayBefore)).toBeLessThan(LINKEDIN_LIMITS.invitesPerDayMax);
+    expect(dailyInviteCap(firstAction, after)).toBe(LINKEDIN_LIMITS.invitesPerDayMax);
   });
 
-  it("never exceeds the maximum however old the account is", () => {
+  it("never exceeds the maximum however long the account has been sending", () => {
     const ancient = new Date("2020-01-01T00:00:00Z");
     expect(dailyInviteCap(ancient, MIDWEEK_AFTERNOON)).toBe(LINKEDIN_LIMITS.invitesPerDayMax);
+  });
+
+  it("holds an account that has never sent at the starting cap, however old it is", () => {
+    // The case this ramp exists for. Connect an account while wiring up a
+    // deployment, launch a fortnight later, and measuring from connection would
+    // hand it 25 invitations on its first day of sending — the exact burst that
+    // gets an account restricted.
+    expect(dailyInviteCap(null, MIDWEEK_AFTERNOON)).toBe(LINKEDIN_LIMITS.invitesPerDayStart);
+  });
+
+  it("refuses a send on day one for an account connected weeks ago but never used", () => {
+    const connectedLongAgo = new Date("2026-07-01T00:00:00Z");
+    const decision = checkAction(
+      "invite",
+      usage({
+        connectedAt: connectedLongAgo,
+        firstActionAt: null,
+        invitesToday: LINKEDIN_LIMITS.invitesPerDayStart,
+      }),
+      MIDWEEK_AFTERNOON,
+    );
+
+    expect(decision.allowed).toBe(false);
+    expect(decision.allowed === false && decision.reason).toBe("daily_invite_cap");
   });
 });
 

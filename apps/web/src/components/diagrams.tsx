@@ -13,6 +13,11 @@ import { DrawPath } from "./reveal";
 
 /* ------------------------------------------------------ the warm-up ramp */
 
+/**
+ * Day zero of the ramp is an account's first invitation, not the day it was
+ * connected — see dailyInviteCap. An account that has been connected for weeks
+ * and never sent anything is still on the left-hand edge of this chart.
+ */
 const DAY_ZERO = new Date("2026-01-01T00:00:00Z");
 const RAMP_DAYS = LINKEDIN_LIMITS.warmupDays + 7;
 
@@ -46,7 +51,7 @@ export function WarmupRamp() {
   return (
     <figure className="chart stack-3">
       <figcaption className="stack-1">
-        <h3>What a new account is allowed to send, day by day</h3>
+        <h3>What a new account is allowed to send, from its first invitation</h3>
         <p className="small muted">
           Drawn by calling <code>dailyInviteCap</code> — the same function the sender checks before
           every invitation. Not a redrawing of it.
@@ -94,7 +99,7 @@ export function WarmupRamp() {
 
         {[0, 7, 14, 21, 28, 35, 42].map((day) => (
           <text key={day} x={x(day)} y={h - 12} className="axis" textAnchor="middle">
-            {day === 0 ? "day 0" : `d${day}`}
+            {day === 0 ? "first send" : `d${day}`}
           </text>
         ))}
       </svg>

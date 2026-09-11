@@ -10,6 +10,15 @@ export type { WorkingHours };
 
 export interface AccountUsage {
   connectedAt: Date;
+  /**
+   * When this account first sent anything through us, or null if it never has.
+   *
+   * This — not connectedAt — is day zero of the warm-up. An account connected
+   * six weeks before its first campaign would otherwise be treated as fully
+   * warmed and allowed 35 invitations on its first day of sending, which is
+   * exactly the burst the ramp exists to prevent.
+   */
+  firstActionAt: Date | null;
   invitesToday: number;
   invitesThisWeek: number;
   messagesToday: number;
@@ -34,13 +43,23 @@ export type DenyReason =
 
 /**
  * Daily invite allowance for an account, ramping linearly from
- * invitesPerDayStart on the connection day to invitesPerDayMax after warmupDays.
- * A brand-new account that blasts its full allowance on day one is the single
- * biggest cause of restrictions, so the ramp is not optional.
+ * invitesPerDayStart to invitesPerDayMax over warmupDays.
+ *
+ * The clock starts at the account's FIRST ACTION, not at connection. Those are
+ * the same day for someone who connects and launches together, and weeks apart
+ * for someone who wires up their deployment over a fortnight — and in the
+ * second case, measuring from connection would hand a never-used account its
+ * full allowance on the first day it ever sends. That burst is the single
+ * biggest cause of restrictions, which makes it the one thing the ramp exists
+ * to prevent.
+ *
+ * An account that has sent nothing sits at the starting allowance, however long
+ * ago it was connected.
  */
-export function dailyInviteCap(connectedAt: Date, now: Date = new Date()): number {
+export function dailyInviteCap(firstActionAt: Date | null, now: Date = new Date()): number {
   const { invitesPerDayStart, invitesPerDayMax, warmupDays } = LINKEDIN_LIMITS;
-  const days = Math.floor((now.getTime() - connectedAt.getTime()) / 86_400_000);
+  if (!firstActionAt) return invitesPerDayStart;
+  const days = Math.floor((now.getTime() - firstActionAt.getTime()) / 86_400_000);
   if (days >= warmupDays) return invitesPerDayMax;
   if (days <= 0) return invitesPerDayStart;
   const step = (invitesPerDayMax - invitesPerDayStart) / warmupDays;
@@ -93,7 +112,7 @@ export function checkAction(kind: ActionKind, usage: AccountUsage, now: Date = n
     if (usage.invitesThisWeek >= LINKEDIN_LIMITS.invitesPerWeek) {
       return { allowed: false, reason: "weekly_invite_cap", retryAfterMs: untilTomorrow };
     }
-    if (usage.invitesToday >= dailyInviteCap(usage.connectedAt, now)) {
+    if (usage.invitesToday >= dailyInviteCap(usage.firstActionAt, now)) {
       return { allowed: false, reason: "daily_invite_cap", retryAfterMs: untilTomorrow };
     }
     return { allowed: true };

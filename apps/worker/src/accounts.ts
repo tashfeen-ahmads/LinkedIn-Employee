@@ -13,6 +13,8 @@ export interface AccountRecord {
   provider_account_id: string | null;
   status: string;
   connected_at: string | null;
+  /** Day zero of the warm-up ramp; null until the account has sent anything. */
+  first_action_at: string | null;
   invites_today: number;
   invites_this_week: number;
   messages_today: number;
@@ -29,7 +31,7 @@ const DEFAULT_HOURS: WorkingHours = { start: 8, end: 18, days: [1, 2, 3, 4, 5] }
  * function that needs it rather than being retyped at each call site.
  */
 export const ACCOUNT_USAGE_COLUMNS =
-  "id, workspace_id, user_id, provider_account_id, status, connected_at, invites_today, invites_this_week, messages_today, counters_reset_on, last_action_at, working_hours";
+  "id, workspace_id, user_id, provider_account_id, status, connected_at, first_action_at, invites_today, invites_this_week, messages_today, counters_reset_on, last_action_at, working_hours";
 
 export function parseWorkingHours(value: unknown): WorkingHours {
   if (value && typeof value === "object") {
@@ -44,6 +46,7 @@ export function parseWorkingHours(value: unknown): WorkingHours {
 export function toUsage(account: AccountRecord, timezone: string): AccountUsage {
   return {
     connectedAt: account.connected_at ? new Date(account.connected_at) : new Date(),
+    firstActionAt: account.first_action_at ? new Date(account.first_action_at) : null,
     invitesToday: account.invites_today,
     invitesThisWeek: account.invites_this_week,
     messagesToday: account.messages_today,

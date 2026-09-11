@@ -142,6 +142,8 @@ export type LinkedinAccountRow = {
   messages_today: number;
   counters_reset_on: string | null;
   last_action_at: string | null;
+  /** Day zero of the warm-up ramp. Null until the account has sent anything. */
+  first_action_at: string | null;
   working_hours: Json;
   created_at: string;
 };

@@ -74,7 +74,7 @@ async function enqueueInvites(
   const decision = checkAction("invite", usage, now);
   if (!decision.allowed && decision.reason !== "too_soon") return 0;
 
-  const accountCap = dailyInviteCap(usage.connectedAt, now) - usage.invitesToday;
+  const accountCap = dailyInviteCap(usage.firstActionAt, now) - usage.invitesToday;
   const weeklyLeft = LINKEDIN_LIMITS.invitesPerWeek - usage.invitesThisWeek;
   const budget = Math.max(0, Math.min(accountCap, weeklyLeft, campaign.daily_invite_cap));
   if (budget === 0) return 0;

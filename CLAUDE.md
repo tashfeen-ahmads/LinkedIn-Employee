@@ -9,7 +9,7 @@ plan. This file is for whoever works on the code next.
 pnpm install
 pnpm build          # packages compile to dist/; apps typecheck against those
 pnpm typecheck
-pnpm test           # 429 tests, no network, no API key needed
+pnpm test           # 432 tests, no network, no API key needed
 node scripts/mutation-check.mjs   # proves the safety tests actually bite
 node scripts/preflight.mjs        # is a deployment actually able to send?
 pnpm --filter @le/web dev
@@ -50,40 +50,47 @@ tests that were verified by deliberately breaking the code.
    (`record_linkedin_action`, called by `recordAction`). Reading a counter and
    writing back read + 1 loses one of two concurrent sends, which is an account
    quietly passing its cap. A failed write raises rather than being swallowed.
-3. **The caps in `packages/shared/src/constants.ts` are product rules, not
+3. **The warm-up ramp starts at an account's first action, not at its
+   connection** (`first_action_at`, stamped by `record_linkedin_action`; read by
+   `dailyInviteCap`). Those are the same day for someone who connects and
+   launches together, and weeks apart for someone wiring up a deployment — and
+   measuring from connection would hand a never-used account its full allowance
+   on the first day it ever sends. An account that has sent nothing sits at the
+   starting cap however long ago it was connected.
+4. **The caps in `packages/shared/src/constants.ts` are product rules, not
    tunables.** They come from the vendor consensus recorded in
    `docs/06-research.md` section 2. Per-account overrides may only go lower.
    Unipile applies no limits of its own, so this file is the only thing between
    a campaign and a restricted account.
-4. **The reply gate (`applyRules` in `packages/agents/src/reply.ts`) is pure and
+5. **The reply gate (`applyRules` in `packages/agents/src/reply.ts`) is pure and
    stays pure.** Autopilot changes what happens to a clean message, never what
    counts as clean.
-5. **The model never invents a datetime.** `packages/calendar/src/slots.ts`
+6. **The model never invents a datetime.** `packages/calendar/src/slots.ts`
    produces the only times that reach a prospect; the model picks from that
    list. Booking matches an acceptance against the slots we actually offered.
-6. **Opt-outs are checked deterministically as well as by the model**
+7. **Opt-outs are checked deterministically as well as by the model**
    (`containsOptOut`). Sending after "remove me" is the one mistake this
    product cannot make.
-7. **Webhooks and the internal API fail closed.** A missing secret rejects
+8. **Webhooks and the internal API fail closed.** A missing secret rejects
    rather than accepts; see `apps/worker/src/server.ts`. That includes
    `/webhooks/unipile/accounts`, where a forged delivery would bind a
    stranger's LinkedIn account to a rep's row and send every campaign message
    from it.
-8. **Targeting refuses a customer profile nobody has approved**
+9. **Targeting refuses a customer profile nobody has approved**
    (`approved_at` in `apps/worker/src/jobs/targeting.ts`). The Strategy Agent
    writes profiles; it does not approve them. Approval happens on
    `/app/strategy` and nowhere else.
-9. **Nothing held for a human is invisible.** `/app/inbox` lists conversations,
+10. **Nothing held for a human is invisible.** `/app/inbox` lists conversations,
    not drafts: a conversation can be flagged with no draft at all, and while the
    page listed drafts those were shown to nobody. Holds carry a kind
    (`apps/worker/src/holds.ts`) so sending a reply clears the reply hold and
    never the one asking someone to book a meeting by hand.
-10. **The knowledge base is never truncated to fit the prompt**
+11. **The knowledge base is never truncated to fit the prompt**
     (`selectKnowledge` in `packages/agents/src/knowledge.ts`). A document too
     long is left out whole and named to the model as unread. Half a pricing
     page is answered from confidently, and the wrong price reaches the prospect
     looking like the right one.
-11. **Prospect search runs on the tier the account actually has**
+12. **Prospect search runs on the tier the account actually has**
     (`has_sales_navigator` → `tier` in `apps/worker/src/jobs/targeting.ts`).
     Sales Navigator is a separate ~$120/month seat, and a search sent to a tier
     an account does not have returns nothing at all — which reads on screen as
@@ -93,7 +100,7 @@ tests that were verified by deliberately breaking the code.
     campaign before anyone launches it. A filter that silently becomes a
     suggestion is worse than one that is missing: the list still looks like
     what was asked for.
-12. **The shared exclusion list is checked immediately before every send**, not
+13. **The shared exclusion list is checked immediately before every send**, not
     only when a campaign is built (`matchExclusion` in
     `packages/shared/src/exclusions.ts`). A campaign launched this morning
     already has invitations queued against every name on it; an account added

@@ -727,6 +727,14 @@ const MUTATIONS = [
     to: "if (false) {",
     pkg: "@le/worker",
   },
+  {
+    id: "limiter/warmup-starts-at-first-send",
+    rule: "The warm-up ramp starts at an account's first action, so one connected weeks early still starts at the low cap",
+    file: "packages/linkedin/src/rate-limit.ts",
+    from: "if (!firstActionAt) return invitesPerDayStart;",
+    to: "if (!firstActionAt) return invitesPerDayMax;",
+    pkg: "@le/linkedin",
+  },
 ];
 
 const filter = process.argv[2];
