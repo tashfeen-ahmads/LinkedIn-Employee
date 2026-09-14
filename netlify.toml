@@ -12,6 +12,18 @@
   # Relative to base, which is apps/web.
   publish = ".next"
 
+  # Without this, Netlify applies its default rule for a site with a base
+  # directory: skip the build unless something under `apps/web` changed. In this
+  # repo that is wrong — the web app imports @le/db and @le/shared, so a change
+  # in packages/ changes the site — and it fails silently. The push is accepted,
+  # no build appears, and the site keeps serving an older commit with nothing
+  # anywhere saying why. It skipped ten consecutive pushes before anyone noticed.
+  #
+  # Exit 0 means skip. So: build whenever the web app, any package it compiles
+  # against, the lockfile, or this file itself moved; skip a worker-only or
+  # docs-only push, which genuinely cannot change what is served.
+  ignore = "cd ../.. && git diff --quiet $CACHED_COMMIT_REF $COMMIT_REF -- apps/web packages pnpm-lock.yaml netlify.toml"
+
 [build.environment]
   NODE_VERSION = "22"
   NEXT_TELEMETRY_DISABLED = "1"
