@@ -5,6 +5,13 @@ FROM node:22-slim AS build
 RUN corepack enable
 WORKDIR /repo
 
+# pnpm treats removing node_modules as destructive and asks first. There is no
+# terminal in a Docker build, so `pnpm prune` below aborts with
+# ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY *after* a successful compile —
+# which reads like a build failure rather than a missing confirmation. CI=true
+# is pnpm's own answer, and it makes the install deterministic besides.
+ENV CI=true
+
 # Manifests first, so a dependency install is cached across code changes.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json tsconfig.base.json ./
 COPY apps/worker/package.json apps/worker/
