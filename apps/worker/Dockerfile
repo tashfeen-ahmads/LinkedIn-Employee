@@ -5,11 +5,7 @@ FROM node:22-slim AS build
 RUN corepack enable
 WORKDIR /repo
 
-# pnpm treats removing node_modules as destructive and asks first. There is no
-# terminal in a Docker build, so `pnpm prune` below aborts with
-# ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY *after* a successful compile —
-# which reads like a build failure rather than a missing confirmation. CI=true
-# is pnpm's own answer, and it makes the install deterministic besides.
+# No terminal here, so pnpm must not stop to ask anything.
 ENV CI=true
 
 # Manifests first, so a dependency install is cached across code changes.
@@ -27,7 +23,22 @@ RUN pnpm install --frozen-lockfile
 
 COPY . .
 RUN pnpm build --filter @le/worker...
-RUN pnpm prune --prod
+
+# There is deliberately no `pnpm prune --prod` here.
+#
+# pnpm prunes against the *current* project, and at a workspace root that is
+# only the root package.json — a handful of build tools. Everything else gets
+# collected out of the shared virtual store, which leaves the symlinks in
+# apps/worker/node_modules pointing at directories that no longer exist. The
+# build still succeeds; the container then dies on its first import with
+# ERR_MODULE_NOT_FOUND for @hono/node-server, a plain `dependencies` entry.
+#
+# Until CI=true was set, pnpm refused to run without a terminal and the prune
+# never actually happened, so the breakage it causes had never been reached.
+#
+# The image therefore ships its devDependencies. That is a few hundred
+# megabytes for a service that is never scaled out, against a startup crash
+# that only appears in production.
 
 FROM node:22-slim AS runtime
 
