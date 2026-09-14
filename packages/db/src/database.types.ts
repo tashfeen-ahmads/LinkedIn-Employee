@@ -394,6 +394,16 @@ export type Database = {
         Args: { p_account_id: string; p_kind: "invite" | "message" };
         Returns: { invites_today: number; invites_this_week: number; messages_today: number }[];
       };
+      /**
+       * Creates a workspace and the caller's owner membership together, and
+       * returns the new id. Two writes rather than one because a workspace is
+       * only visible to its members: inserted from the client, the row cannot
+       * be read back — not even by whoever just created it.
+       */
+      create_workspace: {
+        Args: { p_name: string; p_slug: string; p_full_name?: string | null };
+        Returns: string;
+      };
     };
     Enums: {
       membership_role: MembershipRole;

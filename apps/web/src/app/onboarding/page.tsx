@@ -28,27 +28,23 @@ async function createWorkspace(formData: FormData) {
   }
 
   const slug = `${slugify(companyName)}-${Math.random().toString(36).slice(2, 7)}`;
-  const trialEnds = new Date(Date.now() + 7 * 86_400_000).toISOString();
 
-  const { data: workspace, error } = await supabase
-    .from("workspaces")
-    .insert({ name: companyName, slug, plan: "trial", trial_ends_at: trialEnds })
-    .select("id")
-    .single();
-  if (error || !workspace) redirect(`/onboarding?error=${encodeURIComponent(error?.message ?? "Could not create workspace")}`);
-
-  await supabase.from("memberships").insert({
-    workspace_id: workspace.id,
-    user_id: user.id,
-    role: "owner",
+  // One call, not three. A workspace is only visible to its members, so
+  // inserting it here and asking for the new id back was refused by the SELECT
+  // policy — the membership that would make it visible is written next. The
+  // function does both writes together, under the caller's own identity.
+  const { data: workspaceId, error } = await supabase.rpc("create_workspace", {
+    p_name: companyName,
+    p_slug: slug,
+    p_full_name: fullName || null,
   });
-  if (fullName) await supabase.from("profiles").update({ full_name: fullName }).eq("id", user.id);
+  if (error || !workspaceId) redirect(`/onboarding?error=${encodeURIComponent(error?.message ?? "Could not create workspace")}`);
 
   // The Strategy Agent runs in the worker; the web tier only enqueues it. A
   // worker outage must not lose the signup, so a failure here is logged and the
   // user can retry from the dashboard.
   await callWorker("/jobs/strategy", {
-    workspaceId: workspace.id,
+    workspaceId,
     userId: user.id,
     websiteUrl: websiteUrl || undefined,
     linkedinCompanyUrl: linkedinCompanyUrl || undefined,

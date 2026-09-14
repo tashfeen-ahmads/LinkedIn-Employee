@@ -29,7 +29,7 @@ create or replace function record_linkedin_action(p_account_id uuid, p_kind text
 returns table (invites_today int, invites_this_week int, messages_today int)
 language sql
 security definer
-set search_path = le
+set search_path = public
 as $$
   update linkedin_accounts
   set
