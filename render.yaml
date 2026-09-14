@@ -7,6 +7,22 @@
 # stored here. Nothing in this file is a credential.
 
 services:
+  # Render's free key-value tier is evicted under memory pressure, which for a
+  # job queue means losing queued sends with no error anywhere. Paid on purpose.
+  #
+  # A Key Value instance is a service (`type: keyvalue`), not a top-level
+  # section — a top-level `keyValue:` block is rejected by the blueprint parser
+  # with "field KeyValue not found in type file.spec", which reads like a
+  # missing feature rather than a misplaced key.
+  - type: keyvalue
+    name: linkedin-employee-redis
+    plan: starter
+    region: frankfurt
+    maxmemoryPolicy: noeviction
+    # Empty means no public access: only services inside this Render account
+    # can reach the queue.
+    ipAllowList: []
+
   - type: web
     name: linkedin-employee-worker
     runtime: docker
@@ -104,15 +120,6 @@ services:
         sync: false
       - key: STRIPE_WEBHOOK_SECRET
         sync: false
-
-# Render's free key-value tier is evicted under memory pressure, which for a job
-# queue means losing queued sends with no error anywhere. Paid on purpose.
-keyValue:
-  - name: linkedin-employee-redis
-    plan: starter
-    region: frankfurt
-    maxmemoryPolicy: noeviction
-    ipAllowList: []
 
 previews:
   generation: off
