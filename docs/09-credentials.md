@@ -82,16 +82,26 @@ Dashboard → Access Tokens / API Keys.
 | --- | --- | --- | --- |
 | `UNIPILE_DSN` | Dashboard, your dedicated subdomain | Render | `https://apiX.unipile.com:13xxx` — full origin, no trailing slash, **includes the port** |
 | `UNIPILE_ACCESS_TOKEN` | Access Tokens | Render | opaque string |
-| `UNIPILE_WEBHOOK_SECRET` | **you invent it** | Render + Unipile's webhook config | `openssl rand -hex 32` |
+| `UNIPILE_WEBHOOK_SECRET` | **Unipile's dashboard** — check before generating one | Render | the value Unipile shows |
 
 The DSN is per-account and is not `api.unipile.com`. Getting it wrong produces
 connection errors rather than auth errors, which sends people looking in the
 wrong place.
 
-The webhook secret is not issued by Unipile — you generate it and set the same
-string in both places. A missing secret makes the worker reject every delivery,
-deliberately: a forged account webhook would bind a stranger's LinkedIn account
-to a rep's row and send every campaign message from it.
+The webhook secret is issued by Unipile, not invented here: their docs say to
+verify the signature with "your webhook secret, which you can find in the Unipile
+dashboard". Generating one and pasting it into Render produces a secret that
+matches nothing, and the worker then rejects every delivery — silently, because
+the gate fails closed. If your dashboard instead offers a field to *enter* a
+secret when creating a webhook, then it is shared and `openssl rand -hex 32` is
+the right way to make one; set the identical string on both sides.
+
+That the gate fails closed is deliberate. A forged account webhook would bind a
+stranger's LinkedIn account to a rep's row and send every campaign message from
+it.
+
+Unipile signs `<timestamp>.<body>` and sends `unipile-signature: t=…,v0=…`; the
+worker verifies that form and the plain-body form both.
 
 ## 4. Resend
 
@@ -160,8 +170,10 @@ before you have real customers, not before your own first campaign.
 
 ```bash
 openssl rand -hex 32   # CREDENTIALS_KEY — exactly 64 hex characters
-openssl rand -hex 32   # UNIPILE_WEBHOOK_SECRET
 ```
+
+`UNIPILE_WEBHOOK_SECRET` is not on this list: see section 3. Take Unipile's
+value unless their dashboard asks you to supply one.
 
 `CREDENTIALS_KEY` encrypts OAuth refresh tokens before they are stored
 (`apps/worker/src/crypto.ts`). **Changing it later makes every stored
@@ -196,7 +208,7 @@ campaign; needed before a second customer.
 - [ ] Google OAuth client created with the Supabase redirect URI
 - [ ] Google client id/secret pasted into Supabase → Auth → Providers → Google
 - [ ] `CREDENTIALS_KEY` generated and stored somewhere durable
-- [ ] `UNIPILE_WEBHOOK_SECRET` generated
+- [ ] `UNIPILE_WEBHOOK_SECRET` taken from Unipile (or generated, if their form asks for one)
 
 Everything ticked → deploy Render (`docs/08-go-live.md` step 5).
 
