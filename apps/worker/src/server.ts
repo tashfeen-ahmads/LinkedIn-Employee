@@ -204,7 +204,9 @@ export function createServer(ctx: WorkerContext, queues: Queues): Hono {
 
   app.post("/webhooks/unipile/messages", async (c) => {
     const body = await c.req.text();
-    const signature = c.req.header("x-unipile-signature") ?? undefined;
+    // Unipile sends `unipile-signature`; the x- prefixed spelling is kept as a
+    // fallback so a sender configured against the older name still verifies.
+    const signature = c.req.header("unipile-signature") ?? c.req.header("x-unipile-signature") ?? undefined;
 
     let messages;
     try {
@@ -252,7 +254,9 @@ export function createServer(ctx: WorkerContext, queues: Queues): Hono {
    */
   app.post("/webhooks/unipile/accounts", async (c) => {
     const body = await c.req.text();
-    const signature = c.req.header("x-unipile-signature") ?? undefined;
+    // Unipile sends `unipile-signature`; the x- prefixed spelling is kept as a
+    // fallback so a sender configured against the older name still verifies.
+    const signature = c.req.header("unipile-signature") ?? c.req.header("x-unipile-signature") ?? undefined;
 
     let accounts;
     try {

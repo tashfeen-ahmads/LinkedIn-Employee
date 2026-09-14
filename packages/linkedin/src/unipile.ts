@@ -462,9 +462,41 @@ function toActionError(err: unknown): ActionResult {
   return { ok: false, error: err instanceof Error ? err.message : String(err) };
 }
 
+/**
+ * Unipile signs the timestamp and the body together, not the body alone:
+ *
+ *   unipile-signature: t=1710662400,v0=<hex>
+ *   v0 = HMAC-SHA256(secret, `${t}.${rawBody}`)
+ *
+ * Verifying the body on its own — which is what this did — rejects every real
+ * delivery. Because the webhook fails closed, the symptom is not an error
+ * anyone sees: inbound replies simply never arrive, and a connected LinkedIn
+ * account never finishes binding. The campaign looks like it is running and
+ * nobody is answering.
+ *
+ * The plain-body form is still accepted so a deployment that predates this, or
+ * any sender configured to sign the body directly, keeps working. Both forms
+ * require the shared secret; neither is weaker than the other.
+ *
+ * There is deliberately no freshness window on `t`. Unipile retries a delivery
+ * the endpoint rejected, and a window narrow enough to be worth having would
+ * reject those retries permanently — trading a replay we are already idempotent
+ * against (a message is queued under its own id; an account binds only from
+ * `connecting`) for the exact silent failure described above.
+ */
 function verifySignature(body: string, signature: string, secret: string): boolean {
-  const expected = createHmac("sha256", secret).update(body).digest("hex");
-  const a = Buffer.from(expected);
-  const b = Buffer.from(signature.replace(/^sha256=/, ""));
+  const timestamp = /(?:^|,)\s*t=(\d+)\s*(?=,|$)/.exec(signature)?.[1];
+  const v0 = /(?:^|,)\s*v0=([0-9a-fA-F]+)\s*(?=,|$)/.exec(signature)?.[1];
+
+  if (timestamp && v0) {
+    return hexEquals(createHmac("sha256", secret).update(`${timestamp}.${body}`).digest("hex"), v0);
+  }
+  return hexEquals(createHmac("sha256", secret).update(body).digest("hex"), signature.replace(/^sha256=/, "").trim());
+}
+
+/** Constant-time, and length-safe: timingSafeEqual throws on a length mismatch. */
+function hexEquals(expected: string, actual: string): boolean {
+  const a = Buffer.from(expected, "utf8");
+  const b = Buffer.from(actual.toLowerCase(), "utf8");
   return a.length === b.length && timingSafeEqual(a, b);
 }
