@@ -52,6 +52,21 @@ begin
   values (btrim(p_name), p_slug, 'trial', now() + interval '7 days')
   returning id into v_id;
 
+  -- A membership references profiles, and a profile is created by a trigger on
+  -- `auth.users` — which fires on INSERT, so it only ever ran for accounts
+  -- created after this schema was installed. This deployment shares its
+  -- Supabase project with another product, so its users already existed: they
+  -- sign in rather than sign up, no trigger fires, and the membership below
+  -- fails its foreign key with nothing explaining why.
+  --
+  -- Provisioning it here covers every such user and costs nothing for the ones
+  -- the trigger already handled.
+  insert into profiles (id, email, full_name)
+  select v_user, u.email, coalesce(nullif(btrim(p_full_name), ''), u.raw_user_meta_data ->> 'full_name')
+  from auth.users u
+  where u.id = v_user
+  on conflict (id) do nothing;
+
   -- Same statement block as the insert above: either both land or neither
   -- does, so the orphan case cannot happen.
   insert into memberships (workspace_id, user_id, role)

@@ -43,12 +43,22 @@ the server.
 For this project `le` is already exposed and verified working — a request with
 `Accept-Profile: le` returns 200.
 
-**The signup path is verified too.** Inserting a row into `auth.users` creates
-the matching `le.profiles` row through `on_auth_user_created_le`, carrying the
-email and `full_name` from the signup metadata; deleting the user cascades the
-profile away. Tested against the live database on 2026-09-11 and cleaned up
-after. A broken trigger here would let sign-in succeed and then fail onboarding
-with a foreign-key error nobody could read.
+**The signup trigger works — and only for new accounts.** Inserting a row into
+`auth.users` creates the matching `le.profiles` row through
+`on_auth_user_created_le`, carrying the email and `full_name` from the signup
+metadata; deleting the user cascades the profile away. Tested against the live
+database on 2026-09-11.
+
+That test passed and proved less than it looked. The trigger fires `after insert
+on auth.users`, so it has never run for an account that already existed — and
+this project is shared with another product whose users predate the `le` schema
+by months. They sign in rather than sign up, no trigger fires, and onboarding
+died on `memberships_user_id_fkey`. Testing with a freshly inserted user is
+exactly the case that works.
+
+`le.create_workspace` now provisions the profile from `auth.users` when it is
+missing, so the trigger is a fast path rather than the only one. Verified
+against a real pre-existing account, in a transaction that was rolled back.
 
 ## 2. OpenAI
 
