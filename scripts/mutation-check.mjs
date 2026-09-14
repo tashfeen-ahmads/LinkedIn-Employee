@@ -25,7 +25,7 @@ const MUTATIONS = [
     id: "limiter/daily-invite-cap",
     rule: "An account past its daily invite cap must not send",
     file: "packages/linkedin/src/rate-limit.ts",
-    from: "if (usage.invitesToday >= dailyInviteCap(usage.connectedAt, now)) {",
+    from: "if (usage.invitesToday >= dailyInviteCap(usage.firstActionAt, now)) {",
     to: "if (false) {",
     pkg: "@le/linkedin",
   },

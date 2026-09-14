@@ -49,7 +49,6 @@ export async function runStrategyJob(ctx: WorkerContext, job: StrategyJob): Prom
       name: profile.name,
       spec: profile as never,
       priority: profile.priority,
-      approved_at: new Date().toISOString(),
     })),
   );
 
