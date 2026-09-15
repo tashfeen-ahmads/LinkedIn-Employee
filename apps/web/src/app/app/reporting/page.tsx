@@ -76,33 +76,32 @@ export default async function ReportingPage() {
 
   return (
     <>
-      <h1>Reporting</h1>
-      <p className="muted">
-        {canSeeTeam
-          ? "Where outreach is working and where it stops, per rep and per campaign."
-          : "Your own outreach. Team-wide figures are visible to managers."}
-      </p>
+      <div className="page-head">
+        <h1>Reporting</h1>
+        <p className="muted">
+          {canSeeTeam
+            ? "Where outreach is working and where it stops, per rep and per campaign."
+            : "Your own outreach. Team-wide figures are visible to managers."}
+        </p>
+      </div>
 
       <section>
         <h2>Workspace</h2>
-        <div
-          style={{ display: "grid",
-            gap: "0.75rem",
-            gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))" }}
+        <div className="grid tight grid-5"
         >
           {FUNNEL_STAGES.map((stage) => (
             <div key={stage.key} className="card">
               <p className="small muted">
                 {stage.label}
               </p>
-              <p className="mono" style={{ fontSize: "1.7rem", fontWeight: 640, margin: "0.15rem 0 0" }}>
+              <p className="mono stat-value">
                 {workspaceCounts[stage.key]}
               </p>
             </div>
           ))}
         </div>
 
-        <div style={{ display: "flex", gap: "2rem", flexWrap: "wrap" }}>
+        <div className="meter-group">
           <Rate label="Acceptance" value={workspaceRates.acceptance} target={RATE_TARGETS.acceptance} />
           <Rate label="Reply" value={workspaceRates.reply} target={RATE_TARGETS.reply} />
         </div>
@@ -120,7 +119,7 @@ export default async function ReportingPage() {
               <thead>
                 <tr>
                   <th>Rep</th>
-                  <th style={{ minWidth: 150 }}>Funnel</th>
+                  <th className="col-wide">Funnel</th>
                   {FUNNEL_STAGES.map((stage) => (
                     <th key={stage.key} className="num">
                       {stage.label}
@@ -225,21 +224,20 @@ export default async function ReportingPage() {
 function FunnelBar({ counts, peak, name }: { counts: ReturnType<typeof countFunnel>; peak: number; name: string }) {
   return (
     <div
-      style={{ display: "grid", gap: 2, minWidth: 140 }}
+      className="funnel"
       role="img"
       aria-label={FUNNEL_STAGES.map((s) => `${s.label} ${counts[s.key]}`).join(", ") + ` for ${name}`}
     >
       {FUNNEL_STAGES.map((stage, index) => (
-        <div key={stage.key} style={{ height: 6, background: "var(--surface)", borderRadius: 3 }}>
-          <div
+        <div key={stage.key}>
+          <span
             style={{
-              height: "100%",
               width: `${Math.min(100, (counts[stage.key] / peak) * 100)}%`,
-              background: "var(--accent)",
               // Sequential ramp over one hue: full strength at the top of the
               // funnel, lighter as the numbers fall away.
               opacity: 1 - index * 0.16,
-              borderRadius: 3,
+              // A stage with anyone in it stays visible at any scale; a stage
+              // with nobody draws nothing at all.
               minWidth: counts[stage.key] > 0 ? 3 : 0,
             }}
           />
@@ -256,12 +254,12 @@ function Rate({ label, value, target }: { label: string; value: number | null; t
         {label}
       </p>
       {value === null ? (
-        <p className="muted" style={{ margin: "0.1rem 0 0" }}>
+        <p className="muted">
           Not enough data yet
         </p>
       ) : (
         <>
-          <p className="mono" style={{ fontSize: "1.4rem", fontWeight: 620, margin: "0.1rem 0 0.3rem" }}>
+          <p className="mono stat-value">
             {(value * 100).toFixed(1)}%
           </p>
           <span className={`pill ${value >= target ? "positive" : "warning"}`}>

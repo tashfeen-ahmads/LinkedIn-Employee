@@ -18,8 +18,10 @@ export default async function UsagePage() {
   if (!["owner", "admin"].includes(session.role)) {
     return (
       <>
-        <h1>Usage</h1>
-        <p className="muted">Spend is visible to the workspace owner and admins.</p>
+        <div className="page-head">
+          <h1>Usage</h1>
+          <p className="muted">Spend is visible to the workspace owner and admins.</p>
+        </div>
       </>
     );
   }
@@ -47,10 +49,12 @@ export default async function UsagePage() {
   if (rows.length === 0) {
     return (
       <>
-        <h1>Usage</h1>
-        <p className="muted">
-          No model calls in the last {DAYS} days. This page fills in once a campaign runs.
-        </p>
+        <div className="page-head">
+          <h1>Usage</h1>
+          <p className="muted">
+            No model calls in the last {DAYS} days. This page fills in once a campaign runs.
+          </p>
+        </div>
       </>
     );
   }
@@ -63,18 +67,15 @@ export default async function UsagePage() {
 
   return (
     <>
-      <h1>Usage</h1>
-      <p className="small muted prose">
-        The last {DAYS} days, priced at the published list rates. Costs are an estimate from recorded
-        tokens, not an invoice.
-      </p>
+      <div className="page-head">
+        <h1>Usage</h1>
+        <p className="small muted prose">
+          The last {DAYS} days, priced at the published list rates. Costs are an estimate from recorded
+          tokens, not an invoice.
+        </p>
+      </div>
 
-      <section
-        style={{ display: "grid",
-          gap: "0.75rem",
-          gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-          margin: "1.5rem 0 2.5rem" }}
-      >
+      <section className="grid tight grid-4">
         <Stat label={`Spend, ${DAYS} days`} value={formatUsd(total.costUsd)} />
         <Stat
           label="Per booked meeting"
@@ -161,7 +162,7 @@ function UsageTable({
                 <td className="mono num">
                   {group.medianLatencyMs === null ? "—" : `${(group.medianLatencyMs / 1000).toFixed(1)}s`}
                 </td>
-                <td className="mono" style={{ textAlign: "right", color: group.failed ? "var(--warning)" : undefined }}>
+                <td className={`mono num${group.failed ? " warning-text" : ""}`}>
                   {group.failed || "—"}
                 </td>
               </tr>
@@ -179,7 +180,7 @@ function Stat({ label, value, note }: { label: string; value: string; note?: str
       <p className="small muted">
         {label}
       </p>
-      <p className="mono" style={{ fontSize: "1.6rem", fontWeight: 640, margin: "0.2rem 0 0" }}>
+      <p className="mono stat-value">
         {value}
       </p>
       {note ? (

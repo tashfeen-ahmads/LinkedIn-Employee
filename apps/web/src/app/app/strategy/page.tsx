@@ -152,11 +152,13 @@ export default async function StrategyPage({
   if (!businessRow) {
     return (
       <>
-        <h1>Strategy</h1>
-        <p className="muted">
-          The Strategy Agent has not finished yet, or it has not run. It reads what you publish and
-          drafts your business profile and three to five customer profiles; refresh in a minute.
-        </p>
+        <div className="page-head">
+          <h1>Strategy</h1>
+          <p className="muted">
+            The Strategy Agent has not finished yet, or it has not run. It reads what you publish and
+            drafts your business profile and three to five customer profiles; refresh in a minute.
+          </p>
+        </div>
       </>
     );
   }
@@ -170,12 +172,14 @@ export default async function StrategyPage({
 
   return (
     <>
-      <h1>Strategy</h1>
-      <p className="small muted prose">
-        Written by the Strategy Agent from what you publish. Nothing is searched for until you approve
-        a profile, and every message the writer sends is grounded in what is on this page — so it is
-        worth reading properly once.
-      </p>
+      <div className="page-head">
+        <h1>Strategy</h1>
+        <p className="small muted prose">
+          Written by the Strategy Agent from what you publish. Nothing is searched for until you approve
+          a profile, and every message the writer sends is grounded in what is on this page — so it is
+          worth reading properly once.
+        </p>
+      </div>
 
       {params.error ? (
         <div className="notice danger">
@@ -192,12 +196,9 @@ export default async function StrategyPage({
       {business.success ? (
         <section className="card">
           <h3>{business.data.companyName}</h3>
-          <p style={{ margin: "0 0 0.75rem" }}>{business.data.oneLiner}</p>
+          <p>{business.data.oneLiner}</p>
           <p className="small muted">{business.data.offering}</p>
-          <div
-            style={{ display: "grid",
-              gap: "1rem",
-              gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}
+          <div className="grid grid-3"
           >
             <Facts label="Tone of voice" values={[business.data.toneOfVoice]} />
             <Facts label="Proof points" values={business.data.proofPoints} />
@@ -211,7 +212,7 @@ export default async function StrategyPage({
         </div>
       )}
 
-      <h2 style={{ fontSize: "1.15rem" }}>Customer profiles</h2>
+      <h2>Customer profiles</h2>
 
       <div className="grid">
         {profiles.map(({ row, spec }) => {
@@ -230,12 +231,12 @@ export default async function StrategyPage({
               <header className="between">
                 <div>
                   <h3>{profile.name}</h3>
-                  <p className="small muted" style={{ margin: "0.2rem 0 0" }}>
+                  <p className="small muted">
                     Priority {row.priority} ·{" "}
                     {row.do_not_pursue ? "not pursuing" : approved ? "approved" : "waiting for your approval"}
                   </p>
                 </div>
-                <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+                <div className="cluster">
                   {row.do_not_pursue ? (
                     <form action={approveProfile}>
                       <input type="hidden" name="profileId" value={row.id} />
@@ -269,11 +270,8 @@ export default async function StrategyPage({
                 </div>
               </header>
 
-              <p style={{ margin: "1rem 0 0" }}>{profile.summary}</p>
-              <div
-                style={{ display: "grid",
-                  gap: "1rem",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}
+              <p>{profile.summary}</p>
+              <div className="grid grid-3"
               >
                 <Facts label="What hurts" values={profile.pains} />
                 <Facts label="Buying signals" values={profile.triggerEvents} />
@@ -282,7 +280,7 @@ export default async function StrategyPage({
               </div>
 
               <details>
-                <summary className="small" style={{ cursor: "pointer" }}>
+                <summary className="small">
                   Who we search for
                 </summary>
                 <form action={saveProfile}>
@@ -291,10 +289,7 @@ export default async function StrategyPage({
                     One per line. These go straight into the Sales Navigator search, so a title here is
                     a title LinkedIn has to recognise.
                   </p>
-                  <div
-                    style={{ display: "grid",
-                      gap: "0.75rem",
-                      gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}
+                  <div className="grid tight grid-3"
                   >
                     {FILTER_FIELDS.map((field) => (
                       <label className="field" key={field.key}>
@@ -328,7 +323,7 @@ function Facts({ label, values }: { label: string; values: readonly string[] }) 
   if (values.length === 0) return null;
   return (
     <div>
-      <p className="small muted" style={{ margin: "0 0 0.3rem" }}>
+      <p className="small muted">
         {label}
       </p>
       <ul className="small bullets">

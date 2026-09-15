@@ -80,21 +80,22 @@ export default async function ExclusionsPage() {
 
   return (
     <>
-      <h1>Exclusions</h1>
-      <p className="small muted" style={{ maxWidth: "60ch" }}>
-        Accounts and people nobody in this workspace contacts. Checked when a campaign is built and
-        again immediately before every send, so adding a company here stops the invitations already
-        queued against it.
-      </p>
+      <div className="page-head">
+        <h1>Exclusions</h1>
+        <p className="small muted prose">
+          Accounts and people nobody in this workspace contacts. Checked when a campaign is built and
+          again immediately before every send, so adding a company here stops the invitations already
+          queued against it.
+        </p>
+      </div>
 
       {manage ? (
         <section className="card">
           <h3>Add an exclusion</h3>
-          <form
+          <form className="form-row"
             action={addExclusion}
-            style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "flex-end" }}
           >
-            <label className="field" style={{ width: 130 }}>
+            <label className="field compact">
               <span>Type</span>
               <select name="kind" defaultValue="company">
                 {KINDS.map((kind) => (
@@ -104,11 +105,11 @@ export default async function ExclusionsPage() {
                 ))}
               </select>
             </label>
-            <label className="field" style={{ flex: "1 1 220px" }}>
+            <label className="field">
               <span>Company name or profile URL</span>
               <input name="value" required placeholder="Acme Corp." />
             </label>
-            <label className="field" style={{ flex: "1 1 200px" }}>
+            <label className="field">
               <span>Why (optional)</span>
               <input name="reason" placeholder="Existing customer" />
             </label>
@@ -116,7 +117,7 @@ export default async function ExclusionsPage() {
               Add
             </button>
           </form>
-          <p className="small muted" style={{ margin: "0.75rem 0 0" }}>
+          <p className="small muted">
             A company name matches however it is written: Acme, ACME Inc. and Acme Corporation are one
             account.
           </p>
@@ -127,7 +128,7 @@ export default async function ExclusionsPage() {
         <h2>
           {entries.length} on the list
           {entries.length ? (
-            <span className="small muted" style={{ fontWeight: 400 }}>
+            <span className="small muted">
               {" "}
               · {companies} {companies === 1 ? "company" : "companies"}, {people}{" "}
               {people === 1 ? "person" : "people"}

@@ -197,31 +197,9 @@ function Rate({
     <div className="card tight stat">
       <span className="stat-label">{label}</span>
       <span className="stat-value">{(rate * 100).toFixed(1)}%</span>
-      <div
-        aria-hidden="true"
-        style={{ position: "relative",
-          height: 6,
-          borderRadius: 999,
-          background: "var(--surface-sunken)",
-          marginBlock: "var(--space-2)" }}
-      >
-        <div
-          style={{
-            width: `${width}%`,
-            height: "100%",
-            borderRadius: 999,
-            background: met ? "var(--positive)" : "var(--warning)",
-          }}
-        />
-        <div
-          style={{ position: "absolute",
-            left: "50%",
-            top: -3,
-            width: 2,
-            height: 12,
-            background: "var(--text-subtle)",
-            borderRadius: 1 }}
-        />
+      <div aria-hidden="true" className={`meter vs-target ${met ? "is-met" : "is-short"}`}>
+        <span style={{ width: `${width}%` }} />
+        <div className="meter-tick" />
       </div>
       <span className="stat-note">
         {numerator.toLocaleString()} of {denominator.toLocaleString()} · target{" "}

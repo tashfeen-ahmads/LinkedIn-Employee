@@ -17,11 +17,13 @@ export default async function MeetingsPage() {
   if (!meetings?.length) {
     return (
       <>
-        <h1>Meetings</h1>
-        <p className="muted">
-          Nothing booked yet. When the Reply Agent books one it appears here with a brief on who you are
-          meeting.
-        </p>
+        <div className="page-head">
+          <h1>Meetings</h1>
+          <p className="muted">
+            Nothing booked yet. When the Reply Agent books one it appears here with a brief on who you are
+            meeting.
+          </p>
+        </div>
       </>
     );
   }
@@ -50,7 +52,7 @@ export default async function MeetingsPage() {
                     {[prospect?.title, prospect?.company].filter(Boolean).join(" · ")}
                   </p>
                 </div>
-                <div style={{ textAlign: "right" }}>
+                <div className="num">
                   <p className="mono small">
                     {new Date(meeting.starts_at).toLocaleString()}
                   </p>
@@ -62,7 +64,7 @@ export default async function MeetingsPage() {
                 </div>
               </header>
               {reasons.length ? (
-                <p className="small muted" style={{ margin: "0.85rem 0 0" }}>
+                <p className="small muted">
                   Why they matched: {reasons.join("; ")}
                 </p>
               ) : null}

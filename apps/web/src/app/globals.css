@@ -149,6 +149,8 @@ body {
 
 a { color: inherit; text-decoration: none; }
 a:hover { text-decoration: underline; text-underline-offset: 3px; }
+/* A disclosure is a control, and the pointer is what says so. */
+summary { cursor: pointer; }
 
 :where(a, button, input:not([type="range"]), textarea, select, summary):focus-visible {
   outline: 2px solid var(--accent);
@@ -194,6 +196,26 @@ p  { margin: 0; }
 
 /* Running prose is capped near 65 characters wherever it appears. */
 .prose { max-width: 65ch; }
+/* A shorter measure for a caption or a stat's note, where 65ch would run wider
+   than the tile it sits in. */
+.measure-short { max-width: 32ch; }
+
+/* Text that keeps the line breaks it was typed with — a stored document, a
+   message body. Wraps rather than scrolling, so a long line stays inside the
+   card it is in. */
+.prewrap { white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* Half a step above body weight. Used where a name leads a row and `strong`
+   would be too loud beside its own metadata. */
+.strongish { font-weight: 550; }
+
+/* A number that leads a row without being the page's headline — smaller than
+   `.stat-value`, which is for a tile whose whole job is one figure. */
+.lead-number { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 1.25rem; font-weight: 600; }
+
+/* A table column that must not collapse to its content: a funnel bar, a
+   sparkline, anything drawn rather than written. */
+.col-wide { min-width: 9.5rem; }
 
 /* ---------------------------------------------------------------- layout */
 
@@ -209,6 +231,9 @@ p  { margin: 0; }
 .stack-7 { display: flex; flex-direction: column; gap: var(--space-7); }
 
 .cluster { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+/* A cluster whose items are different heights — a tick beside a paragraph —
+   where centring them makes the short one float. */
+.cluster.top { align-items: flex-start; }
 .cluster-3 { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
 .between { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-4); }
 .grow { flex: 1; min-width: 0; }
@@ -217,6 +242,9 @@ p  { margin: 0; }
 .grid-2  { grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
 .grid-3  { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
 .grid-4  { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+.grid-5  { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
+/* Tiles that are one number each sit closer together than cards do. */
+.grid.tight { gap: var(--space-3); }
 
 .section { padding-block: var(--space-8); }
 .divider { border: 0; border-top: 1px solid var(--border); margin: 0; }
@@ -352,6 +380,17 @@ p  { margin: 0; }
 .card.flat { background: var(--surface); }
 .card.tight { padding: var(--space-4); gap: var(--space-3); }
 
+/* An inset block inside a card: a quoted message, a scrolling transcript. Sunk
+   rather than raised, because it is part of the card and not another card.
+   Three of these were written inline with three different paddings and their
+   own radius. */
+.panel {
+  padding: var(--space-3);
+  background: var(--surface);
+  border-radius: var(--radius-sm);
+}
+.panel.scroll { max-height: 13.75rem; overflow-y: auto; }
+
 /* A number that is the point of its tile. */
 .stat { display: flex; flex-direction: column; gap: 0.125rem; }
 .stat-label { font-size: 0.8125rem; color: var(--text-muted); }
@@ -399,6 +438,64 @@ form { display: flex; flex-direction: column; gap: var(--space-4); }
 
 .form-row { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: flex-end; }
 .form-row > .field { flex: 1 1 220px; }
+
+/* A field that should not grow to fill its row: an hour, a seat count, a
+   number with two digits in it. Expressed as a max so it still shrinks on a
+   narrow screen rather than forcing the row to scroll. */
+.field.compact { max-width: 7rem; }
+.field.medium  { max-width: 20rem; }
+.field.compact-wide { max-width: 14rem; }
+
+/* A checkbox or radio and its label, which is a row and not a column — the
+   only place `.field`'s stacking is wrong. The control keeps its own size while
+   the text wraps beside it. */
+.check { display: flex; align-items: flex-start; gap: var(--space-2); }
+.check input { flex: none; margin-top: 0.15rem; }
+.check .hint { display: block; margin-top: var(--space-1); }
+
+/* A count against its ceiling. Two of these sat inline in the team page with
+   their own colours and radii; a third would have invented a fourth set. */
+.meter { height: 4px; background: var(--border); border-radius: var(--radius-pill); overflow: hidden; }
+.meter > span { display: block; height: 100%; background: var(--accent); border-radius: inherit; }
+.meter.is-near > span { background: var(--warning); }
+.meter-group { display: flex; flex-wrap: wrap; gap: var(--space-5); }
+.meter-item { min-width: 8.75rem; display: flex; flex-direction: column; gap: var(--space-1); }
+/* Against a benchmark rather than a cap: the fill is good or not, and the tick
+   marks where the benchmark sits. */
+.meter.vs-target { position: relative; background: var(--surface-sunken); margin-block: var(--space-2); }
+.meter.vs-target > span { border-radius: inherit; }
+.meter.is-met > span { background: var(--positive); }
+.meter.is-short > span { background: var(--warning); }
+.meter-tick {
+  position: absolute;
+  left: 50%;
+  top: -3px;
+  width: 2px;
+  height: 12px;
+  background: var(--text-subtle);
+  border-radius: 1px;
+}
+
+/* A funnel drawn as one bar per stage, stacked. One hue, stepping lighter as
+   the numbers fall away — a sequential ramp, not five colours. */
+.funnel { display: grid; gap: 2px; min-width: 8.75rem; }
+.funnel > div { height: 6px; background: var(--surface); border-radius: 3px; }
+.funnel > div > span { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+
+/* A URL shown to be copied, not typed into. Read-only, monospaced, and sized to
+   its container so a long token scrolls inside the field instead of widening
+   the table it sits in. */
+.link-field {
+  width: 100%;
+  min-width: 13.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text-muted);
+}
 
 /* ---------------------------------------------------------------- badges */
 

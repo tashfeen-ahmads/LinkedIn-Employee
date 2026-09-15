@@ -271,7 +271,7 @@ export default async function TeamPage({
               placeholder="Twelve years in logistics ops before this. I care about the boring parts."
             />
           </label>
-          <label className="field" style={{ maxWidth: 320 }}>
+          <label className="field medium">
             <span>Your timezone</span>
             <input name="timezone" defaultValue={me?.timezone ?? "UTC"} placeholder="Europe/London" />
           </label>
@@ -285,18 +285,18 @@ export default async function TeamPage({
         <h3>Your LinkedIn account</h3>
         {mine ? (
           <>
-            <p className="small muted" style={{ margin: "0 0 0.75rem" }}>
+            <p className="small muted">
               {mine.display_name ?? "Connected"} · {mine.status}
               {mine.has_sales_navigator ? " · Sales Navigator" : ""}
             </p>
-            <div style={{ display: "flex", gap: "1.5rem", flexWrap: "wrap" }}>
+            <div className="meter-group">
               <Usage label="Invites today" used={mine.invites_today} cap={LINKEDIN_LIMITS.invitesPerDayMax} />
               <Usage label="Invites this week" used={mine.invites_this_week} cap={LINKEDIN_LIMITS.invitesPerWeek} />
               <Usage label="Messages today" used={mine.messages_today} cap={LINKEDIN_LIMITS.messagesPerDay} />
             </div>
 
             <form action={saveSalesNavigator}>
-              <label className="small" style={{ display: "flex", gap: "0.4rem", alignItems: "flex-start" }}>
+              <label className="small check">
                 <input
                   type="checkbox"
                   name="hasSalesNavigator"
@@ -305,7 +305,7 @@ export default async function TeamPage({
                 />
                 <span>
                   This account has Sales Navigator
-                  <span className="tiny subtle" style={{ display: "block" }}>
+                  <span className="tiny subtle hint">
                     Without it, prospect search cannot filter on seniority or company size, and
                     campaigns say so before you launch them. With it, the full customer profile is
                     used.
@@ -318,21 +318,21 @@ export default async function TeamPage({
             </form>
 
             <form action={saveWorkingHours}>
-              <p className="small muted" style={{ margin: "0 0 0.5rem" }}>
+              <p className="small muted">
                 Nothing is sent from this account outside these hours, read in your timezone above.
               </p>
-              <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "flex-end" }}>
-                <label className="field" style={{ width: 110 }}>
+              <div className="form-row">
+                <label className="field compact">
                   <span>From</span>
                   <input type="number" name="start" min={0} max={23} defaultValue={hours.start} />
                 </label>
-                <label className="field" style={{ width: 110 }}>
+                <label className="field compact">
                   <span>To</span>
                   <input type="number" name="end" min={1} max={24} defaultValue={hours.end} />
                 </label>
-                <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", paddingBottom: "0.5rem" }}>
+                <div className="cluster-3">
                   {DAYS.map((day) => (
-                    <label key={day.value} className="small" style={{ display: "flex", gap: "0.25rem" }}>
+                    <label key={day.value} className="small check">
                       <input
                         type="checkbox"
                         name={`day-${day.value}`}
@@ -372,12 +372,12 @@ export default async function TeamPage({
             ever message the same person. We email the invitation; the link is also below in case it
             does not arrive.
           </p>
-          <form action={inviteMember} style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "flex-end" }}>
-            <label className="field" style={{ flex: "1 1 240px" }}>
+          <form action={inviteMember} className="form-row">
+            <label className="field">
               <span>Work email</span>
               <input type="email" name="email" required placeholder="teammate@company.com" />
             </label>
-            <label className="field" style={{ width: 140 }}>
+            <label className="field compact">
               <span>Role</span>
               <select name="role" defaultValue="rep">
                 <option value="rep">Rep</option>
@@ -412,17 +412,9 @@ export default async function TeamPage({
                       <td>
                         <input
                           readOnly
-                          onFocus={undefined}
+                          className="link-field"
+                          aria-label={`Invitation link for ${invitation.email}`}
                           value={`${appUrl}/invite/${invitation.token}`}
-                          style={{ width: "100%",
-                            minWidth: 220,
-                            fontSize: "0.78rem",
-                            fontFamily: "ui-monospace, monospace",
-                            padding: "0.35rem 0.5rem",
-                            border: "1px solid var(--border)",
-                            borderRadius: 6,
-                            background: "var(--surface)",
-                            color: "var(--text-muted)" }}
                         />
                       </td>
                       <td className="small muted">
@@ -521,22 +513,15 @@ function readWorkingHours(value: unknown): { start: number; end: number; days: n
 function Usage({ label, used, cap }: { label: string; used: number; cap: number }) {
   const ratio = Math.min(1, cap === 0 ? 0 : used / cap);
   return (
-    <div style={{ minWidth: 140 }}>
-      <p className="small muted">
-        {label}
-      </p>
-      <p className="mono" style={{ margin: "0.1rem 0 0.35rem", fontWeight: 600 }}>
+    <div className="meter-item">
+      <span className="stat-label">{label}</span>
+      <span className="mono small">
         {used} / {cap}
-      </p>
-      <div style={{ height: 4, background: "var(--border)", borderRadius: 999 }}>
-        <div
-          style={{
-            height: "100%",
-            width: `${ratio * 100}%`,
-            background: ratio > 0.85 ? "var(--warning)" : "var(--accent)",
-            borderRadius: 999,
-          }}
-        />
+      </span>
+      {/* The width is the only genuinely dynamic value here; the colour it
+          turns near the cap is a state, so it is a class. */}
+      <div className={`meter${ratio > 0.85 ? " is-near" : ""}`}>
+        <span style={{ width: `${ratio * 100}%` }} />
       </div>
     </div>
   );

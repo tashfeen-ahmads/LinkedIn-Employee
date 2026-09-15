@@ -85,7 +85,7 @@ export function Hero() {
             stopped rather than sending it. Saying that is weaker than showing it. */}
         <Reveal delay={0.12}>
           <figure className="card raised hero-panel stack-4">
-            <figcaption className="between" style={{ gap: "var(--space-2)" }}>
+            <figcaption className="between">
               <span className="eyebrow">Your inbox</span>
               <span className="pill warning">Pricing question</span>
             </figcaption>
@@ -187,7 +187,7 @@ export function HowItWorks() {
                   <span className="eyebrow">{step.n}</span>
                   <h3>{step.agent}</h3>
                 </div>
-                <p style={{ fontWeight: 550 }}>{step.lead}</p>
+                <p className="strongish">{step.lead}</p>
                 <ul className="muted small stack-2 bullets">
                   {step.points.map((point) => (
                     <li key={point}>{point}</li>
@@ -585,7 +585,7 @@ export function SiteFooter() {
             <Link href="/" aria-label="LinkedIn Employee, home">
               <Wordmark />
             </Link>
-            <p className="small muted" style={{ maxWidth: "32ch" }}>
+            <p className="small muted measure-short">
               An AI SDR that works inside the limits that keep a LinkedIn account alive.
             </p>
             <p className="tiny subtle">

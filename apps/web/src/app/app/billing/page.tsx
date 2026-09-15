@@ -80,15 +80,14 @@ export default async function BillingPage({ searchParams }: { searchParams: Noti
         </p>
       </section>
 
-      <section
-        style={{ display: "grid", gap: "1rem", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))" }}
+      <section className="grid grid-2"
       >
         {PLANS.map((plan) => (
           <article key={plan.id} className="card">
             <h3>{plan.name}</h3>
-            <p style={{ fontSize: "1.7rem", fontWeight: 640, margin: "0.4rem 0 0.2rem" }}>
+            <p className="stat-value">
               {plan.price}
-              <span className="muted" style={{ fontSize: "0.9rem", fontWeight: 400 }}>
+              <span className="muted small">
                 {" "}
                 / seat / mo
               </span>

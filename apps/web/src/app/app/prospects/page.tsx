@@ -68,10 +68,12 @@ export default async function ProspectsPage({ searchParams }: { searchParams: No
   if (!prospects?.length) {
     return (
       <>
-        <h1>Prospects</h1>
-        <p className="muted">
-          None yet. Approve a customer profile and run the Targeting Agent to build your first list.
-        </p>
+        <div className="page-head">
+          <h1>Prospects</h1>
+          <p className="muted">
+            None yet. Approve a customer profile and run the Targeting Agent to build your first list.
+          </p>
+        </div>
       </>
     );
   }
@@ -79,12 +81,14 @@ export default async function ProspectsPage({ searchParams }: { searchParams: No
   return (
     <>
       <PageNotice error={params.error} notice={params.notice} />
-      <h1>Prospects</h1>
-      <p className="muted">
-        {prospects.length} in this workspace, ranked by fit. Nobody here can be contacted twice by two
-        different reps. Erasing someone removes everything we hold about them and keeps only a
-        do-not-contact record, so a later campaign cannot re-import them.
-      </p>
+      <div className="page-head">
+        <h1>Prospects</h1>
+        <p className="muted">
+          {prospects.length} in this workspace, ranked by fit. Nobody here can be contacted twice by two
+          different reps. Erasing someone removes everything we hold about them and keeps only a
+          do-not-contact record, so a later campaign cannot re-import them.
+        </p>
+      </div>
 
       <div className="table-scroll">
         <table>
@@ -105,11 +109,10 @@ export default async function ProspectsPage({ searchParams }: { searchParams: No
               return (
                 <tr key={prospect.id}>
                   <td>
-                    <a
+                    <a className="strongish"
                       href={prospect.linkedin_url.startsWith("http") ? prospect.linkedin_url : `https://${prospect.linkedin_url}`}
                       target="_blank"
                       rel="noreferrer noopener"
-                      style={{ fontWeight: 550 }}
                     >
                       {`${prospect.first_name ?? ""} ${prospect.last_name ?? ""}`.trim() || "Unknown"}
                     </a>
@@ -119,8 +122,8 @@ export default async function ProspectsPage({ searchParams }: { searchParams: No
                   </td>
                   <td className="mono">{prospect.fit_score ?? "—"}</td>
                   <td className="mono">{prospect.intent_score ?? 0}</td>
-                  <td style={{ maxWidth: 320 }}>
-                    <div style={{ display: "flex", gap: "0.3rem", flexWrap: "wrap" }}>
+                  <td className="medium">
+                    <div className="cluster">
                       {signals.slice(0, 3).map((signal, index) => (
                         <span key={index} className="pill accent" title={signal.detail}>
                           {SIGNAL_LABELS[signal.type] ?? signal.type}

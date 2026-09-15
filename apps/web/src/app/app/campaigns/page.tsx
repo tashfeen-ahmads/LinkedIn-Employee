@@ -26,11 +26,13 @@ export default async function CampaignsPage() {
   if (!campaigns?.length) {
     return (
       <>
-        <h1>Campaigns</h1>
-        <p className="muted">
-          None yet. The Targeting Agent creates one as a draft; you review the list and the copy before
-          anything is sent.
-        </p>
+        <div className="page-head">
+          <h1>Campaigns</h1>
+          <p className="muted">
+            None yet. The Targeting Agent creates one as a draft; you review the list and the copy before
+            anything is sent.
+          </p>
+        </div>
       </>
     );
   }
@@ -46,13 +48,13 @@ export default async function CampaignsPage() {
               <header className="between">
                 <div>
                   <h3>{campaign.name}</h3>
-                  <p className="small muted" style={{ margin: "0.2rem 0 0" }}>
+                  <p className="small muted">
                     {stats.total} prospects, {stats.queued} still queued · {campaign.daily_invite_cap} invites
                     a day ·{" "}
                     {campaign.reply_mode === "autopilot" ? "replies on autopilot" : "replies need approval"}
                   </p>
                 </div>
-                <div style={{ display: "flex", gap: "0.5rem", alignItems: "flex-start" }}>
+                <div className="cluster top">
                   <span className={`pill ${campaign.status === "running" ? "positive" : ""}`}>
                     {campaign.status}
                   </span>
@@ -66,11 +68,7 @@ export default async function CampaignsPage() {
                 </div>
               </header>
               <p
-                className="small"
-                style={{ margin: "1rem 0 0",
-                  padding: "0.7rem",
-                  background: "var(--surface)",
-                  borderRadius: 8 }}
+                className="small panel"
               >
                 {campaign.connection_note}
               </p>

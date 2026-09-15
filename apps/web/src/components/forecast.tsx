@@ -52,7 +52,7 @@ export function Forecast() {
 
   return (
     <div className="forecast card raised">
-      <div className="forecast-controls stack-4">
+      <div className="stack-4">
         <Slider
           id="seats"
           label="Reps sending"
@@ -109,7 +109,7 @@ export function Forecast() {
             const width = value === 0 ? 0 : Math.max(4, (value / peak) * 100);
             return (
               <li key={stage}>
-                <div className="between" style={{ gap: "var(--space-2)" }}>
+                <div className="between">
                   <span className="small">{LABELS[stage]}</span>
                   <span className="mono">{value.toLocaleString()}</span>
                 </div>
@@ -164,8 +164,8 @@ function Slider({
   warn?: boolean;
 }) {
   return (
-    <div className="slider stack-2">
-      <div className="between" style={{ gap: "var(--space-2)" }}>
+    <div className="stack-2">
+      <div className="between">
         <label htmlFor={id} className="small">
           {label}
         </label>

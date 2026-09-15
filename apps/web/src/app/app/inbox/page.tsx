@@ -155,8 +155,10 @@ export default async function InboxPage({ searchParams }: { searchParams: Notice
   if (conversationIds.length === 0) {
     return (
       <>
-        <h1>Inbox</h1>
-        <p className="muted">Nothing waiting. Anything needing a human decision appears here.</p>
+        <div className="page-head">
+          <h1>Inbox</h1>
+          <p className="muted">Nothing waiting. Anything needing a human decision appears here.</p>
+        </div>
       </>
     );
   }
@@ -184,11 +186,13 @@ export default async function InboxPage({ searchParams }: { searchParams: Notice
   return (
     <>
       <PageNotice error={params.error} notice={params.notice} />
-      <h1>Inbox</h1>
-      <p className="muted">
-        {conversationIds.length}{" "}
-        {conversationIds.length === 1 ? "conversation needs" : "conversations need"} your decision.
-      </p>
+      <div className="page-head">
+        <h1>Inbox</h1>
+        <p className="muted">
+          {conversationIds.length}{" "}
+          {conversationIds.length === 1 ? "conversation needs" : "conversations need"} your decision.
+        </p>
+      </div>
 
       <div className="grid">
         {conversationIds.map((conversationId) => {
@@ -214,7 +218,7 @@ export default async function InboxPage({ searchParams }: { searchParams: Notice
                     {[prospect?.title, prospect?.company].filter(Boolean).join(" · ") || "—"}
                   </p>
                 </div>
-                <div style={{ display: "flex", gap: "0.4rem", alignItems: "flex-start", flexWrap: "wrap" }}>
+                <div className="cluster top">
                   {hold?.needs_human_reason ? (
                     <span className={`pill ${booking ? "danger" : "warning"}`}>{hold.needs_human_reason}</span>
                   ) : null}
@@ -222,16 +226,10 @@ export default async function InboxPage({ searchParams }: { searchParams: Notice
                 </div>
               </header>
 
-              <div
-                style={{ margin: "1rem 0",
-                  padding: "0.75rem",
-                  background: "var(--surface)",
-                  borderRadius: 8,
-                  maxHeight: 220,
-                  overflowY: "auto" }}
+              <div className="panel scroll"
               >
                 {thread.map((message, index) => (
-                  <p key={index} className="small" style={{ margin: "0 0 0.6rem" }}>
+                  <p key={index} className="small">
                     <span className="muted">{message.direction === "outbound" ? "You: " : "Them: "}</span>
                     {message.body}
                   </p>

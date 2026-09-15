@@ -261,16 +261,11 @@ export default async function CampaignPage({
       <p className="small muted">
         <Link href="/app/campaigns">← Campaigns</Link>
       </p>
-      <div
-        style={{ display: "flex",
-          justifyContent: "space-between",
-          gap: "1rem",
-          flexWrap: "wrap",
-          alignItems: "flex-start" }}
+      <div className="between top"
       >
         <div>
-          <h1 style={{ fontSize: "1.6rem", margin: 0 }}>{campaign.name}</h1>
-          <p className="small muted" style={{ margin: "0.25rem 0 0" }}>
+          <h1>{campaign.name}</h1>
+          <p className="small muted">
             <span className={`pill ${running ? "positive" : ""}`}>{campaign.status}</span>{" "}
             {queued.length} still to invite of {rows.length}
             {days ? ` · about ${days} working ${days === 1 ? "day" : "days"} at ${campaign.daily_invite_cap} a day` : ""}
@@ -289,7 +284,7 @@ export default async function CampaignPage({
       {dropped.length > 0 ? (
         <div className="notice">
           <strong>This list was built without Sales Navigator</strong>
-          <p className="small" style={{ margin: "0.35rem 0 0" }}>
+          <p className="small">
             Classic LinkedIn search cannot filter on {listInWords(dropped)}, so{" "}
             {dropped.length === 1 ? "that part" : "those parts"} of your customer profile
             {dropped.length === 1 ? " was" : " were"} not applied. Everyone below still matched on
@@ -302,7 +297,7 @@ export default async function CampaignPage({
       {blockers.length > 0 && !running ? (
         <div className="notice danger">
           <strong>Not ready to launch</strong>
-          <ul style={{ margin: "0.5rem 0 0", paddingLeft: "1.1rem" }}>
+          <ul className="bullets">
             {blockers.map((blocker) => (
               <li key={blocker}>{blocker}</li>
             ))}
@@ -312,13 +307,13 @@ export default async function CampaignPage({
 
       {reached.length > 0 ? (
         <section className="card">
-          <div style={{ display: "flex", gap: "2rem", flexWrap: "wrap" }}>
+          <div className="meter-group">
             {reached.map((stage) => (
               <div key={stage.key}>
                 <p className="small muted">
                   {stage.label}
                 </p>
-                <p className="mono" style={{ margin: 0, fontWeight: 600, fontSize: "1.25rem" }}>
+                <p className="mono lead-number">
                   {counts[stage.key]}
                 </p>
               </div>
@@ -359,8 +354,8 @@ export default async function CampaignPage({
             </label>
           ))}
 
-          <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", alignItems: "flex-end" }}>
-            <label className="field" style={{ width: 170 }}>
+          <div className="form-row">
+            <label className="field compact-wide">
               <span>Invites a day</span>
               <input
                 type="number"
@@ -370,7 +365,7 @@ export default async function CampaignPage({
                 defaultValue={campaign.daily_invite_cap}
               />
             </label>
-            <label className="field" style={{ width: 220 }}>
+            <label className="field compact-wide">
               <span>Replies</span>
               <select name="replyMode" defaultValue={campaign.reply_mode}>
                 <option value="approval">Hold for my approval</option>
@@ -381,7 +376,7 @@ export default async function CampaignPage({
               Save
             </button>
           </div>
-          <p className="small muted" style={{ margin: "0.75rem 0 0" }}>
+          <p className="small muted">
             Pricing, legal and anything negative always waits for a person, on either setting. The
             ceiling of {LINKEDIN_LIMITS.invitesPerDayMax} a day is a safety limit, not a preference.
           </p>
