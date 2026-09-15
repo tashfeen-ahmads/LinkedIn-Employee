@@ -262,6 +262,25 @@ describe("confirming a connection by asking", () => {
     expect(response.status).toBe(401);
   });
 
+  it("distinguishes no accounts from accounts labelled with someone else", async () => {
+    // These look identical from the outside and need completely different
+    // things done about them: wait a moment, versus the reference we hand the
+    // hosted flow is not coming back the way we expect.
+    const { app, linkedin } = harness();
+    linkedin.connectedAccounts = [
+      { providerAccountId: "acct_live", reference: "Sam Patel", status: "ok" },
+    ];
+
+    const response = await refresh(app, { workspaceId: WORKSPACE, userId: USER });
+    const body = (await response.json()) as { found: number; mine: number; referenceShape?: string[] };
+
+    expect(body.found).toBe(1);
+    expect(body.mine).toBe(0);
+    // Shape, not value: enough to tell a display name from an id that does not
+    // match, without putting one workspace's labels in another's browser.
+    expect(body.referenceShape).toEqual(["text with spaces"]);
+  });
+
   it("leaves an already-connected account alone", async () => {
     const { db, app, linkedin } = harness({ status: "active", provider_account_id: "acct_original" });
     linkedin.connectedAccounts = [{ providerAccountId: "acct_different", reference: USER, status: "ok" }];

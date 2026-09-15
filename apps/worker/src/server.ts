@@ -314,6 +314,29 @@ export function createServer(ctx: WorkerContext, queues: Queues): Hono {
     // Only this rep's own row is touched, whatever the provider returned.
     const mine = accounts.filter((a) => a.reference === parsed.data.userId);
     const bound = await bindAccounts(ctx, mine);
+
+    if (accounts.length > 0 && mine.length === 0) {
+      // The provider has accounts but none carries this rep's id as its
+      // reference, which is the interesting failure and used to be invisible:
+      // the caller saw "no account yet" whether the provider had none or had
+      // one under a name we did not recognise.
+      //
+      // The references are logged in full for whoever holds the credentials,
+      // and only their shape is returned — enough to tell "an id that does not
+      // match" from "a person's name", without putting one workspace's labels
+      // in another's browser.
+      console.error("provider accounts matched no rep", {
+        wanted: parsed.data.userId,
+        references: accounts.map((a) => a.reference),
+      });
+      return c.json({
+        found: accounts.length,
+        mine: 0,
+        bound: 0,
+        referenceShape: accounts.map((a) => shapeOf(a.reference)),
+      });
+    }
+
     return c.json({ found: accounts.length, mine: mine.length, bound });
   });
 
@@ -810,4 +833,18 @@ async function bindAccounts(ctx: WorkerContext, accounts: ConnectedAccount[]): P
     bound++;
   }
   return bound;
+}
+
+/**
+ * What a value looks like, without saying what it is.
+ *
+ * Enough to tell a uuid that does not match from a person's display name,
+ * which is the difference between "the reference is wrong" and "the provider
+ * is not storing our reference at all" — two different bugs that were
+ * indistinguishable from the outside.
+ */
+function shapeOf(value: string): string {
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) return "uuid";
+  if (/\s/.test(value)) return "text with spaces";
+  return `${value.length} characters, no spaces`;
 }

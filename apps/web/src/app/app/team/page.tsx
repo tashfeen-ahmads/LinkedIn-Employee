@@ -54,17 +54,23 @@ async function connectLinkedIn() {
 async function refreshLinkedIn() {
   "use server";
   const session = await requireSession();
-  const result = await callWorker<{ bound?: number; mine?: number }>("/jobs/linkedin-refresh", {
-    workspaceId: session.workspaceId,
-    userId: session.userId,
-  });
+  const result = await callWorker<{ bound?: number; mine?: number; found?: number; referenceShape?: string[] }>(
+    "/jobs/linkedin-refresh",
+    { workspaceId: session.workspaceId, userId: session.userId },
+  );
   if (!result.ok) redirect(errorQuery("/app/team", result.error));
 
   if (!result.data?.mine) {
+    // "No account yet" and "an account that is not labelled with your id" look
+    // identical from here and need completely different things done about them,
+    // so they are said differently.
+    const found = result.data?.found ?? 0;
     redirect(
       errorQuery(
         "/app/team",
-        "LinkedIn's provider has no account for you yet. If you just finished signing in, give it a few seconds and check again.",
+        found === 0
+          ? "LinkedIn's provider has no account for you yet. If you just finished signing in, give it a few seconds and check again."
+          : `LinkedIn's provider has ${found} account${found === 1 ? "" : "s"}, but none of them is labelled with your account here (${result.data?.referenceShape?.join(", ") ?? "unknown"}). This needs an administrator.`,
       ),
     );
   }
