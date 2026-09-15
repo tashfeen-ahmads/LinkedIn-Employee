@@ -404,6 +404,26 @@ export type Database = {
         Args: { p_name: string; p_slug: string; p_full_name?: string | null };
         Returns: string;
       };
+      /** Whether the caller is a platform administrator. */
+      is_platform_admin: {
+        Args: Record<string, never>;
+        Returns: boolean;
+      };
+      /**
+       * Per-workspace counts for the tables an operator may not read row by
+       * row — prospects and conversations hold other people's personal data.
+       * Returns nothing at all for a caller who is not an admin.
+       */
+      platform_workspace_stats: {
+        Args: Record<string, never>;
+        Returns: {
+          workspace_id: string;
+          prospects: number;
+          conversations: number;
+          pending_drafts: number;
+          messages_sent: number;
+        }[];
+      };
     };
     Enums: {
       membership_role: MembershipRole;

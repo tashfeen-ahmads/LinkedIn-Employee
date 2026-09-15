@@ -108,6 +108,21 @@ tests that were verified by deliberately breaking the code.
     reason opt-outs are — "never contact this account" is a promise a colleague
     made to a customer.
 
+14. **The operator console can see that a workspace exists, not what it says.**
+    Platform admins (`platform_admins`, migration 0010) get additive SELECT
+    policies on workspaces, members, accounts, campaigns, events and spend —
+    never on `messages`, `conversations`, `reply_drafts` or `prospects`, which
+    hold other people's personal data and the contents of private conversations.
+    Counts for those come from `platform_workspace_stats()`, whose
+    `where is_platform_admin()` is the entire access check and is one line away
+    from not being there. Nothing grants admin through the API: the table has no
+    insert policy, so it takes the service role or a SQL console.
+
+    Test this with a workspace the admin is *not* a member of. An admin who is
+    also a member reads it through the ordinary membership policy, and a test
+    set up that way passes without proving anything — which is exactly what
+    happened the first time.
+
 ## Conventions
 
 - Agent output is validated against a zod schema before it touches the
