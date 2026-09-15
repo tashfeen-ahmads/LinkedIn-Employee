@@ -230,12 +230,12 @@ p  { margin: 0; }
 .stack-6 { display: flex; flex-direction: column; gap: var(--space-6); }
 .stack-7 { display: flex; flex-direction: column; gap: var(--space-7); }
 
-.cluster { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+.cluster { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
 /* A cluster whose items are different heights — a tick beside a paragraph —
    where centring them makes the short one float. */
 .cluster.top { align-items: flex-start; }
-.cluster-3 { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
-.between { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-4); }
+.cluster-3 { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+.between { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-4); }
 .grow { flex: 1; min-width: 0; }
 
 .grid { display: grid; gap: var(--space-4); }
@@ -436,7 +436,13 @@ input[type="text"], input[type="email"], input[type="url"], input[type="number"]
  * own flex-direction, and a form holding one button is unchanged. */
 form { display: flex; flex-direction: column; gap: var(--space-4); }
 
-.form-row { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: flex-end; }
+/* `flex-direction: row` is not redundant. `form` below sets `column`, and a
+ * class that only sets `display: flex` does not override a direction it never
+ * declares — so `<form className="form-row">` became a column whose
+ * `align-items: flex-end` meant "right", which is a stack of fields shoved
+ * against the right edge with a wrap gap between each one. Every row primitive
+ * in this sheet states its direction for that reason. */
+.form-row { display: flex; flex-direction: row; flex-wrap: wrap; gap: var(--space-3); align-items: flex-end; }
 .form-row > .field { flex: 1 1 220px; }
 
 /* A field that should not grow to fill its row: an hour, a seat count, a

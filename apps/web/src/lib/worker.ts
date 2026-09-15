@@ -47,7 +47,18 @@ export async function callWorker<T = unknown>(
 
   if (!response.ok) {
     console.error(`worker ${path} responded ${response.status}`);
-    return { ok: false, error: describe(response.status) };
+    // The worker says why when it knows why — a rejected provider key and a
+    // provider outage are both 5xx here and need different things done about
+    // them. Its sentence beats a status code translated into a shrug.
+    const said = await response
+      .clone()
+      .json()
+      .then((body: unknown) => (body as { error?: unknown })?.error)
+      .catch(() => undefined);
+    return {
+      ok: false,
+      error: typeof said === "string" && said.trim() ? said : describe(response.status),
+    };
   }
 
   try {

@@ -180,14 +180,26 @@ export function createServer(ctx: WorkerContext, queues: Queues): Hono {
       return c.json({ error: "not a member of that workspace" }, 403);
     }
 
-    const link = await ctx.linkedin.createHostedAuthLink({
-      userId: parsed.data.userId,
-      successUrl: `${ctx.env.APP_URL}/app/team?connected=1`,
-      failureUrl: `${ctx.env.APP_URL}/app/team?error=connection_failed`,
-      // The redirect tells the rep's browser it worked. This tells us, and
-      // until it arrives the account has no provider id, so every job skips it.
-      notifyUrl: `${ctx.env.WORKER_URL}/webhooks/unipile/accounts`,
-    });
+    // An error from the provider used to escape this handler, which Hono turns
+    // into a bare 500. The rep then saw "the background service had a problem"
+    // for a wrong access token, a wrong DSN and a provider outage alike — three
+    // different things to do about it, and no way to tell which.
+    let link;
+    try {
+      link = await ctx.linkedin.createHostedAuthLink({
+        userId: parsed.data.userId,
+        successUrl: `${ctx.env.APP_URL}/app/team?connected=1`,
+        failureUrl: `${ctx.env.APP_URL}/app/team?error=connection_failed`,
+        // The redirect tells the rep's browser it worked. This tells us, and
+        // until it arrives the account has no provider id, so every job skips it.
+        notifyUrl: `${ctx.env.WORKER_URL}/webhooks/unipile/accounts`,
+      });
+    } catch (err) {
+      // The provider's own body goes to the log, never to the browser: it is
+      // written for whoever holds the credentials, not for the rep.
+      console.error("hosted auth link failed", err);
+      return c.json({ error: describeProviderFailure(err) }, 502);
+    }
 
     await ctx.db.from("linkedin_accounts").upsert(
       {
@@ -720,4 +732,29 @@ function constantTimeEquals(a: string, b: string): boolean {
 
 function decryptState(state: string, key: string): { workspaceId: string; userId: string; issuedAt: number } {
   return decryptJson(state, key);
+}
+
+/**
+ * What went wrong with the provider, said to the person who clicked.
+ *
+ * The three cases below need three different actions and are indistinguishable
+ * from a 500: a rejected key is the deployment's to fix, a 404 is almost always
+ * the DSN (which is per-account and includes a port, so it is the value people
+ * get wrong), and a 5xx is nobody's to fix but will pass.
+ */
+function describeProviderFailure(err: unknown): string {
+  const status = (err as { status?: number })?.status;
+  if (status === 401 || status === 403) {
+    return "LinkedIn's provider rejected this deployment's credentials. Its administrator needs to check the Unipile access token.";
+  }
+  if (status === 404) {
+    return "LinkedIn's provider could not be reached at the configured address. Its administrator needs to check the Unipile DSN, including its port.";
+  }
+  if (typeof status === "number" && status >= 500) {
+    return "LinkedIn's provider is having a problem. Please try again in a few minutes.";
+  }
+  if (typeof status === "number") {
+    return `LinkedIn's provider refused the request (${status}).`;
+  }
+  return "Could not reach LinkedIn's provider. Please try again.";
 }
