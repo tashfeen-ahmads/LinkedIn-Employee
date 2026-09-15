@@ -736,6 +736,22 @@ const MUTATIONS = [
     pkg: "@le/worker",
   },
   {
+    id: "connect/a-job-that-learns-the-account-is-gone-says-so",
+    rule: "A job told the provider has no such account marks the row, rather than leaving the Team page claiming it is connected until the nightly poll",
+    file: "apps/worker/src/jobs/targeting.ts",
+    from: "      await markAccountGone(db, { id: account.id, workspace_id: job.workspaceId });",
+    to: "      // mutated: leaves the row claiming to be connected",
+    pkg: "@le/worker",
+  },
+  {
+    id: "connect/only-account-errors-disconnect",
+    rule: "Only a provider failure that is actually about the account disconnects it; an outage does not make a rep re-do the hosted login",
+    file: "packages/linkedin/src/unipile.ts",
+    from: "  return /account not found/i.test(err.body);",
+    to: "  return true;",
+    pkg: "@le/linkedin",
+  },
+  {
     id: "connect/a-dead-account-stops-claiming-to-work",
     rule: "A row holding an account the provider no longer has stops saying it is connected, so the rep can reconnect it",
     file: "apps/worker/src/server.ts",

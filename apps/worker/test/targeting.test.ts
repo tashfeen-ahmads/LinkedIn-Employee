@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { MockLinkedInProvider } from "@le/linkedin";
+import { MockLinkedInProvider, UnipileError } from "@le/linkedin";
 import { normalizeExclusionValue } from "@le/shared";
 import { FakeDb } from "./fake-db.js";
 import type { WorkerContext } from "../src/context.js";
@@ -524,5 +524,40 @@ describe("targeting says why it stopped", () => {
     const stop = db.rows("events").find((e) => e.name === "targeting.stopped");
     expect(String(stop?.payload?.reason)).toMatch(/refused the search/i);
     expect(String(stop?.payload?.cause)).toContain("402");
+  });
+
+  it("stops calling the account connected once the provider says it has no such account", async () => {
+    // The contradiction this closes: targeting said "reconnect it on the Team
+    // page" while the Team page said "Connected · active", with no control on
+    // it that could have found out otherwise. Health is polled nightly, which
+    // is the right cadence for a LinkedIn restriction and far too slow for an
+    // account that does not exist — every job until the small hours fails the
+    // same way against a row the screen calls healthy.
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    linkedin.searchError = new UnipileError(
+      "Unipile POST /api/v1/linkedin/search failed with 404: Account not found",
+      404,
+      JSON.stringify({ title: "Resource not found.", detail: "Account not found" }),
+    );
+
+    expect(await runTargetingJob(ctx, job)).toBeNull();
+
+    const stop = db.rows("events").find((e) => e.name === "targeting.stopped");
+    expect(String(stop?.payload?.reason)).toMatch(/no longer has this account/i);
+    const account = db.rows("linkedin_accounts")[0];
+    expect(account?.status).toBe("reauth_required");
+    expect(String(account?.status_detail)).toMatch(/no longer has this account/i);
+  });
+
+  it("does not disconnect an account over a failure that is not about the account", async () => {
+    // A provider outage is not a reason to make a rep re-do the hosted login.
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    linkedin.searchError = new UnipileError("failed with 503", 503, "upstream unavailable");
+
+    await runTargetingJob(ctx, job);
+
+    expect(db.rows("linkedin_accounts")[0]?.status).toBe("active");
   });
 });

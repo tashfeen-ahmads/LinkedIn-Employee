@@ -150,6 +150,38 @@ export async function applyHealth(
 }
 
 /**
+ * The provider does not have this account, so stop saying it is connected.
+ *
+ * Health is polled nightly, which is the right cadence for "LinkedIn has
+ * restricted this account" and far too slow for this: a job that has just been
+ * told the account does not exist knows it now, and every job until the small
+ * hours would otherwise fail exactly the same way while the Team page shows a
+ * healthy connection. Telling the rep to reconnect on a screen that says
+ * `active` is a contradiction they cannot act on.
+ */
+export async function markAccountGone(
+  db: Db,
+  account: { id: string; workspace_id: string },
+): Promise<void> {
+  await db
+    .from("linkedin_accounts")
+    .update({
+      status: "reauth_required",
+      status_detail:
+        "LinkedIn's provider no longer has this account. Reconnect it to start sending again.",
+      paused_at: new Date().toISOString(),
+    })
+    .eq("id", account.id);
+  await recordEvent(db, {
+    workspaceId: account.workspace_id,
+    name: "linkedin.account.reauth_required",
+    subjectType: "linkedin_account",
+    subjectId: account.id,
+    payload: { health: "reauth_required", reason: "provider no longer has the account" },
+  });
+}
+
+/**
  * Resets the daily counters on a new day, and the weekly ones when the last
  * reset fell in an earlier week.
  *

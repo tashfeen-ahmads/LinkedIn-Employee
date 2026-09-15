@@ -7,6 +7,7 @@ import {
   normalizeLinkedInUrl,
 } from "@le/shared";
 import { isAccountGone } from "@le/linkedin";
+import { markAccountGone } from "../accounts.js";
 import type { WorkerContext } from "../context.js";
 import { recordEvent } from "../context.js";
 import { loadExclusions } from "../exclusions.js";
@@ -113,10 +114,16 @@ export async function runTargetingJob(ctx: WorkerContext, job: TargetingJob): Pr
     // separately: "the provider refused the search" sounds like LinkedIn
     // having a bad day, and a connected account the provider no longer has is
     // a Reconnect button away from working.
-    const reason = isAccountGone(err)
-      ? "LinkedIn's provider no longer has this account. Reconnect it on the Team page."
-      : "LinkedIn's provider refused the search.";
-    return giveUp(ctx, job, reason, {
+    if (isAccountGone(err)) {
+      // Said on the Team page as well as here. Pointing someone at a screen
+      // that still reads "Connected · active" is not telling them anything.
+      await markAccountGone(db, { id: account.id, workspace_id: job.workspaceId });
+      return giveUp(ctx, job, "LinkedIn's provider no longer has this account. Reconnect it on the Team page.", {
+        searchTier,
+        cause: (err as { message?: string })?.message ?? "unknown",
+      });
+    }
+    return giveUp(ctx, job, "LinkedIn's provider refused the search.", {
       searchTier,
       cause: (err as { message?: string })?.message ?? "unknown",
     });

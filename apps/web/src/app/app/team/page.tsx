@@ -1,11 +1,12 @@
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
-import { callWorker, errorQuery } from "@/lib/worker";
+import { callWorker, errorQuery, noticeQuery } from "@/lib/worker";
 import { redirect } from "next/navigation";
 import { LINKEDIN_LIMITS } from "@le/shared";
 import { PLAN_SEATS } from "@le/billing";
 import { revalidatePath } from "next/cache";
 import { createInviteToken, inviteExpiry, INVITE_TTL_DAYS } from "@/lib/invitations";
+import { PageNotice } from "@/components/page-notice";
 
 /**
  * Starts LinkedIn's hosted consent flow.
@@ -72,6 +73,15 @@ async function refreshLinkedIn() {
       errorQuery(
         "/app/team",
         "LinkedIn's provider no longer has the account this was connected to. Connect LinkedIn again to start sending.",
+      ),
+    );
+  }
+
+  if (result.data?.changed) {
+    redirect(
+      noticeQuery(
+        "/app/team",
+        "Reconnected: LinkedIn's provider had a different account for you, and this is now pointed at it.",
       ),
     );
   }
@@ -259,7 +269,7 @@ function isKnownTimezone(value: string): boolean {
 export default async function TeamPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; connected?: string }>;
+  searchParams: Promise<{ error?: string; notice?: string; connected?: string }>;
 }) {
   const params = await searchParams;
   const session = await requireSession();
@@ -321,11 +331,7 @@ export default async function TeamPage({
     <>
       <h1>Team</h1>
 
-      {params.error ? (
-        <div className="notice danger">
-          {params.error}
-        </div>
-      ) : null}
+      <PageNotice error={params.error} notice={params.notice} />
 
       <section className="card">
         <h3>You</h3>
@@ -419,6 +425,25 @@ export default async function TeamPage({
                 </button>
               </div>
             </form>
+
+            {/* Connected is a claim this page makes, not one it has checked.
+                The row keeps whatever provider id it was bound with, and when
+                the provider drops that account nothing here notices until the
+                nightly health poll — so every campaign fails against an
+                account the screen calls healthy, and the only control that
+                could correct it used to live in the branch below, where a
+                connected account never sees it. */}
+            <div className="cluster">
+              <form action={refreshLinkedIn}>
+                <button className="btn secondary small" type="submit">
+                  Check connection
+                </button>
+              </form>
+              <span className="tiny subtle">
+                Asks LinkedIn&rsquo;s provider whether this account is still there. Worth doing if
+                campaigns are not finding anyone.
+              </span>
+            </div>
           </>
         ) : (
           <>

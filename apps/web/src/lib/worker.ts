@@ -94,3 +94,15 @@ function describe(status: number): string {
 export function errorQuery(path: string, message: string): string {
   return `${path}?error=${encodeURIComponent(message)}`;
 }
+
+/**
+ * The same channel for something that went right.
+ *
+ * An action that redirects can only speak through the URL, and a redirect was
+ * the only way to say anything at all — so good news was going out as
+ * `?error=`, rendered in the red banner. "Reconnected successfully" in the
+ * colour reserved for failure teaches people to distrust both.
+ */
+export function noticeQuery(path: string, message: string): string {
+  return `${path}?notice=${encodeURIComponent(message)}`;
+}
