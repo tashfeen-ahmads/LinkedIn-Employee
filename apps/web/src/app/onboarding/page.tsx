@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase-server";
 import { isAppConfigured } from "@/lib/config";
-import { callWorker } from "@/lib/worker";
+import { callWorker, errorQuery } from "@/lib/worker";
 
 /**
  * First run. Creates the workspace and kicks off the Strategy Agent, so the
@@ -41,9 +41,13 @@ async function createWorkspace(formData: FormData) {
   if (error || !workspaceId) redirect(`/onboarding?error=${encodeURIComponent(error?.message ?? "Could not create workspace")}`);
 
   // The Strategy Agent runs in the worker; the web tier only enqueues it. A
-  // worker outage must not lose the signup, so a failure here is logged and the
-  // user can retry from the dashboard.
-  await callWorker("/jobs/strategy", {
+  // worker outage must not lose the signup, so this does not block — the
+  // workspace exists and the user can retry from the dashboard.
+  //
+  // But it is not silent either. Without this the first screen after signing up
+  // is an empty dashboard that looks like the product doing nothing, when in
+  // fact nothing was ever started.
+  const queued = await callWorker("/jobs/strategy", {
     workspaceId,
     userId: user.id,
     websiteUrl: websiteUrl || undefined,
@@ -51,6 +55,9 @@ async function createWorkspace(formData: FormData) {
     description: description || undefined,
   });
 
+  if (!queued.ok) {
+    redirect(errorQuery("/app", `Your workspace is ready, but we could not start writing your profiles: ${queued.error}`));
+  }
   redirect("/app");
 }
 

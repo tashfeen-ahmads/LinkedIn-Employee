@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { BusinessProfileSchema, CustomerProfileSchema } from "@le/shared";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
-import { callWorker } from "@/lib/worker";
+import { callWorker, errorQuery } from "@/lib/worker";
 import { FILTER_FIELDS, applyProfileEdits, formatList } from "@/lib/profile-form";
 
 /**
@@ -104,13 +104,16 @@ async function findProspects(formData: FormData) {
     redirect("/app/strategy?error=" + encodeURIComponent("Connect your LinkedIn account on the Team page first."));
   }
 
-  await callWorker("/jobs/targeting", {
+  const queued = await callWorker("/jobs/targeting", {
     workspaceId: session.workspaceId,
     userId: session.userId,
     customerProfileId: profileId,
     linkedinAccountId: account.id,
     limit: HOW_MANY,
   });
+  if (!queued.ok) {
+    redirect(errorQuery("/app/strategy", `Could not start the search: ${queued.error}`));
+  }
 
   revalidatePath("/app/strategy");
   revalidatePath("/app/campaigns");

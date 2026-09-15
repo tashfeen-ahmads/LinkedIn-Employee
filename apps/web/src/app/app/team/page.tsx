@@ -1,6 +1,6 @@
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
-import { callWorker } from "@/lib/worker";
+import { callWorker, errorQuery } from "@/lib/worker";
 import { redirect } from "next/navigation";
 import { LINKEDIN_LIMITS } from "@le/shared";
 import { PLAN_SEATS } from "@le/billing";
@@ -23,8 +23,11 @@ async function connectLinkedIn() {
     workspaceId: session.workspaceId,
     userId: session.userId,
   });
-  if (result?.url) redirect(result.url);
-  redirect("/app/team?error=Could+not+reach+LinkedIn+just+now.+Please+try+again.");
+  if (!result.ok) redirect(errorQuery("/app/team", result.error));
+  if (!result.data?.url) {
+    redirect(errorQuery("/app/team", "LinkedIn did not return a sign-in link. Please try again."));
+  }
+  redirect(result.data.url);
 }
 
 /**
@@ -85,13 +88,18 @@ async function inviteMember(formData: FormData) {
     .single();
 
   // The worker sends it. If mail is not configured the invitation still exists
-  // and the link is shown below, so this never blocks adding a teammate.
+  // and the link is shown below, so this never blocks adding a teammate — but
+  // whoever invited them needs to know the email did not go, or they will wait
+  // for a reply to a message nobody received.
   if (invitation) {
-    await callWorker("/jobs/send-invite", {
+    const sent = await callWorker("/jobs/send-invite", {
       workspaceId: session.workspaceId,
       userId: session.userId,
       invitationId: invitation.id,
     });
+    if (!sent.ok) {
+      redirect(errorQuery("/app/team", `Invitation created, but the email was not sent: ${sent.error} Share the link below instead.`));
+    }
   }
 
   revalidatePath("/app/team");

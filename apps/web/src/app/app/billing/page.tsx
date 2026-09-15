@@ -1,8 +1,9 @@
 import { entitlementFor, entitlementMessage } from "@le/billing";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
-import { callWorker } from "@/lib/worker";
+import { callWorker, errorQuery } from "@/lib/worker";
 import { redirect } from "next/navigation";
+import { PageNotice, type NoticeParams } from "@/components/page-notice";
 
 const PLANS = [
   { id: "solo" as const, name: "Solo", price: "$149", blurb: "One seat, replies drafted for your approval." },
@@ -23,10 +24,15 @@ async function startCheckout(formData: FormData) {
     seats: Number(formData.get("seats") ?? 1),
     email: session.email || undefined,
   });
-  if (result?.url) redirect(result.url);
+  if (!result.ok) redirect(errorQuery("/app/billing", result.error));
+  if (!result.data?.url) {
+    redirect(errorQuery("/app/billing", "Checkout is not available right now. Please try again."));
+  }
+  redirect(result.data.url);
 }
 
-export default async function BillingPage() {
+export default async function BillingPage({ searchParams }: { searchParams: NoticeParams }) {
+  const params = await searchParams;
   const session = await requireSession();
   const supabase = await createClient();
 
@@ -46,6 +52,7 @@ export default async function BillingPage() {
 
   return (
     <>
+      <PageNotice error={params.error} notice={params.notice} />
       <h1 style={{ fontSize: "1.6rem" }}>Billing</h1>
 
       {message ? (

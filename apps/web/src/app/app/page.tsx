@@ -3,8 +3,10 @@ import { FUNNEL_STAGES, countFunnel } from "@le/shared";
 import { requireSession } from "@/lib/workspace";
 import { SetupChecklist } from "@/components/setup-checklist";
 import { createClient } from "@/lib/supabase-server";
+import { PageNotice, type NoticeParams } from "@/components/page-notice";
 
-export default async function OverviewPage() {
+export default async function OverviewPage({ searchParams }: { searchParams: NoticeParams }) {
+  const params = await searchParams;
   const session = await requireSession();
   const supabase = await createClient();
 
@@ -75,6 +77,7 @@ export default async function OverviewPage() {
 
   return (
     <>
+      <PageNotice error={params.error} notice={params.notice} />
       <header className="page-head">
         <p className="eyebrow">Overview</p>
         <h1>{session.fullName ? `Morning, ${session.fullName.split(" ")[0]}.` : "Overview"}</h1>

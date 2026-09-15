@@ -1,7 +1,9 @@
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
-import { callWorker } from "@/lib/worker";
+import { callWorker, errorQuery } from "@/lib/worker";
+import { redirect } from "next/navigation";
+import { PageNotice, type NoticeParams } from "@/components/page-notice";
 
 /**
  * Erasure on request. A prospect who asks to be forgotten is a request the
@@ -14,12 +16,18 @@ async function eraseProspect(formData: FormData) {
   if (!prospectId) return;
 
   const session = await requireSession();
-  await callWorker("/jobs/erase-prospect", {
+  // Erasure is a promise made to a person about their own data. A silent
+  // failure here leaves them in the database while the screen says they are
+  // gone, so this one is reported rather than retried in the background.
+  const erased = await callWorker("/jobs/erase-prospect", {
     workspaceId: session.workspaceId,
     userId: session.userId,
     prospectId,
     reason: "requested by the individual",
   });
+  if (!erased.ok) {
+    redirect(errorQuery("/app/prospects", `This person was not erased: ${erased.error}`));
+  }
   revalidatePath("/app/prospects");
 }
 
@@ -43,7 +51,8 @@ const SIGNAL_LABELS: Record<string, string> = {
 };
 
 /** The lead list, with the evidence behind every score visible on the row. */
-export default async function ProspectsPage() {
+export default async function ProspectsPage({ searchParams }: { searchParams: NoticeParams }) {
+  const params = await searchParams;
   const session = await requireSession();
   const supabase = await createClient();
 
@@ -69,6 +78,7 @@ export default async function ProspectsPage() {
 
   return (
     <>
+      <PageNotice error={params.error} notice={params.notice} />
       <h1 style={{ fontSize: "1.6rem" }}>Prospects</h1>
       <p className="muted">
         {prospects.length} in this workspace, ranked by fit. Nobody here can be contacted twice by two

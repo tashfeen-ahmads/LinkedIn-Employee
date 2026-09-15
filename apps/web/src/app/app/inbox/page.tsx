@@ -1,7 +1,9 @@
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
-import { callWorker } from "@/lib/worker";
+import { callWorker, errorQuery } from "@/lib/worker";
+import { redirect } from "next/navigation";
+import { PageNotice, type NoticeParams } from "@/components/page-notice";
 
 /**
  * Everything waiting on a person.
@@ -32,9 +34,15 @@ async function approveDraft(formData: FormData) {
     .eq("id", draftId)
     .eq("workspace_id", session.workspaceId);
 
-  // If this fails, the worker's maintenance sweep re-enqueues approved drafts,
-  // so an approved reply is never silently lost.
-  await callWorker("/jobs/send-reply", { workspaceId: session.workspaceId, draftId });
+  // The draft is approved in the database either way, and the worker's
+  // maintenance sweep re-enqueues approved drafts — so a failure here delays the
+  // send rather than losing it. Said plainly, because "approved" and "sent" are
+  // not the same thing and the person who clicked is entitled to know which
+  // happened.
+  const queued = await callWorker("/jobs/send-reply", { workspaceId: session.workspaceId, draftId });
+  if (!queued.ok) {
+    redirect(errorQuery("/app/inbox", `Approved, but sending could not be confirmed: ${queued.error} It will be retried automatically.`));
+  }
 
   revalidatePath("/app/inbox");
 }
@@ -66,7 +74,10 @@ async function sendManualReply(formData: FormData) {
 
   // Sent through the same path as everything else, so it still passes the rate
   // limiter and lands in the message history. Rule 1 in CLAUDE.md.
-  await callWorker("/jobs/send-reply", { workspaceId: session.workspaceId, draftId: draft.id });
+  const queued = await callWorker("/jobs/send-reply", { workspaceId: session.workspaceId, draftId: draft.id });
+  if (!queued.ok) {
+    redirect(errorQuery("/app/inbox", `Saved, but sending could not be confirmed: ${queued.error} It will be retried automatically.`));
+  }
 
   revalidatePath("/app/inbox");
 }
@@ -112,7 +123,8 @@ async function clearConversationHold(conversationId: string, workspaceId: string
     .eq("needs_human_kind", kind);
 }
 
-export default async function InboxPage() {
+export default async function InboxPage({ searchParams }: { searchParams: NoticeParams }) {
+  const params = await searchParams;
   const session = await requireSession();
   const supabase = await createClient();
 
@@ -171,6 +183,7 @@ export default async function InboxPage() {
 
   return (
     <>
+      <PageNotice error={params.error} notice={params.notice} />
       <h1 style={{ fontSize: "1.6rem" }}>Inbox</h1>
       <p className="muted">
         {conversationIds.length}{" "}
