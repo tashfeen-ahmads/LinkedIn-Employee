@@ -35,6 +35,11 @@ export class MockLinkedInProvider implements LinkedInProvider {
     return this.connectedAccounts;
   }
 
+  /** The same list the webhook would have carried, asked for rather than told. */
+  async listAccounts(): Promise<ConnectedAccount[]> {
+    return this.connectedAccounts;
+  }
+
   async createHostedAuthLink(): Promise<HostedAuthLink> {
     return { url: "https://example.test/hosted-auth", expiresAt: new Date(Date.now() + 3_600_000).toISOString() };
   }

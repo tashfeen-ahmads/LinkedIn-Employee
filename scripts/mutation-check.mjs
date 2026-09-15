@@ -178,6 +178,14 @@ const MUTATIONS = [
     pkg: "@le/worker",
   },
   {
+    id: "connect/binds-only-the-caller",
+    rule: "Confirming a connection binds the asking rep's account and nobody else's",
+    file: "apps/worker/src/server.ts",
+    from: "const mine = accounts.filter((a) => a.reference === parsed.data.userId);",
+    to: "const mine = accounts;",
+    pkg: "@le/worker",
+  },
+  {
     id: "webhook/signature",
     rule: "An unsigned or wrongly signed webhook is rejected",
     file: "packages/linkedin/src/unipile.ts",

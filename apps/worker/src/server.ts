@@ -9,6 +9,7 @@ import {
   planFromPriceLookupKey,
   verifyStripeWebhook,
 } from "@le/billing";
+import type { ConnectedAccount } from "@le/linkedin";
 import { decryptJson, encryptJson } from "./crypto.js";
 import type { MiddlewareHandler } from "hono";
 import type { IntegrationKind } from "@le/db";
@@ -278,36 +279,42 @@ export function createServer(ctx: WorkerContext, queues: Queues): Hono {
       return c.json({ error: "invalid signature" }, 401);
     }
 
-    let bound = 0;
-    for (const account of accounts) {
-      // Matched on the reference we handed the hosted flow, and only against a
-      // row that is actually waiting for it. An already-connected account is
-      // not re-bound by a replayed delivery.
-      const { data: pending } = await ctx.db
-        .from("linkedin_accounts")
-        .select("id")
-        .eq("user_id", account.reference)
-        .in("status", ["connecting", "reauth_required", "restricted"])
-        .maybeSingle();
-      if (!pending) continue;
+    const bound = await bindAccounts(ctx, accounts);
+    return c.json({ received: accounts.length, bound });
+  });
 
-      await ctx.db
-        .from("linkedin_accounts")
-        .update({
-          provider_account_id: account.providerAccountId,
-          display_name: account.displayName ?? null,
-          status: account.status === "ok" ? "active" : "reauth_required",
-          status_detail: null,
-          // Starts the warm-up ramp. A freshly connected account sends at the
-          // low daily cap until it has some age on it.
-          connected_at: new Date().toISOString(),
-          paused_at: null,
-        })
-        .eq("id", pending.id);
-      bound++;
+  /**
+   * Confirm a connection by asking the provider, rather than waiting to be told.
+   *
+   * The hosted flow's notification is one delivery. Rejected once — a signature
+   * mismatch, a restart, a webhook registered after the account was already
+   * connected — and the row stays `connecting` forever while the account works
+   * perfectly at the provider. The rep sees "sending is paused" and a Reconnect
+   * button that runs the same flow to the same end.
+   *
+   * So the same binding is reachable by asking. Nothing here trusts the caller
+   * about which account is whose: the provider's own `name` is the rep's user
+   * id, exactly as the notification carries it.
+   */
+  app.post("/jobs/linkedin-refresh", async (c) => {
+    const parsed = LinkRequest.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "invalid request" }, 400);
+    if (!(await assertMembership(ctx.db, parsed.data.workspaceId, parsed.data.userId))) {
+      return c.json({ error: "not a member of that workspace" }, 403);
     }
 
-    return c.json({ received: accounts.length, bound });
+    let accounts;
+    try {
+      accounts = await ctx.linkedin.listAccounts();
+    } catch (err) {
+      console.error("listing provider accounts failed", err);
+      return c.json({ error: describeProviderFailure(err) }, 502);
+    }
+
+    // Only this rep's own row is touched, whatever the provider returned.
+    const mine = accounts.filter((a) => a.reference === parsed.data.userId);
+    const bound = await bindAccounts(ctx, mine);
+    return c.json({ found: accounts.length, mine: mine.length, bound });
   });
 
   // Google Calendar connect. The Reply Agent cannot offer a time until this is
@@ -764,4 +771,43 @@ function describeProviderFailure(err: unknown): string {
   return cause
     ? `Could not reach LinkedIn's provider: ${cause}`
     : "Could not reach LinkedIn's provider. Please try again.";
+}
+
+/**
+ * Binds provider accounts to the rows waiting for them.
+ *
+ * Shared by the webhook and the refresh route so the two cannot drift: one of
+ * them writing a different status, or matching on something else, would mean a
+ * connection that behaves differently depending on how it arrived.
+ */
+async function bindAccounts(ctx: WorkerContext, accounts: ConnectedAccount[]): Promise<number> {
+  let bound = 0;
+  for (const account of accounts) {
+    // Matched on the reference we handed the hosted flow, and only against a
+    // row that is actually waiting for it. An already-connected account is not
+    // re-bound by a replayed delivery.
+    const { data: pending } = await ctx.db
+      .from("linkedin_accounts")
+      .select("id")
+      .eq("user_id", account.reference)
+      .in("status", ["connecting", "reauth_required", "restricted"])
+      .maybeSingle();
+    if (!pending) continue;
+
+    await ctx.db
+      .from("linkedin_accounts")
+      .update({
+        provider_account_id: account.providerAccountId,
+        display_name: account.displayName ?? null,
+        status: account.status === "ok" ? "active" : "reauth_required",
+        status_detail: null,
+        // Starts the warm-up ramp. A freshly connected account sends at the low
+        // daily cap until it has some age on it.
+        connected_at: new Date().toISOString(),
+        paused_at: null,
+      })
+      .eq("id", pending.id);
+    bound++;
+  }
+  return bound;
 }

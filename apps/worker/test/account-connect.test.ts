@@ -9,6 +9,7 @@ import type { Queues } from "../src/queues.js";
 const WORKSPACE = "11111111-1111-4111-8111-111111111111";
 const USER = "22222222-2222-4222-8222-222222222222";
 const ACCOUNT = "33333333-3333-4333-8333-333333333333";
+const INTERNAL_SECRET = "internal-secret-at-least-32-characters-long";
 
 function harness(accountOverrides: Record<string, unknown> = {}) {
   const db = new FakeDb();
@@ -26,11 +27,23 @@ function harness(accountOverrides: Record<string, unknown> = {}) {
     },
   ]);
 
+  // The refresh route checks membership before touching anything, so the
+  // harness needs one. The webhook does not: it is authenticated by signature
+  // and names the rep by the reference the provider echoes back.
+  db.seed("memberships", [{ id: "m-1", workspace_id: WORKSPACE, user_id: USER, role: "owner" }]);
+
   const ctx = {
     db: db.asDb(),
     linkedin,
     email: null,
-    env: { APP_URL: "http://app.test", WORKER_URL: "http://worker.test" } as WorkerContext["env"],
+    env: {
+      APP_URL: "http://app.test",
+      WORKER_URL: "http://worker.test",
+      // /jobs/* is behind the internal secret, and the refresh route belongs
+      // there: it names a workspace and a user, so an unauthenticated caller
+      // could bind accounts in someone else's tenant.
+      INTERNAL_API_SECRET: INTERNAL_SECRET,
+    } as WorkerContext["env"],
     agentsFor: () => ({ client: {} as never }),
   } as unknown as WorkerContext;
 
@@ -174,5 +187,87 @@ describe("applyHealth", () => {
     await applyHealth(db.asDb(), record("active"), "ok");
 
     expect(db.rows("events")).toHaveLength(0);
+  });
+});
+
+function refresh(app: ReturnType<typeof createServer>, body: unknown, secret = INTERNAL_SECRET) {
+  return app.request("/jobs/linkedin-refresh", {
+    method: "POST",
+    body: JSON.stringify(body),
+    headers: { "content-type": "application/json", authorization: `Bearer ${secret}` },
+  });
+}
+
+describe("confirming a connection by asking", () => {
+  const OTHER = "44444444-4444-4444-8444-444444444444";
+
+  it("binds an account whose notification never arrived", async () => {
+    // Connected at the provider, still `connecting` here — exactly the state a
+    // rejected or missed webhook leaves behind, and previously permanent.
+    const { db, app, linkedin } = harness();
+    linkedin.connectedAccounts = [
+      { providerAccountId: "acct_live", reference: USER, displayName: "Sam Patel", status: "ok" },
+    ];
+
+    const response = await refresh(app, { workspaceId: WORKSPACE, userId: USER });
+
+    expect(response.status).toBe(200);
+    const account = db.find("linkedin_accounts", { id: ACCOUNT })!;
+    expect(account.provider_account_id).toBe("acct_live");
+    expect(account.status).toBe("active");
+    expect(account.connected_at).toBeTruthy();
+  });
+
+  it("binds only the rep who asked, not everyone the provider returned", async () => {
+    // The provider answers with every account this deployment holds. Binding
+    // the whole list is how one person's LinkedIn ends up sending another
+    // person's campaign, under their name.
+    //
+    // The other rep needs a row of their own for this to test anything. Without
+    // one, "bind everything" and "bind mine" do the same thing — there is
+    // nothing else to bind — and the test passes while proving nothing.
+    const { db, app, linkedin } = harness();
+    db.seed("linkedin_accounts", [
+      {
+        id: "acct-row-other",
+        workspace_id: WORKSPACE,
+        user_id: OTHER,
+        provider: "mock",
+        provider_account_id: null,
+        status: "connecting",
+      },
+    ]);
+    linkedin.connectedAccounts = [
+      { providerAccountId: "acct_someone_else", reference: OTHER, status: "ok" },
+      { providerAccountId: "acct_mine", reference: USER, status: "ok" },
+    ];
+
+    await refresh(app, { workspaceId: WORKSPACE, userId: USER });
+
+    expect(db.find("linkedin_accounts", { id: ACCOUNT })?.provider_account_id).toBe("acct_mine");
+    // The other rep's row is untouched: they did not ask, and their account is
+    // not this caller's to bind.
+    expect(db.find("linkedin_accounts", { id: "acct-row-other" })?.provider_account_id).toBeNull();
+    expect(db.find("linkedin_accounts", { id: "acct-row-other" })?.status).toBe("connecting");
+  });
+
+  it("refuses a caller without the internal secret", async () => {
+    // The route names a workspace and a user, so an unauthenticated caller
+    // could bind an account in somebody else's tenant.
+    const { app, linkedin } = harness();
+    linkedin.connectedAccounts = [{ providerAccountId: "acct_live", reference: USER, status: "ok" }];
+
+    const response = await refresh(app, { workspaceId: WORKSPACE, userId: USER }, "wrong");
+
+    expect(response.status).toBe(401);
+  });
+
+  it("leaves an already-connected account alone", async () => {
+    const { db, app, linkedin } = harness({ status: "active", provider_account_id: "acct_original" });
+    linkedin.connectedAccounts = [{ providerAccountId: "acct_different", reference: USER, status: "ok" }];
+
+    await refresh(app, { workspaceId: WORKSPACE, userId: USER });
+
+    expect(db.find("linkedin_accounts", { id: ACCOUNT })?.provider_account_id).toBe("acct_original");
   });
 });

@@ -25,6 +25,7 @@ import type {
  */
 const ROUTES = {
   hostedAuth: "/api/v1/hosted/accounts/link",
+  accounts: "/api/v1/accounts",
   account: (id: string) => `/api/v1/accounts/${id}`,
   search: "/api/v1/linkedin/search",
   profile: (id: string) => `/api/v1/users/${id}`,
@@ -300,20 +301,42 @@ export class UnipileProvider implements LinkedInProvider {
 
     const parsed = JSON.parse(input.body) as RawUnipileAccount | { items?: RawUnipileAccount[] };
     const items = "items" in parsed && Array.isArray(parsed.items) ? parsed.items : [parsed as RawUnipileAccount];
-
-    return items
-      .map((item) => ({
-        providerAccountId: String(item.account_id ?? item.id ?? ""),
-        // `name` is what we passed into the hosted flow.
-        reference: String(item.name ?? item.reference ?? ""),
-        displayName: typeof item.account_name === "string" ? item.account_name : undefined,
-        status: mapAccountStatus(String(item.status ?? "OK")),
-      }))
-      // A notification naming neither the account nor the rep cannot be acted
-      // on, and guessing which row it meant is how the wrong account gets
-      // bound to the wrong person.
-      .filter((account) => account.providerAccountId && account.reference);
+    return toConnectedAccounts(items);
   }
+
+  /**
+   * Every account Unipile currently holds for this deployment.
+   *
+   * The hosted flow tells us an account connected by calling `notify_url`, and
+   * until this existed that notification was the only way a row could ever be
+   * bound. A delivery rejected once — a signature mismatch, a restart, a
+   * webhook registered after the fact — left the account connected at Unipile
+   * and permanently `connecting` here, with a Reconnect button that only ran
+   * the same flow again.
+   *
+   * Asking is the recovery path: the answer is the same list the notification
+   * carries, and `name` is the rep's user id either way.
+   */
+  async listAccounts(): Promise<ConnectedAccount[]> {
+    const res = await this.request<{ items?: RawUnipileAccount[] }>(ROUTES.accounts);
+    return toConnectedAccounts(res.items ?? []);
+  }
+}
+
+/** One shape for a connected account, whether it arrived by push or by pull. */
+function toConnectedAccounts(items: RawUnipileAccount[]): ConnectedAccount[] {
+  return items
+    .map((item) => ({
+      providerAccountId: String(item.account_id ?? item.id ?? ""),
+      // `name` is what we passed into the hosted flow.
+      reference: String(item.name ?? item.reference ?? ""),
+      displayName: typeof item.account_name === "string" ? item.account_name : undefined,
+      status: mapAccountStatus(String(item.status ?? "OK")),
+    }))
+    // An entry naming neither the account nor the rep cannot be acted on, and
+    // guessing which row it meant is how the wrong account gets bound to the
+    // wrong person.
+    .filter((account) => account.providerAccountId && account.reference);
 }
 
 interface RawUnipileAccount {

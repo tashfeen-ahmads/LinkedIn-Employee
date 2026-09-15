@@ -111,6 +111,13 @@ export interface LinkedInProvider {
    * skips it, so this is the step that makes a connected account real.
    */
   parseAccountWebhook(input: { body: string; signature?: string }): ConnectedAccount[];
+  /**
+   * Every account the provider currently holds, so a connection can be
+   * confirmed by asking rather than only by being told. The hosted flow's
+   * notification is a single delivery, and an account that misses it is
+   * otherwise stuck connecting forever.
+   */
+  listAccounts(): Promise<ConnectedAccount[]>;
   getAccountHealth(accountId: string): Promise<AccountHealth>;
   searchProspects(input: {
     accountId: string;

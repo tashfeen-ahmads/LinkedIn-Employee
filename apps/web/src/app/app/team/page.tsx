@@ -40,6 +40,37 @@ async function connectLinkedIn() {
  * telling someone their invitation is invalid after they clicked it is a worse
  * experience than telling the admin they need another seat.
  */
+/**
+ * Asks the provider whether this rep's account is connected, instead of waiting
+ * to be told.
+ *
+ * The hosted flow reports success by calling a webhook once. If that delivery
+ * is rejected — a signature mismatch, a restart, a webhook registered after the
+ * account already connected — the account works perfectly at the provider and
+ * sits here as "connecting" forever, with a Start again button that runs the
+ * same flow to the same end. This is the way out of that, and it costs one
+ * request.
+ */
+async function refreshLinkedIn() {
+  "use server";
+  const session = await requireSession();
+  const result = await callWorker<{ bound?: number; mine?: number }>("/jobs/linkedin-refresh", {
+    workspaceId: session.workspaceId,
+    userId: session.userId,
+  });
+  if (!result.ok) redirect(errorQuery("/app/team", result.error));
+
+  if (!result.data?.mine) {
+    redirect(
+      errorQuery(
+        "/app/team",
+        "LinkedIn's provider has no account for you yet. If you just finished signing in, give it a few seconds and check again.",
+      ),
+    );
+  }
+  revalidatePath("/app/team");
+}
+
 async function inviteMember(formData: FormData) {
   "use server";
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
@@ -352,14 +383,26 @@ export default async function TeamPage({
           <>
             <p className="small muted">
               {awaitingProvider
-                ? "Waiting for LinkedIn to confirm the connection. This usually takes a few seconds; if the page still says this in a minute, start again."
+                ? "Waiting for LinkedIn to confirm the connection. If you have already finished signing in, check again — the confirmation sometimes does not arrive, and checking asks directly."
                 : "Not connected yet. You will sign in to LinkedIn on their hosted page; we never see your password."}
             </p>
-            <form action={connectLinkedIn}>
-              <button className="btn" type="submit">
-                {awaitingProvider ? "Start again" : "Connect LinkedIn"}
-              </button>
-            </form>
+            <div className="cluster">
+              {/* While waiting, checking is the likelier fix and goes first:
+                  the account is usually already connected at the provider and
+                  only the notification went missing. */}
+              {awaitingProvider ? (
+                <form action={refreshLinkedIn}>
+                  <button className="btn" type="submit">
+                    Check again
+                  </button>
+                </form>
+              ) : null}
+              <form action={connectLinkedIn}>
+                <button className={awaitingProvider ? "btn secondary" : "btn"} type="submit">
+                  {awaitingProvider ? "Start again" : "Connect LinkedIn"}
+                </button>
+              </form>
+            </div>
           </>
         )}
       </section>
