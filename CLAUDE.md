@@ -123,6 +123,21 @@ tests that were verified by deliberately breaking the code.
     set up that way passes without proving anything — which is exactly what
     happened the first time.
 
+15. **A connection request is written for the person who receives it.**
+    `personalizeInvites` writes one note per prospect from that prospect's own
+    details, stored on `campaign_prospects` and read by a human before launch.
+    Before it existed, everyone in a campaign got the campaign's template with
+    `{{first_name}}` substituted — the headline, title, company and about text
+    were searched for, scored, stored, shown on screen, then dropped at the one
+    moment they mattered. `inviteNote` sends the personalised note verbatim and
+    falls back to the template when there is none, so a writer outage degrades a
+    campaign instead of stopping it. The note is matched to its prospect by
+    provider id, never by position: the failure mode of index matching is the
+    wrong person receiving a paragraph about somebody else, under a real rep's
+    name. `grounding` names the prospect details the note used, which is what
+    makes "personalised" checkable rather than a matter of opinion — empty
+    grounding is reported on the review screen, not hidden.
+
 ## Conventions
 
 - Agent output is validated against a zod schema before it touches the

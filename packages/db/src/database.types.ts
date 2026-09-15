@@ -241,6 +241,19 @@ export type CampaignProspectRow = {
   next_action_at: string | null;
   replied_at: string | null;
   closed_at: string | null;
+  /**
+   * The connection note written for this one person. Null falls back to the
+   * campaign's template, which is what every campaign created before this
+   * existed does.
+   */
+  invite_note: string | null;
+  invite_note_prompt_version: string | null;
+  /** Which of the prospect's own details the note leaned on. */
+  invite_note_grounding: string[];
+  /** The model said this prospect's details were too thin to be specific. */
+  invite_note_thin: boolean;
+  /** A human rewrote it; the agent must not overwrite it. */
+  invite_note_edited: boolean;
   created_at: string;
   updated_at: string;
 };

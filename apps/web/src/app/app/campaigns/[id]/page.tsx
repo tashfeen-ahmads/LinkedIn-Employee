@@ -1,9 +1,11 @@
 import { revalidatePath } from "next/cache";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { LINKEDIN_LIMITS, countFunnel, FUNNEL_STAGES } from "@le/shared";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
+import { errorQuery } from "@/lib/worker";
+import { PageNotice, type NoticeParams } from "@/components/page-notice";
 import { CONNECTION_NOTE_MAX, daysToSendAll, launchBlockers } from "@/lib/campaign";
 
 /**
@@ -68,6 +70,53 @@ async function removeFromCampaign(formData: FormData) {
       status_reason: "removed during review",
       closed_at: new Date().toISOString(),
       next_action_at: null,
+    })
+    .eq("id", campaignProspectId)
+    .eq("workspace_id", session.workspaceId)
+    .eq("status", "queued");
+
+  revalidatePath(`/app/campaigns/${campaignId}`);
+}
+
+/**
+ * A rep rewriting the note the agent wrote for one person.
+ *
+ * `invite_note_edited` is what stops the agent overwriting it later. A rep who
+ * rewrote a note and watched it revert would stop trusting the screen, and then
+ * stop reading the notes at all — which is the failure this review step exists
+ * to prevent.
+ *
+ * Only while queued. After the invitation is sent the note is a record of what
+ * was said, not a draft.
+ */
+async function saveInviteNote(formData: FormData) {
+  "use server";
+  const campaignProspectId = String(formData.get("campaignProspectId"));
+  const campaignId = String(formData.get("campaignId"));
+  const note = String(formData.get("note") ?? "").trim();
+  const session = await requireSession();
+  const supabase = await createClient();
+
+  // LinkedIn refuses a longer note outright rather than truncating it, so a
+  // silent save here would produce an invitation that never sends.
+  if (note.length > CONNECTION_NOTE_MAX) {
+    redirect(
+      errorQuery(
+        `/app/campaigns/${campaignId}`,
+        `That note is ${note.length} characters. LinkedIn refuses anything over ${CONNECTION_NOTE_MAX}.`,
+      ),
+    );
+  }
+
+  await supabase
+    .from("campaign_prospects")
+    .update({
+      invite_note: note || null,
+      invite_note_edited: true,
+      // It is the rep's sentence now, so the agent's account of where it came
+      // from no longer describes it.
+      invite_note_grounding: [],
+      invite_note_thin: false,
     })
     .eq("id", campaignProspectId)
     .eq("workspace_id", session.workspaceId)
@@ -157,7 +206,14 @@ function listInWords(items: string[]): string {
   return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
 }
 
-export default async function CampaignPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function CampaignPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: NoticeParams;
+}) {
+  const notice = await searchParams;
   const { id } = await params;
   const session = await requireSession();
   const supabase = await createClient();
@@ -178,7 +234,7 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
       .order("step_number"),
     supabase
       .from("campaign_prospects")
-      .select("id, status, status_reason, invited_at, accepted_at, replied_at, prospects (id, first_name, last_name, title, company, linkedin_url, fit_score)")
+      .select("id, status, status_reason, invited_at, accepted_at, replied_at, invite_note, invite_note_grounding, invite_note_thin, invite_note_edited, prospects (id, first_name, last_name, headline, title, company, location, linkedin_url, fit_score, fit_reasons)")
       .eq("campaign_id", id)
       .order("created_at"),
     supabase.from("linkedin_accounts").select("status, display_name").eq("id", campaign.linkedin_account_id).maybeSingle(),
@@ -201,6 +257,7 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
 
   return (
     <>
+      <PageNotice error={notice.error} notice={notice.notice} />
       <p className="small muted">
         <Link href="/app/campaigns">← Campaigns</Link>
       </p>
@@ -331,73 +388,144 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
         </section>
       </form>
 
-      <section>
-        <h2>Who is on the list</h2>
+      <section className="stack-4">
+        <div className="between">
+          <h2>Who is on the list</h2>
+          <p className="tiny subtle">
+            {rows.length} {rows.length === 1 ? "person" : "people"}
+          </p>
+        </div>
+
         {rows.length === 0 ? (
           <p className="small muted">Nobody yet.</p>
         ) : (
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Role</th>
-                  <th>Fit</th>
-                  <th>Status</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => {
-                  const prospect = row.prospects as unknown as {
-                    id: string;
-                    first_name: string | null;
-                    last_name: string | null;
-                    title: string | null;
-                    company: string | null;
-                    linkedin_url: string;
-                    fit_score: number | null;
-                  } | null;
-                  if (!prospect) return null;
-                  return (
-                    <tr key={row.id}>
-                      <td>
-                        <a href={`https://${prospect.linkedin_url.replace(/^https?:\/\//, "")}`} target="_blank" rel="noreferrer">
-                          {[prospect.first_name, prospect.last_name].filter(Boolean).join(" ") || "—"}
+          <ul className="prospect-list">
+            {rows.map((row) => {
+              const prospect = row.prospects as unknown as {
+                id: string;
+                first_name: string | null;
+                last_name: string | null;
+                headline: string | null;
+                title: string | null;
+                company: string | null;
+                location: string | null;
+                linkedin_url: string;
+                fit_score: number | null;
+                fit_reasons: string[] | null;
+              } | null;
+              if (!prospect) return null;
+
+              const name = [prospect.first_name, prospect.last_name].filter(Boolean).join(" ") || "—";
+              const grounding = (row.invite_note_grounding ?? []) as string[];
+              const queued = row.status === "queued";
+
+              return (
+                <li key={row.id} className="card prospect-card">
+                  <div className="between">
+                    <div className="stack-1 grow">
+                      <div className="cluster">
+                        <a
+                          href={`https://${prospect.linkedin_url.replace(/^https?:\/\//, "")}`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          <strong>{name}</strong>
                         </a>
-                      </td>
-                      <td className="small muted">
-                        {prospect.title ?? "—"}
-                        {prospect.company ? ` · ${prospect.company}` : ""}
-                      </td>
-                      <td className="mono">{prospect.fit_score ?? "—"}</td>
-                      <td>
-                        <span className={`pill ${row.status === "meeting_booked" ? "positive" : ""}`}>
-                          {row.status}
+                        {prospect.fit_score !== null ? (
+                          <span className="pill plain tiny mono">fit {prospect.fit_score}</span>
+                        ) : null}
+                        <span className={`pill tiny ${row.status === "meeting_booked" ? "positive" : "plain"}`}>
+                          {row.status.replaceAll("_", " ")}
                         </span>
-                        {row.status_reason ? (
-                          <p className="small muted">
-                            {row.status_reason}
+                      </div>
+                      <p className="small muted">
+                        {prospect.title ?? prospect.headline ?? "—"}
+                        {prospect.company ? ` · ${prospect.company}` : ""}
+                        {prospect.location ? ` · ${prospect.location}` : ""}
+                      </p>
+                    </div>
+                    {queued ? (
+                      <form action={removeFromCampaign}>
+                        <input type="hidden" name="campaignProspectId" value={row.id} />
+                        <input type="hidden" name="campaignId" value={campaign.id} />
+                        <button className="btn ghost small" type="submit">
+                          Remove
+                        </button>
+                      </form>
+                    ) : null}
+                  </div>
+
+                  {prospect.fit_reasons?.length ? (
+                    <div className="stack-1">
+                      <p className="tiny subtle">Why this person</p>
+                      <ul className="bullets small muted">
+                        {prospect.fit_reasons.map((reason) => (
+                          <li key={reason}>{reason}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
+
+                  {/* What this person actually receives. Until notes existed
+                      everyone in a campaign got identical words, and this is
+                      the screen where that is now visible before it is sent. */}
+                  <div className="stack-2">
+                    <div className="cluster">
+                      <p className="tiny subtle">Their connection note</p>
+                      {row.invite_note_edited ? (
+                        <span className="pill plain tiny">edited by you</span>
+                      ) : row.invite_note_thin ? (
+                        <span className="pill warning tiny">too little to go on</span>
+                      ) : !row.invite_note ? (
+                        <span className="pill warning tiny">campaign template</span>
+                      ) : null}
+                    </div>
+
+                    {queued ? (
+                      <form action={saveInviteNote} className="stack-2">
+                        <input type="hidden" name="campaignProspectId" value={row.id} />
+                        <input type="hidden" name="campaignId" value={campaign.id} />
+                        <label className="field">
+                          <span className="sr-only">Connection note for {name}</span>
+                          <textarea
+                            name="note"
+                            rows={3}
+                            maxLength={CONNECTION_NOTE_MAX}
+                            defaultValue={row.invite_note ?? ""}
+                            placeholder={campaign.connection_note}
+                          />
+                        </label>
+                        <div className="between">
+                          <p className="tiny subtle">
+                            {row.invite_note
+                              ? `${row.invite_note.length}/${CONNECTION_NOTE_MAX}`
+                              : "Empty sends the campaign template."}
                           </p>
-                        ) : null}
-                      </td>
-                      <td>
-                        {row.status === "queued" ? (
-                          <form action={removeFromCampaign}>
-                            <input type="hidden" name="campaignProspectId" value={row.id} />
-                            <input type="hidden" name="campaignId" value={campaign.id} />
-                            <button className="btn secondary small" type="submit">
-                              Remove
-                            </button>
-                          </form>
-                        ) : null}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                          <button className="btn secondary small" type="submit">
+                            Save note
+                          </button>
+                        </div>
+                      </form>
+                    ) : (
+                      <blockquote className="quote small">{row.invite_note ?? campaign.connection_note}</blockquote>
+                    )}
+
+                    {grounding.length ? (
+                      <p className="tiny subtle">
+                        Grounded in: {grounding.join(" · ")}
+                      </p>
+                    ) : row.invite_note && !row.invite_note_edited ? (
+                      <p className="tiny warning-text">
+                        Nothing specific to this person — this note could have gone to anybody.
+                      </p>
+                    ) : null}
+                  </div>
+
+                  {row.status_reason ? <p className="tiny muted">{row.status_reason}</p> : null}
+                </li>
+              );
+            })}
+          </ul>
         )}
       </section>
     </>

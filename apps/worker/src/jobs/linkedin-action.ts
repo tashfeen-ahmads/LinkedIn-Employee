@@ -19,7 +19,7 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
   const { db } = ctx;
   const { data: cp } = await db
     .from("campaign_prospects")
-    .select("id, workspace_id, campaign_id, prospect_id, status, last_step_sent, invitation_id")
+    .select("id, workspace_id, campaign_id, prospect_id, status, last_step_sent, invitation_id, invite_note")
     .eq("id", job.campaignProspectId)
     .single();
   if (!cp) return;
@@ -85,7 +85,12 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
     const result = await ctx.linkedin.sendInvitation({
       accountId: accountRow.provider_account_id,
       providerId: prospect.provider_id,
-      note: renderTemplate(campaign.connection_note, prospect.first_name),
+      // The note written for this person when the campaign was built, and read
+      // by a human before launch. The campaign template is the fallback for a
+      // prospect the writer did not answer for, and for every campaign created
+      // before notes existed — so this is additive, and a workspace that has
+      // never seen a personalised note keeps working exactly as it did.
+      note: inviteNote(cp.invite_note, campaign.connection_note, prospect.first_name),
     });
     if (result.health) await applyHealth(db, accountRow, result.health, { email: ctx.email, appUrl: ctx.env.APP_URL });
     if (!result.ok) {
@@ -332,6 +337,27 @@ async function failProspect(ctx: WorkerContext, campaignProspectId: string, reas
 /** Only {{first_name}} is supported; anything else stays literal by design. */
 export function renderTemplate(template: string, firstName: string | null): string {
   return template.replace(/\{\{\s*first_name\s*\}\}/gi, firstName?.trim() || "there");
+}
+
+/**
+ * What this person is actually sent.
+ *
+ * A personalised note is already written for one named person, so it is sent
+ * verbatim — running it through the template renderer would be a no-op at best
+ * and would rewrite the writer's words at worst.
+ *
+ * Blank falls back rather than sending nothing: an invitation with no note is
+ * still delivered by LinkedIn, so an empty string here would quietly turn a
+ * personalised campaign into a bare connection request nobody chose to send.
+ */
+export function inviteNote(
+  personalized: string | null,
+  template: string,
+  firstName: string | null,
+): string {
+  const note = personalized?.trim();
+  if (note) return note;
+  return renderTemplate(template, firstName);
 }
 
 export function addDays(date: Date, days: number): Date {

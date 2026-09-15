@@ -162,6 +162,22 @@ const MUTATIONS = [
     pkg: "@le/worker",
   },
   {
+    id: "invite/personalised-note-is-sent",
+    rule: "The note written for a person is the note they receive",
+    file: "apps/worker/src/jobs/linkedin-action.ts",
+    from: "  const note = personalized?.trim();\n  if (note) return note;",
+    to: "  const note = personalized?.trim();\n  if (false && note) return note;",
+    pkg: "@le/worker",
+  },
+  {
+    id: "invite/note-matched-by-id",
+    rule: "A note reaches the prospect it was written about",
+    file: "apps/worker/src/jobs/targeting.ts",
+    from: 'const note = notes.get(providerIdByProspectId.get(p.id) ?? "");',
+    to: "const note = [...notes.values()][insertedProspects.indexOf(p)];",
+    pkg: "@le/worker",
+  },
+  {
     id: "webhook/signature",
     rule: "An unsigned or wrongly signed webhook is rejected",
     file: "packages/linkedin/src/unipile.ts",

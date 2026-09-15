@@ -12,6 +12,7 @@ const PROFILE = "55555555-5555-4555-8555-555555555555";
 
 const scoreMock = vi.fn();
 const campaignMock = vi.fn();
+const notesMock = vi.fn();
 
 vi.mock("@le/agents", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@le/agents")>();
@@ -19,6 +20,7 @@ vi.mock("@le/agents", async (importOriginal) => {
     ...actual,
     scoreProspects: (...args: unknown[]) => scoreMock(...args),
     buildCampaign: (...args: unknown[]) => campaignMock(...args),
+    personalizeInvites: (...args: unknown[]) => notesMock(...args),
   };
 });
 
@@ -136,6 +138,11 @@ beforeEach(() => {
     stopConditions: ["prospect replies", "prospect opts out", "meeting booked"],
     dailyInviteCap: 20,
   });
+  notesMock.mockReset();
+  // The default: the writer answered for nobody, so every prospect falls back
+  // to the campaign template. That is what every campaign built before
+  // personalised notes existed does, and it must keep working.
+  notesMock.mockResolvedValue(new Map());
 });
 
 describe("runTargetingJob", () => {
@@ -380,5 +387,98 @@ describe("runTargetingJob", () => {
     ]);
     const event = db.rows("events").find((e) => e.name === "campaign.created");
     expect((event?.payload as { searchTier: string }).searchTier).toBe("classic");
+  });
+});
+
+describe("personalised connection notes", () => {
+  it("stores the note written for each prospect, with what it was grounded in", async () => {
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    linkedin.candidates = {
+      items: [candidate("p1", "https://www.linkedin.com/in/jane-one")],
+      cursor: null,
+      droppedFilters: [],
+    };
+    scoreMock.mockResolvedValue([ranked("https://www.linkedin.com/in/jane-one", "p1", 90)]);
+    notesMock.mockResolvedValue(
+      new Map([
+        [
+          "p1",
+          {
+            providerId: "p1",
+            note: "Saw you run ops at Acme — curious how you handle pipeline hygiene.",
+            grounding: ["Head of Operations at Acme"],
+            tooThin: false,
+            promptVersion: "targeting.invite-note/2026-09-15",
+          },
+        ],
+      ]),
+    );
+
+    await runTargetingJob(ctx, job);
+
+    const [row] = db.rows("campaign_prospects");
+    expect(row.invite_note).toContain("Saw you run ops at Acme");
+    expect(row.invite_note_grounding).toEqual(["Head of Operations at Acme"]);
+    expect(row.invite_note_thin).toBe(false);
+    // Convention: every sent message records the prompt that produced it, so a
+    // regression traces back to the change that caused it.
+    expect(row.invite_note_prompt_version).toBe("targeting.invite-note/2026-09-15");
+  });
+
+  it("leaves the note null when the writer did not answer for that prospect", async () => {
+    // Not an error. The send falls back to the campaign template, which is the
+    // behaviour that existed before any of this — so a writer outage degrades
+    // a campaign rather than stopping it.
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    linkedin.candidates = {
+      items: [candidate("p1", "https://www.linkedin.com/in/jane-one")],
+      cursor: null,
+      droppedFilters: [],
+    };
+    scoreMock.mockResolvedValue([ranked("https://www.linkedin.com/in/jane-one", "p1", 90)]);
+
+    await runTargetingJob(ctx, job);
+
+    const [row] = db.rows("campaign_prospects");
+    expect(row.invite_note).toBeNull();
+    expect(row.invite_note_grounding).toEqual([]);
+  });
+
+  it("matches a note to its prospect by provider id, not by position", async () => {
+    // The upsert returns rows in the order given, so index matching works right
+    // up until it does not — and the failure is the wrong person receiving a
+    // note written about somebody else, under a real rep's name.
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    linkedin.candidates = {
+      items: [
+        candidate("p1", "https://www.linkedin.com/in/jane-one"),
+        candidate("p2", "https://www.linkedin.com/in/john-two"),
+      ],
+      cursor: null,
+      droppedFilters: [],
+    };
+    scoreMock.mockResolvedValue([
+      ranked("https://www.linkedin.com/in/jane-one", "p1", 90),
+      ranked("https://www.linkedin.com/in/john-two", "p2", 85),
+    ]);
+    // Deliberately returned in the opposite order to the prospect list.
+    notesMock.mockResolvedValue(
+      new Map([
+        ["p2", { providerId: "p2", note: "note for p2", grounding: ["b"], tooThin: false, promptVersion: "v" }],
+        ["p1", { providerId: "p1", note: "note for p1", grounding: ["a"], tooThin: false, promptVersion: "v" }],
+      ]),
+    );
+
+    await runTargetingJob(ctx, job);
+
+    const prospects = db.rows("prospects");
+    const rows = db.rows("campaign_prospects");
+    for (const row of rows) {
+      const prospect = prospects.find((p) => p.id === row.prospect_id);
+      expect(row.invite_note).toBe(`note for ${prospect?.provider_id}`);
+    }
   });
 });

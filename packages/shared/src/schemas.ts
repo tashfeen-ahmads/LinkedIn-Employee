@@ -101,6 +101,36 @@ export type FitScore = z.infer<typeof FitScoreSchema>;
 
 export const FitScoreBatchSchema = z.object({ scores: z.array(FitScoreSchema) });
 
+/**
+ * The connection note written for one named person.
+ *
+ * `grounding` is not decoration. It names the prospect's own details the note
+ * leaned on, which makes two things checkable that are otherwise a matter of
+ * opinion: whether the note is actually about this person, and whether the
+ * model made something up. An empty grounding means the note could have been
+ * sent to anybody, and the campaign screen says so rather than letting it pass
+ * as personalised.
+ *
+ * Model-facing, so `.nullable()` rather than `.optional()` — structured outputs
+ * reject optional keys.
+ */
+export const InviteNoteSchema = z.object({
+  providerId: z.string(),
+  /** LinkedIn's hard ceiling for a connection request note. */
+  note: z.string().max(300),
+  /** Which of this prospect's details the note used, quoted from the input. */
+  grounding: z.array(z.string()).max(3),
+  /**
+   * Set when the prospect's details were too thin to say anything specific.
+   * Honest thinness beats invented familiarity: a note that guesses wrong is
+   * worse than one that is merely polite.
+   */
+  tooThin: z.boolean(),
+});
+export type InviteNote = z.infer<typeof InviteNoteSchema>;
+
+export const InviteNoteBatchSchema = z.object({ notes: z.array(InviteNoteSchema) });
+
 export const CampaignPlanSchema = z.object({
   name: z.string(),
   connectionNote: z.string().max(300),

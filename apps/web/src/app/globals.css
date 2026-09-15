@@ -226,6 +226,39 @@ p  { margin: 0; }
    margin, because spacing is the parent's job here as everywhere. */
 .bullets { margin: 0; padding-left: 1.05rem; display: flex; flex-direction: column; gap: var(--space-1); }
 
+/* ---------------------------------------------------------- review screen */
+
+/* One card per person, because the thing being reviewed is a paragraph written
+   about them — which a table cell cannot hold. The list was a table of names
+   and fit scores, and the note every person would receive was not on the page
+   at all. */
+.prospect-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+.prospect-card { gap: var(--space-3); }
+.prospect-card textarea { min-height: 4.5rem; }
+
+.quote {
+  margin: 0;
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--border-strong);
+  color: var(--text-muted);
+}
+
+/* Semantic text colours, matched to the pills so a warning reads the same
+   whether it is a badge or a sentence. */
+.warning-text { color: var(--warning); }
+.danger-text  { color: var(--danger); }
+
+/* Present for a screen reader, absent for everything else. Used where a field
+   is labelled by what surrounds it and a visible label would be noise. */
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 /* The heading block every page and section opens with. */
 .page-head { display: flex; flex-direction: column; gap: var(--space-2); }
 .section-head { display: flex; flex-direction: column; gap: var(--space-1); }

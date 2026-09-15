@@ -1,4 +1,4 @@
-import { buildCampaign, scoreProspects } from "@le/agents";
+import { buildCampaign, personalizeInvites, scoreProspects } from "@le/agents";
 import {
   BusinessProfileSchema,
   CustomerProfileSchema,
@@ -149,13 +149,47 @@ export async function runTargetingJob(ctx: WorkerContext, job: TargetingJob): Pr
     .select("id");
 
   if (insertedProspects?.length) {
+    // One note per person, written from that person's own details.
+    //
+    // Done here rather than at send time for two reasons. A human reviews and
+    // launches the campaign, and they cannot review copy that does not exist
+    // yet. And a send-time model call sits on the path of an action the rate
+    // limiter has already scheduled, where a slow or failed response becomes a
+    // missed send rather than a visible problem.
+    //
+    // The upsert above returns ids in the order it was given, so the shortlist
+    // and the inserted rows line up — but "lines up" is an assumption that
+    // breaks silently, so the note is matched by provider id instead.
+    const notes = await personalizeInvites(ctx.agentsFor(job.workspaceId), {
+      business,
+      profile,
+      repName: rep?.full_name ?? "the sender",
+      campaignAngle: plan.connectionNote,
+      prospects: shortlist.map((r) => r.candidate),
+    });
+
+    const providerIdByProspectId = new Map<string, string>();
+    for (const [index, p] of insertedProspects.entries()) {
+      const candidate = shortlist[index]?.candidate;
+      if (candidate) providerIdByProspectId.set(p.id, candidate.providerId);
+    }
+
     await db.from("campaign_prospects").insert(
-      insertedProspects.map((p) => ({
-        workspace_id: job.workspaceId,
-        campaign_id: campaign.id,
-        prospect_id: p.id,
-        status: "queued" as const,
-      })),
+      insertedProspects.map((p) => {
+        const note = notes.get(providerIdByProspectId.get(p.id) ?? "");
+        return {
+          workspace_id: job.workspaceId,
+          campaign_id: campaign.id,
+          prospect_id: p.id,
+          status: "queued" as const,
+          // Absent is not an error: the send falls back to the campaign
+          // template, which is exactly what happened before any of this.
+          invite_note: note?.note ?? null,
+          invite_note_prompt_version: note?.promptVersion ?? null,
+          invite_note_grounding: (note?.grounding ?? []) as never,
+          invite_note_thin: note?.tooThin ?? false,
+        };
+      }),
     );
   }
 

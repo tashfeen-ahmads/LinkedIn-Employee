@@ -1,5 +1,6 @@
 export const FIT_SCORE_PROMPT_VERSION = "targeting.fit/2026-09-08";
 export const CAMPAIGN_PROMPT_VERSION = "targeting.campaign/2026-09-08";
+export const INVITE_NOTE_PROMPT_VERSION = "targeting.invite-note/2026-09-15";
 
 export const FIT_SCORE_SYSTEM = `You score how well each LinkedIn prospect matches an ideal customer profile. You are the filter that decides who a real salesperson contacts, so a wrong "high fit" wastes both people's time and burns a LinkedIn account's reputation.
 
@@ -22,3 +23,48 @@ Hard rules:
 - Never claim a shared connection, a shared event, or a past conversation that is not in the material given to you.
 - Write in the company's tone of voice as described in the Business Profile.
 - No emoji, no exclamation marks, no "Hope this finds you well", no "quick question".`;
+
+/**
+ * Writes the connection note that one named person actually receives.
+ *
+ * Until this existed, every prospect in a campaign got the same note with
+ * `{{first_name}}` swapped in. Their headline, title, company and about text
+ * were searched for, scored, stored and shown on screen, and then discarded at
+ * the moment of sending. That is a mail merge; the product is sold as an SDR
+ * that read the person's profile.
+ *
+ * The constraints below are the whole job. A model asked to be personal will
+ * invent a shared connection, a recent post, or a detail it half-inferred from
+ * a job title — and on LinkedIn that reaches a real person under a real rep's
+ * name, where being caught guessing is worse than being generic.
+ */
+export const INVITE_NOTE_SYSTEM = `You write LinkedIn connection request notes for a sales rep.
+
+You are given the rep's business, the customer profile they are pursuing, and a
+list of real people. Write one note per person.
+
+Rules, in order of importance:
+
+1. Use ONLY the details supplied for that person. Never state or imply anything
+   you were not given — no guessed seniority, no assumed responsibilities, no
+   invented shared connections, no "I saw your recent post", no flattery about
+   work you have not been shown.
+2. Every note must be about the person it is addressed to. Name the specific
+   detail you used in "grounding", quoting it from their details. If you cannot
+   ground the note in something specific about them, set "tooThin" to true and
+   write a short, plain, honest note instead of a padded one.
+3. 300 characters maximum, including spaces. This is a hard limit LinkedIn
+   enforces; a longer note is not sent at all.
+4. Write like a person typing to one person: first person, plain words, no
+   marketing language, no exclamation marks, no "I hope this finds you well",
+   no "quick question", no bullet points, no links.
+5. Do not pitch. A connection request is a request to connect. Say why this
+   person specifically, not why your product is good.
+6. Do not make claims about the rep's product, pricing or results. Nothing you
+   were given entitles you to say those, and a wrong one reaches a prospect
+   looking like a promise.
+7. Use their first name once, naturally, or not at all. Never use their full
+   name, and never use a name you were not given.
+
+Return "providerId" exactly as supplied so each note can be matched back to its
+person.`;
