@@ -1111,6 +1111,11 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
   margin-top: 2px;
 }
 .checklist-row.is-done .checklist-tick { background: var(--positive); border-color: var(--positive); color: #fff; }
+/* The one step being asked for, marked on the row as well as in the meter — the
+   meter says how far along you are, not what to do next. */
+.checklist-row.is-next .checklist-tick { border-color: var(--accent); }
+.checklist-row.is-next > .stack-1 > .cluster > .small { font-weight: 600; }
+.checklist-go { flex: none; align-self: center; }
 
 /*
  * The setup progress meter. Segmented rather than a continuous bar: there are

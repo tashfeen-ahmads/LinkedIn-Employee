@@ -24,9 +24,7 @@ export function SetupChecklist({ state }: { state: OnboardingState }) {
     <section className="card raised stack-4" aria-labelledby="setup-heading">
       <div className="between">
         <div className="stack-1">
-          <h2 id="setup-heading" style={{ fontSize: "1.0625rem" }}>
-            Finish setting up
-          </h2>
+          <h2 id="setup-heading">Finish setting up</h2>
           <p className="small muted">
             {done} of {total} done. Nothing sends until the required steps are.
           </p>
@@ -51,23 +49,31 @@ export function SetupChecklist({ state }: { state: OnboardingState }) {
         {ONBOARDING_STEPS.map((step) => {
           const complete = state[step.key];
           return (
-            <li key={step.key} className={`checklist-row${complete ? " is-done" : ""}`}>
+            <li
+              key={step.key}
+              className={`checklist-row${complete ? " is-done" : ""}${
+                step.key === next?.key ? " is-next" : ""
+              }`}
+            >
               <span className="checklist-tick" aria-hidden="true">
                 {complete ? "✓" : ""}
               </span>
               <div className="stack-1 grow">
-                <div className="cluster" style={{ gap: "var(--space-2)" }}>
-                  {complete ? (
-                    <span className="small">{step.label}</span>
-                  ) : (
-                    <Link href={step.href} className="small">
-                      {step.label}
-                    </Link>
-                  )}
-                  {step.required ? null : <span className="pill plain tiny">optional</span>}
+                <div className="cluster">
+                  <span className="small">{step.label}</span>
+                  {step.key === next?.key ? <span className="pill accent tiny">next</span> : null}
+                  {step.required || complete ? null : <span className="pill plain tiny">optional</span>}
                 </div>
                 {complete ? null : <p className="tiny subtle">{step.why}</p>}
               </div>
+              {/* The action sits at the end of its own row rather than the label
+                  doubling as a link. A row that was both a sentence and a
+                  control never said which part to click. */}
+              {complete ? null : (
+                <Link href={step.href} className="btn ghost small checklist-go">
+                  {step.key === next?.key ? "Start" : "Open"}
+                </Link>
+              )}
             </li>
           );
         })}
