@@ -105,7 +105,19 @@ export class UnipileProvider implements LinkedInProvider {
     });
     const text = await res.text();
     if (!res.ok) {
-      throw new UnipileError(`Unipile ${init.method ?? "GET"} ${path} failed with ${res.status}`, res.status, text);
+      // Unipile's own sentence, carried out with the status.
+      //
+      // A 404 from this API means one of several unrelated things — no such
+      // account, a feature the subscription does not include, a route that
+      // does not exist on this deployment — and the body is where it says
+      // which. Reporting the number alone leaves whoever reads the event to
+      // guess, which is how a search that was failing for a nameable reason
+      // looked for a day like a search that matched nobody.
+      throw new UnipileError(
+        `Unipile ${init.method ?? "GET"} ${path} failed with ${res.status}${said(text)}`,
+        res.status,
+        text,
+      );
     }
     return (text ? JSON.parse(text) : {}) as T;
   }
@@ -199,7 +211,16 @@ export class UnipileProvider implements LinkedInProvider {
     const resolve = async (field: string, type: SearchParameterType, names: string[] | undefined) => {
       const ids: string[] = [];
       for (const name of names ?? []) {
-        const hit = await this.lookupParameter(accountId, type, name);
+        const looked = await this.lookupParameter(accountId, type, name);
+        if (looked.failed) {
+          // Not the same thing as LinkedIn not having the term, and saying so
+          // matters: every lookup failing means the search runs with no
+          // location and no industry at all, which is a different campaign
+          // from the one that was approved.
+          notes.push(`The ${field} "${name}" could not be looked up (${looked.failed}), so it was left out of the search.`);
+          continue;
+        }
+        const hit = looked.found;
         if (!hit) {
           notes.push(`LinkedIn has no ${field} called "${name}", so it was left out of the search.`);
           continue;
@@ -224,10 +245,10 @@ export class UnipileProvider implements LinkedInProvider {
     accountId: string,
     type: SearchParameterType,
     name: string,
-  ): Promise<SearchParameter | null> {
+  ): Promise<Lookup> {
     const key = `${type}:${name.trim().toLowerCase()}`;
     const cached = this.parameterIds.get(key);
-    if (cached !== undefined) return cached;
+    if (cached !== undefined) return { found: cached };
 
     const params = new URLSearchParams({ account_id: accountId, type, keywords: name });
     let items: Array<{ id?: string; title?: string; name?: string }> = [];
@@ -236,11 +257,12 @@ export class UnipileProvider implements LinkedInProvider {
         `${ROUTES.searchParameters}?${params.toString()}`,
       );
       items = res.items ?? [];
-    } catch {
+    } catch (err) {
       // A lookup that fails is not a filter that matched nothing. Nothing is
       // cached, so the next search asks again rather than inheriting a wrong
-      // answer for the life of the process.
-      return null;
+      // answer for the life of the process, and the caller is told which of
+      // the two happened.
+      return { found: null, failed: (err as { message?: string })?.message ?? "the lookup failed" };
     }
 
     // Exact first: "Design" is a real LinkedIn industry and also a word inside
@@ -251,11 +273,11 @@ export class UnipileProvider implements LinkedInProvider {
     const id = hit?.id;
     if (!id) {
       this.parameterIds.set(key, null);
-      return null;
+      return { found: null };
     }
     const found = { id, title: hit?.title ?? hit?.name ?? name };
     this.parameterIds.set(key, found);
-    return found;
+    return { found };
   }
 
   async getProfile(input: { accountId: string; providerId: string }): Promise<ProviderProfile> {
@@ -477,6 +499,32 @@ function toInboundMessage(m: RawUnipileMessage, fallbackAccountId: string): Inbo
  * reported as dropped. A filter that quietly becomes a suggestion is worse than
  * one that is missing, because the result still looks like what was asked for.
  */
+/**
+ * What the provider said, short enough to store beside the status.
+ *
+ * Error bodies here are small JSON objects — `type`, `title`, `detail` — and
+ * the interesting part is a sentence. Truncated rather than dropped: an HTML
+ * error page from something in front of the API is still worth the first line
+ * of, because it says the request never reached Unipile at all.
+ */
+function said(body: string): string {
+  const text = body.trim();
+  if (!text) return "";
+  let detail = text;
+  try {
+    const parsed: unknown = JSON.parse(text);
+    if (parsed && typeof parsed === "object") {
+      const { title, detail: d, type, message } = parsed as Record<string, unknown>;
+      const parts = [title, d, message, type].filter((v): v is string => typeof v === "string" && v.trim() !== "");
+      if (parts.length) detail = [...new Set(parts)].join(" — ");
+    }
+  } catch {
+    // Not JSON. The raw first line is still the most informative thing here.
+  }
+  const oneLine = detail.replace(/\s+/g, " ").trim();
+  return `: ${oneLine.length > 300 ? `${oneLine.slice(0, 300)}…` : oneLine}`;
+}
+
 /** The parameter lists this product needs ids from. */
 type SearchParameterType = "LOCATION" | "INDUSTRY";
 
@@ -484,6 +532,18 @@ interface SearchParameter {
   id: string;
   /** LinkedIn's own name for it, which is often not the one we asked with. */
   title: string;
+}
+
+/**
+ * The three answers a taxonomy lookup has, kept apart.
+ *
+ * `found` set is a term LinkedIn knows. `found: null` with no `failed` is a
+ * term it does not have. `failed` is a term nobody managed to ask about, which
+ * says nothing at all about whether LinkedIn has it.
+ */
+interface Lookup {
+  found: SearchParameter | null;
+  failed?: string;
 }
 
 interface ResolvedFilters {

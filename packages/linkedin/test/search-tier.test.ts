@@ -155,6 +155,44 @@ describe("searchProspects tier", () => {
     ]);
   });
 
+  it("says the provider's own words, not just its status code", async () => {
+    const fetchImpl = (async () =>
+      new Response(
+        JSON.stringify({ status: 404, type: "errors/no_account", title: "Account not found" }),
+        { status: 404, headers: { "content-type": "application/json" } },
+      )) as typeof fetch;
+    const provider = new UnipileProvider({ dsn: "https://api.test", accessToken: "t", fetchImpl });
+
+    // A 404 here means no such account, or a feature the subscription lacks,
+    // or a route that is not on this deployment. Three different things to do
+    // about it, and the number alone picks none of them.
+    await expect(
+      provider.searchProspects({ accountId: "a1", query: { titles: ["Founder"] }, tier: "classic" }),
+    ).rejects.toThrow(/Account not found/);
+  });
+
+  it("does not report a lookup it could not make as a term LinkedIn lacks", async () => {
+    const fetchImpl = (async (url: string | URL | Request, init?: RequestInit) => {
+      if (String(url).includes("/search/parameters")) {
+        return new Response(JSON.stringify({ title: "Account not found" }), { status: 404 });
+      }
+      void init;
+      return json({ items: [], cursor: null });
+    }) as typeof fetch;
+    const provider = new UnipileProvider({ dsn: "https://api.test", accessToken: "t", fetchImpl });
+
+    const page = await provider.searchProspects({
+      accountId: "a1",
+      query: { geographies: ["United Kingdom"] },
+      tier: "classic",
+    });
+
+    // "LinkedIn has no location called United Kingdom" would be a lie, and the
+    // kind that sends someone off to rewrite a customer profile that is fine.
+    expect(page.filterNotes?.[0]).toMatch(/could not be looked up/);
+    expect(page.filterNotes?.[0]).toMatch(/Account not found/);
+  });
+
   it("asks LinkedIn for each term once, however many searches run", async () => {
     const { provider, lookups } = providerWithCapturedBody();
 

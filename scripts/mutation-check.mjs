@@ -736,6 +736,22 @@ const MUTATIONS = [
     pkg: "@le/worker",
   },
   {
+    id: "search/provider-says-why",
+    rule: "A provider failure carries the provider's own sentence, not only its status code",
+    file: "packages/linkedin/src/unipile.ts",
+    from: '        `Unipile ${init.method ?? "GET"} ${path} failed with ${res.status}${said(text)}`,',
+    to: '        `Unipile ${init.method ?? "GET"} ${path} failed with ${res.status}`,',
+    pkg: "@le/linkedin",
+  },
+  {
+    id: "search/failed-lookup-is-not-an-absent-term",
+    rule: "A taxonomy lookup that could not be made is reported as that, never as LinkedIn not having the term",
+    file: "packages/linkedin/src/unipile.ts",
+    from: "        if (looked.failed) {",
+    to: "        if (false) {",
+    pkg: "@le/linkedin",
+  },
+  {
     id: "search/filters-are-ids-not-names",
     rule: "Locations and industries are searched by LinkedIn's id; sending the words returns nobody",
     file: "packages/linkedin/src/unipile.ts",
