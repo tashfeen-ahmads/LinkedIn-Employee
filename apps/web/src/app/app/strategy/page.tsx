@@ -128,6 +128,21 @@ export default async function StrategyPage({
   const session = await requireSession();
   const supabase = await createClient();
 
+  // The last time the Targeting Agent gave up, and why.
+  //
+  // The agent runs in the worker, so the page that started it never learns how
+  // it went. Pressing "find prospects" and coming back to the same empty list
+  // was indistinguishable from pressing nothing at all — which is exactly how
+  // this shipped, and exactly what got reported.
+  const { data: lastStop } = await supabase
+    .from("events")
+    .select("payload, created_at")
+    .eq("workspace_id", session.workspaceId)
+    .eq("name", "targeting.stopped")
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
   const [{ data: businessRow }, { data: profileRows }, { data: account }] = await Promise.all([
     supabase
       .from("business_profiles")
@@ -184,6 +199,21 @@ export default async function StrategyPage({
       {params.error ? (
         <div className="notice danger">
           {params.error}
+        </div>
+      ) : null}
+
+      {/* Reported whether or not the run failed loudly: the interesting case is
+          the one that succeeded at doing nothing. */}
+      {lastStop ? (
+        <div className="notice warning">
+          <p>
+            <strong>The last prospect search stopped early.</strong>{" "}
+            {String((lastStop.payload as Record<string, unknown>)?.reason ?? "No reason recorded.")}
+          </p>
+          <p className="tiny subtle">
+            {new Date(lastStop.created_at).toLocaleString()} ·{" "}
+            <span className="mono">{JSON.stringify(lastStop.payload)}</span>
+          </p>
         </div>
       ) : null}
 

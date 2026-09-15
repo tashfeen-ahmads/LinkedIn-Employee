@@ -482,3 +482,47 @@ describe("personalised connection notes", () => {
     }
   });
 });
+
+describe("targeting says why it stopped", () => {
+  it("records a reason when the search returns nobody", async () => {
+    // Previously a bare `return null`: the rep pressed the button, the queue
+    // accepted the job, and the screen showed the same empty list as before.
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    linkedin.candidates = { items: [], cursor: null, droppedFilters: [] };
+
+    expect(await runTargetingJob(ctx, job)).toBeNull();
+
+    const stop = db.rows("events").find((e) => e.name === "targeting.stopped");
+    expect(stop).toBeDefined();
+    expect(String(stop?.payload?.reason)).toMatch(/nobody new/i);
+  });
+
+  it("records a reason when the LinkedIn account is not active", async () => {
+    const { db, ctx } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    await db.asDb().from("linkedin_accounts").update({ status: "reauth_required" }).eq("id", ACCOUNT);
+
+    expect(await runTargetingJob(ctx, job)).toBeNull();
+
+    const stop = db.rows("events").find((e) => e.name === "targeting.stopped");
+    expect(String(stop?.payload?.reason)).toMatch(/not connected/i);
+    // The status is carried too: "not active" and "which kind of not active"
+    // are different conversations with the rep.
+    expect(stop?.payload?.status).toBe("reauth_required");
+  });
+
+  it("records a reason when the provider refuses the search", async () => {
+    // A throw here is retried by the queue and then given up on, all of it out
+    // of sight of the person who pressed the button.
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    linkedin.searchError = new Error("402 subscription required");
+
+    expect(await runTargetingJob(ctx, job)).toBeNull();
+
+    const stop = db.rows("events").find((e) => e.name === "targeting.stopped");
+    expect(String(stop?.payload?.reason)).toMatch(/refused the search/i);
+    expect(String(stop?.payload?.cause)).toContain("402");
+  });
+});

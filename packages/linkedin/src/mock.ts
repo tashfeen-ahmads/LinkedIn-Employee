@@ -23,6 +23,12 @@ export class MockLinkedInProvider implements LinkedInProvider {
   health: AccountHealth = "ok";
   inbox: InboundMessage[] = [];
   candidates: ProspectPage = { items: [], cursor: null, droppedFilters: [] };
+  /**
+   * Set by a test to make the search fail the way a real provider does — a
+   * refused subscription, a rejected key. The job has to report that rather
+   * than let the queue retry it out of sight.
+   */
+  searchError: Error | null = null;
   /** Every search performed, so a test can prove one did not happen. */
   readonly searches: Array<{ accountId: string; query: SearchQuery; tier: SearchTier }> = [];
   /** Connections the account has, i.e. who accepted an invitation. */
@@ -59,6 +65,7 @@ export class MockLinkedInProvider implements LinkedInProvider {
     tier?: SearchTier;
   }): Promise<ProspectPage> {
     this.searches.push({ accountId: input.accountId, query: input.query, tier: input.tier ?? "classic" });
+    if (this.searchError) throw this.searchError;
     return this.candidates;
   }
 

@@ -14,6 +14,35 @@ import type { TargetingJob } from "../queues.js";
 const MIN_FIT_TO_QUEUE = 60;
 
 /**
+ * Why the job stopped, written where anyone can read it.
+ *
+ * Every exit below used to be a bare `return null`. The rep pressed "find
+ * prospects", the queue accepted the job, the job decided there was nothing to
+ * do, and the screen showed the same empty state as before — identical whether
+ * the search matched nobody, the account was not connected, or the profile was
+ * never approved. Three different things to do about it and no way to tell
+ * which, which is exactly the report that brought this to light.
+ */
+async function giveUp(
+  ctx: WorkerContext,
+  job: TargetingJob,
+  reason: string,
+  detail: Record<string, unknown> = {},
+): Promise<null> {
+  console.error("targeting stopped", { reason, ...detail });
+  await recordEvent(ctx.db, {
+    workspaceId: job.workspaceId,
+    name: "targeting.stopped",
+    actorUserId: job.userId,
+    subjectType: "customer_profile",
+    subjectId: job.customerProfileId,
+    payload: { reason, ...detail },
+  });
+  return null;
+}
+
+
+/**
  * Agent 2 as a job. Searches, dedupes against everything the workspace has
  * already touched, scores, and writes a draft campaign with its prospect list.
  * The campaign is left in `draft`: a human reviews the list and the copy, then
@@ -27,13 +56,18 @@ export async function runTargetingJob(ctx: WorkerContext, job: TargetingJob): Pr
     .select("id, spec, business_profile_id, do_not_pursue, approved_at")
     .eq("id", job.customerProfileId)
     .single();
-  if (!profileRow || profileRow.do_not_pursue) return null;
+  if (!profileRow) return giveUp(ctx, job, "That customer profile no longer exists.");
+  if (profileRow.do_not_pursue) {
+    return giveUp(ctx, job, "That customer profile is marked do-not-pursue.");
+  }
 
   // The Strategy Agent writes profiles; it does not approve them. Searching
   // LinkedIn against a description of a customer nobody has read is how a
   // campaign ends up aimed at the wrong market, and the search itself costs
   // Sales Navigator credits.
-  if (!profileRow.approved_at) return null;
+  if (!profileRow.approved_at) {
+    return giveUp(ctx, job, "That customer profile has not been approved yet.");
+  }
 
   const profile = CustomerProfileSchema.parse(profileRow.spec);
 
@@ -49,19 +83,35 @@ export async function runTargetingJob(ctx: WorkerContext, job: TargetingJob): Pr
     .select("id, provider_account_id, status, has_sales_navigator")
     .eq("id", job.linkedinAccountId)
     .single();
-  if (!account?.provider_account_id || account.status !== "active") return null;
+  if (!account?.provider_account_id || account.status !== "active") {
+    return giveUp(ctx, job, "The LinkedIn account is not connected and active.", {
+      status: account?.status ?? "missing",
+      hasProviderId: Boolean(account?.provider_account_id),
+    });
+  }
 
   // Sales Navigator is a separate paid seat, and searching a tier the account
   // does not have returns nothing at all — which reads on screen as "your
   // customer profile matched nobody" rather than "you are not subscribed".
   // The column already existed and nothing read it.
   const searchTier = account.has_sales_navigator ? "sales_navigator" : "classic";
-  const page = await ctx.linkedin.searchProspects({
-    accountId: account.provider_account_id,
-    query: profile.salesNavFilters,
-    limit: job.limit,
-    tier: searchTier,
-  });
+  let page;
+  try {
+    page = await ctx.linkedin.searchProspects({
+      accountId: account.provider_account_id,
+      query: profile.salesNavFilters,
+      limit: job.limit,
+      tier: searchTier,
+    });
+  } catch (err) {
+    // A throw here is retried by the queue and then given up on, all of it out
+    // of sight. The rep sees a button that did nothing, which is the same thing
+    // they see when the search legitimately matches nobody.
+    return giveUp(ctx, job, "LinkedIn's provider refused the search.", {
+      searchTier,
+      cause: (err as { message?: string })?.message ?? "unknown",
+    });
+  }
 
   // Anyone this workspace already knows about is excluded, whichever rep owns
   // them. This is the cross-rep duplicate prevention promised in the spec.
@@ -76,11 +126,28 @@ export async function runTargetingJob(ctx: WorkerContext, job: TargetingJob): Pr
   const fresh = unknown.filter(
     (c) => !matchExclusion(exclusions, { company: c.company, linkedinUrl: c.linkedinUrl }),
   );
-  if (fresh.length === 0) return null;
+  if (fresh.length === 0) {
+    // The three reasons a page of results yields nobody are completely
+    // different problems, so they are counted separately rather than reported
+    // as one empty list.
+    return giveUp(ctx, job, "The search returned nobody new to contact.", {
+      searchTier,
+      returnedByProvider: page.items.length,
+      alreadyKnown: page.items.length - unknown.length,
+      excluded: unknown.length - fresh.length,
+      droppedFilters: page.droppedFilters,
+    });
+  }
 
   const ranked = await scoreProspects(ctx.agentsFor(job.workspaceId), { profile, candidates: fresh });
   const shortlist = ranked.filter((r) => !r.disqualified && r.fitScore >= MIN_FIT_TO_QUEUE);
-  if (shortlist.length === 0) return null;
+  if (shortlist.length === 0) {
+    return giveUp(ctx, job, `Nobody scored above the minimum fit of ${MIN_FIT_TO_QUEUE}.`, {
+      scored: ranked.length,
+      disqualified: ranked.filter((r) => r.disqualified).length,
+      bestScore: ranked.reduce((best, r) => Math.max(best, r.fitScore), 0),
+    });
+  }
 
   const { data: rep } = await db.from("profiles").select("full_name").eq("id", job.userId).single();
 
