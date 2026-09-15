@@ -60,6 +60,22 @@ export interface ProspectPage {
    * instead, so the screen and the campaign record can say so.
    */
   droppedFilters: string[];
+  /**
+   * What became of each term the search had to translate, one sentence each.
+   *
+   * LinkedIn searches places and industries by id, never by name, so every
+   * word a customer profile uses is looked up in LinkedIn's own taxonomy
+   * first. Two things can happen there and both need saying. A term it does
+   * not recognise is left out of the search entirely. And a term it recognises
+   * as something else — its industry taxonomy was renamed in 2022, so
+   * "Marketing & Advertising" resolves to "Advertising Services" — quietly
+   * narrows the list the reviewer thinks they approved.
+   *
+   * Separate from `droppedFilters`, which is about what the tier cannot
+   * express rather than what the words turned into. Optional because the mock
+   * and the tests build pages by hand.
+   */
+  filterNotes?: string[];
 }
 
 /** Which LinkedIn search surface an account is entitled to. */

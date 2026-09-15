@@ -3,13 +3,21 @@ import { UnipileProvider } from "../src/unipile.js";
 import type { SearchQuery } from "../src/provider.js";
 
 /**
- * Which search surface a customer profile is sent to.
+ * Which search surface a customer profile is sent to, and what its words turn
+ * into on the way.
  *
  * Sales Navigator is a separate paid seat — around $120 a month, more than
  * everything else in this product's stack combined. Assuming every account has
  * one made the subscription mandatory in practice, and the failure was silent:
  * a search against a tier the account lacks returns nothing, which reads on
  * screen as "your customer profile matched nobody".
+ *
+ * The same sentence describes the other bug these tests exist for. LinkedIn
+ * does not search by the name of a place or an industry, only by its id, and
+ * `location: ["United States"]` is not a loose match returning fewer people —
+ * it is not a location, and the search comes back empty. That is what actually
+ * happened on the first live campaign: three approved customer profiles, a
+ * connected account, a queued job, and nobody found.
  */
 
 const QUERY: SearchQuery = {
@@ -27,19 +35,38 @@ const QUERY: SearchQuery = {
  * spied on. A spy installed afterwards leaves the real fetch in place: the
  * request fails, `bodies` stays empty, and every `expect(bodies[0]?.x)` passes
  * against undefined. Three of these tests did exactly that before this changed.
+ *
+ * `parameters` is what LinkedIn's taxonomy lookup answers, keyed by the words
+ * asked with. A name missing from it is a name LinkedIn does not know.
  */
-function providerWithCapturedBody() {
+function providerWithCapturedBody(parameters: Record<string, { id: string; title: string }> = {
+  "united kingdom": { id: "101165590", title: "United Kingdom" },
+  software: { id: "4", title: "Software Development" },
+}) {
   const bodies: Record<string, unknown>[] = [];
-  const fetchImpl = (async (_url: string | URL | Request, init?: RequestInit) => {
+  const lookups: string[] = [];
+
+  const fetchImpl = (async (url: string | URL | Request, init?: RequestInit) => {
+    const href = String(url);
+    if (href.includes("/search/parameters")) {
+      const asked = new URL(href).searchParams.get("keywords") ?? "";
+      lookups.push(asked);
+      const hit = parameters[asked.trim().toLowerCase()];
+      return json({ items: hit ? [hit] : [] });
+    }
     bodies.push(JSON.parse(String(init?.body)));
-    return new Response(JSON.stringify({ items: [], cursor: null }), {
-      status: 200,
-      headers: { "content-type": "application/json" },
-    });
+    return json({ items: [], cursor: null });
   }) as typeof fetch;
 
   const provider = new UnipileProvider({ dsn: "https://api.test", accessToken: "t", fetchImpl });
-  return { provider, bodies };
+  return { provider, bodies, lookups };
+}
+
+function json(value: unknown): Response {
+  return new Response(JSON.stringify(value), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
 }
 
 describe("searchProspects tier", () => {
@@ -81,21 +108,95 @@ describe("searchProspects tier", () => {
     expect(bodies[0]?.company_headcount).toBeUndefined();
   });
 
+  it("searches locations and industries by LinkedIn's id, never by name", async () => {
+    const { provider, bodies, lookups } = providerWithCapturedBody();
+
+    await provider.searchProspects({ accountId: "a1", query: QUERY, tier: "classic" });
+
+    expect(lookups).toEqual(["United Kingdom", "Software"]);
+    // The whole bug, in two lines. Sending the words returns nobody.
+    expect(bodies[0]?.location).toEqual(["101165590"]);
+    expect(bodies[0]?.industry).toEqual(["4"]);
+  });
+
+  it("asks Sales Navigator by id too", async () => {
+    const { provider, bodies } = providerWithCapturedBody();
+
+    await provider.searchProspects({ accountId: "a1", query: QUERY, tier: "sales_navigator" });
+
+    expect(bodies[0]?.location).toEqual({ include: ["101165590"] });
+    expect(bodies[0]?.industry).toEqual({ include: ["4"] });
+  });
+
+  it("says when a term was searched as something LinkedIn calls by another name", async () => {
+    const { provider } = providerWithCapturedBody();
+
+    const page = await provider.searchProspects({ accountId: "a1", query: QUERY, tier: "classic" });
+
+    // "Software" is a real thing to ask for and is not what LinkedIn calls it.
+    // The narrower list is fine; the reviewer not knowing it narrowed is not.
+    expect(page.filterNotes).toEqual([
+      'The industry "Software" was searched as LinkedIn\'s "Software Development".',
+    ]);
+  });
+
+  it("leaves out a term LinkedIn does not have, and says so", async () => {
+    const { provider, bodies } = providerWithCapturedBody({});
+
+    const page = await provider.searchProspects({
+      accountId: "a1",
+      query: { geographies: ["Wakanda"], titles: ["Founder"] },
+      tier: "classic",
+    });
+
+    expect(bodies[0]?.location).toBeUndefined();
+    expect(page.filterNotes).toEqual([
+      'LinkedIn has no location called "Wakanda", so it was left out of the search.',
+    ]);
+  });
+
+  it("asks LinkedIn for each term once, however many searches run", async () => {
+    const { provider, lookups } = providerWithCapturedBody();
+
+    await provider.searchProspects({ accountId: "a1", query: QUERY, tier: "classic" });
+    await provider.searchProspects({ accountId: "a1", query: QUERY, tier: "classic" });
+
+    expect(lookups).toEqual(["United Kingdom", "Software"]);
+  });
+
   it("keeps the filters classic search does have", async () => {
     const { provider, bodies } = providerWithCapturedBody();
 
     await provider.searchProspects({ accountId: "a1", query: QUERY, tier: "classic" });
 
-    expect(bodies[0]?.title).toEqual({ include: ["Head of Operations"] });
-    expect(bodies[0]?.industry).toEqual({ include: ["Software"] });
-    expect(bodies[0]?.location).toEqual({ include: ["United Kingdom"] });
+    expect(bodies[0]?.advanced_keywords).toEqual({ title: '"Head of Operations"' });
+    // First-degree connections have already accepted; inviting them spends the
+    // day's allowance on nothing.
+    expect(bodies[0]?.network_distance).toEqual([2, 3]);
     // Seniority survives as a text hint rather than vanishing entirely — worth
     // something, and still reported as dropped because a hint is not a filter.
-    expect(bodies[0]?.keywords).toBe("revops Director");
+    expect(bodies[0]?.keywords).toBe('"revops" OR "Director"');
+  });
+
+  it("joins several terms as alternatives, not as a single unsatisfiable phrase", async () => {
+    const { provider, bodies } = providerWithCapturedBody();
+
+    await provider.searchProspects({
+      accountId: "a1",
+      query: { titles: ["Chapter President", "Group Leader"], keywords: ["BNI", "Chamber"] },
+      tier: "classic",
+    });
+
+    // Space-joined, these are an AND: a profile had to contain every word, and
+    // essentially nobody does. A list of titles is a list of alternatives.
+    expect(bodies[0]?.keywords).toBe('"BNI" OR "Chamber"');
+    expect(bodies[0]?.advanced_keywords).toEqual({
+      title: '"Chapter President" OR "Group Leader"',
+    });
   });
 
   it("reports nothing dropped when the profile asked for nothing classic lacks", async () => {
-    const { provider } = providerWithCapturedBody();
+    const { provider } = providerWithCapturedBody({ ireland: { id: "104738515", title: "Ireland" } });
 
     const page = await provider.searchProspects({
       accountId: "a1",
@@ -106,5 +207,6 @@ describe("searchProspects tier", () => {
     // An empty list is what the campaign page checks; a notice on every
     // campaign would train people to ignore the one that matters.
     expect(page.droppedFilters).toEqual([]);
+    expect(page.filterNotes).toEqual([]);
   });
 });

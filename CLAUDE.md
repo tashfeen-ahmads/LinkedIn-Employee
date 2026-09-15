@@ -100,6 +100,17 @@ tests that were verified by deliberately breaking the code.
     campaign before anyone launches it. A filter that silently becomes a
     suggestion is worse than one that is missing: the list still looks like
     what was asked for.
+
+    LinkedIn searches places and industries by id and never by name, so every
+    word the Strategy Agent writes is looked up in LinkedIn's own taxonomy
+    first (`resolveFilters`, `/linkedin/search/parameters`). `location:
+    ["United States"]` is not a loose match returning fewer people — it is not
+    a location, and the search returns nobody, which is exactly how the first
+    live campaign found nothing. Two things happen in that lookup and both are
+    reported in `filterNotes`: a term LinkedIn does not have is left out, and a
+    term it renamed (its industry taxonomy changed in 2022) narrows the list
+    without anyone asking. Several titles or keywords are joined with `OR`, not
+    with spaces — space-joined they are an AND that matches nobody.
 13. **The shared exclusion list is checked immediately before every send**, not
     only when a campaign is built (`matchExclusion` in
     `packages/shared/src/exclusions.ts`). A campaign launched this morning

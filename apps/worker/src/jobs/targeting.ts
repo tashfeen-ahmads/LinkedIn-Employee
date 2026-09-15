@@ -136,6 +136,10 @@ export async function runTargetingJob(ctx: WorkerContext, job: TargetingJob): Pr
       alreadyKnown: page.items.length - unknown.length,
       excluded: unknown.length - fresh.length,
       droppedFilters: page.droppedFilters,
+      // Usually the answer. A search whose every location and industry was
+      // left out is a search for a job title anywhere on earth, or for
+      // nothing at all.
+      filterNotes: page.filterNotes ?? [],
     });
   }
 
@@ -173,7 +177,11 @@ export async function runTargetingJob(ctx: WorkerContext, job: TargetingJob): Pr
       // Carried on the campaign, not only in the event log, because the person
       // who reviews this list before launching is the one who needs to know
       // the search could not honour part of the profile they approved.
-      rules: { searchTier, droppedFilters: page.droppedFilters } as never,
+      rules: {
+        searchTier,
+        droppedFilters: page.droppedFilters,
+        filterNotes: page.filterNotes ?? [],
+      } as never,
     })
     .select("id")
     .single();
@@ -271,6 +279,7 @@ export async function runTargetingJob(ctx: WorkerContext, job: TargetingJob): Pr
       searched: page.items.length,
       searchTier,
       droppedFilters: page.droppedFilters,
+      filterNotes: page.filterNotes ?? [],
     },
   });
 

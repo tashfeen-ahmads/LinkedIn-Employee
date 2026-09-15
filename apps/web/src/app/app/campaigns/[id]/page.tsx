@@ -195,9 +195,9 @@ async function launchState(campaignId: string, workspaceId: string) {
  * created before this existed has none. A crash on the campaign page would be a
  * worse outcome than a missing notice.
  */
-function droppedSearchFilters(rules: unknown): string[] {
+function ruleStrings(rules: unknown, key: "droppedFilters" | "filterNotes"): string[] {
   if (!rules || typeof rules !== "object") return [];
-  const value = (rules as { droppedFilters?: unknown }).droppedFilters;
+  const value = (rules as Record<string, unknown>)[key];
   return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
 }
 
@@ -251,7 +251,10 @@ export default async function CampaignPage({
     accountStatus: account?.status ?? null,
   });
   const days = daysToSendAll(queued.length, campaign.daily_invite_cap);
-  const dropped = droppedSearchFilters(campaign.rules);
+  const dropped = ruleStrings(campaign.rules, "droppedFilters");
+  // What the words in the customer profile actually became. LinkedIn searches
+  // places and industries by id, so every one of them was translated first.
+  const filterNotes = ruleStrings(campaign.rules, "filterNotes");
   const running = campaign.status === "running";
   const reached = FUNNEL_STAGES.filter((stage) => counts[stage.key] > 0);
 
@@ -291,6 +294,22 @@ export default async function CampaignPage({
             title, industry and location, and each was scored against the full profile — read the
             names before launching, and expect more of them to be wrong than usual.
           </p>
+        </div>
+      ) : null}
+
+      {filterNotes.length > 0 ? (
+        <div className="notice">
+          <strong>How your customer profile was searched</strong>
+          <p className="small">
+            LinkedIn searches locations and industries by its own identifiers, not by name, so each
+            one had to be looked up first. Read these before the names below — a term that was left
+            out is a filter this list does not have.
+          </p>
+          <ul className="bullets">
+            {filterNotes.map((note) => (
+              <li key={note}>{note}</li>
+            ))}
+          </ul>
         </div>
       ) : null}
 

@@ -28,6 +28,7 @@ const ROUTES = {
   accounts: "/api/v1/accounts",
   account: (id: string) => `/api/v1/accounts/${id}`,
   search: "/api/v1/linkedin/search",
+  searchParameters: "/api/v1/linkedin/search/parameters",
   profile: (id: string) => `/api/v1/users/${id}`,
   invite: "/api/v1/users/invite",
   invitationsSent: "/api/v1/users/invite/sent",
@@ -77,6 +78,13 @@ export class UnipileProvider implements LinkedInProvider {
   private readonly token: string;
   private readonly webhookSecret?: string;
   private readonly fetchImpl: typeof fetch;
+  /**
+   * LinkedIn's own id for a place or an industry, keyed by the words we asked
+   * with. The taxonomy does not change between searches and a lookup costs a
+   * round trip per term, so the answer is kept for the life of the process.
+   * `null` is cached too: a term LinkedIn does not recognise stays unrecognised.
+   */
+  private readonly parameterIds = new Map<string, SearchParameter | null>();
 
   constructor(config: UnipileConfig) {
     this.dsn = config.dsn.replace(/\/$/, "");
@@ -151,7 +159,9 @@ export class UnipileProvider implements LinkedInProvider {
     const tier = input.tier ?? "classic";
     const params = new URLSearchParams({ account_id: input.accountId, limit: String(input.limit ?? 50) });
     if (input.cursor) params.set("cursor", input.cursor);
-    const { body, droppedFilters } = toUnipileSearchBody(input.query, tier);
+
+    const resolved = await this.resolveFilters(input.accountId, input.query);
+    const { body, droppedFilters } = toUnipileSearchBody(input.query, tier, resolved);
     const res = await this.request<{ items?: UnipileRawProfile[]; cursor?: string | null }>(
       `${ROUTES.search}?${params.toString()}`,
       { method: "POST", body: JSON.stringify(body) },
@@ -160,7 +170,92 @@ export class UnipileProvider implements LinkedInProvider {
       items: (res.items ?? []).map(toProspectCandidate),
       cursor: res.cursor ?? null,
       droppedFilters,
+      filterNotes: resolved.notes,
     };
+  }
+
+  /**
+   * Turns the places and industries a customer profile names into the ids
+   * LinkedIn searches by.
+   *
+   * LinkedIn does not take words here. `location: ["United States"]` is not a
+   * loose match that returns fewer people — it is not a location, and the
+   * search comes back empty. That is how a campaign aimed at four industries
+   * across two countries returned nobody at all, with no error anywhere: the
+   * Strategy Agent writes what a person would write, and every one of those
+   * words had to become a number before it left this file.
+   *
+   * A term LinkedIn does not recognise is dropped and named rather than
+   * guessed at, and a term it recognises as something slightly different — its
+   * taxonomy renamed most industries in 2022 — is reported as what it actually
+   * became. Both end up on the campaign the reviewer reads before launching.
+   */
+  private async resolveFilters(
+    accountId: string,
+    query: SearchQuery,
+  ): Promise<ResolvedFilters> {
+    const notes: string[] = [];
+
+    const resolve = async (field: string, type: SearchParameterType, names: string[] | undefined) => {
+      const ids: string[] = [];
+      for (const name of names ?? []) {
+        const hit = await this.lookupParameter(accountId, type, name);
+        if (!hit) {
+          notes.push(`LinkedIn has no ${field} called "${name}", so it was left out of the search.`);
+          continue;
+        }
+        ids.push(hit.id);
+        if (hit.title.trim().toLowerCase() !== name.trim().toLowerCase()) {
+          notes.push(`The ${field} "${name}" was searched as LinkedIn's "${hit.title}".`);
+        }
+      }
+      return ids;
+    };
+
+    return {
+      locations: await resolve("location", "LOCATION", query.geographies),
+      industries: await resolve("industry", "INDUSTRY", query.industries),
+      notes,
+    };
+  }
+
+  /** One name, one id, asked once per process. */
+  private async lookupParameter(
+    accountId: string,
+    type: SearchParameterType,
+    name: string,
+  ): Promise<SearchParameter | null> {
+    const key = `${type}:${name.trim().toLowerCase()}`;
+    const cached = this.parameterIds.get(key);
+    if (cached !== undefined) return cached;
+
+    const params = new URLSearchParams({ account_id: accountId, type, keywords: name });
+    let items: Array<{ id?: string; title?: string; name?: string }> = [];
+    try {
+      const res = await this.request<{ items?: typeof items }>(
+        `${ROUTES.searchParameters}?${params.toString()}`,
+      );
+      items = res.items ?? [];
+    } catch {
+      // A lookup that fails is not a filter that matched nothing. Nothing is
+      // cached, so the next search asks again rather than inheriting a wrong
+      // answer for the life of the process.
+      return null;
+    }
+
+    // Exact first: "Design" is a real LinkedIn industry and also a word inside
+    // several others, and the typeahead does not promise to put it first.
+    const wanted = name.trim().toLowerCase();
+    const hit =
+      items.find((i) => (i.title ?? i.name ?? "").trim().toLowerCase() === wanted) ?? items[0];
+    const id = hit?.id;
+    if (!id) {
+      this.parameterIds.set(key, null);
+      return null;
+    }
+    const found = { id, title: hit?.title ?? hit?.name ?? name };
+    this.parameterIds.set(key, found);
+    return found;
   }
 
   async getProfile(input: { accountId: string; providerId: string }): Promise<ProviderProfile> {
@@ -382,21 +477,55 @@ function toInboundMessage(m: RawUnipileMessage, fallbackAccountId: string): Inbo
  * reported as dropped. A filter that quietly becomes a suggestion is worse than
  * one that is missing, because the result still looks like what was asked for.
  */
+/** The parameter lists this product needs ids from. */
+type SearchParameterType = "LOCATION" | "INDUSTRY";
+
+interface SearchParameter {
+  id: string;
+  /** LinkedIn's own name for it, which is often not the one we asked with. */
+  title: string;
+}
+
+interface ResolvedFilters {
+  locations: string[];
+  industries: string[];
+  /** One sentence per term that was left out or became something else. */
+  notes: string[];
+}
+
+/**
+ * Several terms, as one field LinkedIn will match any of.
+ *
+ * Joined with spaces these are an AND: a profile had to contain "BNI" and
+ * "chapter" and "membership" and "Chamber" and every seniority word, which
+ * essentially nobody does. A list of titles is a list of alternatives, and has
+ * to be written as one.
+ */
+function anyOf(terms: Array<string | undefined>): string | undefined {
+  const quoted = terms
+    .map((t) => t?.trim())
+    .filter((t): t is string => Boolean(t))
+    .map((t) => `"${t.replace(/"/g, "")}"`);
+  if (quoted.length === 0) return undefined;
+  return quoted.length === 1 ? quoted[0] : quoted.join(" OR ");
+}
+
 function toUnipileSearchBody(
   query: SearchQuery,
   tier: SearchTier,
+  resolved: ResolvedFilters,
 ): { body: Record<string, unknown>; droppedFilters: string[] } {
   if (tier === "sales_navigator") {
     return {
       body: {
         api: "sales_navigator",
         category: "people",
-        keywords: query.keywords?.join(" ") || undefined,
+        keywords: anyOf(query.keywords ?? []),
         title: query.titles?.length ? { include: query.titles, exclude: query.excludeTitles ?? [] } : undefined,
         seniority: query.seniorities?.length ? { include: query.seniorities } : undefined,
-        industry: query.industries?.length ? { include: query.industries } : undefined,
+        industry: resolved.industries.length ? { include: resolved.industries } : undefined,
         company_headcount: query.companyHeadcount?.length ? query.companyHeadcount : undefined,
-        location: query.geographies?.length ? { include: query.geographies } : undefined,
+        location: resolved.locations.length ? { include: resolved.locations } : undefined,
       },
       droppedFilters: [],
     };
@@ -410,16 +539,21 @@ function toUnipileSearchBody(
   // it costs model spend it would not have cost on Sales Navigator.
   if (query.excludeTitles?.length) droppedFilters.push("excluded titles");
 
-  const keywords = [...(query.keywords ?? []), ...(query.seniorities ?? [])].filter(Boolean);
-
   return {
     body: {
       api: "classic",
       category: "people",
-      keywords: keywords.join(" ") || undefined,
-      title: query.titles?.length ? { include: query.titles } : undefined,
-      industry: query.industries?.length ? { include: query.industries } : undefined,
-      location: query.geographies?.length ? { include: query.geographies } : undefined,
+      // Seniority survives as a text hint rather than vanishing entirely, and
+      // is still reported dropped above, because a hint is not a filter.
+      keywords: anyOf([...(query.keywords ?? []), ...(query.seniorities ?? [])]),
+      // Classic's one structured field for what someone does. Free text, not
+      // an id — unlike location and industry, which are ids or nothing.
+      advanced_keywords: query.titles?.length ? { title: anyOf(query.titles) } : undefined,
+      industry: resolved.industries.length ? resolved.industries : undefined,
+      location: resolved.locations.length ? resolved.locations : undefined,
+      // First-degree connections cannot be invited — they already accepted. A
+      // campaign that spends its daily invite allowance on them sends nothing.
+      network_distance: [2, 3],
     },
     droppedFilters,
   };
