@@ -281,12 +281,92 @@ describe("confirming a connection by asking", () => {
     expect(body.referenceShape).toEqual(["text with spaces"]);
   });
 
-  it("leaves an already-connected account alone", async () => {
+  it("never lets a delivery re-point an account that is already working", async () => {
+    // The property this used to assert about the refresh route, asserted where
+    // it actually belongs.
+    //
+    // Being *told* an account changed and *asking* whether it did are not the
+    // same claim. A delivery is unauthenticated input from the network, so it
+    // may only complete a connection someone here started — otherwise a forged
+    // one re-points a live account at a stranger's LinkedIn and every campaign
+    // message goes out from it. Asking is the recovery path, and it is tested
+    // below.
     const { db, app, linkedin } = harness({ status: "active", provider_account_id: "acct_original" });
     linkedin.connectedAccounts = [{ providerAccountId: "acct_different", reference: USER, status: "ok" }];
 
-    await refresh(app, { workspaceId: WORKSPACE, userId: USER });
+    await post(app, { status: "CREATION_SUCCESS", account_id: "acct_different", name: USER });
 
     expect(db.find("linkedin_accounts", { id: ACCOUNT })?.provider_account_id).toBe("acct_original");
   });
 });
+
+/**
+ * A row that says `active` while the provider has no such account.
+ *
+ * This is not hypothetical: it is what the first live deployment sat in. Every
+ * campaign failed with "LinkedIn's provider refused the search" — the
+ * provider's own words were `404 … Account not found` — while the Team page
+ * showed a healthy connection, usage bars and a Check again button that did
+ * nothing, because binding deliberately only touches a row that is waiting.
+ * The only way out was editing the database by hand.
+ */
+describe("an account the provider no longer has", () => {
+  it("re-points a live row when the provider's id has changed", async () => {
+    const { db, app, linkedin } = harness({ provider_account_id: "acct_old", status: "active" });
+    linkedin.connectedAccounts = [
+      { providerAccountId: "acct_new", reference: USER, displayName: "Sam Patel", status: "ok" },
+    ];
+
+    const response = await refresh(app, { workspaceId: WORKSPACE, userId: USER });
+
+    expect(await response.json()).toMatchObject({ changed: true });
+    const account = db.find("linkedin_accounts", { id: ACCOUNT })!;
+    expect(account.provider_account_id).toBe("acct_new");
+    expect(account.status).toBe("active");
+  });
+
+  it("stops claiming to be connected when the provider has nothing", async () => {
+    const { db, app, linkedin } = harness({ provider_account_id: "acct_gone", status: "active" });
+    linkedin.connectedAccounts = [];
+
+    const response = await refresh(app, { workspaceId: WORKSPACE, userId: USER });
+
+    expect(await response.json()).toMatchObject({ lost: true });
+    const account = db.find("linkedin_accounts", { id: ACCOUNT })!;
+    // Reconnect is the fix and the rep can do it themselves, but only if the
+    // screen admits there is something to fix.
+    expect(account.status).toBe("reauth_required");
+    expect(String(account.status_detail)).toMatch(/no longer has this account/i);
+  });
+
+  it("never re-points a row at an account carrying someone else's reference", async () => {
+    const { db, app, linkedin } = harness({ provider_account_id: "acct_mine", status: "active" });
+    linkedin.connectedAccounts = [
+      { providerAccountId: "acct_theirs", reference: OTHER_REP, displayName: "Someone", status: "ok" },
+    ];
+
+    await refresh(app, { workspaceId: WORKSPACE, userId: USER });
+
+    // Reconciling must not become a way to attach a stranger's LinkedIn to a
+    // rep's row and send every campaign message from it.
+    const account = db.find("linkedin_accounts", { id: ACCOUNT })!;
+    expect(account.provider_account_id).toBe("acct_mine");
+    // The provider has accounts, just none of this rep's — so this rep's is
+    // gone, and that is what it says.
+    expect(account.status).toBe("reauth_required");
+  });
+
+  it("leaves a healthy row entirely alone", async () => {
+    const { db, app, linkedin } = harness({ provider_account_id: "acct_same", status: "active" });
+    linkedin.connectedAccounts = [
+      { providerAccountId: "acct_same", reference: USER, status: "ok" },
+    ];
+
+    const response = await refresh(app, { workspaceId: WORKSPACE, userId: USER });
+
+    expect(await response.json()).toMatchObject({ changed: false });
+    expect(db.find("linkedin_accounts", { id: ACCOUNT })!.provider_account_id).toBe("acct_same");
+  });
+});
+
+const OTHER_REP = "55555555-5555-4555-8555-555555555555";

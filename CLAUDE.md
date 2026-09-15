@@ -76,6 +76,18 @@ tests that were verified by deliberately breaking the code.
    `/webhooks/unipile/accounts`, where a forged delivery would bind a
    stranger's LinkedIn account to a rep's row and send every campaign message
    from it.
+
+   Being *told* an account changed and *asking* whether it did are different
+   claims, and the code treats them differently. `bindAccounts`, on the push
+   path, may only complete a connection someone here started — it never
+   re-points a row that is already working. `reconcileAccount`, on the pull
+   path, does re-point one, because it runs on a list the worker fetched
+   itself over an authenticated call the rep began. Without it an `active` row
+   holding an id the provider has dropped is unfixable except by hand: every
+   job fails against it while the Team page shows a healthy account and a
+   button that does nothing, which is where the first live deployment sat.
+   What both share is the binding rule — an account is only ever matched to
+   the rep whose user id it carries as its reference. Do not loosen that.
 9. **Targeting refuses a customer profile nobody has approved**
    (`approved_at` in `apps/worker/src/jobs/targeting.ts`). The Strategy Agent
    writes profiles; it does not approve them. Approval happens on

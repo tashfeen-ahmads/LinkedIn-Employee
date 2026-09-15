@@ -6,6 +6,7 @@ import {
   matchExclusion,
   normalizeLinkedInUrl,
 } from "@le/shared";
+import { isAccountGone } from "@le/linkedin";
 import type { WorkerContext } from "../context.js";
 import { recordEvent } from "../context.js";
 import { loadExclusions } from "../exclusions.js";
@@ -107,7 +108,15 @@ export async function runTargetingJob(ctx: WorkerContext, job: TargetingJob): Pr
     // A throw here is retried by the queue and then given up on, all of it out
     // of sight. The rep sees a button that did nothing, which is the same thing
     // they see when the search legitimately matches nobody.
-    return giveUp(ctx, job, "LinkedIn's provider refused the search.", {
+    //
+    // One of these is theirs to fix and the rest are not, so it is said
+    // separately: "the provider refused the search" sounds like LinkedIn
+    // having a bad day, and a connected account the provider no longer has is
+    // a Reconnect button away from working.
+    const reason = isAccountGone(err)
+      ? "LinkedIn's provider no longer has this account. Reconnect it on the Team page."
+      : "LinkedIn's provider refused the search.";
+    return giveUp(ctx, job, reason, {
       searchTier,
       cause: (err as { message?: string })?.message ?? "unknown",
     });

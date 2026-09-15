@@ -47,6 +47,21 @@ export interface UnipileConfig {
   fetchImpl?: typeof fetch;
 }
 
+/**
+ * The provider does not have the account we are asking with.
+ *
+ * Worth its own question because it is the one provider failure a rep can fix
+ * themselves, and it is indistinguishable from the rest at the call site: a
+ * campaign that cannot search because the connected account is gone reads as
+ * "LinkedIn refused the search", which sounds like LinkedIn's problem and is
+ * not. Matched on the status and the body together — a 404 alone is also how
+ * this API answers a route it does not have.
+ */
+export function isAccountGone(err: unknown): boolean {
+  if (!(err instanceof UnipileError) || err.status !== 404) return false;
+  return /account not found/i.test(err.body);
+}
+
 export class UnipileError extends Error {
   constructor(
     message: string,

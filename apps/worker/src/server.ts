@@ -314,6 +314,7 @@ export function createServer(ctx: WorkerContext, queues: Queues): Hono {
     // Only this rep's own row is touched, whatever the provider returned.
     const mine = accounts.filter((a) => a.reference === parsed.data.userId);
     const bound = await bindAccounts(ctx, mine);
+    const reconciled = await reconcileAccount(ctx, parsed.data.workspaceId, parsed.data.userId, mine);
 
     if (accounts.length > 0 && mine.length === 0) {
       // The provider has accounts but none carries this rep's id as its
@@ -337,7 +338,7 @@ export function createServer(ctx: WorkerContext, queues: Queues): Hono {
       });
     }
 
-    return c.json({ found: accounts.length, mine: mine.length, bound });
+    return c.json({ found: accounts.length, mine: mine.length, bound, ...reconciled });
   });
 
   // Google Calendar connect. The Reply Agent cannot offer a time until this is
@@ -833,6 +834,77 @@ async function bindAccounts(ctx: WorkerContext, accounts: ConnectedAccount[]): P
     bound++;
   }
   return bound;
+}
+
+/**
+ * Makes the row agree with what the provider actually has.
+ *
+ * `bindAccounts` deliberately only touches a row that is waiting to be
+ * connected, so a replayed or forged delivery cannot re-point a working
+ * account at something else. That left no way back from the opposite problem:
+ * a row that says `active`, holding an id the provider no longer has. Every
+ * job then fails against it — "LinkedIn's provider refused the search", over
+ * and over — while the Team page shows a healthy account, usage bars and no
+ * button that does anything. That is exactly what happened here, and the only
+ * fix was editing the database by hand.
+ *
+ * Safe to do on the pull path and not on the push path, which is the whole
+ * distinction: this runs on a list we fetched from the provider ourselves,
+ * over an authenticated call the rep started, rather than on something we were
+ * sent. The binding rule is untouched — `mine` has already been filtered to
+ * accounts carrying this rep's own user id as their reference, and nothing
+ * here looks at any other row.
+ */
+async function reconcileAccount(
+  ctx: WorkerContext,
+  workspaceId: string,
+  userId: string,
+  mine: ConnectedAccount[],
+): Promise<{ changed?: boolean; lost?: boolean }> {
+  const { data: row } = await ctx.db
+    .from("linkedin_accounts")
+    .select("id, provider_account_id, status")
+    .eq("workspace_id", workspaceId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (!row) return {};
+
+  if (mine.length === 0) {
+    // Nothing to reconcile against unless we are claiming to hold something.
+    if (!row.provider_account_id) return {};
+    await ctx.db
+      .from("linkedin_accounts")
+      .update({
+        status: "reauth_required",
+        status_detail:
+          "LinkedIn's provider no longer has this account. Reconnect it to start sending again.",
+      })
+      .eq("id", row.id);
+    return { lost: true };
+  }
+
+  // Prefer the one already held: several accounts for one rep is a mess to be
+  // reported rather than silently resolved by picking differently each time.
+  const account = mine.find((a) => a.providerAccountId === row.provider_account_id) ?? mine[0];
+  if (!account) return {};
+  const changed = account.providerAccountId !== row.provider_account_id;
+  if (!changed && row.status === "active") return { changed: false };
+
+  await ctx.db
+    .from("linkedin_accounts")
+    .update({
+      provider_account_id: account.providerAccountId,
+      display_name: account.displayName ?? null,
+      status: account.status === "ok" ? "active" : "reauth_required",
+      status_detail: null,
+      // Stamped only when the account itself changed. The warm-up ramp reads
+      // `first_action_at`, not this, so a refresh cannot hand an account a
+      // fresh allowance — but a connection date that moves every time someone
+      // presses a button is a lie on the screen either way.
+      ...(changed ? { connected_at: new Date().toISOString(), paused_at: null } : {}),
+    })
+    .eq("id", row.id);
+  return { changed };
 }
 
 /**

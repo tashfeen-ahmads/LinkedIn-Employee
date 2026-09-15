@@ -54,11 +54,27 @@ async function connectLinkedIn() {
 async function refreshLinkedIn() {
   "use server";
   const session = await requireSession();
-  const result = await callWorker<{ bound?: number; mine?: number; found?: number; referenceShape?: string[] }>(
-    "/jobs/linkedin-refresh",
-    { workspaceId: session.workspaceId, userId: session.userId },
-  );
+  const result = await callWorker<{
+    bound?: number;
+    mine?: number;
+    found?: number;
+    referenceShape?: string[];
+    changed?: boolean;
+    lost?: boolean;
+  }>("/jobs/linkedin-refresh", { workspaceId: session.workspaceId, userId: session.userId });
   if (!result.ok) redirect(errorQuery("/app/team", result.error));
+
+  // The account this row claimed to hold is gone from the provider. Said out
+  // loud because the row looked healthy while every campaign silently failed
+  // against it, and because pressing Connect is all it takes.
+  if (result.data?.lost) {
+    redirect(
+      errorQuery(
+        "/app/team",
+        "LinkedIn's provider no longer has the account this was connected to. Connect LinkedIn again to start sending.",
+      ),
+    );
+  }
 
   if (!result.data?.mine) {
     // "No account yet" and "an account that is not labelled with your id" look
