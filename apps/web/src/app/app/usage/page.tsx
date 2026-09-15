@@ -18,7 +18,7 @@ export default async function UsagePage() {
   if (!["owner", "admin"].includes(session.role)) {
     return (
       <>
-        <h1 style={{ fontSize: "1.6rem" }}>Usage</h1>
+        <h1>Usage</h1>
         <p className="muted">Spend is visible to the workspace owner and admins.</p>
       </>
     );
@@ -47,7 +47,7 @@ export default async function UsagePage() {
   if (rows.length === 0) {
     return (
       <>
-        <h1 style={{ fontSize: "1.6rem" }}>Usage</h1>
+        <h1>Usage</h1>
         <p className="muted">
           No model calls in the last {DAYS} days. This page fills in once a campaign runs.
         </p>
@@ -63,19 +63,17 @@ export default async function UsagePage() {
 
   return (
     <>
-      <h1 style={{ fontSize: "1.6rem" }}>Usage</h1>
-      <p className="small muted" style={{ maxWidth: "62ch" }}>
+      <h1>Usage</h1>
+      <p className="small muted prose">
         The last {DAYS} days, priced at the published list rates. Costs are an estimate from recorded
         tokens, not an invoice.
       </p>
 
       <section
-        style={{
-          display: "grid",
+        style={{ display: "grid",
           gap: "0.75rem",
           gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-          margin: "1.5rem 0 2.5rem",
-        }}
+          margin: "1.5rem 0 2.5rem" }}
       >
         <Stat label={`Spend, ${DAYS} days`} value={formatUsd(total.costUsd)} />
         <Stat
@@ -95,9 +93,9 @@ export default async function UsagePage() {
       <UsageTable title="By prompt version" groups={byVersion} firstColumn="Prompt" />
 
       {failures.length ? (
-        <section style={{ marginTop: "2rem" }}>
-          <h2 style={{ fontSize: "1.15rem" }}>Recent failures</h2>
-          <div className="table-scroll" style={{ marginTop: "1rem" }}>
+        <section>
+          <h2>Recent failures</h2>
+          <div className="table-scroll">
             <table>
               <thead>
                 <tr>
@@ -133,34 +131,34 @@ function UsageTable({
   firstColumn: string;
 }) {
   return (
-    <section style={{ marginTop: "2rem" }}>
-      <h2 style={{ fontSize: "1.15rem" }}>{title}</h2>
-      <div className="table-scroll" style={{ marginTop: "1rem" }}>
+    <section>
+      <h2>{title}</h2>
+      <div className="table-scroll">
         <table>
           <thead>
             <tr>
               <th>{firstColumn}</th>
-              <th style={{ textAlign: "right" }}>Cost</th>
-              <th style={{ textAlign: "right" }}>Calls</th>
-              <th style={{ textAlign: "right" }}>Cached</th>
-              <th style={{ textAlign: "right" }}>Median</th>
-              <th style={{ textAlign: "right" }}>Failed</th>
+              <th className="num">Cost</th>
+              <th className="num">Calls</th>
+              <th className="num">Cached</th>
+              <th className="num">Median</th>
+              <th className="num">Failed</th>
             </tr>
           </thead>
           <tbody>
             {groups.map((group) => (
               <tr key={group.key}>
                 <td className="small">{group.key}</td>
-                <td className="mono" style={{ textAlign: "right" }}>
+                <td className="mono num">
                   {formatUsd(group.costUsd)}
                 </td>
-                <td className="mono" style={{ textAlign: "right" }}>
+                <td className="mono num">
                   {group.calls.toLocaleString()}
                 </td>
-                <td className="mono" style={{ textAlign: "right" }}>
+                <td className="mono num">
                   {group.cacheHitRate === null ? "—" : `${Math.round(group.cacheHitRate * 100)}%`}
                 </td>
-                <td className="mono" style={{ textAlign: "right" }}>
+                <td className="mono num">
                   {group.medianLatencyMs === null ? "—" : `${(group.medianLatencyMs / 1000).toFixed(1)}s`}
                 </td>
                 <td className="mono" style={{ textAlign: "right", color: group.failed ? "var(--warning)" : undefined }}>
@@ -178,14 +176,14 @@ function UsageTable({
 function Stat({ label, value, note }: { label: string; value: string; note?: string }) {
   return (
     <div className="card">
-      <p className="small muted" style={{ margin: 0 }}>
+      <p className="small muted">
         {label}
       </p>
       <p className="mono" style={{ fontSize: "1.6rem", fontWeight: 640, margin: "0.2rem 0 0" }}>
         {value}
       </p>
       {note ? (
-        <p className="small muted" style={{ margin: 0 }}>
+        <p className="small muted">
           {note}
         </p>
       ) : null}

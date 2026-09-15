@@ -77,15 +77,15 @@ export default async function KnowledgePage() {
 
   return (
     <>
-      <h1 style={{ fontSize: "1.6rem" }}>Knowledge</h1>
-      <p className="small muted" style={{ maxWidth: "62ch" }}>
+      <h1>Knowledge</h1>
+      <p className="small muted prose">
         The only product facts the agent may state. Anything a prospect asks that is not answered here
         is handed to you instead of guessed at — so this page is the difference between autopilot
         answering a question and forwarding it.
       </p>
 
       {omitted.length ? (
-        <div className="notice warning" style={{ marginTop: "1rem" }}>
+        <div className="notice warning">
           Too long to send to the agent, so it has not read{" "}
           {omitted.length === 1 ? "this document" : "these documents"}: {omitted.join(", ")}. Split{" "}
           {omitted.length === 1 ? "it" : "them"} into shorter pages and the agent will use{" "}
@@ -94,9 +94,9 @@ export default async function KnowledgePage() {
       ) : null}
 
       {manage ? (
-        <section className="card" style={{ marginTop: "1.25rem" }}>
+        <section className="card">
           <h3>Add a page</h3>
-          <p className="small muted" style={{ marginTop: 0 }}>
+          <p className="small muted">
             One subject per page: pricing, security, integrations, the objection you hear most. Short
             and factual beats long and persuasive — the agent quotes it, it does not summarise it.
           </p>
@@ -116,8 +116,8 @@ export default async function KnowledgePage() {
         </section>
       ) : null}
 
-      <section style={{ marginTop: "1.75rem" }}>
-        <h2 style={{ fontSize: "1.15rem" }}>
+      <section>
+        <h2>
           {docs.length} {docs.length === 1 ? "page" : "pages"}
           <span className="small muted" style={{ fontWeight: 400 }}>
             {" "}
@@ -126,12 +126,12 @@ export default async function KnowledgePage() {
         </h2>
 
         {docs.length === 0 ? (
-          <p className="small muted" style={{ marginTop: "1rem" }}>
+          <p className="small muted">
             Nothing here yet, so every product question a prospect asks will come to you. Start with
             pricing and the two objections you answer most.
           </p>
         ) : (
-          <div style={{ display: "grid", gap: "1rem", marginTop: "1rem" }}>
+          <div className="grid">
             {docs.map((doc) => (
               <article key={doc.id} className="card">
                 {manage ? (
@@ -151,14 +151,14 @@ export default async function KnowledgePage() {
                   </form>
                 ) : (
                   <>
-                    <h3 style={{ marginTop: 0 }}>{doc.title}</h3>
+                    <h3>{doc.title}</h3>
                     <p className="small" style={{ whiteSpace: "pre-wrap" }}>
                       {doc.content}
                     </p>
                   </>
                 )}
                 {manage ? (
-                  <form action={deleteDocument} style={{ marginTop: "0.5rem" }}>
+                  <form action={deleteDocument}>
                     <input type="hidden" name="id" value={doc.id} />
                     <button className="btn secondary small" type="submit">
                       Delete

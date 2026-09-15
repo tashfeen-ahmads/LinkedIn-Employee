@@ -152,7 +152,7 @@ export default async function StrategyPage({
   if (!businessRow) {
     return (
       <>
-        <h1 style={{ fontSize: "1.6rem" }}>Strategy</h1>
+        <h1>Strategy</h1>
         <p className="muted">
           The Strategy Agent has not finished yet, or it has not run. It reads what you publish and
           drafts your business profile and three to five customer profiles; refresh in a minute.
@@ -170,37 +170,34 @@ export default async function StrategyPage({
 
   return (
     <>
-      <h1 style={{ fontSize: "1.6rem" }}>Strategy</h1>
-      <p className="small muted" style={{ maxWidth: "62ch" }}>
+      <h1>Strategy</h1>
+      <p className="small muted prose">
         Written by the Strategy Agent from what you publish. Nothing is searched for until you approve
         a profile, and every message the writer sends is grounded in what is on this page — so it is
         worth reading properly once.
       </p>
 
       {params.error ? (
-        <div className="notice danger" style={{ marginTop: "1rem" }}>
+        <div className="notice danger">
           {params.error}
         </div>
       ) : null}
 
       {!connected ? (
-        <div className="notice" style={{ marginTop: "1rem" }}>
+        <div className="notice">
           Connect your LinkedIn account on the Team page before looking for prospects.
         </div>
       ) : null}
 
       {business.success ? (
-        <section className="card" style={{ marginTop: "1.25rem" }}>
-          <h3 style={{ marginTop: 0 }}>{business.data.companyName}</h3>
+        <section className="card">
+          <h3>{business.data.companyName}</h3>
           <p style={{ margin: "0 0 0.75rem" }}>{business.data.oneLiner}</p>
           <p className="small muted">{business.data.offering}</p>
           <div
-            style={{
-              display: "grid",
+            style={{ display: "grid",
               gap: "1rem",
-              gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-              marginTop: "1rem",
-            }}
+              gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}
           >
             <Facts label="Tone of voice" values={[business.data.toneOfVoice]} />
             <Facts label="Proof points" values={business.data.proofPoints} />
@@ -209,14 +206,14 @@ export default async function StrategyPage({
           </div>
         </section>
       ) : (
-        <div className="notice danger" style={{ marginTop: "1rem" }}>
+        <div className="notice danger">
           The stored business profile does not match the current schema. Re-run the Strategy Agent.
         </div>
       )}
 
-      <h2 style={{ fontSize: "1.15rem", marginTop: "2rem" }}>Customer profiles</h2>
+      <h2 style={{ fontSize: "1.15rem" }}>Customer profiles</h2>
 
-      <div style={{ display: "grid", gap: "1rem", marginTop: "1rem" }}>
+      <div className="grid">
         {profiles.map(({ row, spec }) => {
           if (!spec.success) {
             return (
@@ -230,9 +227,9 @@ export default async function StrategyPage({
 
           return (
             <article key={row.id} className="card" style={row.do_not_pursue ? { opacity: 0.6 } : undefined}>
-              <header style={{ display: "flex", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
+              <header className="between">
                 <div>
-                  <h3 style={{ margin: 0 }}>{profile.name}</h3>
+                  <h3>{profile.name}</h3>
                   <p className="small muted" style={{ margin: "0.2rem 0 0" }}>
                     Priority {row.priority} ·{" "}
                     {row.do_not_pursue ? "not pursuing" : approved ? "approved" : "waiting for your approval"}
@@ -274,12 +271,9 @@ export default async function StrategyPage({
 
               <p style={{ margin: "1rem 0 0" }}>{profile.summary}</p>
               <div
-                style={{
-                  display: "grid",
+                style={{ display: "grid",
                   gap: "1rem",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-                  marginTop: "1rem",
-                }}
+                  gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}
               >
                 <Facts label="What hurts" values={profile.pains} />
                 <Facts label="Buying signals" values={profile.triggerEvents} />
@@ -287,25 +281,23 @@ export default async function StrategyPage({
                 <Facts label="Opening angles" values={profile.hooks} />
               </div>
 
-              <details style={{ marginTop: "1.25rem" }}>
+              <details>
                 <summary className="small" style={{ cursor: "pointer" }}>
                   Who we search for
                 </summary>
-                <form action={saveProfile} style={{ marginTop: "1rem" }}>
+                <form action={saveProfile}>
                   <input type="hidden" name="profileId" value={row.id} />
-                  <p className="small muted" style={{ marginTop: 0 }}>
+                  <p className="small muted">
                     One per line. These go straight into the Sales Navigator search, so a title here is
                     a title LinkedIn has to recognise.
                   </p>
                   <div
-                    style={{
-                      display: "grid",
+                    style={{ display: "grid",
                       gap: "0.75rem",
-                      gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))",
-                    }}
+                      gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))" }}
                   >
                     {FILTER_FIELDS.map((field) => (
-                      <label className="field" key={field.key} style={{ marginBottom: 0 }}>
+                      <label className="field" key={field.key}>
                         <span>{field.label}</span>
                         <textarea
                           name={field.key}
@@ -314,12 +306,12 @@ export default async function StrategyPage({
                         />
                       </label>
                     ))}
-                    <label className="field" style={{ marginBottom: 0 }}>
+                    <label className="field">
                       <span>Priority · 1 goes first</span>
                       <input type="number" name="priority" min={1} max={5} defaultValue={row.priority} />
                     </label>
                   </div>
-                  <button className="btn secondary small" type="submit" style={{ marginTop: "1rem" }}>
+                  <button className="btn secondary small" type="submit">
                     Save search
                   </button>
                 </form>
@@ -339,9 +331,9 @@ function Facts({ label, values }: { label: string; values: readonly string[] }) 
       <p className="small muted" style={{ margin: "0 0 0.3rem" }}>
         {label}
       </p>
-      <ul className="small" style={{ margin: 0, paddingLeft: "1.05rem" }}>
+      <ul className="small bullets">
         {values.map((value) => (
-          <li key={value} style={{ marginBottom: "0.2rem" }}>
+          <li key={value}>
             {value}
           </li>
         ))}

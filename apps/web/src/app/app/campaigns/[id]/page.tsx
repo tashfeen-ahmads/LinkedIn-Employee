@@ -201,18 +201,15 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
 
   return (
     <>
-      <p className="small muted" style={{ margin: 0 }}>
+      <p className="small muted">
         <Link href="/app/campaigns">← Campaigns</Link>
       </p>
       <div
-        style={{
-          display: "flex",
+        style={{ display: "flex",
           justifyContent: "space-between",
           gap: "1rem",
           flexWrap: "wrap",
-          alignItems: "flex-start",
-          marginTop: "0.35rem",
-        }}
+          alignItems: "flex-start" }}
       >
         <div>
           <h1 style={{ fontSize: "1.6rem", margin: 0 }}>{campaign.name}</h1>
@@ -233,7 +230,7 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
       </div>
 
       {dropped.length > 0 ? (
-        <div className="notice" style={{ marginTop: "1.25rem" }}>
+        <div className="notice">
           <strong>This list was built without Sales Navigator</strong>
           <p className="small" style={{ margin: "0.35rem 0 0" }}>
             Classic LinkedIn search cannot filter on {listInWords(dropped)}, so{" "}
@@ -246,7 +243,7 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
       ) : null}
 
       {blockers.length > 0 && !running ? (
-        <div className="notice danger" style={{ marginTop: "1.25rem" }}>
+        <div className="notice danger">
           <strong>Not ready to launch</strong>
           <ul style={{ margin: "0.5rem 0 0", paddingLeft: "1.1rem" }}>
             {blockers.map((blocker) => (
@@ -257,11 +254,11 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
       ) : null}
 
       {reached.length > 0 ? (
-        <section className="card" style={{ marginTop: "1.25rem" }}>
+        <section className="card">
           <div style={{ display: "flex", gap: "2rem", flexWrap: "wrap" }}>
             {reached.map((stage) => (
               <div key={stage.key}>
-                <p className="small muted" style={{ margin: 0 }}>
+                <p className="small muted">
                   {stage.label}
                 </p>
                 <p className="mono" style={{ margin: 0, fontWeight: 600, fontSize: "1.25rem" }}>
@@ -276,9 +273,9 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
       <form action={saveCampaign}>
         <input type="hidden" name="campaignId" value={campaign.id} />
 
-        <section className="card" style={{ marginTop: "1.25rem" }}>
+        <section className="card">
           <h3>What gets sent</h3>
-          <p className="small muted" style={{ marginTop: 0 }}>
+          <p className="small muted">
             {"Read all of it. Only {{first_name}} is substituted; anything else stays literal."}
             {running ? " Edits apply to everyone who has not been reached yet." : ""}
           </p>
@@ -306,7 +303,7 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
           ))}
 
           <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", alignItems: "flex-end" }}>
-            <label className="field" style={{ width: 170, marginBottom: 0 }}>
+            <label className="field" style={{ width: 170 }}>
               <span>Invites a day</span>
               <input
                 type="number"
@@ -316,7 +313,7 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
                 defaultValue={campaign.daily_invite_cap}
               />
             </label>
-            <label className="field" style={{ width: 220, marginBottom: 0 }}>
+            <label className="field" style={{ width: 220 }}>
               <span>Replies</span>
               <select name="replyMode" defaultValue={campaign.reply_mode}>
                 <option value="approval">Hold for my approval</option>
@@ -334,12 +331,12 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
         </section>
       </form>
 
-      <section style={{ marginTop: "1.75rem" }}>
-        <h2 style={{ fontSize: "1.15rem" }}>Who is on the list</h2>
+      <section>
+        <h2>Who is on the list</h2>
         {rows.length === 0 ? (
           <p className="small muted">Nobody yet.</p>
         ) : (
-          <div className="table-scroll" style={{ marginTop: "1rem" }}>
+          <div className="table-scroll">
             <table>
               <thead>
                 <tr>
@@ -379,7 +376,7 @@ export default async function CampaignPage({ params }: { params: Promise<{ id: s
                           {row.status}
                         </span>
                         {row.status_reason ? (
-                          <p className="small muted" style={{ margin: 0 }}>
+                          <p className="small muted">
                             {row.status_reason}
                           </p>
                         ) : null}

@@ -15,8 +15,7 @@ export function GET(request: Request) {
   return new ImageResponse(
     (
       <div
-        style={{
-          height: "100%",
+        style={{ height: "100%",
           width: "100%",
           display: "flex",
           flexDirection: "column",
@@ -25,31 +24,26 @@ export function GET(request: Request) {
           padding: "72px",
           // A single wash of the accent, bottom-left, so the card is not a
           // flat rectangle of one colour.
-          backgroundImage: "radial-gradient(circle at 0% 100%, #241F5E 0%, #0B0D12 55%)",
-        }}
+          backgroundImage: "radial-gradient(circle at 0% 100%, #241F5E 0%, #0B0D12 55%)" }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <div
-            style={{
-              width: 40,
+            style={{ width: 40,
               height: 40,
               borderRadius: 10,
               background: "#A5A0FF",
-              display: "flex",
-            }}
+              display: "flex" }}
           />
           <div style={{ color: "#ECEEF3", fontSize: 26, letterSpacing: "-0.02em" }}>{SITE.name}</div>
         </div>
 
         <div
-          style={{
-            color: "#FFFFFF",
+          style={{ color: "#FFFFFF",
             fontSize: title.length > 55 ? 60 : 74,
             lineHeight: 1.08,
             letterSpacing: "-0.035em",
             maxWidth: 940,
-            display: "flex",
-          }}
+            display: "flex" }}
         >
           {title}
         </div>

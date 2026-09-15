@@ -76,26 +76,23 @@ export default async function ReportingPage() {
 
   return (
     <>
-      <h1 style={{ fontSize: "1.6rem" }}>Reporting</h1>
+      <h1>Reporting</h1>
       <p className="muted">
         {canSeeTeam
           ? "Where outreach is working and where it stops, per rep and per campaign."
           : "Your own outreach. Team-wide figures are visible to managers."}
       </p>
 
-      <section style={{ marginTop: "1.75rem" }}>
-        <h2 style={{ fontSize: "1.1rem" }}>Workspace</h2>
+      <section>
+        <h2>Workspace</h2>
         <div
-          style={{
-            display: "grid",
+          style={{ display: "grid",
             gap: "0.75rem",
-            gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
-            marginTop: "0.9rem",
-          }}
+            gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))" }}
         >
           {FUNNEL_STAGES.map((stage) => (
             <div key={stage.key} className="card">
-              <p className="small muted" style={{ margin: 0 }}>
+              <p className="small muted">
                 {stage.label}
               </p>
               <p className="mono" style={{ fontSize: "1.7rem", fontWeight: 640, margin: "0.15rem 0 0" }}>
@@ -105,32 +102,32 @@ export default async function ReportingPage() {
           ))}
         </div>
 
-        <div style={{ display: "flex", gap: "2rem", flexWrap: "wrap", marginTop: "1.25rem" }}>
+        <div style={{ display: "flex", gap: "2rem", flexWrap: "wrap" }}>
           <Rate label="Acceptance" value={workspaceRates.acceptance} target={RATE_TARGETS.acceptance} />
           <Rate label="Reply" value={workspaceRates.reply} target={RATE_TARGETS.reply} />
         </div>
       </section>
 
-      <section style={{ marginTop: "2.5rem" }}>
-        <h2 style={{ fontSize: "1.1rem" }}>{canSeeTeam ? "By rep" : "You"}</h2>
+      <section>
+        <h2>{canSeeTeam ? "By rep" : "You"}</h2>
         {reps.every((rep) => rep.counts.invited === 0) ? (
-          <p className="muted" style={{ marginTop: "0.75rem" }}>
+          <p className="muted">
             No outreach has gone out yet. Launch a campaign and this fills in.
           </p>
         ) : (
-          <div className="table-scroll" style={{ marginTop: "0.9rem" }}>
+          <div className="table-scroll">
             <table>
               <thead>
                 <tr>
                   <th>Rep</th>
                   <th style={{ minWidth: 150 }}>Funnel</th>
                   {FUNNEL_STAGES.map((stage) => (
-                    <th key={stage.key} style={{ textAlign: "right" }}>
+                    <th key={stage.key} className="num">
                       {stage.label}
                     </th>
                   ))}
-                  <th style={{ textAlign: "right" }}>Acceptance</th>
-                  <th style={{ textAlign: "right" }}>Reply</th>
+                  <th className="num">Acceptance</th>
+                  <th className="num">Reply</th>
                 </tr>
               </thead>
               <tbody>
@@ -138,7 +135,7 @@ export default async function ReportingPage() {
                   <tr key={rep.userId}>
                     <td>
                       {rep.name}
-                      <p className="small muted" style={{ margin: 0 }}>
+                      <p className="small muted">
                         {rep.role}
                       </p>
                     </td>
@@ -146,14 +143,14 @@ export default async function ReportingPage() {
                       <FunnelBar counts={rep.counts} peak={peak} name={rep.name} />
                     </td>
                     {FUNNEL_STAGES.map((stage) => (
-                      <td key={stage.key} className="mono" style={{ textAlign: "right" }}>
+                      <td key={stage.key} className="mono num">
                         {rep.counts[stage.key]}
                       </td>
                     ))}
-                    <td style={{ textAlign: "right" }}>
+                    <td className="num">
                       <RateCell value={rep.rates.acceptance} target={RATE_TARGETS.acceptance} />
                     </td>
-                    <td style={{ textAlign: "right" }}>
+                    <td className="num">
                       <RateCell value={rep.rates.reply} target={RATE_TARGETS.reply} />
                     </td>
                   </tr>
@@ -162,27 +159,27 @@ export default async function ReportingPage() {
             </table>
           </div>
         )}
-        <p className="small muted" style={{ marginTop: "0.9rem" }}>
+        <p className="small muted">
           A rate appears once there are {MIN_FOR_RATE} in its denominator. Below that a percentage
           says more about the sample than the rep.
         </p>
       </section>
 
       {campaigns?.length ? (
-        <section style={{ marginTop: "2.5rem" }}>
-          <h2 style={{ fontSize: "1.1rem" }}>By campaign</h2>
-          <div className="table-scroll" style={{ marginTop: "0.9rem" }}>
+        <section>
+          <h2>By campaign</h2>
+          <div className="table-scroll">
             <table>
               <thead>
                 <tr>
                   <th>Campaign</th>
                   <th>Status</th>
                   {FUNNEL_STAGES.map((stage) => (
-                    <th key={stage.key} style={{ textAlign: "right" }}>
+                    <th key={stage.key} className="num">
                       {stage.label}
                     </th>
                   ))}
-                  <th style={{ textAlign: "right" }}>Acceptance</th>
+                  <th className="num">Acceptance</th>
                 </tr>
               </thead>
               <tbody>
@@ -200,11 +197,11 @@ export default async function ReportingPage() {
                           </span>
                         </td>
                         {FUNNEL_STAGES.map((stage) => (
-                          <td key={stage.key} className="mono" style={{ textAlign: "right" }}>
+                          <td key={stage.key} className="mono num">
                             {counts[stage.key]}
                           </td>
                         ))}
-                        <td style={{ textAlign: "right" }}>
+                        <td className="num">
                           <RateCell value={rates.acceptance} target={RATE_TARGETS.acceptance} />
                         </td>
                       </tr>
@@ -255,7 +252,7 @@ function FunnelBar({ counts, peak, name }: { counts: ReturnType<typeof countFunn
 function Rate({ label, value, target }: { label: string; value: number | null; target: number }) {
   return (
     <div>
-      <p className="small muted" style={{ margin: 0 }}>
+      <p className="small muted">
         {label}
       </p>
       {value === null ? (

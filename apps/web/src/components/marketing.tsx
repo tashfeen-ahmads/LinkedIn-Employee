@@ -188,7 +188,7 @@ export function HowItWorks() {
                   <h3>{step.agent}</h3>
                 </div>
                 <p style={{ fontWeight: 550 }}>{step.lead}</p>
-                <ul className="muted small stack-2" style={{ margin: 0, paddingLeft: "1.05rem" }}>
+                <ul className="muted small stack-2 bullets">
                   {step.points.map((point) => (
                     <li key={point}>{point}</li>
                   ))}
@@ -473,7 +473,7 @@ export function Pricing() {
                 <span className="small muted"> / seat / mo</span>
               </p>
 
-              <ul className="small muted stack-2" style={{ margin: 0, paddingLeft: "1.05rem" }}>
+              <ul className="small muted stack-2 bullets">
                 {plan.features.map((feature) => (
                   <li key={feature}>{feature}</li>
                 ))}

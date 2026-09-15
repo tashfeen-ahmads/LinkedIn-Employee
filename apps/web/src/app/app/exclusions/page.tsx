@@ -80,7 +80,7 @@ export default async function ExclusionsPage() {
 
   return (
     <>
-      <h1 style={{ fontSize: "1.6rem" }}>Exclusions</h1>
+      <h1>Exclusions</h1>
       <p className="small muted" style={{ maxWidth: "60ch" }}>
         Accounts and people nobody in this workspace contacts. Checked when a campaign is built and
         again immediately before every send, so adding a company here stops the invitations already
@@ -88,13 +88,13 @@ export default async function ExclusionsPage() {
       </p>
 
       {manage ? (
-        <section className="card" style={{ marginTop: "1.25rem" }}>
+        <section className="card">
           <h3>Add an exclusion</h3>
           <form
             action={addExclusion}
             style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "flex-end" }}
           >
-            <label className="field" style={{ width: 130, marginBottom: 0 }}>
+            <label className="field" style={{ width: 130 }}>
               <span>Type</span>
               <select name="kind" defaultValue="company">
                 {KINDS.map((kind) => (
@@ -104,11 +104,11 @@ export default async function ExclusionsPage() {
                 ))}
               </select>
             </label>
-            <label className="field" style={{ flex: "1 1 220px", marginBottom: 0 }}>
+            <label className="field" style={{ flex: "1 1 220px" }}>
               <span>Company name or profile URL</span>
               <input name="value" required placeholder="Acme Corp." />
             </label>
-            <label className="field" style={{ flex: "1 1 200px", marginBottom: 0 }}>
+            <label className="field" style={{ flex: "1 1 200px" }}>
               <span>Why (optional)</span>
               <input name="reason" placeholder="Existing customer" />
             </label>
@@ -123,8 +123,8 @@ export default async function ExclusionsPage() {
         </section>
       ) : null}
 
-      <section style={{ marginTop: "1.75rem" }}>
-        <h2 style={{ fontSize: "1.15rem" }}>
+      <section>
+        <h2>
           {entries.length} on the list
           {entries.length ? (
             <span className="small muted" style={{ fontWeight: 400 }}>
@@ -136,12 +136,12 @@ export default async function ExclusionsPage() {
         </h2>
 
         {entries.length === 0 ? (
-          <p className="small muted" style={{ marginTop: "1rem" }}>
+          <p className="small muted">
             Nothing excluded yet. Most teams start with their customer list and the accounts their AEs
             already own.
           </p>
         ) : (
-          <div className="table-scroll" style={{ marginTop: "1rem" }}>
+          <div className="table-scroll">
             <table>
               <thead>
                 <tr>
@@ -166,7 +166,7 @@ export default async function ExclusionsPage() {
                       <td className="small muted">{row.reason ?? "—"}</td>
                       <td className="small muted">
                         {author?.full_name ?? author?.email ?? "—"}
-                        <p className="small muted" style={{ margin: 0 }}>
+                        <p className="small muted">
                           {new Date(row.created_at).toLocaleDateString()}
                         </p>
                       </td>

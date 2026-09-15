@@ -221,6 +221,11 @@ p  { margin: 0; }
 .section { padding-block: var(--space-8); }
 .divider { border: 0; border-top: 1px solid var(--border); margin: 0; }
 
+/* Every bulleted list in the app was setting its own indent inline, and they
+   did not agree. The marker sits in the padding; the list itself carries no
+   margin, because spacing is the parent's job here as everywhere. */
+.bullets { margin: 0; padding-left: 1.05rem; display: flex; flex-direction: column; gap: var(--space-1); }
+
 /* The heading block every page and section opens with. */
 .page-head { display: flex; flex-direction: column; gap: var(--space-2); }
 .section-head { display: flex; flex-direction: column; gap: var(--space-1); }
@@ -458,6 +463,14 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 }
 .app-main { min-width: 0; display: flex; flex-direction: column; }
 .app-body { padding: var(--space-6) var(--space-5) var(--space-8); width: min(1100px, 100%); }
+
+/* The global heading scale is set for the marketing pages, where an h1 opens a
+ * wide screen and is meant to carry it. Inside the app an h1 is a page title
+ * sitting above a table, and at the marketing size it shouts. Every app page
+ * was overriding it inline — eighteen at 1.6rem and four at 1.7rem, which is
+ * how a scale stops being a scale. */
+.app-body h1 { font-size: 1.6rem; }
+.app-body h2 { font-size: 1.15rem; }
 
 .nav { display: flex; flex-direction: column; gap: 1px; }
 .nav a {

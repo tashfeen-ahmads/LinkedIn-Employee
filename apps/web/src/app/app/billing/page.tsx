@@ -53,14 +53,14 @@ export default async function BillingPage({ searchParams }: { searchParams: Noti
   return (
     <>
       <PageNotice error={params.error} notice={params.notice} />
-      <h1 style={{ fontSize: "1.6rem" }}>Billing</h1>
+      <h1>Billing</h1>
 
       {message ? (
-        <div className={`notice ${entitlement.canSend ? "warning" : "danger"}`} style={{ marginBottom: "1.5rem" }}>
+        <div className={`notice ${entitlement.canSend ? "warning" : "danger"}`}>
           {message}
         </div>
       ) : entitlement.reason === "trial_active" ? (
-        <div className="notice" style={{ marginBottom: "1.5rem" }}>
+        <div className="notice">
           {entitlement.trialDaysLeft === 0
             ? "Your trial ends today."
             : `${entitlement.trialDaysLeft} ${entitlement.trialDaysLeft === 1 ? "day" : "days"} left in your trial.`}{" "}
@@ -68,9 +68,9 @@ export default async function BillingPage({ searchParams }: { searchParams: Noti
         </div>
       ) : null}
 
-      <section className="card" style={{ marginBottom: "2rem" }}>
+      <section className="card">
         <h3>Current plan</h3>
-        <p className="small muted" style={{ margin: 0 }}>
+        <p className="small muted">
           {workspace?.plan ?? "trial"}
           {workspace?.subscription_status ? ` · ${workspace.subscription_status}` : ""}
           {workspace?.seats ? ` · ${workspace.seats} ${workspace.seats === 1 ? "seat" : "seats"}` : ""}
@@ -85,7 +85,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Noti
       >
         {PLANS.map((plan) => (
           <article key={plan.id} className="card">
-            <h3 style={{ margin: 0 }}>{plan.name}</h3>
+            <h3>{plan.name}</h3>
             <p style={{ fontSize: "1.7rem", fontWeight: 640, margin: "0.4rem 0 0.2rem" }}>
               {plan.price}
               <span className="muted" style={{ fontSize: "0.9rem", fontWeight: 400 }}>
@@ -105,7 +105,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Noti
         ))}
       </section>
 
-      <p className="small muted" style={{ marginTop: "1.5rem" }}>
+      <p className="small muted">
         Cancelling stops outreach. Your prospects, conversations and booked meetings stay readable and
         exportable — we do not hold your record of what was said hostage.
       </p>

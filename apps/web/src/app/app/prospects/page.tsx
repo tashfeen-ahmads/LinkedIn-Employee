@@ -68,7 +68,7 @@ export default async function ProspectsPage({ searchParams }: { searchParams: No
   if (!prospects?.length) {
     return (
       <>
-        <h1 style={{ fontSize: "1.6rem" }}>Prospects</h1>
+        <h1>Prospects</h1>
         <p className="muted">
           None yet. Approve a customer profile and run the Targeting Agent to build your first list.
         </p>
@@ -79,14 +79,14 @@ export default async function ProspectsPage({ searchParams }: { searchParams: No
   return (
     <>
       <PageNotice error={params.error} notice={params.notice} />
-      <h1 style={{ fontSize: "1.6rem" }}>Prospects</h1>
+      <h1>Prospects</h1>
       <p className="muted">
         {prospects.length} in this workspace, ranked by fit. Nobody here can be contacted twice by two
         different reps. Erasing someone removes everything we hold about them and keeps only a
         do-not-contact record, so a later campaign cannot re-import them.
       </p>
 
-      <div className="table-scroll" style={{ marginTop: "1.5rem" }}>
+      <div className="table-scroll">
         <table>
           <thead>
             <tr>
@@ -113,14 +113,14 @@ export default async function ProspectsPage({ searchParams }: { searchParams: No
                     >
                       {`${prospect.first_name ?? ""} ${prospect.last_name ?? ""}`.trim() || "Unknown"}
                     </a>
-                    <p className="small muted" style={{ margin: 0 }}>
+                    <p className="small muted">
                       {[prospect.title, prospect.company].filter(Boolean).join(" · ")}
                     </p>
                   </td>
                   <td className="mono">{prospect.fit_score ?? "—"}</td>
                   <td className="mono">{prospect.intent_score ?? 0}</td>
                   <td style={{ maxWidth: 320 }}>
-                    <div style={{ display: "flex", gap: "0.3rem", flexWrap: "wrap", marginBottom: "0.35rem" }}>
+                    <div style={{ display: "flex", gap: "0.3rem", flexWrap: "wrap" }}>
                       {signals.slice(0, 3).map((signal, index) => (
                         <span key={index} className="pill accent" title={signal.detail}>
                           {SIGNAL_LABELS[signal.type] ?? signal.type}

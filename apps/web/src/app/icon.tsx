@@ -8,8 +8,7 @@ export default function Icon() {
   return new ImageResponse(
     (
       <div
-        style={{
-          width: "100%",
+        style={{ width: "100%",
           height: "100%",
           display: "flex",
           flexDirection: "column",
@@ -17,8 +16,7 @@ export default function Icon() {
           justifyContent: "center",
           gap: 2.5,
           background: "#3730E8",
-          borderRadius: 7,
-        }}
+          borderRadius: 7 }}
       >
         <div style={{ width: 17, height: 3, borderRadius: 2, background: "rgba(255,255,255,.95)" }} />
         <div style={{ width: 13, height: 3, borderRadius: 2, background: "rgba(255,255,255,.75)" }} />

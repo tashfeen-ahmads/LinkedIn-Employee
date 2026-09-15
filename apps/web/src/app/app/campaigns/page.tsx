@@ -26,7 +26,7 @@ export default async function CampaignsPage() {
   if (!campaigns?.length) {
     return (
       <>
-        <h1 style={{ fontSize: "1.6rem" }}>Campaigns</h1>
+        <h1>Campaigns</h1>
         <p className="muted">
           None yet. The Targeting Agent creates one as a draft; you review the list and the copy before
           anything is sent.
@@ -37,15 +37,15 @@ export default async function CampaignsPage() {
 
   return (
     <>
-      <h1 style={{ fontSize: "1.6rem" }}>Campaigns</h1>
-      <div style={{ display: "grid", gap: "1rem", marginTop: "1.5rem" }}>
+      <h1>Campaigns</h1>
+      <div className="grid">
         {campaigns.map((campaign) => {
           const stats = byCampaign.get(campaign.id) ?? { queued: 0, total: 0 };
           return (
             <article key={campaign.id} className="card">
-              <header style={{ display: "flex", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
+              <header className="between">
                 <div>
-                  <h3 style={{ margin: 0 }}>{campaign.name}</h3>
+                  <h3>{campaign.name}</h3>
                   <p className="small muted" style={{ margin: "0.2rem 0 0" }}>
                     {stats.total} prospects, {stats.queued} still queued · {campaign.daily_invite_cap} invites
                     a day ·{" "}
@@ -67,12 +67,10 @@ export default async function CampaignsPage() {
               </header>
               <p
                 className="small"
-                style={{
-                  margin: "1rem 0 0",
+                style={{ margin: "1rem 0 0",
                   padding: "0.7rem",
                   background: "var(--surface)",
-                  borderRadius: 8,
-                }}
+                  borderRadius: 8 }}
               >
                 {campaign.connection_note}
               </p>

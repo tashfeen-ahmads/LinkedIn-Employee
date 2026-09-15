@@ -155,7 +155,7 @@ export default async function InboxPage({ searchParams }: { searchParams: Notice
   if (conversationIds.length === 0) {
     return (
       <>
-        <h1 style={{ fontSize: "1.6rem" }}>Inbox</h1>
+        <h1>Inbox</h1>
         <p className="muted">Nothing waiting. Anything needing a human decision appears here.</p>
       </>
     );
@@ -184,13 +184,13 @@ export default async function InboxPage({ searchParams }: { searchParams: Notice
   return (
     <>
       <PageNotice error={params.error} notice={params.notice} />
-      <h1 style={{ fontSize: "1.6rem" }}>Inbox</h1>
+      <h1>Inbox</h1>
       <p className="muted">
         {conversationIds.length}{" "}
         {conversationIds.length === 1 ? "conversation needs" : "conversations need"} your decision.
       </p>
 
-      <div style={{ display: "grid", gap: "1rem", marginTop: "1.5rem" }}>
+      <div className="grid">
         {conversationIds.map((conversationId) => {
           const hold = heldById.get(conversationId);
           const draft = draftByConversation.get(conversationId);
@@ -203,14 +203,14 @@ export default async function InboxPage({ searchParams }: { searchParams: Notice
 
           return (
             <article key={conversationId} className="card">
-              <header style={{ display: "flex", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap" }}>
+              <header className="between">
                 <div>
                   <strong>
                     {prospect
                       ? `${prospect.first_name ?? ""} ${prospect.last_name ?? ""}`.trim() || "Prospect"
                       : "Prospect"}
                   </strong>
-                  <p className="small muted" style={{ margin: 0 }}>
+                  <p className="small muted">
                     {[prospect?.title, prospect?.company].filter(Boolean).join(" · ") || "—"}
                   </p>
                 </div>
@@ -223,14 +223,12 @@ export default async function InboxPage({ searchParams }: { searchParams: Notice
               </header>
 
               <div
-                style={{
-                  margin: "1rem 0",
+                style={{ margin: "1rem 0",
                   padding: "0.75rem",
                   background: "var(--surface)",
                   borderRadius: 8,
                   maxHeight: 220,
-                  overflowY: "auto",
-                }}
+                  overflowY: "auto" }}
               >
                 {thread.map((message, index) => (
                   <p key={index} className="small" style={{ margin: "0 0 0.6rem" }}>
@@ -241,7 +239,7 @@ export default async function InboxPage({ searchParams }: { searchParams: Notice
               </div>
 
               {questions.length ? (
-                <div className="notice warning" style={{ marginBottom: "1rem" }}>
+                <div className="notice warning">
                   The agent could not answer: {questions.join("; ")}
                 </div>
               ) : null}
@@ -271,7 +269,7 @@ export default async function InboxPage({ searchParams }: { searchParams: Notice
                       Send
                     </button>
                   </form>
-                  <form action={dismissDraft} style={{ marginTop: "0.5rem" }}>
+                  <form action={dismissDraft}>
                     <input type="hidden" name="draftId" value={draft.id} />
                     <input type="hidden" name="conversationId" value={conversationId} />
                     <button className="btn secondary small" type="submit">
@@ -295,7 +293,7 @@ export default async function InboxPage({ searchParams }: { searchParams: Notice
                       Send
                     </button>
                   </form>
-                  <form action={dismissDraft} style={{ marginTop: "0.5rem" }}>
+                  <form action={dismissDraft}>
                     <input type="hidden" name="conversationId" value={conversationId} />
                     <button className="btn secondary small" type="submit">
                       Dismiss, I will handle it on LinkedIn

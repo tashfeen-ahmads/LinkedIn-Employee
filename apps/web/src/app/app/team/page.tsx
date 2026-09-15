@@ -247,17 +247,17 @@ export default async function TeamPage({
 
   return (
     <>
-      <h1 style={{ fontSize: "1.6rem" }}>Team</h1>
+      <h1>Team</h1>
 
       {params.error ? (
-        <div className="notice danger" style={{ marginBottom: "1.25rem" }}>
+        <div className="notice danger">
           {params.error}
         </div>
       ) : null}
 
-      <section className="card" style={{ marginTop: "1.25rem" }}>
+      <section className="card">
         <h3>You</h3>
-        <p className="small muted" style={{ marginTop: 0 }}>
+        <p className="small muted">
           The agent writes in your voice and sends inside your working day, so both of these change
           what a prospect receives.
         </p>
@@ -281,7 +281,7 @@ export default async function TeamPage({
         </form>
       </section>
 
-      <section className="card" style={{ marginTop: "1rem" }}>
+      <section className="card">
         <h3>Your LinkedIn account</h3>
         {mine ? (
           <>
@@ -295,13 +295,13 @@ export default async function TeamPage({
               <Usage label="Messages today" used={mine.messages_today} cap={LINKEDIN_LIMITS.messagesPerDay} />
             </div>
 
-            <form action={saveSalesNavigator} style={{ marginTop: "1.25rem" }}>
+            <form action={saveSalesNavigator}>
               <label className="small" style={{ display: "flex", gap: "0.4rem", alignItems: "flex-start" }}>
                 <input
                   type="checkbox"
                   name="hasSalesNavigator"
                   defaultChecked={mine.has_sales_navigator}
-                  style={{ marginTop: "0.2rem" }}
+                 
                 />
                 <span>
                   This account has Sales Navigator
@@ -312,21 +312,21 @@ export default async function TeamPage({
                   </span>
                 </span>
               </label>
-              <button className="btn small" type="submit" style={{ marginTop: "0.6rem" }}>
+              <button className="btn small" type="submit">
                 Save
               </button>
             </form>
 
-            <form action={saveWorkingHours} style={{ marginTop: "1.5rem" }}>
+            <form action={saveWorkingHours}>
               <p className="small muted" style={{ margin: "0 0 0.5rem" }}>
                 Nothing is sent from this account outside these hours, read in your timezone above.
               </p>
               <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", alignItems: "flex-end" }}>
-                <label className="field" style={{ width: 110, marginBottom: 0 }}>
+                <label className="field" style={{ width: 110 }}>
                   <span>From</span>
                   <input type="number" name="start" min={0} max={23} defaultValue={hours.start} />
                 </label>
-                <label className="field" style={{ width: 110, marginBottom: 0 }}>
+                <label className="field" style={{ width: 110 }}>
                   <span>To</span>
                   <input type="number" name="end" min={1} max={24} defaultValue={hours.end} />
                 </label>
@@ -365,7 +365,7 @@ export default async function TeamPage({
       </section>
 
       {canManage ? (
-        <section className="card" style={{ marginTop: "1rem" }}>
+        <section className="card">
           <h3>Invite a teammate</h3>
           <p className="small muted">
             Each rep connects their own LinkedIn account. Nobody shares a login, and no two reps will
@@ -373,11 +373,11 @@ export default async function TeamPage({
             does not arrive.
           </p>
           <form action={inviteMember} style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "flex-end" }}>
-            <label className="field" style={{ flex: "1 1 240px", marginBottom: 0 }}>
+            <label className="field" style={{ flex: "1 1 240px" }}>
               <span>Work email</span>
               <input type="email" name="email" required placeholder="teammate@company.com" />
             </label>
-            <label className="field" style={{ width: 140, marginBottom: 0 }}>
+            <label className="field" style={{ width: 140 }}>
               <span>Role</span>
               <select name="role" defaultValue="rep">
                 <option value="rep">Rep</option>
@@ -391,7 +391,7 @@ export default async function TeamPage({
           </form>
 
           {invitations?.length ? (
-            <div className="table-scroll" style={{ marginTop: "1.25rem" }}>
+            <div className="table-scroll">
               <table>
                 <thead>
                   <tr>
@@ -414,8 +414,7 @@ export default async function TeamPage({
                           readOnly
                           onFocus={undefined}
                           value={`${appUrl}/invite/${invitation.token}`}
-                          style={{
-                            width: "100%",
+                          style={{ width: "100%",
                             minWidth: 220,
                             fontSize: "0.78rem",
                             fontFamily: "ui-monospace, monospace",
@@ -423,8 +422,7 @@ export default async function TeamPage({
                             border: "1px solid var(--border)",
                             borderRadius: 6,
                             background: "var(--surface)",
-                            color: "var(--text-muted)",
-                          }}
+                            color: "var(--text-muted)" }}
                         />
                       </td>
                       <td className="small muted">
@@ -444,16 +442,16 @@ export default async function TeamPage({
               </table>
             </div>
           ) : (
-            <p className="small muted" style={{ marginTop: "1rem", marginBottom: 0 }}>
+            <p className="small muted">
               No pending invitations. Links stay valid for {INVITE_TTL_DAYS} days.
             </p>
           )}
         </section>
       ) : null}
 
-      <section style={{ marginTop: "2rem" }}>
-        <h2 style={{ fontSize: "1.15rem" }}>Members</h2>
-        <div className="table-scroll" style={{ marginTop: "1rem" }}>
+      <section>
+        <h2>Members</h2>
+        <div className="table-scroll">
           <table>
             <thead>
               <tr>
@@ -472,7 +470,7 @@ export default async function TeamPage({
                   <tr key={member.id}>
                     <td>
                       {profile?.full_name ?? profile?.email ?? "—"}
-                      <p className="small muted" style={{ margin: 0 }}>
+                      <p className="small muted">
                         {profile?.email}
                       </p>
                     </td>
@@ -524,7 +522,7 @@ function Usage({ label, used, cap }: { label: string; used: number; cap: number 
   const ratio = Math.min(1, cap === 0 ? 0 : used / cap);
   return (
     <div style={{ minWidth: 140 }}>
-      <p className="small muted" style={{ margin: 0 }}>
+      <p className="small muted">
         {label}
       </p>
       <p className="mono" style={{ margin: "0.1rem 0 0.35rem", fontWeight: 600 }}>

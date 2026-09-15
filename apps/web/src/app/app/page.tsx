@@ -199,13 +199,11 @@ function Rate({
       <span className="stat-value">{(rate * 100).toFixed(1)}%</span>
       <div
         aria-hidden="true"
-        style={{
-          position: "relative",
+        style={{ position: "relative",
           height: 6,
           borderRadius: 999,
           background: "var(--surface-sunken)",
-          marginBlock: "var(--space-2)",
-        }}
+          marginBlock: "var(--space-2)" }}
       >
         <div
           style={{
@@ -216,15 +214,13 @@ function Rate({
           }}
         />
         <div
-          style={{
-            position: "absolute",
+          style={{ position: "absolute",
             left: "50%",
             top: -3,
             width: 2,
             height: 12,
             background: "var(--text-subtle)",
-            borderRadius: 1,
-          }}
+            borderRadius: 1 }}
         />
       </div>
       <span className="stat-note">

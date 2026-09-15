@@ -80,14 +80,14 @@ export default async function InvitePage({
         <div className="narrow" style={{ maxWidth: 460 }}>
           {!invite ? (
             <>
-              <h1 style={{ fontSize: "1.7rem" }}>Invitation not found</h1>
+              <h1>Invitation not found</h1>
               <p className="muted">
                 This link is not valid. Ask whoever invited you to send a new one.
               </p>
             </>
           ) : !user ? (
             <>
-              <h1 style={{ fontSize: "1.7rem" }}>You have been invited to {workspaceName}</h1>
+              <h1>You have been invited to {workspaceName}</h1>
               <p className="muted">
                 Sign in as <strong>{invite.email}</strong> to accept.
               </p>
@@ -97,18 +97,18 @@ export default async function InvitePage({
             </>
           ) : verdict && !verdict.ok ? (
             <>
-              <h1 style={{ fontSize: "1.7rem" }}>This invitation cannot be used</h1>
+              <h1>This invitation cannot be used</h1>
               <p className="muted">{inviteRejectionMessage(verdict.reason)}</p>
             </>
           ) : (
             <>
-              <h1 style={{ fontSize: "1.7rem" }}>Join {workspaceName}</h1>
+              <h1>Join {workspaceName}</h1>
               <p className="muted">
                 You will join as a <strong>{invite.role}</strong>. You will connect your own LinkedIn
                 account; nobody shares a login.
               </p>
               {error ? (
-                <div className="notice danger" style={{ marginBottom: "1rem" }}>
+                <div className="notice danger">
                   Something went wrong accepting this invitation. Try again, or ask for a new link.
                 </div>
               ) : null}
