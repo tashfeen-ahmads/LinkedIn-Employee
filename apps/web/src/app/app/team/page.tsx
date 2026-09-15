@@ -237,11 +237,30 @@ function isKnownTimezone(value: string): boolean {
 export default async function TeamPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; connected?: string }>;
 }) {
   const params = await searchParams;
   const session = await requireSession();
   const supabase = await createClient();
+
+  // Coming back from the provider's hosted login.
+  //
+  // The connection is finished at the provider by the time this redirect fires
+  // — it even hands back an account_id in the query — but the row here is bound
+  // by a webhook, and a webhook that does not arrive left the rep looking at
+  // "sending is paused" one second after being told they had succeeded.
+  //
+  // So the return itself confirms it. The account_id in the URL is deliberately
+  // ignored: binding whatever id a query string names would let anyone attach
+  // someone else's provider account to their own row. This asks the provider
+  // instead, which answers with the rep's own user id attached, and binds only
+  // a row already waiting.
+  if (params.connected === "1") {
+    await callWorker("/jobs/linkedin-refresh", {
+      workspaceId: session.workspaceId,
+      userId: session.userId,
+    });
+  }
 
   // Four independent reads on a page people open often; sequential awaits cost
   // four round trips where one batch does.

@@ -113,3 +113,30 @@ describe("UNIPILE_DSN", () => {
       .toThrow(/UNIPILE_DSN/);
   });
 });
+
+describe("base URLs", () => {
+  const base = {
+    NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "sb_secret_x",
+    OPENAI_API_KEY: "sk-test",
+    LINKEDIN_PROVIDER: "mock",
+  };
+
+  it("strips a trailing slash from APP_URL", () => {
+    // Every redirect is built as `${APP_URL}/path`. One pasted with a slash
+    // produced `//app/team`, which a browser reads as protocol-relative and
+    // Next.js does not route — so the rep finished signing in to LinkedIn and
+    // landed on a client-side exception.
+    expect(loadEnv({ ...base, APP_URL: "https://app.example.com/" } as never).APP_URL)
+      .toBe("https://app.example.com");
+  });
+
+  it("strips a trailing slash from WORKER_URL", () => {
+    expect(loadEnv({ ...base, WORKER_URL: "https://worker.example.com/" } as never).WORKER_URL)
+      .toBe("https://worker.example.com");
+  });
+
+  it("refuses an APP_URL that is not an absolute URL", () => {
+    expect(() => loadEnv({ ...base, APP_URL: "app.example.com" } as never)).toThrow(/APP_URL/);
+  });
+});

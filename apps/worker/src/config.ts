@@ -7,6 +7,11 @@ import { z } from "zod";
  * scheme `api58.unipile.com:` with the path `18893`, which is why a missing
  * `https://` gets all the way to `fetch` before failing.
  */
+/** `https://example.com/` and `https://example.com` name the same origin. */
+function stripTrailingSlash(value: string): string {
+  return value.replace(/\/+$/, "");
+}
+
 function isAbsoluteHttpUrl(value: string): boolean {
   try {
     const url = new URL(value);
@@ -54,15 +59,34 @@ const EnvSchema = z.object({
       message:
         "must be a full origin including the scheme and port, e.g. https://api58.unipile.com:18893",
     })
+    .transform(stripTrailingSlash)
     .optional(),
   UNIPILE_ACCESS_TOKEN: z.string().min(1).optional(),
   /** Required in production: without it, anyone can forge an inbound reply. */
   UNIPILE_WEBHOOK_SECRET: z.string().optional(),
   /** Shared with the web app to authenticate internal job dispatch. */
   INTERNAL_API_SECRET: z.string().min(32).optional(),
-  APP_URL: z.string().default("http://localhost:3000"),
+  /**
+   * The public base of the web app. Every OAuth redirect and every link in
+   * every email is built from it.
+   *
+   * Trailing slash stripped rather than tolerated: these are all built as
+   * `${APP_URL}/path`, so one pasted with a slash produced `//app/team`, which
+   * a browser reads as protocol-relative and Next.js does not route — the rep
+   * finished signing in to LinkedIn and landed on a client-side exception.
+   */
+  APP_URL: z
+    .string()
+    .default("http://localhost:3000")
+    .refine(isAbsoluteHttpUrl, { message: "must be an absolute http(s) URL" })
+    .transform(stripTrailingSlash),
   /** Public base URL of this worker, used for OAuth redirect URIs. */
-  WORKER_URL: z.string().default("http://localhost:4000"),
+  /** Same treatment: it is the base of every webhook and callback URL. */
+  WORKER_URL: z
+    .string()
+    .default("http://localhost:4000")
+    .refine(isAbsoluteHttpUrl, { message: "must be an absolute http(s) URL" })
+    .transform(stripTrailingSlash),
   WORKER_PORT: z.coerce.number().default(4000),
   /** Set to "mock" in development to run without touching LinkedIn at all. */
   LINKEDIN_PROVIDER: z.enum(["unipile", "mock"]).default("unipile"),

@@ -405,8 +405,8 @@ const MUTATIONS = [
     id: "connect/binds-the-provider-account",
     rule: "A finished hosted login binds the provider account, or nothing ever sends",
     file: "apps/worker/src/server.ts",
-    from: "          provider_account_id: account.providerAccountId,",
-    to: "          provider_account_id: null,",
+    from: "        provider_account_id: account.providerAccountId,",
+    to: "        provider_account_id: null,",
     pkg: "@le/worker",
   },
   {
@@ -742,6 +742,14 @@ const MUTATIONS = [
     from: 'const tier = input.tier ?? "classic";',
     to: 'const tier = input.tier ?? "sales_navigator";',
     pkg: "@le/linkedin",
+  },
+  {
+    id: "config/base-urls-have-no-trailing-slash",
+    rule: "A base URL with a trailing slash does not produce a // route",
+    file: "apps/worker/src/config.ts",
+    from: '  return value.replace(/\\/+$/, "");',
+    to: "  return value;",
+    pkg: "@le/worker",
   },
   {
     id: "config/dsn-must-be-a-url",
