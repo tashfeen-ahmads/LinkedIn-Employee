@@ -260,9 +260,50 @@ p  { margin: 0; }
 .btn.large { padding: 0.8rem 1.5rem; font-size: 1rem; }
 .btn.block { width: 100%; }
 
+/* ------------------------------------------------------------- auth pages */
+
+/* Sign-in, onboarding and invitation acceptance are the same shape: one narrow
+ * column of stacked blocks, centred, on every screen size. Each page was
+ * setting its own width, its own padding and its own heading size inline, so
+ * they drifted from one another and none of them spaced their children — the
+ * heading sat directly on the paragraph, which sat directly on the form.
+ *
+ * The gutter is expressed as a subtraction from the viewport rather than a
+ * max-width, so the column always keeps its margins on a narrow phone. */
+.auth-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  width: min(27rem, 100% - 2 * var(--space-4));
+  margin-inline: auto;
+  padding-block: var(--space-7);
+}
+.auth-page.wide { width: min(35rem, 100% - 2 * var(--space-4)); }
+.auth-page > header { display: flex; flex-direction: column; gap: var(--space-2); }
+/* Down here the display face at its clamped size is louder than the page. */
+.auth-page h1 { font-size: clamp(1.5rem, 1.2rem + 1.4vw, 1.9rem); }
+
+@media (min-width: 48em) {
+  .auth-page { padding-block: var(--space-8); }
+}
+
 /* --------------------------------------------------------------- surfaces */
 
+/* A card lays its own children out.
+ *
+ * Every margin in this sheet is zero — spacing is the container's job, set with
+ * gap. `.card` set padding and nothing else, so it was the one container that
+ * did not do that job, and its children stacked flush against each other. In a
+ * form that meant each input touching the label of the field below it, which
+ * reads as the label overlapping the box. Both /login and /onboarding are a
+ * form with `className="card"`, so both were wrong in the same way.
+ *
+ * Any card holding a single child is unaffected: gap between one thing and
+ * nothing is nothing. */
 .card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
   background: var(--surface-raised);
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -271,7 +312,7 @@ p  { margin: 0; }
 /* Elevation is spent on the one thing that needs lifting, not on every block. */
 .card.raised { box-shadow: var(--shadow); }
 .card.flat { background: var(--surface); }
-.card.tight { padding: var(--space-4); }
+.card.tight { padding: var(--space-4); gap: var(--space-3); }
 
 /* A number that is the point of its tile. */
 .stat { display: flex; flex-direction: column; gap: 0.125rem; }
@@ -311,6 +352,12 @@ input[type="text"], input[type="email"], input[type="url"], input[type="number"]
   box-shadow: 0 0 0 3px var(--accent-soft);
 }
 .field input::placeholder, .field textarea::placeholder { color: var(--text-subtle); }
+
+/* Same reasoning as `.card`: a form groups fields, so spacing them is its job.
+ * Without this every bare <form> stacked its fields flush, because nothing in
+ * this sheet carries a margin. A form that wants a row sets `.form-row` or its
+ * own flex-direction, and a form holding one button is unchanged. */
+form { display: flex; flex-direction: column; gap: var(--space-4); }
 
 .form-row { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: flex-end; }
 .form-row > .field { flex: 1 1 220px; }

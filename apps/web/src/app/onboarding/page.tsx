@@ -87,50 +87,46 @@ export default async function OnboardingPage({
   if (pendingInvite) redirect(`/invite/${pendingInvite.token}`);
 
   return (
-    <main style={{ padding: "4rem 0" }}>
-      <div className="narrow" style={{ maxWidth: 560 }}>
-        <h1 style={{ fontSize: "1.9rem" }}>Tell us about your business</h1>
+    <main className="auth-page wide">
+      <header>
+        <h1>Tell us about your business</h1>
         <p className="muted">
           The Strategy Agent reads what you publish and drafts your Business Profile and customer
           profiles. You will be able to edit everything it writes.
         </p>
+      </header>
 
-        {params.error ? (
-          <div className="notice danger" style={{ marginBottom: "1.25rem" }}>
-            {params.error}
-          </div>
-        ) : null}
+      {params.error ? <div className="notice danger">{params.error}</div> : null}
 
-        <form action={createWorkspace} className="card">
-          <label className="field">
-            <span>Your name</span>
-            <input name="fullName" placeholder="Jane Doe" autoComplete="name" />
-          </label>
-          <label className="field">
-            <span>Company name</span>
-            <input name="companyName" required placeholder="Acme Inc" />
-          </label>
-          <label className="field">
-            <span>Website</span>
-            <input name="websiteUrl" type="url" placeholder="https://acme.com" />
-          </label>
-          <label className="field">
-            <span>LinkedIn company page</span>
-            <input name="linkedinCompanyUrl" type="url" placeholder="https://linkedin.com/company/acme" />
-          </label>
-          <label className="field">
-            <span>Anything else worth knowing</span>
-            <textarea
-              name="description"
-              rows={4}
-              placeholder="Who you sell to, what you charge, what makes you different."
-            />
-          </label>
-          <button className="btn" type="submit" style={{ width: "100%", justifyContent: "center" }}>
-            Build my profiles
-          </button>
-        </form>
-      </div>
+      <form action={createWorkspace} className="card">
+        <label className="field">
+          <span>Your name</span>
+          <input name="fullName" placeholder="Jane Doe" autoComplete="name" />
+        </label>
+        <label className="field">
+          <span>Company name</span>
+          <input name="companyName" required placeholder="Acme Inc" />
+        </label>
+        <label className="field">
+          <span>Website</span>
+          <input name="websiteUrl" type="url" placeholder="https://acme.com" />
+        </label>
+        <label className="field">
+          <span>LinkedIn company page</span>
+          <input name="linkedinCompanyUrl" type="url" placeholder="https://linkedin.com/company/acme" />
+        </label>
+        <label className="field">
+          <span>Anything else worth knowing</span>
+          <textarea
+            name="description"
+            rows={4}
+            placeholder="Who you sell to, what you charge, what makes you different."
+          />
+        </label>
+        <button className="btn block" type="submit">
+          Build my profiles
+        </button>
+      </form>
     </main>
   );
 }
