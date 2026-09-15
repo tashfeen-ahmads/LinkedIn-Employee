@@ -1,22 +1,58 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
+import { AppNav, type NavGroup } from "@/components/app-nav";
 import { entitlementFor, entitlementMessage } from "@le/billing";
 
-const NAV = [
-  { href: "/app", label: "Overview" },
-  { href: "/app/strategy", label: "Strategy" },
-  { href: "/app/prospects", label: "Prospects" },
-  { href: "/app/campaigns", label: "Campaigns" },
-  { href: "/app/inbox", label: "Inbox" },
-  { href: "/app/meetings", label: "Meetings" },
-  { href: "/app/reporting", label: "Reporting" },
-  { href: "/app/knowledge", label: "Knowledge" },
-  { href: "/app/exclusions", label: "Exclusions" },
-  { href: "/app/team", label: "Team" },
-  { href: "/app/usage", label: "Usage" },
-  { href: "/app/billing", label: "Billing" },
-];
+/**
+ * Twelve links in one flat list is a list you read rather than a nav you use.
+ * Grouped by what the rep is doing: the daily loop first, then the things that
+ * shape it, then the account.
+ */
+function navGroups(waiting: number): NavGroup[] {
+  return [
+    {
+      label: "Daily",
+      items: [
+        { href: "/app", label: "Overview" },
+        { href: "/app/inbox", label: "Inbox", count: waiting },
+        { href: "/app/meetings", label: "Meetings" },
+      ],
+    },
+    {
+      label: "Outreach",
+      items: [
+        { href: "/app/strategy", label: "Strategy" },
+        { href: "/app/prospects", label: "Prospects" },
+        { href: "/app/campaigns", label: "Campaigns" },
+        { href: "/app/knowledge", label: "Knowledge" },
+        { href: "/app/exclusions", label: "Exclusions" },
+      ],
+    },
+    {
+      label: "Account",
+      items: [
+        { href: "/app/reporting", label: "Reporting" },
+        { href: "/app/usage", label: "Usage" },
+        { href: "/app/team", label: "Team" },
+        { href: "/app/billing", label: "Billing" },
+      ],
+    },
+  ];
+}
+
+/**
+ * There was no way to sign out of this application at all. On a shared or
+ * borrowed machine that is not an inconvenience, it is the session staying open
+ * for whoever sits down next — and this one can message a rep's real contacts.
+ */
+async function signOut() {
+  "use server";
+  const supabase = await createClient();
+  await supabase.auth.signOut();
+  redirect("/login");
+}
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await requireSession();
@@ -54,28 +90,31 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div className="app">
       <aside className="app-aside">
-        <div className="stack-2">
-          <Link href="/app" style={{ fontWeight: 600 }}>
-            LinkedIn&nbsp;Employee
-          </Link>
+        <div className="app-brand">
+          <Link href="/app">LinkedIn&nbsp;Employee</Link>
           <p className="tiny subtle">{session.workspaceName}</p>
         </div>
 
-        <nav className="nav">
-          {NAV.map((item) => (
-            <Link key={item.href} href={item.href}>
-              {item.label}
-              {item.href === "/app/inbox" && waiting ? (
-                <span className="nav-count">{waiting}</span>
-              ) : null}
-            </Link>
-          ))}
-        </nav>
+        <AppNav groups={navGroups(waiting ?? 0)} />
+
+        <div className="app-account">
+          <div className="app-account-who">
+            <p className="small">{session.fullName ?? session.email}</p>
+            <p className="tiny subtle">
+              {session.fullName ? session.email : session.role}
+            </p>
+          </div>
+          <form action={signOut}>
+            <button className="btn ghost small" type="submit">
+              Sign out
+            </button>
+          </form>
+        </div>
       </aside>
 
       <div className="app-main">
         {billingMessage || (account && account.status !== "active") ? (
-          <div className="stack-3" style={{ padding: "var(--space-4) var(--space-5) 0" }}>
+          <div className="app-banners">
             {billingMessage ? (
               <div className={`notice ${entitlement.canSend ? "warning" : "danger"}`}>
                 <p>

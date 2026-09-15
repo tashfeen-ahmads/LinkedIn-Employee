@@ -482,10 +482,73 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   color: var(--text-inverse);
 }
 
+.app-brand { display: flex; flex-direction: column; gap: var(--space-1); }
+.app-brand a { font-weight: 600; }
+
+.nav-group { display: flex; flex-direction: column; gap: 1px; }
+.nav-group + .nav-group { margin-top: var(--space-4); }
+.nav-group-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+  padding: 0 0.6rem var(--space-1);
+}
+
+/* Pushed to the bottom of the column: it is the last thing you reach for, and
+   it must be reachable from every page. */
+.app-account {
+  margin-top: auto;
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.app-account-who { min-width: 0; }
+.app-account-who p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.app-banners { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-4) var(--space-5) 0; }
+
 @media (max-width: 820px) {
   .app { grid-template-columns: 1fr; }
-  .app-aside { border-right: 0; border-bottom: 1px solid var(--border); }
-  .nav { flex-direction: row; flex-wrap: wrap; }
+  .app-aside {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+    padding: var(--space-4);
+    gap: var(--space-3);
+    /* The account row's `margin-top: auto` belongs to a full-height column. In
+       a bar it would push sign-out to the far side of the viewport. */
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+  .app-brand { grid-column: 1; }
+  .app-account { grid-column: 2; grid-row: 1; margin-top: 0; padding-top: 0; border-top: 0; }
+  /* The email is the first thing to go when there is no room for it. */
+  .app-account-who { display: none; }
+
+  /* Wrapping twelve links puts four rows of navigation above every page. One
+     scrolling row keeps the page where it belongs — at the top. */
+  .nav {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: var(--space-4);
+    scrollbar-width: none;
+    /* Bleed to the edges so the row reads as scrollable rather than clipped. */
+    margin-inline: calc(var(--space-4) * -1);
+    padding-inline: var(--space-4);
+  }
+  .nav::-webkit-scrollbar { display: none; }
+  .nav-group { flex-direction: row; gap: var(--space-1); }
+  .nav-group + .nav-group { margin-top: 0; }
+  .nav-group-label { display: none; }
+  .nav a { white-space: nowrap; }
+
   .app-body { padding: var(--space-5) var(--space-4) var(--space-7); }
 }
 

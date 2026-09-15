@@ -89,16 +89,12 @@ export const ONBOARDING_STEPS: readonly OnboardingStep[] = [
       "Your campaign is built and sitting in draft. Read the four messages, cut anyone you would not message yourself, and launch — it starts at ten invitations a day.",
     required: true,
   },
-  {
-    key: "hasCalendar",
-    label: "Connect your calendar",
-    done: "your calendar",
-    why: "Without it the agent offers to send times rather than proposing any. It never invents a slot.",
-    href: "/app/team",
-    nudge:
-      "The agent will not invent a time — without a calendar it can only offer to send some, which costs you a round trip on every booking.",
-    required: false,
-  },
+  // "Connect your calendar" was here. It pointed at /app/team, where the button
+  // posted to a worker route that was never implemented — so the step could not
+  // be completed by anyone, and a checklist with a permanently unfinished item
+  // is worse than a shorter checklist. Meetings are booked by hand until the
+  // Calendar integration is actually built; the Reply Agent already handles that
+  // by offering to send times rather than inventing one.
   {
     key: "hasKnowledge",
     label: "Add a page of product facts",

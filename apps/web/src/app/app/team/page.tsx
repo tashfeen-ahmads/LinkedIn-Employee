@@ -8,26 +8,24 @@ import { revalidatePath } from "next/cache";
 import { createInviteToken, inviteExpiry, INVITE_TTL_DAYS } from "@/lib/invitations";
 
 /**
- * Starts a provider's hosted consent flow. Five of these existed, identical
- * but for the path, so a change to the call shape meant five edits in one file.
+ * Starts LinkedIn's hosted consent flow.
+ *
+ * There were five of these — Google Calendar, Microsoft, HubSpot, Salesforce —
+ * pointed at worker routes that do not exist and never did. The worker answered
+ * 404, `callWorker` swallowed it and returned null, and the button did nothing
+ * at all: no error, no navigation, no change on the page. The four have been
+ * removed rather than left looking available.
  */
-function connectAction(path: string) {
-  return async function connect() {
-    "use server";
-    const session = await requireSession();
-    const result = await callWorker<{ url?: string }>(path, {
-      workspaceId: session.workspaceId,
-      userId: session.userId,
-    });
-    if (result?.url) redirect(result.url);
-  };
+async function connectLinkedIn() {
+  "use server";
+  const session = await requireSession();
+  const result = await callWorker<{ url?: string }>("/auth/linkedin/link", {
+    workspaceId: session.workspaceId,
+    userId: session.userId,
+  });
+  if (result?.url) redirect(result.url);
+  redirect("/app/team?error=Could+not+reach+LinkedIn+just+now.+Please+try+again.");
 }
-
-const connectLinkedIn = connectAction("/auth/linkedin/link");
-const connectCalendar = connectAction("/auth/google/link");
-const connectMicrosoftCalendar = connectAction("/auth/microsoft/link");
-const connectHubSpot = connectAction("/auth/hubspot/link");
-const connectSalesforce = connectAction("/auth/salesforce/link");
 
 /**
  * Team and connection management. Each rep connects their own LinkedIn account
@@ -206,9 +204,9 @@ export default async function TeamPage({
   const session = await requireSession();
   const supabase = await createClient();
 
-  // Six independent reads on a page people open often; sequential awaits cost
-  // six round trips where one batch does.
-  const [{ data: members }, { data: accounts }, { data: calendar }, { data: crm }, { data: invitations }, { data: me }] =
+  // Four independent reads on a page people open often; sequential awaits cost
+  // four round trips where one batch does.
+  const [{ data: members }, { data: accounts }, { data: invitations }, { data: me }] =
     await Promise.all([
       supabase
         .from("memberships")
@@ -218,19 +216,6 @@ export default async function TeamPage({
         .from("linkedin_accounts")
         .select("user_id, status, display_name, invites_today, invites_this_week, messages_today, has_sales_navigator, working_hours")
         .eq("workspace_id", session.workspaceId),
-      supabase
-        .from("integrations")
-        .select("kind, status")
-        .eq("workspace_id", session.workspaceId)
-        .eq("user_id", session.userId)
-        .in("kind", ["google_calendar", "microsoft_calendar"])
-        .maybeSingle(),
-      supabase
-        .from("integrations")
-        .select("kind, status")
-        .eq("workspace_id", session.workspaceId)
-        .in("kind", ["hubspot", "salesforce", "webhook"])
-        .maybeSingle(),
       supabase
         .from("invitations")
         .select("id, email, role, token, expires_at, created_at")
@@ -367,66 +352,6 @@ export default async function TeamPage({
                 {awaitingProvider ? "Start again" : "Connect LinkedIn"}
               </button>
             </form>
-          </>
-        )}
-      </section>
-
-      <section className="card" style={{ marginTop: "1rem" }}>
-        <h3>Your calendar</h3>
-        {calendar?.status === "active" ? (
-          <p className="small muted" style={{ margin: 0 }}>
-            {calendar.kind === "microsoft_calendar" ? "Microsoft 365" : "Google Calendar"} connected. The
-            Reply Agent offers only times you are genuinely free and books the meeting itself.
-          </p>
-        ) : (
-          <>
-            <p className="small muted">
-              {calendar?.status === "reauth_required"
-                ? "Your calendar connection expired. Reconnect so the agent can keep booking meetings."
-                : "Not connected. Until it is, the agent offers to send times instead of proposing any — it will never invent a slot."}
-            </p>
-            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-              <form action={connectCalendar}>
-                <button className="btn" type="submit">
-                  {calendar ? "Reconnect Google" : "Connect Google Calendar"}
-                </button>
-              </form>
-              <form action={connectMicrosoftCalendar}>
-                <button className="btn secondary" type="submit">
-                  Connect Microsoft 365
-                </button>
-              </form>
-            </div>
-          </>
-        )}
-      </section>
-
-      <section className="card" style={{ marginTop: "1rem" }}>
-        <h3>Your CRM</h3>
-        {crm?.status === "active" ? (
-          <p className="small muted" style={{ margin: 0 }}>
-            Connected to{" "}
-            {crm.kind === "hubspot" ? "HubSpot" : crm.kind === "salesforce" ? "Salesforce" : "your webhook"}. Contacts,
-            messages and
-            booked meetings sync automatically, and every AI-written message is labelled as such.
-          </p>
-        ) : (
-          <>
-            <p className="small muted">
-              Not connected. Everything still works; your CRM just will not know about it.
-            </p>
-            <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-              <form action={connectHubSpot}>
-                <button className="btn secondary" type="submit">
-                  Connect HubSpot
-                </button>
-              </form>
-              <form action={connectSalesforce}>
-                <button className="btn secondary" type="submit">
-                  Connect Salesforce
-                </button>
-              </form>
-            </div>
           </>
         )}
       </section>

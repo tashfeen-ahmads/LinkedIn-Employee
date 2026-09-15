@@ -40,7 +40,12 @@ describe("nextStep", () => {
   });
 
   it("moves on to the optional ones once sending is possible", () => {
-    expect(nextStep(EVERYTHING_REQUIRED)?.key).toBe("hasCalendar");
+    // Named from the list rather than hardcoded: this asserted "hasCalendar",
+    // and when that step was removed the failure read as a broken ordering rule
+    // rather than a test naming a step that no longer exists.
+    const firstOptional = ONBOARDING_STEPS.find((s) => !s.required);
+    expect(firstOptional).toBeDefined();
+    expect(nextStep(EVERYTHING_REQUIRED)?.key).toBe(firstOptional?.key);
   });
 
   it("has nothing left to ask when everything is done", () => {
