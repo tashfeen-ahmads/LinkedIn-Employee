@@ -756,5 +756,12 @@ function describeProviderFailure(err: unknown): string {
   if (typeof status === "number") {
     return `LinkedIn's provider refused the request (${status}).`;
   }
-  return "Could not reach LinkedIn's provider. Please try again.";
+  // No status means no HTTP response at all — the request never completed, so
+  // this is the address or the network rather than anything the provider said.
+  // The cause is a hostname and a failure code, neither of which is a secret,
+  // and it is the difference between guessing and knowing.
+  const cause = (err as { message?: string })?.message;
+  return cause
+    ? `Could not reach LinkedIn's provider: ${cause}`
+    : "Could not reach LinkedIn's provider. Please try again.";
 }

@@ -736,6 +736,14 @@ const MUTATIONS = [
     pkg: "@le/linkedin",
   },
   {
+    id: "config/dsn-must-be-a-url",
+    rule: "A DSN that is not a URL is refused at boot, not at the first send",
+    file: "apps/worker/src/config.ts",
+    from: "    .refine(isAbsoluteHttpUrl, {",
+    to: "    .refine(() => true, {",
+    pkg: "@le/worker",
+  },
+  {
     id: "config/unipile-required-when-live",
     rule: "A worker that will really reach LinkedIn refuses to boot without Unipile credentials, rather than failing at the first send",
     file: "apps/worker/src/config.ts",

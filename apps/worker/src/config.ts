@@ -1,5 +1,21 @@
 import { z } from "zod";
 
+/**
+ * A scheme, a host, and nothing that only looks like a URL.
+ *
+ * `new URL("api58.unipile.com:18893")` does not throw — it parses as the
+ * scheme `api58.unipile.com:` with the path `18893`, which is why a missing
+ * `https://` gets all the way to `fetch` before failing.
+ */
+function isAbsoluteHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 const EnvSchema = z.object({
   NEXT_PUBLIC_SUPABASE_URL: z.string().min(1),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
@@ -20,7 +36,25 @@ const EnvSchema = z.object({
    * mock useless for the case it was built for — standing a deployment up
    * before the LinkedIn subscription exists.
    */
-  UNIPILE_DSN: z.string().min(1).optional(),
+  /**
+   * Unipile's per-account API origin, including its port — e.g.
+   * `https://api58.unipile.com:18893`.
+   *
+   * Validated as a URL rather than as a non-empty string because the value
+   * people actually have to hand is `api58.unipile.com:18893`, copied from a
+   * dashboard that shows it without a scheme. `min(1)` accepted that, and
+   * `fetch` then threw before any request left the process — no status, no
+   * response, nothing for the error handler to describe beyond "could not
+   * reach". Refused at boot instead, where the message can say what is wrong.
+   */
+  UNIPILE_DSN: z
+    .string()
+    .min(1)
+    .refine(isAbsoluteHttpUrl, {
+      message:
+        "must be a full origin including the scheme and port, e.g. https://api58.unipile.com:18893",
+    })
+    .optional(),
   UNIPILE_ACCESS_TOKEN: z.string().min(1).optional(),
   /** Required in production: without it, anyone can forge an inbound reply. */
   UNIPILE_WEBHOOK_SECRET: z.string().optional(),
@@ -90,8 +124,13 @@ export type Env = z.infer<typeof EnvSchema>;
 export function loadEnv(source: NodeJS.ProcessEnv = process.env): Env {
   const parsed = EnvSchema.safeParse(source);
   if (!parsed.success) {
-    const missing = parsed.error.issues.map((i) => i.path.join(".")).join(", ");
-    throw new Error(`Worker environment is incomplete: ${missing}`);
+    // Naming only the key was enough while every failure meant "absent". Once a
+    // value can be present and wrong, the key alone sends someone to look at a
+    // variable that is plainly filled in.
+    const problems = parsed.error.issues
+      .map((i) => `${i.path.join(".")} (${i.message})`)
+      .join(", ");
+    throw new Error(`Worker environment is incomplete: ${problems}`);
   }
   return parsed.data;
 }

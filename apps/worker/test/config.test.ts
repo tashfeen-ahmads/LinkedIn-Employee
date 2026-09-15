@@ -78,3 +78,38 @@ describe("isoWeekStart", () => {
     expect(isoWeekStart("2026-09-13")).not.toBe(isoWeekStart("2026-09-14"));
   });
 });
+
+describe("UNIPILE_DSN", () => {
+  const base = {
+    NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "sb_secret_x",
+    OPENAI_API_KEY: "sk-test",
+    LINKEDIN_PROVIDER: "unipile",
+    UNIPILE_ACCESS_TOKEN: "token",
+  };
+
+  it("accepts the full origin with its port", () => {
+    expect(loadEnv({ ...base, UNIPILE_DSN: "https://api58.unipile.com:18893" } as never).UNIPILE_DSN)
+      .toBe("https://api58.unipile.com:18893");
+  });
+
+  it("refuses a DSN with no scheme, which is how the dashboard shows it", () => {
+    // `new URL("api58.unipile.com:18893")` does not throw — it parses as the
+    // scheme `api58.unipile.com:`. So this reached fetch, which threw with no
+    // status, and the only thing the UI could say was "could not reach".
+    expect(() => loadEnv({ ...base, UNIPILE_DSN: "api58.unipile.com:18893" } as never))
+      .toThrow(/UNIPILE_DSN/);
+  });
+
+  it("names what is wrong, not only which key", () => {
+    // A key that is plainly filled in sends people to look at the wrong thing
+    // when the error says only "incomplete".
+    expect(() => loadEnv({ ...base, UNIPILE_DSN: "api58.unipile.com:18893" } as never))
+      .toThrow(/scheme and port/);
+  });
+
+  it("refuses a scheme that is not http", () => {
+    expect(() => loadEnv({ ...base, UNIPILE_DSN: "ftp://api58.unipile.com:18893" } as never))
+      .toThrow(/UNIPILE_DSN/);
+  });
+});

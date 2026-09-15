@@ -90,13 +90,21 @@ Dashboard → Access Tokens / API Keys.
 
 | Value | Where | Goes to | Shape |
 | --- | --- | --- | --- |
-| `UNIPILE_DSN` | Dashboard, your dedicated subdomain | Render | `https://apiX.unipile.com:13xxx` — full origin, no trailing slash, **includes the port** |
+| `UNIPILE_DSN` | Dashboard, your dedicated subdomain | Render | `https://apiX.unipile.com:13xxx` — **scheme included**, no trailing slash, **includes the port** |
 | `UNIPILE_ACCESS_TOKEN` | Access Tokens | Render | opaque string |
 | `UNIPILE_WEBHOOK_SECRET` | **Unipile's dashboard** — check before generating one | Render | the value Unipile shows |
 
 The DSN is per-account and is not `api.unipile.com`. Getting it wrong produces
 connection errors rather than auth errors, which sends people looking in the
 wrong place.
+
+**Unipile's dashboard shows it without a scheme** — `api58.unipile.com:18893`
+— and that is not a URL any HTTP client can use. `new URL()` does not reject
+it either: it parses as the scheme `api58.unipile.com:` with the path `18893`,
+so it survives every check short of an actual request. The worker now refuses
+to boot on a DSN that is not an absolute http(s) URL, which is the only place
+this can be caught before it becomes "could not reach the provider" on
+somebody's screen.
 
 The webhook secret is issued by Unipile, not invented here: their docs say to
 verify the signature with "your webhook secret, which you can find in the Unipile
