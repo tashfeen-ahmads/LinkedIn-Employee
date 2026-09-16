@@ -35,6 +35,13 @@ describe("describeRepair", () => {
     expect(notice?.fix).toMatch(/connect linkedin/i);
   });
 
+  it("says nothing when the account exists but carries no label for this rep", () => {
+    // The state a manual attach leaves behind, and the one that tore itself
+    // down every page load: the id is in the provider's list and working, the
+    // label just says somebody's name. Nothing is wrong, so nothing is said.
+    expect(describeRepair({ ok: true, data: { found: 2, mine: 0, unlabelled: true } })).toBeNull();
+  });
+
   it("says how the provider's accounts are labelled, which is the whole diagnosis", () => {
     // "a uuid that does not match" and "a person's name" are different
     // problems. A name means the account was created in the provider's own

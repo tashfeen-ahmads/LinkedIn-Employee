@@ -410,7 +410,7 @@ export function createServer(ctx: WorkerContext, queues: Queues): Hono {
     // Only this rep's own row is touched, whatever the provider returned.
     const mine = accounts.filter((a) => a.reference === parsed.data.userId);
     const bound = await bindAccounts(ctx, mine);
-    const reconciled = await reconcileAccount(ctx.db, parsed.data.workspaceId, parsed.data.userId, mine);
+    const reconciled = await reconcileAccount(ctx.db, parsed.data.workspaceId, parsed.data.userId, mine, accounts);
 
     if (accounts.length > 0 && mine.length === 0) {
       // The provider has accounts but none carries this rep's id as its

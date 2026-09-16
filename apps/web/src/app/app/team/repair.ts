@@ -6,6 +6,7 @@ export interface RefreshResult {
   bound?: number;
   changed?: boolean;
   lost?: boolean;
+  unlabelled?: boolean;
   referenceShape?: string[];
 }
 
@@ -47,6 +48,12 @@ export function describeRepair(result: WorkerResult<RefreshResult>): RepairNotic
   if (data?.bound) {
     return { tone: "accent", title: "Connected.", body: "Your LinkedIn account is attached and ready." };
   }
+
+  // The account this row holds is in the provider's list, it simply is not
+  // labelled with this rep. Nothing is broken and nothing needs pressing — an
+  // account attached by an administrator, or connected before labelling
+  // existed, lives here permanently and legitimately.
+  if (data?.unlabelled) return null;
 
   const found = data?.found ?? 0;
   if (found > 0 && (data?.mine ?? 0) === 0) {

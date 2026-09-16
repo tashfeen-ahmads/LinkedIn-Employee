@@ -205,7 +205,8 @@ export async function reconcileAccount(
   workspaceId: string,
   userId: string,
   mine: ConnectedAccount[],
-): Promise<{ changed?: boolean; lost?: boolean }> {
+  all: ConnectedAccount[] = mine,
+): Promise<{ changed?: boolean; lost?: boolean; unlabelled?: boolean }> {
   const { data: row } = await db
     .from("linkedin_accounts")
     .select("id, provider_account_id, status")
@@ -217,6 +218,25 @@ export async function reconcileAccount(
   if (mine.length === 0) {
     // Nothing to reconcile against unless we are claiming to hold something.
     if (!row.provider_account_id) return {};
+
+    // Whether the account *exists* and whether the provider *labels it as this
+    // rep's* are two different questions, and answering the first with the
+    // second tore down a working connection.
+    //
+    // The label records who started the hosted flow; an account connected in
+    // the provider's own dashboard carries none, and one attached by an
+    // administrator carries none either. The id records whether the account is
+    // there at all. Reading an unlabelled account as a missing one marked a
+    // live connection dead — repeatedly, because every page load asked again —
+    // and no manual fix could survive it.
+    //
+    // Binding is untouched: choosing a *new* id to attach still requires the
+    // rep's own reference. This only governs tearing an existing one down, and
+    // that needs evidence the account is gone, which a mismatched label is not.
+    if (all.some((a) => a.providerAccountId === row.provider_account_id)) {
+      return { unlabelled: true };
+    }
+
     await db
       .from("linkedin_accounts")
       .update({
@@ -304,7 +324,7 @@ export async function recoverAccounts(
     // anybody has.
     if (mine.length === 0) continue;
 
-    const result = await reconcileAccount(db, row.workspace_id, row.user_id, mine);
+    const result = await reconcileAccount(db, row.workspace_id, row.user_id, mine, accounts);
     if (result.changed) {
       repaired++;
       await recordEvent(db, {

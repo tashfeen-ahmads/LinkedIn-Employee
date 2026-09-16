@@ -477,3 +477,65 @@ describe("recovering an account the provider has replaced", () => {
     expect(db.find("linkedin_accounts", { id: ACCOUNT })!.status_detail).toBe("provider reported reauth_required");
   });
 });
+
+/**
+ * Existence and ownership are different questions.
+ *
+ * The provider's label records who started the hosted flow. An account
+ * connected in the provider's own dashboard carries none; one attached by an
+ * administrator carries none either. The id records whether the account is
+ * there at all.
+ *
+ * Answering the first question with the second tore down a working connection:
+ * a live account, present in the provider's list under the id this row holds,
+ * was marked dead because its label said a person's name instead of a user id
+ * — and marked dead again on every page load, so no fix of any kind could
+ * survive. Binding is untouched by this: choosing a *new* id still requires the
+ * rep's own reference. Only tearing an existing one down changed, and that now
+ * needs evidence the account is gone.
+ */
+describe("an account the provider holds but does not label", () => {
+  const dashboardAccount = {
+    providerAccountId: "acct_live",
+    reference: "Sam Patel",
+    status: "ok" as const,
+  };
+
+  it("leaves a held account alone when the provider still has that id", async () => {
+    const { db, linkedin } = harness({ provider_account_id: "acct_live", status: "active" });
+    const { reconcileAccount } = await import("../src/accounts.js");
+    void linkedin;
+
+    const result = await reconcileAccount(db.asDb(), WORKSPACE, USER, [], [dashboardAccount]);
+
+    expect(result).toEqual({ unlabelled: true });
+    const account = db.find("linkedin_accounts", { id: ACCOUNT })!;
+    expect(account.status).toBe("active");
+    expect(account.provider_account_id).toBe("acct_live");
+  });
+
+  it("still marks an account dead when its id is genuinely absent", async () => {
+    // The check that must keep working. An id nowhere in the provider's list
+    // is gone, whatever anything is labelled.
+    const { db } = harness({ provider_account_id: "acct_dead", status: "active" });
+    const { reconcileAccount } = await import("../src/accounts.js");
+
+    const result = await reconcileAccount(db.asDb(), WORKSPACE, USER, [], [dashboardAccount]);
+
+    expect(result).toEqual({ lost: true });
+    expect(db.find("linkedin_accounts", { id: ACCOUNT })!.status).toBe("reauth_required");
+  });
+
+  it("still refuses to attach an account labelled with somebody else", async () => {
+    // Existence is not permission. An account carrying another rep's reference
+    // is never bound here, however present it is.
+    const { db } = harness({ provider_account_id: null, status: "connecting" });
+    const { reconcileAccount } = await import("../src/accounts.js");
+
+    await reconcileAccount(db.asDb(), WORKSPACE, USER, [], [
+      { providerAccountId: "acct_theirs", reference: "99999999-9999-4999-8999-999999999999", status: "ok" },
+    ]);
+
+    expect(db.find("linkedin_accounts", { id: ACCOUNT })!.provider_account_id).toBeNull();
+  });
+});
