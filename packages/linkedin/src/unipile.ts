@@ -191,28 +191,87 @@ export class UnipileProvider implements LinkedInProvider {
     const { body, droppedFilters } = toUnipileSearchBody(input.query, tier, resolved);
     const notes = [...resolved.notes];
 
-    // Every constraint at once is an AND, and a customer profile is a
-    // description rather than a query: titles AND keywords AND industry AND
-    // location is a conjunction almost nobody on LinkedIn satisfies. The first
-    // live campaign asked for eight titles, five keywords, three industries and
-    // two countries and matched zero people, which read on screen as "your
-    // customer profile is wrong" when the profile was fine and the query was
-    // unsatisfiable.
-    //
-    // So a search that finds nobody is widened and tried again, in an order
-    // that gives up the weakest signal first. What was given up is named:
-    // a list broader than the one that was approved is fine, and a reviewer
-    // being told it is the one they approved is not.
-    for (const step of relaxations(input.query, tier, resolved, body)) {
+    // Sales Navigator takes the whole profile as one structured query, which is
+    // what the seat is for.
+    if (tier === "sales_navigator") {
       const res = await this.request<{ items?: UnipileRawProfile[]; cursor?: string | null }>(
         `${ROUTES.search}?${params.toString()}`,
-        { method: "POST", body: JSON.stringify(step.body) },
+        { method: "POST", body: JSON.stringify(body) },
       );
-      const items = (res.items ?? []).map(toProspectCandidate);
-      if (items.length > 0 || step.last) {
-        if (step.note) notes.push(step.note);
-        return { items, cursor: res.cursor ?? null, droppedFilters, filterNotes: notes };
+      return {
+        items: (res.items ?? []).map(toProspectCandidate),
+        cursor: res.cursor ?? null,
+        droppedFilters,
+        filterNotes: notes,
+      };
+    }
+
+    // Classic search has one keyword box, and a box is not a query language.
+    // Unipile's own documented example passes plain text -- `"keywords":
+    // "product manager"` -- so a boolean string built from eight titles goes
+    // into that box literally and matches nobody. That is exactly what the
+    // first live campaign got: a widening ladder that ran every step it had,
+    // down to a keyword plus two countries and second-and-third degree, and
+    // still returned zero people. That is not an answer the real LinkedIn
+    // gives to that query.
+    //
+    // So the profile is asked one term at a time, the way a person would type
+    // it, and the answers are merged. More requests, but each is a question
+    // LinkedIn can actually answer.
+    const terms = classicTerms(input.query);
+    const limit = input.limit ?? 50;
+
+    for (const round of [0, 1]) {
+      // Second pass without the industry filter. LinkedIn's taxonomy rarely
+      // matches how a business describes its own market, and this profile
+      // named four industries, one of which LinkedIn does not have at all.
+      const withIndustry = round === 0 && resolved.industries.length > 0;
+      const merged = new Map<string, UnipileRawProfile>();
+
+      for (const term of terms) {
+        if (merged.size >= limit) break;
+        const res = await this.request<{ items?: UnipileRawProfile[]; cursor?: string | null }>(
+          `${ROUTES.search}?${params.toString()}`,
+          {
+            method: "POST",
+            body: JSON.stringify({
+              api: "classic",
+              category: "people",
+              keywords: term,
+              ...(withIndustry ? { industry: resolved.industries } : {}),
+              // Never given up, at any stage. A campaign that quietly starts
+              // messaging another continent is worse than one finding nobody.
+              ...(resolved.locations.length ? { location: resolved.locations } : {}),
+              network_distance: [2, 3],
+            }),
+          },
+        );
+        for (const item of res.items ?? []) {
+          const id = item.provider_id ?? item.id ?? item.public_identifier ?? "";
+          if (id && !merged.has(id)) merged.set(id, item);
+        }
       }
+
+      if (merged.size > 0) {
+        if (terms.length > 1) {
+          notes.push(
+            `Classic search takes one keyword at a time, so the profile was searched as ${terms.length} separate queries and the results combined: ${terms.join(", ")}.`,
+          );
+        }
+        if (!withIndustry && resolved.industries.length > 0) {
+          notes.push(
+            "Nobody matched inside those industries, so the industry filter was dropped. Read the names carefully — this list is not filtered by industry at all.",
+          );
+        }
+        return {
+          items: [...merged.values()].slice(0, limit).map(toProspectCandidate),
+          cursor: null,
+          droppedFilters,
+          filterNotes: notes,
+        };
+      }
+
+      if (!withIndustry) break;
     }
 
     return { items: [], cursor: null, droppedFilters, filterNotes: notes };
@@ -714,66 +773,23 @@ function toUnipileSearchBody(
 }
 
 /**
- * The same search, asked less and less precisely.
+ * What to type into LinkedIn's one keyword box, in priority order.
  *
- * Ordered by what a list can most afford to lose. Free-text keywords go first:
- * they are the loosest thing in a customer profile and the likeliest to exclude
- * somebody who is a perfect fit but does not use that word. The title filter
- * becomes ordinary keywords next, because classic search matches it against one
- * field and a person whose title is "Chapter Director" is missed by a filter
- * asking for "Chapter President". Industry goes last of the real filters, since
- * LinkedIn's taxonomy rarely matches how a business describes its own market.
- *
- * Location is never given up. A campaign that quietly starts messaging another
- * continent is worse than one that finds nobody.
+ * Titles first: they are what a customer profile is really about, and somebody
+ * whose headline reads "Chapter President" is found by searching those words.
+ * Free-text keywords follow. Capped, because each term is a request against a
+ * seat somebody pays for, and the tail of a profile's keyword list is its
+ * vaguest part.
  */
-function relaxations(
-  query: SearchQuery,
-  tier: SearchTier,
-  resolved: ResolvedFilters,
-  full: Record<string, unknown>,
-): Array<{ body: Record<string, unknown>; note?: string; last?: boolean }> {
-  // Sales Navigator expresses the whole profile properly, so an empty result
-  // there means an empty result, not a query we mangled.
-  if (tier === "sales_navigator") return [{ body: full, last: true }];
-
-  const steps: Array<{ body: Record<string, unknown>; note?: string; last?: boolean }> = [
-    { body: full },
+export function classicTerms(query: SearchQuery): string[] {
+  const unique = [
+    ...new Set(
+      [...(query.titles ?? []), ...(query.keywords ?? [])].map((t) => t.trim()).filter(Boolean),
+    ),
   ];
-
-  const hasKeywords = Boolean(full.keywords);
-  const hasTitle = Boolean(full.advanced_keywords);
-
-  if (hasKeywords && hasTitle) {
-    steps.push({
-      body: { ...full, keywords: undefined },
-      note: "Nobody matched every part of the profile at once, so the search was widened: the keywords were dropped and the titles kept.",
-    });
-  }
-
-  if (hasTitle) {
-    // Titles as ordinary keywords, which matches them anywhere on a profile
-    // rather than against the one title field.
-    steps.push({
-      body: { ...full, advanced_keywords: undefined, keywords: anyOf(query.titles ?? []) },
-      note: "Nobody matched the titles as written, so they were searched as keywords instead — this list is broader than the profile asked for.",
-    });
-  }
-
-  if (resolved.industries.length > 0) {
-    steps.push({
-      body: {
-        ...full,
-        advanced_keywords: undefined,
-        industry: undefined,
-        keywords: anyOf([...(query.titles ?? []), ...(query.keywords ?? [])]),
-      },
-      note: "Nobody matched inside those industries, so the industry filter was dropped. Read the names carefully — this list is not filtered by industry at all.",
-    });
-  }
-
-  steps[steps.length - 1]!.last = true;
-  return steps;
+  // Nothing to search for is still a search: an empty keyword with a location
+  // returns that location's people rather than nobody at all.
+  return unique.length > 0 ? unique.slice(0, 6) : [""];
 }
 
 function toProspectCandidate(raw: UnipileRawProfile): ProspectCandidate {

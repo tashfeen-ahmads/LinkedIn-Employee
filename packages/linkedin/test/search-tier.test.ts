@@ -106,7 +106,7 @@ describe("searchProspects tier", () => {
     expect(page.droppedFilters).toEqual(["seniority", "company size", "excluded titles"]);
     // Asserted against a body that exists: `bodies[0]?.seniority` is undefined
     // when no request was made at all, which would pass while proving nothing.
-    expect(bodies).toHaveLength(1);
+    expect(bodies.length).toBeGreaterThan(0);
     expect(bodies[0]?.seniority).toBeUndefined();
     expect(bodies[0]?.company_headcount).toBeUndefined();
   });
@@ -138,9 +138,9 @@ describe("searchProspects tier", () => {
 
     // "Software" is a real thing to ask for and is not what LinkedIn calls it.
     // The narrower list is fine; the reviewer not knowing it narrowed is not.
-    expect(page.filterNotes).toEqual([
+    expect(page.filterNotes).toContain(
       'The industry "Software" was searched as LinkedIn\'s "Software Development".',
-    ]);
+    );
   });
 
   it("leaves out a term LinkedIn does not have, and says so", async () => {
@@ -153,9 +153,9 @@ describe("searchProspects tier", () => {
     });
 
     expect(bodies[0]?.location).toBeUndefined();
-    expect(page.filterNotes).toEqual([
+    expect(page.filterNotes).toContain(
       'LinkedIn has no location called "Wakanda", so it was left out of the search.',
-    ]);
+    );
   });
 
   it("says the provider's own words, not just its status code", async () => {
@@ -210,16 +210,20 @@ describe("searchProspects tier", () => {
 
     await provider.searchProspects({ accountId: "a1", query: QUERY, tier: "classic" });
 
-    expect(bodies[0]?.advanced_keywords).toEqual({ title: '"Head of Operations"' });
+    // One term per request: the title first, because that is what a customer
+    // profile is really about.
+    expect(bodies[0]?.keywords).toBe("Head of Operations");
+    expect(bodies[0]?.advanced_keywords).toBeUndefined();
     // First-degree connections have already accepted; inviting them spends the
     // day's allowance on nothing.
     expect(bodies[0]?.network_distance).toEqual([2, 3]);
-    // Seniority survives as a text hint rather than vanishing entirely — worth
-    // something, and still reported as dropped because a hint is not a filter.
-    expect(bodies[0]?.keywords).toBe('"revops" OR "Director"');
   });
 
-  it("joins several terms as alternatives, not as a single unsatisfiable phrase", async () => {
+  it("never builds a boolean string for the one keyword box", async () => {
+    // This used to join terms with OR to avoid space-joining them into an AND.
+    // Both are wrong: classic search takes one box of plain text, so a boolean
+    // string goes into it literally and matches nobody. The terms are separate
+    // requests now.
     const { provider, bodies } = providerWithCapturedBody();
 
     await provider.searchProspects({
@@ -228,12 +232,10 @@ describe("searchProspects tier", () => {
       tier: "classic",
     });
 
-    // Space-joined, these are an AND: a profile had to contain every word, and
-    // essentially nobody does. A list of titles is a list of alternatives.
-    expect(bodies[0]?.keywords).toBe('"BNI" OR "Chamber"');
-    expect(bodies[0]?.advanced_keywords).toEqual({
-      title: '"Chapter President" OR "Group Leader"',
-    });
+    expect(bodies.map((b) => b.keywords)).toEqual(["Chapter President", "Group Leader", "BNI", "Chamber"]);
+    for (const body of bodies) {
+      expect(String(body.keywords)).not.toMatch(/ OR |"/);
+    }
   });
 
   it("reports nothing dropped when the profile asked for nothing classic lacks", async () => {
@@ -278,56 +280,89 @@ function providerWithResults(pages: Array<Array<Record<string, unknown>>>) {
 
 const person = { provider_id: "p1", public_identifier: "jane", first_name: "Jane", last_name: "Doe" };
 
-describe("a search that finds nobody", () => {
-  it("widens instead of giving up, and says what it gave up", async () => {
-    // Empty, empty, then results once the keywords are relaxed.
-    const { provider, bodies } = providerWithResults([[], [], [person]]);
-
-    const page = await provider.searchProspects({ accountId: "a1", query: QUERY, tier: "classic" });
-
-    expect(page.items).toHaveLength(1);
-    expect(bodies.length).toBeGreaterThan(1);
-    // A broader list is fine. A reviewer being told it is the one they
-    // approved is not.
-    expect(page.filterNotes?.some((n) => /widened|broader/i.test(n))).toBe(true);
-  });
-
-  it("does not widen when the first search already found people", async () => {
+describe("a classic search that finds nobody", () => {
+  it("asks one keyword at a time, because that is what the box takes", async () => {
+    // The bug this replaces: eight titles joined with OR went into LinkedIn's
+    // single keyword box literally and matched nobody, at every width the
+    // widening ladder could reach.
     const { provider, bodies } = providerWithResults([[person]]);
 
-    const page = await provider.searchProspects({ accountId: "a1", query: QUERY, tier: "classic" });
+    await provider.searchProspects({
+      accountId: "a1",
+      query: { titles: ["Chapter President", "Group Leader"], geographies: ["United Kingdom"] },
+      tier: "classic",
+    });
 
-    expect(page.items).toHaveLength(1);
-    expect(bodies).toHaveLength(1);
-    expect(page.filterNotes?.some((n) => /widened|broader/i.test(n))).toBe(false);
+    expect(bodies.map((b) => b.keywords)).toEqual(["Chapter President", "Group Leader"]);
+    for (const body of bodies) expect(String(body.keywords)).not.toMatch(/ OR /);
   });
 
-  it("never gives up the location, however wide it has to go", async () => {
+  it("merges the answers and drops anyone who appears twice", async () => {
+    const { provider } = providerWithResults([[person], [person, { ...person, provider_id: "p2" }]]);
+
+    const page = await provider.searchProspects({
+      accountId: "a1",
+      query: { titles: ["A", "B"], geographies: ["United Kingdom"] },
+      tier: "classic",
+    });
+
+    expect(page.items.map((p) => p.providerId)).toEqual(["p1", "p2"]);
+  });
+
+  it("drops the industry filter and asks again when every term found nobody", async () => {
+    const { provider, bodies } = providerWithResults([[], [], [person]]);
+
+    const page = await provider.searchProspects({
+      accountId: "a1",
+      query: { titles: ["A", "B"], industries: ["Software"], geographies: ["United Kingdom"] },
+      tier: "classic",
+    });
+
+    expect(page.items).toHaveLength(1);
+    expect(bodies.slice(0, 2).every((b) => b.industry)).toBe(true);
+    expect(bodies[2]?.industry).toBeUndefined();
+    expect(page.filterNotes?.some((n) => /industry filter was dropped/i.test(n))).toBe(true);
+  });
+
+  it("never gives up the location, at any stage", async () => {
     // A campaign that quietly starts messaging another continent is worse than
     // one that finds nobody.
     const { provider, bodies } = providerWithResults([[], [], [], []]);
 
-    await provider.searchProspects({ accountId: "a1", query: QUERY, tier: "classic" });
+    await provider.searchProspects({
+      accountId: "a1",
+      query: { titles: ["A", "B"], industries: ["Software"], geographies: ["United Kingdom"] },
+      tier: "classic",
+    });
 
-    for (const body of bodies) {
-      expect(body.location).toBeTruthy();
-    }
+    expect(bodies.length).toBeGreaterThan(0);
+    for (const body of bodies) expect(body.location).toBeTruthy();
   });
 
-  it("returns an honest empty list when even the widest search finds nobody", async () => {
-    const { provider } = providerWithResults([[], [], [], []]);
+  it("says the list was built from several searches", async () => {
+    // Rule 12: a list broader than the profile asked for is fine, a reviewer
+    // being told it is the one they approved is not.
+    const { provider } = providerWithResults([[person]]);
 
-    const page = await provider.searchProspects({ accountId: "a1", query: QUERY, tier: "classic" });
+    const page = await provider.searchProspects({
+      accountId: "a1",
+      query: { titles: ["A", "B"], geographies: ["United Kingdom"] },
+      tier: "classic",
+    });
 
-    expect(page.items).toEqual([]);
+    expect(page.filterNotes?.some((n) => /separate queries/i.test(n))).toBe(true);
   });
 
-  it("does not widen a Sales Navigator search", async () => {
-    // That tier expresses the whole profile properly, so empty means empty
-    // rather than a query we mangled.
-    const { provider, bodies } = providerWithResults([[], [person]]);
+  it("does not split a Sales Navigator search", async () => {
+    // That tier takes the whole profile as one structured query, which is what
+    // the seat is for.
+    const { provider, bodies } = providerWithResults([[person]]);
 
-    await provider.searchProspects({ accountId: "a1", query: QUERY, tier: "sales_navigator" });
+    await provider.searchProspects({
+      accountId: "a1",
+      query: { titles: ["A", "B"], geographies: ["United Kingdom"] },
+      tier: "sales_navigator",
+    });
 
     expect(bodies).toHaveLength(1);
   });
