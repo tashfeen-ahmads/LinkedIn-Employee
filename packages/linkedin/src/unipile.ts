@@ -78,6 +78,9 @@ interface UnipileRawProfile {
   provider_id?: string;
   public_identifier?: string;
   public_profile_url?: string;
+  profile_url?: string;
+  /** Search results carry one full name; the profile endpoint splits it. */
+  name?: string;
   first_name?: string;
   last_name?: string;
   headline?: string;
@@ -795,13 +798,12 @@ export function classicTerms(query: SearchQuery): string[] {
 function toProspectCandidate(raw: UnipileRawProfile): ProspectCandidate {
   const identifier = raw.provider_id ?? raw.id ?? raw.public_identifier ?? "";
   const position = raw.current_position ?? raw.work_experience?.[0];
+  const { firstName, lastName } = splitName(raw);
   return {
     providerId: identifier,
-    linkedinUrl:
-      raw.public_profile_url ??
-      (raw.public_identifier ? `https://www.linkedin.com/in/${raw.public_identifier}` : `https://www.linkedin.com/in/${identifier}`),
-    firstName: raw.first_name ?? "",
-    lastName: raw.last_name ?? "",
+    linkedinUrl: profileUrl(raw, identifier),
+    firstName,
+    lastName,
     headline: raw.headline,
     title: (position as { title?: string; position?: string } | undefined)?.title ??
       (position as { position?: string } | undefined)?.position,
@@ -819,6 +821,52 @@ function toProspectCandidate(raw: UnipileRawProfile): ProspectCandidate {
         ]
       : [],
   };
+}
+
+/**
+ * A prospect's name, from whichever field carries it.
+ *
+ * Search results return one `name`; only the profile endpoint splits it into
+ * `first_name` and `last_name`. Reading only the split pair left every name on
+ * every card blank, which is what made fourteen real people — a membership
+ * director at a chamber of commerce, a chapter president — look like fake data
+ * to the person reviewing them.
+ *
+ * The split is deliberately naive: everything before the first space is the
+ * first name. It only has to be right enough to greet somebody, and a note
+ * beginning "Hi Jean-Paul" is correct where "Hi Jean" would not be.
+ */
+function splitName(raw: UnipileRawProfile): { firstName: string; lastName: string } {
+  if (raw.first_name || raw.last_name) {
+    return { firstName: raw.first_name ?? "", lastName: raw.last_name ?? "" };
+  }
+  const whole = (raw.name ?? "").trim().replace(/\s+/g, " ");
+  if (!whole) return { firstName: "", lastName: "" };
+  const cut = whole.indexOf(" ");
+  if (cut < 0) return { firstName: whole, lastName: "" };
+  return { firstName: whole.slice(0, cut), lastName: whole.slice(cut + 1) };
+}
+
+/**
+ * The prospect's profile address, or a stable key that is honest about not
+ * being one.
+ *
+ * `https://www.linkedin.com/in/<provider id>` is not a profile URL. LinkedIn's
+ * internal ids look nothing like vanity slugs and every one of those links is a
+ * 404 — which a rep finds out by clicking a name during a review and
+ * concluding the whole list is invented.
+ *
+ * Some profiles genuinely have no public address: LinkedIn hides the vanity URL
+ * outside your network, and shows those people as "LinkedIn Member". They are
+ * still real, still messageable through the provider by id, and still need a
+ * unique key here, so the id is used as one — under a path that cannot be
+ * mistaken for a profile and that `isPublicProfileUrl` can tell apart.
+ */
+function profileUrl(raw: UnipileRawProfile, identifier: string): string {
+  const published = raw.public_profile_url ?? raw.profile_url;
+  if (published) return published;
+  if (raw.public_identifier) return `https://www.linkedin.com/in/${raw.public_identifier}`;
+  return `https://www.linkedin.com/search/results/all/?keywords=${encodeURIComponent(identifier)}`;
 }
 
 function startedRoleRecently(raw: UnipileRawProfile): boolean {

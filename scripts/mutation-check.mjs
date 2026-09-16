@@ -1016,6 +1016,22 @@ const MUTATIONS = [
     pkg: "@le/linkedin",
   },
   {
+    id: "search/a-prospect-has-a-name",
+    rule: "A prospect's name is read from whichever field carries it; a blank name makes a real list look invented",
+    file: "packages/linkedin/src/unipile.ts",
+    from: "  const whole = (raw.name ?? \"\").trim().replace(/\\s+/g, \" \");",
+    to: '  const whole = "";',
+    pkg: "@le/linkedin",
+  },
+  {
+    id: "search/never-fabricate-a-profile-url",
+    rule: "A provider id is never pasted into a profile URL; every one of those links is a 404 and a reviewer concludes the list is fake",
+    file: "packages/linkedin/src/unipile.ts",
+    from: "  return `https://www.linkedin.com/search/results/all/?keywords=${encodeURIComponent(identifier)}`;",
+    to: "  return `https://www.linkedin.com/in/${identifier}`;",
+    pkg: "@le/linkedin",
+  },
+  {
     id: "search/one-keyword-at-a-time",
     rule: "Classic search is asked one plain term per request; its keyword box is not a query language and a boolean string matches nobody",
     file: "packages/linkedin/src/unipile.ts",

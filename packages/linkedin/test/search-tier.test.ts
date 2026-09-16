@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { UnipileProvider } from "../src/unipile.js";
 import type { SearchQuery } from "../src/provider.js";
+import { isPublicProfileUrl } from "@le/shared";
 
 /**
  * Which search surface a customer profile is sent to, and what its words turn
@@ -365,5 +366,75 @@ describe("a classic search that finds nobody", () => {
     });
 
     expect(bodies).toHaveLength(1);
+  });
+});
+
+/**
+ * What a real prospect looks like by the time it reaches a screen.
+ *
+ * Fourteen genuine people — a membership director at a chamber of commerce, a
+ * chapter president — were reported as fake by the person reviewing them,
+ * because every name rendered blank and half the profile links returned 404.
+ * Both were this parser.
+ */
+describe("reading a prospect out of a search result", () => {
+  async function candidateFrom(raw: Record<string, unknown>) {
+    const fetchImpl = (async (url: string | URL | Request) => {
+      if (String(url).includes("/search/parameters")) return json({ items: [] });
+      return json({ items: [raw], cursor: null });
+    }) as typeof fetch;
+    const provider = new UnipileProvider({ dsn: "https://api.test", accessToken: "t", fetchImpl });
+    const page = await provider.searchProspects({ accountId: "a1", query: { titles: ["x"] }, tier: "classic" });
+    return page.items[0]!;
+  }
+
+  it("takes the name from the one field a search result carries", async () => {
+    // Search returns `name`; only the profile endpoint splits it. Reading only
+    // the split pair left every card blank.
+    const c = await candidateFrom({ provider_id: "ACoAAB1", name: "Jane Doe", headline: "Membership Director" });
+
+    expect(c.firstName).toBe("Jane");
+    expect(c.lastName).toBe("Doe");
+  });
+
+  it("prefers the split pair when the provider gives one", async () => {
+    const c = await candidateFrom({ provider_id: "ACoAAB1", first_name: "Jane", last_name: "Doe", name: "WRONG" });
+
+    expect(c.firstName).toBe("Jane");
+  });
+
+  it("keeps a compound surname whole", async () => {
+    // Everything after the first space. "Hi Maria" is right where "Hi Maria
+    // Del" is not, and the note only ever uses the first name.
+    const c = await candidateFrom({ provider_id: "ACoAAB1", name: "Maria Del Carmen Ruiz" });
+
+    expect(c.firstName).toBe("Maria");
+    expect(c.lastName).toBe("Del Carmen Ruiz");
+  });
+
+  it("uses the real profile address when there is one", async () => {
+    const c = await candidateFrom({ provider_id: "ACoAAB1", public_identifier: "jane-doe-123" });
+
+    expect(c.linkedinUrl).toBe("https://www.linkedin.com/in/jane-doe-123");
+  });
+
+  it("never pastes a provider id into a profile URL", async () => {
+    // `linkedin.com/in/ACoAAB...` is a 404 every time. A rep clicks one during
+    // a review and concludes the whole list is invented -- which is exactly
+    // what happened.
+    const c = await candidateFrom({ provider_id: "ACoAAAin3Y8BodiFKCSaVFp0HRMOtSRZUhbGhoc" });
+
+    expect(c.linkedinUrl).not.toMatch(/\/in\/ACoAAA/i);
+    expect(isPublicProfileUrl(c.linkedinUrl)).toBe(false);
+  });
+
+  it("still gives an unlisted profile a stable key of its own", async () => {
+    // They are real and messageable by provider id; they just have no public
+    // address. The key has to be unique or they collide in the prospect table.
+    const a = await candidateFrom({ provider_id: "ACoAAB1" });
+    const b = await candidateFrom({ provider_id: "ACoAAB2" });
+
+    expect(a.linkedinUrl).not.toBe(b.linkedinUrl);
+    expect(a.linkedinUrl).toContain("ACoAAB1");
   });
 });

@@ -119,3 +119,18 @@ export function matchExclusion(
 export function exclusionReason(rule: ExclusionRule): string {
   return rule.reason ? `excluded: ${rule.rawValue} — ${rule.reason}` : `excluded: ${rule.rawValue}`;
 }
+
+/**
+ * Whether this is an address a person can actually open.
+ *
+ * Some profiles have no public URL — LinkedIn hides the vanity address outside
+ * your network and shows those people as "LinkedIn Member". They are real, and
+ * messageable through the provider by id, but there is nothing to link to. We
+ * store a search address as their key instead, and every screen has to know the
+ * difference: a name rendered as a link that 404s is how a rep concludes a list
+ * of fourteen real people is invented.
+ */
+export function isPublicProfileUrl(url: string | null | undefined): boolean {
+  if (!url) return false;
+  return /(^|\/)in\/[^/?#]+/.test(url) && !url.includes("/search/results/");
+}

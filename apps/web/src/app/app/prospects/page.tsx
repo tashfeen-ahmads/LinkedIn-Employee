@@ -2,6 +2,7 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { callWorker, errorQuery } from "@/lib/worker";
+import { isPublicProfileUrl } from "@le/shared";
 import { redirect } from "next/navigation";
 import { PageNotice, type NoticeParams } from "@/components/page-notice";
 
@@ -59,7 +60,7 @@ export default async function ProspectsPage({ searchParams }: { searchParams: No
   const { data: prospects } = await supabase
     .from("prospects")
     .select(
-      "id, first_name, last_name, title, company, location, linkedin_url, fit_score, fit_reasons, intent_score, signals, do_not_contact, last_contacted_at",
+      "id, first_name, last_name, headline, title, company, location, linkedin_url, fit_score, fit_reasons, intent_score, signals, do_not_contact, last_contacted_at",
     )
     .eq("workspace_id", session.workspaceId)
     .order("fit_score", { ascending: false, nullsFirst: false })
@@ -109,15 +110,37 @@ export default async function ProspectsPage({ searchParams }: { searchParams: No
               return (
                 <tr key={prospect.id}>
                   <td>
-                    <a className="strongish"
-                      href={prospect.linkedin_url.startsWith("http") ? prospect.linkedin_url : `https://${prospect.linkedin_url}`}
-                      target="_blank"
-                      rel="noreferrer noopener"
-                    >
-                      {`${prospect.first_name ?? ""} ${prospect.last_name ?? ""}`.trim() || "Unknown"}
-                    </a>
+                    {/* A name is whatever we actually know. LinkedIn's search
+                        returns one `name` field and the profile endpoint splits
+                        it, so a card built only from the split pair showed a
+                        blank for every real person on the list — and the
+                        headline, which was there all along, was hidden under
+                        it. Falling back to the headline is not a placeholder:
+                        "Membership Director at Lawton Fort Sill Chamber of
+                        Commerce" is the most useful line on the card. */}
+                    {isPublicProfileUrl(prospect.linkedin_url) ? (
+                      <a
+                        className="strongish"
+                        href={prospect.linkedin_url.startsWith("http") ? prospect.linkedin_url : `https://${prospect.linkedin_url}`}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                      >
+                        {displayName(prospect)}
+                      </a>
+                    ) : (
+                      /* Not every profile has a public address: LinkedIn hides
+                         the vanity URL outside your network and shows those
+                         people as "LinkedIn Member". They are real and can
+                         still be messaged through the provider — but a link
+                         here would 404, and a rep who clicks one concludes the
+                         whole list is invented. */
+                      <span className="strongish" title="This profile has no public LinkedIn address. They can still be invited and messaged.">
+                        {displayName(prospect)}
+                      </span>
+                    )}
                     <p className="small muted">
-                      {[prospect.title, prospect.company].filter(Boolean).join(" · ")}
+                      {[prospect.title, prospect.company].filter(Boolean).join(" · ") ||
+                        (displayName(prospect) === prospect.headline ? "" : prospect.headline ?? "")}
                     </p>
                   </td>
                   <td className="mono">{prospect.fit_score ?? "—"}</td>
@@ -163,4 +186,17 @@ export default async function ProspectsPage({ searchParams }: { searchParams: No
       </div>
     </>
   );
+}
+
+/**
+ * What to call somebody on screen.
+ *
+ * A blank name is never shown: fourteen real prospects rendering as "Unknown"
+ * is what made a working list look like fake data. The headline is the next
+ * best thing and is usually the most informative line we have about them.
+ */
+function displayName(prospect: { first_name: string | null; last_name: string | null; headline: string | null }): string {
+  const name = `${prospect.first_name ?? ""} ${prospect.last_name ?? ""}`.trim();
+  if (name) return name;
+  return prospect.headline?.trim() || "LinkedIn member";
 }
