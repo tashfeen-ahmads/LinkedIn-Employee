@@ -45,6 +45,7 @@ const STAGES = {
   targeting: "Targeting Agent",
   campaign: "Campaign",
   replies: "Reply Agent",
+  calendar: "Meetings",
 } as const;
 
 export async function runDiagnostics(
@@ -232,6 +233,51 @@ export async function runDiagnostics(
         : "None. The agent may not invent an answer, so every product question a prospect asks will be held for a human instead.",
     fix: (knowledge ?? 0) > 0 ? undefined : "Add a page of product facts.",
     href: (knowledge ?? 0) > 0 ? undefined : "/app/knowledge",
+  });
+
+  // ---- Meetings ---------------------------------------------------------
+  const { data: availability } = await db
+    .from("availability")
+    .select("working_hours, meeting_minutes, location")
+    .eq("workspace_id", input.workspaceId)
+    .eq("user_id", input.userId)
+    .maybeSingle();
+
+  const own = env.CALENDAR_PROVIDER === "own";
+  add({
+    key: "calendar",
+    stage: STAGES.calendar,
+    label: "A prospect can be offered a time",
+    state: "ok",
+    detail: own
+      ? "Using this product's own calendar. It knows about meetings booked here and nothing else — anything in your Google or Outlook diary has to be blocked out, or a prospect can pick a time you are not free."
+      : `Using the ${env.CALENDAR_PROVIDER} calendar.`,
+    fix: own && !availability ? "You have not set your hours, so the defaults are in use: 9 to 5, weekdays, 30 minutes." : undefined,
+    href: own ? "/app/meetings" : undefined,
+  });
+
+  add({
+    key: "meeting-location",
+    stage: STAGES.calendar,
+    label: "A booked meeting says where it happens",
+    state: availability?.location ? "ok" : "todo",
+    detail: availability?.location
+      ? "The invitation carries it."
+      : "No location set, so the invitation tells the prospect when but not where, and somebody has to send a link by hand afterwards.",
+    fix: availability?.location ? undefined : "Add a video link, phone number or address.",
+    href: availability?.location ? undefined : "/app/meetings",
+  });
+
+  add({
+    key: "invitations",
+    stage: STAGES.calendar,
+    label: "Calendar invitations can be sent",
+    state: env.EMAIL_PROVIDER === "off" ? "blocked" : "ok",
+    detail:
+      env.EMAIL_PROVIDER === "off"
+        ? "Email is off, so a booked meeting exists only in this app. The prospect gets no invitation and nothing appears in their diary — they will not turn up."
+        : "Both sides get a calendar invitation when a meeting is booked.",
+    fix: env.EMAIL_PROVIDER === "off" ? "Set EMAIL_PROVIDER and a key on the worker." : undefined,
   });
 
   return { checkedAt: new Date().toISOString(), checks };

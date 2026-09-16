@@ -1,8 +1,11 @@
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
+import { PageNotice, type NoticeParams } from "@/components/page-notice";
+import { Availability } from "./availability";
 
 /** Step 4 of the product: show up prepared, close. */
-export default async function MeetingsPage() {
+export default async function MeetingsPage({ searchParams }: { searchParams: NoticeParams }) {
+  const params = await searchParams;
   const session = await requireSession();
   const supabase = await createClient();
 
@@ -17,13 +20,17 @@ export default async function MeetingsPage() {
   if (!meetings?.length) {
     return (
       <>
+        <PageNotice error={params.error} notice={params.notice} />
         <div className="page-head">
           <h1>Meetings</h1>
           <p className="muted">
-            Nothing booked yet. When the Reply Agent books one it appears here with a brief on who you are
-            meeting.
+            Nothing booked yet. The Reply Agent offers times from the hours below and books the one a
+            prospect accepts — or sends them a link to pick from.
           </p>
         </div>
+        {/* Shown on the empty page too. The settings are what make the first
+            booking possible, so hiding them until one exists is backwards. */}
+        <Availability />
       </>
     );
   }
@@ -36,6 +43,7 @@ export default async function MeetingsPage() {
 
   return (
     <>
+      <PageNotice error={params.error} notice={params.notice} />
       <h1>Meetings</h1>
       <div className="grid">
         {meetings.map((meeting) => {
@@ -72,6 +80,8 @@ export default async function MeetingsPage() {
           );
         })}
       </div>
+
+      <Availability />
     </>
   );
 }

@@ -4,7 +4,7 @@ import type { Db } from "@le/db";
 type Row = Record<string, unknown>;
 
 interface Filter {
-  kind: "eq" | "in" | "not-in" | "is" | "lt" | "lte" | "gte";
+  kind: "eq" | "neq" | "in" | "not-in" | "is" | "lt" | "lte" | "gte";
   column: string;
   value: unknown;
 }
@@ -176,6 +176,18 @@ class QueryBuilder implements PromiseLike<{ data: Row[] | null; error: null | { 
     return this;
   }
 
+  /**
+   * PostgREST `neq`, which is not the negation of `eq` where nulls are
+   * involved: `status <> 'cancelled'` does not match a row whose status is
+   * null, because in SQL that comparison is unknown rather than true. Getting
+   * this wrong the convenient way would make a fake that returns rows a real
+   * database never would, which is the one thing this file must not do.
+   */
+  neq(column: string, value: unknown): this {
+    this.filters.push({ kind: "neq", column, value });
+    return this;
+  }
+
   lt(column: string, value: unknown): this {
     this.filters.push({ kind: "lt", column, value });
     return this;
@@ -296,6 +308,8 @@ function matches(row: Row, filter: Filter): boolean {
       return !(filter.value as unknown[]).includes(value as string);
     case "is":
       return filter.value === "not-null" ? value !== null && value !== undefined : value === filter.value;
+    case "neq":
+      return value !== null && value !== undefined && value !== filter.value;
     case "lt":
       return value !== null && value !== undefined && String(value) < String(filter.value);
     case "lte":

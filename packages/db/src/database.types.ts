@@ -318,6 +318,58 @@ export type MeetingRow = {
   crm_event_id: string | null;
   status: string;
   created_at: string;
+  /** The name and address the prospect gave for the invitation, if they booked it. */
+  attendee_name: string | null;
+  attendee_email: string | null;
+  /** "agent" when a reply accepted an offered time, "link" from the booking page. */
+  booked_via: string;
+  cancelled_at: string | null;
+  cancel_reason: string | null;
+};
+
+/** One rep's booking rules. See migration 0012. */
+export type AvailabilityRow = {
+  id: string;
+  workspace_id: string;
+  user_id: string;
+  timezone: string;
+  working_hours: Json;
+  meeting_minutes: number;
+  min_notice_hours: number;
+  buffer_minutes: number;
+  max_per_day: number;
+  location: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+/**
+ * Time the rep is not available. Without an external calendar to read, this is
+ * the only thing between a prospect and a double booking.
+ */
+export type AvailabilityBlackoutRow = {
+  id: string;
+  workspace_id: string;
+  user_id: string;
+  starts_at: string;
+  ends_at: string;
+  reason: string | null;
+  created_at: string;
+};
+
+/** One link, one prospect. The token is the whole authorisation. */
+export type BookingLinkRow = {
+  id: string;
+  workspace_id: string;
+  rep_user_id: string;
+  prospect_id: string;
+  conversation_id: string | null;
+  token: string;
+  expires_at: string;
+  meeting_id: string | null;
+  used_at: string | null;
+  revoked_at: string | null;
+  created_at: string;
 };
 
 export type IntegrationRow = {
@@ -393,6 +445,9 @@ export type Database = {
       messages: Table<MessageRow>;
       reply_drafts: Table<ReplyDraftRow>;
       meetings: Table<MeetingRow>;
+      availability: Table<AvailabilityRow>;
+      availability_blackouts: Table<AvailabilityBlackoutRow>;
+      booking_links: Table<BookingLinkRow>;
       integrations: Table<IntegrationRow>;
       knowledge_documents: Table<KnowledgeDocumentRow>;
       events: Table<EventRow>;

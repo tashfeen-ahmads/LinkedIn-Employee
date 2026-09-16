@@ -90,7 +90,12 @@ const EnvSchema = z.object({
   WORKER_PORT: z.coerce.number().default(4000),
   /** Set to "mock" in development to run without touching LinkedIn at all. */
   LINKEDIN_PROVIDER: z.enum(["unipile", "mock"]).default("unipile"),
-  CALENDAR_PROVIDER: z.enum(["google", "mock"]).default("google"),
+  // "own" is the default: this product keeps its own availability and books
+  // into its own table. Google is still supported for a deployment that has
+  // been through brand verification, which needs a verified domain and a review
+  // measured in weeks -- requiring it made the last stage of the product
+  // impossible to demonstrate anywhere else.
+  CALENDAR_PROVIDER: z.enum(["own", "google", "mock"]).default("own"),
   MICROSOFT_CLIENT_ID: z.string().optional(),
   MICROSOFT_CLIENT_SECRET: z.string().optional(),
   /** "common" for any work account, or a specific tenant id. */

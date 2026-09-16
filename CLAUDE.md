@@ -172,6 +172,27 @@ tests that were verified by deliberately breaking the code.
     the caller's own workspace and account; it must never report what other
     accounts the provider holds.
 
+17. **The calendar this product owns knows only what we put in it.**
+    Google will not grant calendar scopes to an app that has not been through
+    brand verification, and that needs a verified domain and a review measured
+    in weeks — so requiring it made the last stage of the product impossible to
+    demonstrate. `CALENDAR_PROVIDER=own` is the default;
+    `OwnCalendarProvider` treats meetings booked here and
+    `availability_blackouts` as busy, and there is nothing else it can see. The
+    blackout list is therefore the whole defence against double-booking, and
+    every screen that touches availability says so rather than implying a
+    calendar that watches everything.
+
+    Two things stop a real person sitting in an empty call. `bookFromLink`
+    re-derives the free slots and refuses a `startsAt` that is not among them,
+    because that value arrives from a form; and
+    `meetings_one_per_rep_slot` (migration 0012) is a unique index, because
+    checking availability in the application and then inserting is a
+    read-then-write race, and the person who loses it finds out by turning up.
+    A booking link's token is its entire authorisation: every refusal says the
+    same thing whether the token is expired, revoked or invented, or the page
+    becomes a way to learn which tokens exist.
+
 ## Conventions
 
 - Agent output is validated against a zod schema before it touches the

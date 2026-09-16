@@ -15,6 +15,7 @@ import type { MiddlewareHandler } from "hono";
 import type { IntegrationKind } from "@le/db";
 import type { Queues } from "./queues.js";
 import type { WorkerContext } from "./context.js";
+import { bookFromLink, readBookingPage } from "./jobs/book.js";
 import { runDiagnostics } from "./jobs/diagnostics.js";
 import { eraseProspect, exportWorkspace } from "./jobs/retention.js";
 import { inviteEmail } from "@le/email";
@@ -54,6 +55,19 @@ const SendReplyRequest = z.object({
 const LinkRequest = z.object({
   workspaceId: z.string().uuid(),
   userId: z.string().uuid(),
+});
+
+// The token is the whole authorisation, so it is validated like one: a length
+// floor rejects a truncated paste before it becomes a database lookup, and
+// nothing here accepts a workspace or a user id from the caller.
+const BookingPageRequest = z.object({ token: z.string().min(20).max(200) });
+
+const BookingConfirmRequest = BookingPageRequest.extend({
+  startsAt: z.string().datetime(),
+  name: z.string().trim().min(1).max(120),
+  // Checked because it is what the calendar invitation is addressed to. A
+  // booking whose invitation bounces is a meeting the prospect never sees.
+  email: z.string().trim().email().max(320),
 });
 
 const InviteEmailRequest = LinkRequest.extend({
@@ -169,6 +183,26 @@ export function createServer(ctx: WorkerContext, queues: Queues): Hono {
       return c.json({ error: "not a member of that workspace" }, 403);
     }
     return c.json(await runDiagnostics(ctx, parsed.data));
+  });
+
+  // The booking page, which is opened by a prospect who is not signed in.
+  //
+  // Deliberately outside /jobs/*: it is reached by the web app on behalf of
+  // somebody holding a link, not by an authenticated rep. The token in the body
+  // is the entire authorisation and is checked on every call — these two never
+  // take a workspace id from the caller, because a caller who could name one
+  // could read another company's prospects.
+  app.post("/booking/page", async (c) => {
+    const parsed = BookingPageRequest.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "invalid request" }, 400);
+    return c.json(await readBookingPage(ctx, parsed.data.token));
+  });
+
+  app.post("/booking/confirm", async (c) => {
+    const parsed = BookingConfirmRequest.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "Please check the name and email address." }, 400);
+    const result = await bookFromLink(ctx, parsed.data);
+    return result.ok ? c.json(result) : c.json({ error: result.error ?? "That could not be booked." }, 409);
   });
 
   app.post("/jobs/targeting", async (c) => {
