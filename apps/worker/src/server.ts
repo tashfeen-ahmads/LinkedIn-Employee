@@ -18,6 +18,7 @@ import type { WorkerContext } from "./context.js";
 import { eraseProspect, exportWorkspace } from "./jobs/retention.js";
 import { inviteEmail } from "@le/email";
 import { trySend } from "./email.js";
+import { recordEvent } from "./context.js";
 
 const StrategyRequest = z
   .object({
@@ -129,6 +130,28 @@ export function createServer(ctx: WorkerContext, queues: Queues): Hono {
     if (!parsed.success) return c.json({ error: "invalid request" }, 400);
     if (!(await assertMembership(ctx.db, parsed.data.workspaceId, parsed.data.userId))) {
       return c.json({ error: "not a member of that workspace" }, 403);
+    }
+    // Recorded before the job is queued, because the minutes in between are
+    // exactly when nobody knows anything. Onboarding's only output is written
+    // by the agent, so until it lands the dashboard has no evidence the person
+    // did their part -- and told one tester for twenty-one minutes that they
+    // had not said what they sell, with a button inviting them to do it again.
+    //
+    // Never at the cost of the run itself: a failure to write the note must not
+    // 500 a request whose job was accepted, or the caller submits again and the
+    // agent runs twice. Worst case the screen is as uninformative as it was
+    // before, which is not worth a duplicate campaign.
+    try {
+      await recordEvent(ctx.db, {
+        workspaceId: parsed.data.workspaceId,
+        name: "strategy.queued",
+        actorUserId: parsed.data.userId,
+        subjectType: "workspace",
+        subjectId: parsed.data.workspaceId,
+        payload: { websiteUrl: parsed.data.websiteUrl ?? null },
+      });
+    } catch (err) {
+      console.error("could not record strategy.queued", err);
     }
     await queues.strategy.add("strategy", parsed.data);
     return c.json({ queued: true });

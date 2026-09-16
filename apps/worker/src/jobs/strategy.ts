@@ -13,6 +13,29 @@ const PAGES_TO_READ = ["", "/about", "/pricing", "/customers", "/case-studies", 
  * before the Targeting Agent may act on them.
  */
 export async function runStrategyJob(ctx: WorkerContext, job: StrategyJob): Promise<string> {
+  try {
+    return await strategy(ctx, job);
+  } catch (err) {
+    // The one agent whose failure is completely invisible. Its only output is
+    // the business profile, and the dashboard reads the absence of that row as
+    // "this person has not finished onboarding" -- so a failed run shows up as
+    // a checklist asking them to do again the thing that just broke, forever,
+    // with nothing anywhere naming a reason.
+    const reason = (err as { message?: string })?.message ?? "unknown";
+    console.error("strategy failed", { workspaceId: job.workspaceId, reason });
+    await recordEvent(ctx.db, {
+      workspaceId: job.workspaceId,
+      name: "strategy.failed",
+      actorUserId: job.userId,
+      subjectType: "workspace",
+      subjectId: job.workspaceId,
+      payload: { reason },
+    });
+    throw err;
+  }
+}
+
+async function strategy(ctx: WorkerContext, job: StrategyJob): Promise<string> {
   // Sent first, not last: it says the agent is reading their site right now,
   // and it is. Waiting until the profiles exist would make it a lie by a
   // minute — and if the agent fails, the one email explaining what is

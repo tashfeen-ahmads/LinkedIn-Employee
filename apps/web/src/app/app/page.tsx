@@ -4,6 +4,8 @@ import { requireSession } from "@/lib/workspace";
 import { SetupChecklist } from "@/components/setup-checklist";
 import { createClient } from "@/lib/supabase-server";
 import { PageNotice, type NoticeParams } from "@/components/page-notice";
+import { hasToldUsWhatTheySell, readStrategyState } from "@/lib/strategy-state";
+import { StrategyStatus } from "@/components/strategy-status";
 
 export default async function OverviewPage({ searchParams }: { searchParams: NoticeParams }) {
   const params = await searchParams;
@@ -54,10 +56,16 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
   ]);
 
   const any = (result: { count: number | null }) => (result.count ?? 0) > 0;
+  const strategy = await readStrategyState(supabase, session.workspaceId, any(business));
   // The same seven facts the nudge emails read, from the same shared list of
   // steps — so the inbox and the dashboard can never disagree.
   const setup = {
-    hasBusinessProfile: any(business),
+    // Ticked when the person has done their part, not when the agent has done
+    // its own. This step's only output is written by the Strategy Agent, and
+    // reading its absence as "they have not filled in the form" told a real
+    // tester for twenty-one minutes that they had not, with a Start button
+    // that would have queued the whole thing a second time.
+    hasBusinessProfile: hasToldUsWhatTheySell(strategy),
     hasApprovedProfile: any(approved),
     hasLinkedInAccount: any(account),
     hasCampaign: any(campaign),
@@ -82,6 +90,8 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
         <p className="eyebrow">Overview</p>
         <h1>{session.fullName ? `Morning, ${session.fullName.split(" ")[0]}.` : "Overview"}</h1>
       </header>
+
+      <StrategyStatus state={strategy} />
 
       <SetupChecklist state={setup} />
 

@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { BusinessProfileSchema, CustomerProfileSchema } from "@le/shared";
@@ -5,6 +6,8 @@ import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { callWorker, errorQuery } from "@/lib/worker";
 import { FILTER_FIELDS, applyProfileEdits, formatList } from "@/lib/profile-form";
+import { readStrategyState } from "@/lib/strategy-state";
+import { StrategyStatus } from "@/components/strategy-status";
 
 /**
  * The Strategy Agent's output, and the only place it can be approved.
@@ -165,15 +168,31 @@ export default async function StrategyPage({
   ]);
 
   if (!businessRow) {
+    // "Has not finished yet, or it has not run" was the whole of what this page
+    // could say, and those are different situations with different things to do
+    // about them — one of them being a failed run that will never finish on its
+    // own. The agent records where it got to; this reads that.
+    const strategy = await readStrategyState(supabase, session.workspaceId, false);
     return (
       <>
         <div className="page-head">
           <h1>Strategy</h1>
-          <p className="muted">
-            The Strategy Agent has not finished yet, or it has not run. It reads what you publish and
-            drafts your business profile and three to five customer profiles; refresh in a minute.
-          </p>
         </div>
+        <StrategyStatus state={strategy} />
+        {strategy.phase === "absent" ? (
+          <div className="notice">
+            <p>
+              <strong>Nothing here yet.</strong> The Strategy Agent reads what you publish and drafts
+              your business profile and three to five customer profiles — it has not been asked to
+              yet.
+            </p>
+            <p className="small">
+              <Link href="/onboarding" className="btn small">
+                Tell us what you sell
+              </Link>
+            </p>
+          </div>
+        ) : null}
       </>
     );
   }
