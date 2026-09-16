@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeRepair } from "../src/app/app/team/repair";
+import { cannotSend, describeRepair } from "../src/app/app/team/repair";
 
 /**
  * What asking the provider told us, said on the screen.
@@ -52,5 +52,44 @@ describe("describeRepair", () => {
     expect(unreachable?.title).toMatch(/could not check/i);
     // Two different things to do about them, so never the same sentence.
     expect(nothing?.title).not.toBe(unreachable?.title);
+  });
+});
+
+/**
+ * Whether the Team page offers a way back in.
+ *
+ * It did not. A `reauth_required` account rendered the connected card — usage
+ * bars, Sales Navigator, working hours — because the page only cleared its
+ * connected state for `connecting`. The banner across the app said "Reconnect"
+ * and linked to a page with nothing on it to press, which is the worst kind of
+ * defect this product has: it points somebody at a dead end at the exact
+ * moment they are trying to act.
+ */
+describe("cannotSend", () => {
+  it("is false for a working account", () => {
+    expect(cannotSend("active")).toBe(false);
+  });
+
+  it("is true for an account that needs signing in again", () => {
+    // The state the deployment actually sat in, with no control on the page.
+    expect(cannotSend("reauth_required")).toBe(true);
+    expect(cannotSend("disconnected")).toBe(true);
+  });
+
+  it("is true while a connection is half-finished", () => {
+    expect(cannotSend("connecting")).toBe(true);
+  });
+
+  it("is false when LinkedIn has paused a properly connected account", () => {
+    // Signing in again does not lift a LinkedIn restriction. Offering it costs
+    // the rep a sign-in and changes nothing, and it hides the real reason.
+    expect(cannotSend("warning")).toBe(false);
+    expect(cannotSend("restricted")).toBe(false);
+  });
+
+  it("says nothing about a rep who has never connected at all", () => {
+    // No row is a different screen entirely, not a broken account.
+    expect(cannotSend(null)).toBe(false);
+    expect(cannotSend(undefined)).toBe(false);
   });
 });

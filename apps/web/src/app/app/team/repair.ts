@@ -68,3 +68,23 @@ export function describeRepair(result: WorkerResult<RefreshResult>): RepairNotic
   }
   return null;
 }
+
+/**
+ * Can this account actually send?
+ *
+ * The question the Team page has to answer before it decides whether to show
+ * usage bars or a way back in. It was answered inline and wrongly: the page
+ * cleared its connected state only for `connecting`, so a `reauth_required`
+ * row rendered the connected card — bars, Sales Navigator, working hours — and
+ * the branch holding Connect LinkedIn never ran. The banner elsewhere in the
+ * app said "Reconnect" and linked here, and here had nothing to press.
+ *
+ * `warning` and `restricted` are deliberately not failures here. Those are
+ * LinkedIn pausing an account that is still properly connected: signing in
+ * again does not lift a restriction, and telling someone to do it is advice
+ * that costs them a sign-in and changes nothing.
+ */
+export function cannotSend(status: string | null | undefined): boolean {
+  if (!status) return false;
+  return !["active", "warning", "restricted"].includes(status);
+}

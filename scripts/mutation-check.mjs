@@ -904,6 +904,22 @@ const MUTATIONS = [
     pkg: "@le/worker",
   },
   {
+    id: "connect/a-dead-account-offers-a-way-back",
+    rule: "An account that cannot send shows a way to connect again; the Reconnect banner must not lead to a page with nothing to press",
+    file: "apps/web/src/app/app/team/repair.ts",
+    from: '  return !["active", "warning", "restricted"].includes(status);',
+    to: '  return status === "connecting";',
+    pkg: "@le/web",
+  },
+  {
+    id: "connect/a-paused-account-is-not-a-disconnected-one",
+    rule: "A LinkedIn restriction is not offered a reconnect; signing in again does not lift one and hides the real reason",
+    file: "apps/web/src/app/app/team/repair.ts",
+    from: '  return !["active", "warning", "restricted"].includes(status);',
+    to: '  return status !== "active";',
+    pkg: "@le/web",
+  },
+  {
     id: "connect/an-unlabelled-account-is-never-claimed",
     rule: "An account the provider has not labelled with this rep is explained, never attached; one labelled with nobody could belong to anybody",
     file: "apps/web/src/app/app/team/repair.ts",

@@ -1,7 +1,7 @@
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { callWorker, errorQuery, noticeQuery } from "@/lib/worker";
-import { describeRepair, type RefreshResult, type RepairNotice } from "./repair";
+import { cannotSend, describeRepair, type RefreshResult, type RepairNotice } from "./repair";
 import { redirect } from "next/navigation";
 import { LINKEDIN_LIMITS } from "@le/shared";
 import { PLAN_SEATS } from "@le/billing";
@@ -334,7 +334,7 @@ export default async function TeamPage({
         .eq("workspace_id", session.workspaceId),
       supabase
         .from("linkedin_accounts")
-        .select("user_id, status, display_name, invites_today, invites_this_week, messages_today, has_sales_navigator, working_hours")
+        .select("user_id, status, status_detail, display_name, invites_today, invites_this_week, messages_today, has_sales_navigator, working_hours")
         .eq("workspace_id", session.workspaceId),
       supabase
         .from("invitations")
@@ -355,6 +355,9 @@ export default async function TeamPage({
   // does not work yet, and took away the only button that could fix it.
   const mine = found?.status === "connecting" ? undefined : found;
   const awaitingProvider = found?.status === "connecting";
+  // An account that cannot send needs a way to be reconnected, on the page the
+  // "Reconnect" banner sends people to. See cannotSend for why it did not.
+  const needsReconnect = cannotSend(found?.status);
   const hours = readWorkingHours(mine?.working_hours);
 
   return (
@@ -405,11 +408,33 @@ export default async function TeamPage({
               {mine.display_name ?? "Connected"} · {mine.status}
               {mine.has_sales_navigator ? " · Sales Navigator" : ""}
             </p>
-            <div className="meter-group">
-              <Usage label="Invites today" used={mine.invites_today} cap={LINKEDIN_LIMITS.invitesPerDayMax} />
-              <Usage label="Invites this week" used={mine.invites_this_week} cap={LINKEDIN_LIMITS.invitesPerWeek} />
-              <Usage label="Messages today" used={mine.messages_today} cap={LINKEDIN_LIMITS.messagesPerDay} />
-            </div>
+
+            {needsReconnect ? (
+              <div className="notice danger">
+                <p>
+                  <strong>This account cannot send.</strong>{" "}
+                  {mine.status_detail ?? "It needs to be connected again."}
+                </p>
+                <p className="small">
+                  Sign in through this flow rather than in the provider&rsquo;s own dashboard — that
+                  is what attaches the account to you here.
+                </p>
+                <form action={connectLinkedIn}>
+                  <button className="btn" type="submit">
+                    Connect LinkedIn again
+                  </button>
+                </form>
+              </div>
+            ) : (
+              /* Hidden while the account cannot send. Three bars reading 0/35
+                 next to "reauth required" describe an allowance that does not
+                 exist, and read as a working account to anyone skimming. */
+              <div className="meter-group">
+                <Usage label="Invites today" used={mine.invites_today} cap={LINKEDIN_LIMITS.invitesPerDayMax} />
+                <Usage label="Invites this week" used={mine.invites_this_week} cap={LINKEDIN_LIMITS.invitesPerWeek} />
+                <Usage label="Messages today" used={mine.messages_today} cap={LINKEDIN_LIMITS.messagesPerDay} />
+              </div>
+            )}
 
             <form action={saveSalesNavigator}>
               <label className="small check">
