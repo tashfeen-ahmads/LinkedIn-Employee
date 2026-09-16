@@ -1,6 +1,7 @@
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { callWorker, errorQuery, noticeQuery } from "@/lib/worker";
+import { describeRepair, type RefreshResult, type RepairNotice } from "./repair";
 import { redirect } from "next/navigation";
 import { LINKEDIN_LIMITS } from "@le/shared";
 import { PLAN_SEATS } from "@le/billing";
@@ -307,11 +308,20 @@ export default async function TeamPage({
     .eq("user_id", session.userId)
     .maybeSingle();
 
+  //
+  // What it learned is rendered, not discarded. The first version of this
+  // called the worker and threw the answer away: it asked the provider, was
+  // told "there are accounts here but none of them is yours", and showed an
+  // unchanged page. Repairing silently and failing silently look identical
+  // from the outside, which is the whole disease this product keeps catching
+  // itself with.
+  let repair: RepairNotice | null = null;
   if (params.connected === "1" || (current && current.status !== "active")) {
-    await callWorker("/jobs/linkedin-refresh", {
+    const result = await callWorker<RefreshResult>("/jobs/linkedin-refresh", {
       workspaceId: session.workspaceId,
       userId: session.userId,
     });
+    repair = describeRepair(result);
   }
 
   // Four independent reads on a page people open often; sequential awaits cost
@@ -352,6 +362,14 @@ export default async function TeamPage({
       <h1>Team</h1>
 
       <PageNotice error={params.error} notice={params.notice} />
+      {repair ? (
+        <div className={`notice ${repair.tone}`} role="status">
+          <p>
+            <strong>{repair.title}</strong> {repair.body}
+          </p>
+          {repair.fix ? <p className="small">{repair.fix}</p> : null}
+        </div>
+      ) : null}
 
       <section className="card">
         <h3>You</h3>

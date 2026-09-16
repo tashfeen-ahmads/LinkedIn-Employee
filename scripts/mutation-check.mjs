@@ -904,6 +904,22 @@ const MUTATIONS = [
     pkg: "@le/worker",
   },
   {
+    id: "connect/an-unlabelled-account-is-never-claimed",
+    rule: "An account the provider has not labelled with this rep is explained, never attached; one labelled with nobody could belong to anybody",
+    file: "apps/web/src/app/app/team/repair.ts",
+    from: "  if (found > 0 && (data?.mine ?? 0) === 0) {",
+    to: "  if (false) {",
+    pkg: "@le/web",
+  },
+  {
+    id: "connect/the-repair-says-what-it-found",
+    rule: "The automatic repair renders what the provider told it; repairing silently and failing silently are the same page",
+    file: "apps/web/src/app/app/team/repair.ts",
+    from: "  if (!result.ok) {",
+    to: "  if (false) {",
+    pkg: "@le/web",
+  },
+  {
     id: "connect/a-broken-account-repairs-itself",
     rule: "An account the provider has replaced is repaired without anyone pressing a button; recovery behind a button is permanent for whoever does not find it",
     file: "apps/worker/src/accounts.ts",
