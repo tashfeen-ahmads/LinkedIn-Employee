@@ -1,5 +1,5 @@
 import type { Db } from "@le/db";
-import type { AccountHealth, LinkedInProvider } from "@le/linkedin";
+import type { AccountHealth, ConnectedAccount, LinkedInProvider } from "@le/linkedin";
 import type { AccountUsage, WorkingHours } from "@le/linkedin";
 import { accountPausedEmail } from "@le/email";
 import type { EmailProvider } from "@le/email";
@@ -179,6 +179,144 @@ export async function markAccountGone(
     subjectId: account.id,
     payload: { health: "reauth_required", reason: "provider no longer has the account" },
   });
+}
+
+/**
+ * Makes the row agree with what the provider actually has.
+ *
+ * `bindAccounts` deliberately only touches a row that is waiting to be
+ * connected, so a replayed or forged delivery cannot re-point a working
+ * account at something else. That left no way back from the opposite problem:
+ * a row that says `active`, holding an id the provider no longer has. Every
+ * job then fails against it — "LinkedIn's provider refused the search", over
+ * and over — while the Team page shows a healthy account, usage bars and no
+ * button that does anything. That is exactly what happened here, and the only
+ * fix was editing the database by hand.
+ *
+ * Safe to do on the pull path and not on the push path, which is the whole
+ * distinction: this runs on a list we fetched from the provider ourselves,
+ * over an authenticated call the rep started, rather than on something we were
+ * sent. The binding rule is untouched — `mine` has already been filtered to
+ * accounts carrying this rep's own user id as their reference, and nothing
+ * here looks at any other row.
+ */
+export async function reconcileAccount(
+  db: Db,
+  workspaceId: string,
+  userId: string,
+  mine: ConnectedAccount[],
+): Promise<{ changed?: boolean; lost?: boolean }> {
+  const { data: row } = await db
+    .from("linkedin_accounts")
+    .select("id, provider_account_id, status")
+    .eq("workspace_id", workspaceId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (!row) return {};
+
+  if (mine.length === 0) {
+    // Nothing to reconcile against unless we are claiming to hold something.
+    if (!row.provider_account_id) return {};
+    await db
+      .from("linkedin_accounts")
+      .update({
+        status: "reauth_required",
+        status_detail:
+          "LinkedIn's provider no longer has this account. Reconnect it to start sending again.",
+      })
+      .eq("id", row.id);
+    return { lost: true };
+  }
+
+  // Prefer the one already held: several accounts for one rep is a mess to be
+  // reported rather than silently resolved by picking differently each time.
+  const account = mine.find((a) => a.providerAccountId === row.provider_account_id) ?? mine[0];
+  if (!account) return {};
+  const changed = account.providerAccountId !== row.provider_account_id;
+  if (!changed && row.status === "active") return { changed: false };
+
+  await db
+    .from("linkedin_accounts")
+    .update({
+      provider_account_id: account.providerAccountId,
+      display_name: account.displayName ?? null,
+      status: account.status === "ok" ? "active" : "reauth_required",
+      status_detail: null,
+      // Stamped only when the account itself changed. The warm-up ramp reads
+      // `first_action_at`, not this, so a refresh cannot hand an account a
+      // fresh allowance — but a connection date that moves every time someone
+      // presses a button is a lie on the screen either way.
+      ...(changed ? { connected_at: new Date().toISOString(), paused_at: null } : {}),
+    })
+    .eq("id", row.id);
+  return { changed };
+}
+
+/**
+ * Asks the provider about every account that is not working, and repairs the
+ * ones it can.
+ *
+ * `reconcileAccount` was only ever reached by a rep pressing a button, which
+ * made the common failure permanent for anyone who did not find it. A rep
+ * reconnects, the provider issues a *new* account with a new id, and our row
+ * still holds the old one — so their provider dashboard shows a healthy
+ * connection while this product shows "reauth required" and every job fails.
+ * The two screens disagree and the one that is right is the one we are not
+ * looking at.
+ *
+ * The nightly health poll made this worse rather than better: it asks about
+ * the id we hold, gets a 404 because that account is gone, and marks the row
+ * dead. It never asks the only question that would have fixed it — does the
+ * provider have an account for this rep at all?
+ *
+ * One list for the whole deployment, then each unhealthy row reconciled
+ * against it. The binding rule is untouched: `reconcileAccount` is handed only
+ * the accounts carrying that rep's own user id as their reference.
+ */
+export async function recoverAccounts(
+  db: Db,
+  provider: LinkedInProvider,
+): Promise<{ checked: number; repaired: number }> {
+  const { data: rows } = await db
+    .from("linkedin_accounts")
+    .select("id, workspace_id, user_id, status, provider_account_id")
+    .in("status", ["connecting", "reauth_required", "restricted", "warning", "disconnected"]);
+
+  if (!rows?.length) return { checked: 0, repaired: 0 };
+
+  let accounts: ConnectedAccount[];
+  try {
+    accounts = await provider.listAccounts();
+  } catch (err) {
+    // Asked and could not be answered is not the same as "the provider has
+    // nothing", and treating it as the latter would mark every account in the
+    // deployment dead over one bad minute.
+    console.error("could not list provider accounts for recovery", err);
+    return { checked: rows.length, repaired: 0 };
+  }
+
+  let repaired = 0;
+  for (const row of rows) {
+    const mine = accounts.filter((a) => a.reference === row.user_id);
+    // Nothing for this rep: leave the row exactly as it is. The reason it is
+    // already unhealthy is the reason it should stay that way, and overwriting
+    // a specific status_detail with a generic one loses the only explanation
+    // anybody has.
+    if (mine.length === 0) continue;
+
+    const result = await reconcileAccount(db, row.workspace_id, row.user_id, mine);
+    if (result.changed) {
+      repaired++;
+      await recordEvent(db, {
+        workspaceId: row.workspace_id,
+        name: "linkedin.account.recovered",
+        subjectType: "linkedin_account",
+        subjectId: row.id,
+        payload: { from: row.status, reason: "the provider had a different account for this rep" },
+      });
+    }
+  }
+  return { checked: rows.length, repaired };
 }
 
 /**

@@ -88,6 +88,19 @@ tests that were verified by deliberately breaking the code.
    button that does nothing, which is where the first live deployment sat.
    What both share is the binding rule — an account is only ever matched to
    the rep whose user id it carries as its reference. Do not loosen that.
+
+   Repair must never depend on somebody finding a button. `recoverAccounts`
+   runs in nightly maintenance and the Team page asks on arrival whenever the
+   rep's account is not active, because the common failure is silent from the
+   inside: a rep reconnects, the provider issues a *new* account with a new id,
+   our row keeps the old one, and the provider's own dashboard then shows a
+   healthy green connection while this product says "reauth required". Two
+   screens contradicting each other, with the right answer on the one nobody is
+   reading. The health poll made it worse — it asks about the id we hold, gets
+   a 404, marks the row dead, and never asks whether a live account is sitting
+   beside it — so recovery runs *before* polling. A failure to list provider
+   accounts is never read as "the provider has none": one bad minute would
+   otherwise disconnect every account on the deployment.
 9. **Targeting refuses a customer profile nobody has approved**
    (`approved_at` in `apps/worker/src/jobs/targeting.ts`). The Strategy Agent
    writes profiles; it does not approve them. Approval happens on

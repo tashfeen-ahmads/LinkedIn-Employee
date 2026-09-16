@@ -287,7 +287,27 @@ export default async function TeamPage({
   // someone else's provider account to their own row. This asks the provider
   // instead, which answers with the rep's own user id attached, and binds only
   // a row already waiting.
-  if (params.connected === "1") {
+  //
+  // Asked on arrival whenever this rep's account is not working, not only on
+  // the way back from the provider.
+  //
+  // The failure this exists for: a rep reconnects, the provider issues a new
+  // account with a new id, and our row still holds the old one. Their provider
+  // dashboard then shows a healthy green connection while this page shows
+  // "reauth required" — two screens disagreeing, with the right answer on the
+  // one we are not reading. Recovery existed but only behind a button, so
+  // whoever did not find it stayed stuck.
+  //
+  // Bounded on purpose: this only runs while the account is already broken, so
+  // a working deployment makes no provider call here at all.
+  const { data: current } = await supabase
+    .from("linkedin_accounts")
+    .select("status")
+    .eq("workspace_id", session.workspaceId)
+    .eq("user_id", session.userId)
+    .maybeSingle();
+
+  if (params.connected === "1" || (current && current.status !== "active")) {
     await callWorker("/jobs/linkedin-refresh", {
       workspaceId: session.workspaceId,
       userId: session.userId,

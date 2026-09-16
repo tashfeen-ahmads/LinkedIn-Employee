@@ -370,3 +370,110 @@ describe("an account the provider no longer has", () => {
 });
 
 const OTHER_REP = "55555555-5555-4555-8555-555555555555";
+
+/**
+ * The disagreement a real deployment sat in for a day.
+ *
+ * Unipile's own dashboard showed a healthy green connection. This product
+ * showed "reauth required · Reconnect". Both were right about different things:
+ * the rep had reconnected, the provider had issued a *new* account with a new
+ * id, and our row still held the old one. Recovery existed and was only ever
+ * reached by pressing a button, so whoever did not find that button stayed
+ * stuck — and the nightly health poll made it worse, asking about the dead id,
+ * getting a 404, and marking the row dead again every night without ever
+ * asking whether a live account was sitting beside it.
+ */
+describe("recovering an account the provider has replaced", () => {
+  it("repairs a reauth_required row from the provider's live list", async () => {
+    const { db, app, linkedin } = harness({
+      provider_account_id: "acct_dead",
+      status: "reauth_required",
+      status_detail: "provider reported reauth_required",
+    });
+    linkedin.connectedAccounts = [
+      { providerAccountId: "acct_new", reference: USER, displayName: "Sam Patel", status: "ok" },
+    ];
+    const { recoverAccounts } = await import("../src/accounts.js");
+
+    const result = await recoverAccounts(db.asDb(), linkedin);
+
+    expect(result.repaired).toBe(1);
+    const account = db.find("linkedin_accounts", { id: ACCOUNT })!;
+    expect(account.provider_account_id).toBe("acct_new");
+    expect(account.status).toBe("active");
+    expect(account.status_detail).toBeNull();
+  });
+
+  it("finishes a connection that was left half-done", async () => {
+    // A hosted flow whose notification never arrived leaves a `connecting` row
+    // with no provider id, and nothing else ever completes it.
+    const { db, app, linkedin } = harness({ provider_account_id: null, status: "connecting" });
+    linkedin.connectedAccounts = [{ providerAccountId: "acct_new", reference: USER, status: "ok" }];
+    const { recoverAccounts } = await import("../src/accounts.js");
+
+    await recoverAccounts(db.asDb(), linkedin);
+
+    expect(db.find("linkedin_accounts", { id: ACCOUNT })!.status).toBe("active");
+    void app;
+  });
+
+  it("leaves a healthy account alone", async () => {
+    const { db, linkedin } = harness({ provider_account_id: "acct_live", status: "active" });
+    linkedin.connectedAccounts = [{ providerAccountId: "acct_other", reference: USER, status: "ok" }];
+    const { recoverAccounts } = await import("../src/accounts.js");
+
+    const result = await recoverAccounts(db.asDb(), linkedin);
+
+    // Not in the list it looks at, so an active account is never re-pointed by
+    // a background job.
+    expect(result.repaired).toBe(0);
+    expect(db.find("linkedin_accounts", { id: ACCOUNT })!.provider_account_id).toBe("acct_live");
+  });
+
+  it("never attaches an account carrying someone else's reference", async () => {
+    const { db, linkedin } = harness({ provider_account_id: "acct_dead", status: "reauth_required" });
+    linkedin.connectedAccounts = [
+      { providerAccountId: "acct_theirs", reference: "99999999-9999-4999-8999-999999999999", status: "ok" },
+    ];
+    const { recoverAccounts } = await import("../src/accounts.js");
+
+    await recoverAccounts(db.asDb(), linkedin);
+
+    // Repairing must not become a way to send a whole campaign from a
+    // stranger's LinkedIn.
+    const account = db.find("linkedin_accounts", { id: ACCOUNT })!;
+    expect(account.provider_account_id).toBe("acct_dead");
+    expect(account.status).toBe("reauth_required");
+  });
+
+  it("does not mark every account dead because the provider had a bad minute", async () => {
+    // Asked-and-not-answered is not "the provider has nothing". Treating it as
+    // that would disconnect an entire deployment over one failed request.
+    const { db, linkedin } = harness({ provider_account_id: "acct_dead", status: "reauth_required" });
+    linkedin.listAccounts = async () => {
+      throw new Error("provider unavailable");
+    };
+    const { recoverAccounts } = await import("../src/accounts.js");
+
+    const result = await recoverAccounts(db.asDb(), linkedin);
+
+    expect(result.repaired).toBe(0);
+    expect(db.find("linkedin_accounts", { id: ACCOUNT })!.status).toBe("reauth_required");
+  });
+
+  it("keeps the reason when the provider genuinely has nothing for this rep", async () => {
+    // The specific explanation already on the row is the only one anybody has;
+    // overwriting it with a generic one loses it.
+    const { db, linkedin } = harness({
+      provider_account_id: "acct_dead",
+      status: "reauth_required",
+      status_detail: "provider reported reauth_required",
+    });
+    linkedin.connectedAccounts = [];
+    const { recoverAccounts } = await import("../src/accounts.js");
+
+    await recoverAccounts(db.asDb(), linkedin);
+
+    expect(db.find("linkedin_accounts", { id: ACCOUNT })!.status_detail).toBe("provider reported reauth_required");
+  });
+});

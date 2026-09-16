@@ -175,6 +175,15 @@ export async function runDiagnostics(
   const providerCheck = await probeAccount(ctx, account?.provider_account_id ?? null);
   add({ ...providerCheck, stage: STAGES.account, key: "account-live" });
 
+  // The disagreement itself, named. A rep reconnects, the provider issues a
+  // new account with a new id, and our row still holds the old one — so their
+  // provider dashboard shows a healthy green connection while this product
+  // shows "reauth required". Two screens contradicting each other and no way
+  // to tell which is right is the worst report this product can give.
+  if (providerCheck.state === "blocked" || (account && account.status !== "active")) {
+    add({ ...(await probeReplacement(ctx, input.userId, account?.provider_account_id ?? null)), stage: STAGES.account, key: "account-replacement" });
+  }
+
   // ---- Can we actually search? -----------------------------------------
   const searchCheck = await probeSearch(ctx, account?.provider_account_id ?? null, providerCheck.state);
   add({ ...searchCheck, stage: STAGES.targeting, key: "search" });
@@ -359,6 +368,60 @@ async function probeAccount(
       href: gone ? "/app/team" : undefined,
     };
   }
+}
+
+/**
+ * Does the provider hold a *different* account for this rep?
+ *
+ * Only a yes or no about this one rep's own accounts. It must never report
+ * what else the provider holds: that list spans every workspace on the
+ * deployment.
+ */
+async function probeReplacement(
+  ctx: WorkerContext,
+  userId: string,
+  held: string | null,
+): Promise<Omit<Check, "key" | "stage">> {
+  let mine: Array<{ providerAccountId: string }>;
+  try {
+    const accounts = await ctx.linkedin.listAccounts();
+    mine = accounts.filter((a) => a.reference === userId);
+  } catch (err) {
+    return {
+      label: "The provider and this app agree about your account",
+      state: "unknown",
+      detail: `Could not ask the provider: ${(err as { message?: string })?.message ?? "unknown error"}`,
+    };
+  }
+
+  if (mine.length === 0) {
+    return {
+      label: "The provider and this app agree about your account",
+      state: "blocked",
+      detail:
+        "The provider has no LinkedIn account connected for you at all. If its own dashboard shows one as connected, it is not labelled with this user, which an administrator has to look at.",
+      fix: "Connect LinkedIn again from the Team page.",
+      href: "/app/team",
+    };
+  }
+
+  const replacement = mine.find((a) => a.providerAccountId !== held);
+  if (replacement && held) {
+    return {
+      label: "The provider and this app agree about your account",
+      state: "blocked",
+      detail:
+        "The provider has a different account for you than the one stored here — this is what makes its dashboard show a healthy connection while this app says reconnect. Opening the Team page attaches the live one.",
+      fix: "Open the Team page; it repairs this on arrival.",
+      href: "/app/team",
+    };
+  }
+
+  return {
+    label: "The provider and this app agree about your account",
+    state: "ok",
+    detail: "The account stored here is the one the provider holds for you.",
+  };
 }
 
 /**

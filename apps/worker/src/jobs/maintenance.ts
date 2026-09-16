@@ -1,6 +1,6 @@
 import { LINKEDIN_LIMITS, countFunnel } from "@le/shared";
 import type { WorkerContext } from "../context.js";
-import { pollHealth } from "../accounts.js";
+import { pollHealth, recoverAccounts } from "../accounts.js";
 import { recordEvent } from "../context.js";
 import { detectAcceptedInvitations } from "./acceptance.js";
 import { syncCalendarFeeds } from "./calendar-feed.js";
@@ -35,6 +35,16 @@ export async function runMaintenance(
     .from("linkedin_accounts")
     .select("id, workspace_id, status, provider_account_id")
     .in("status", ["active", "warning"]);
+
+  // Before polling: repair any account whose stored id the provider has
+  // replaced. Polling first asks about an id that is already gone, marks the
+  // row dead, and never looks for the live account sitting beside it.
+  try {
+    const recovery = await recoverAccounts(db, ctx.linkedin);
+    if (recovery.repaired > 0) console.log(`recovered ${recovery.repaired} LinkedIn account(s)`);
+  } catch (err) {
+    console.error("account recovery failed", err);
+  }
 
   for (const account of accounts ?? []) {
     try {
