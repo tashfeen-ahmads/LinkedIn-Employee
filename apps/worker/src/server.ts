@@ -16,6 +16,7 @@ import type { IntegrationKind } from "@le/db";
 import type { Queues } from "./queues.js";
 import type { WorkerContext } from "./context.js";
 import { bookFromLink, readBookingPage } from "./jobs/book.js";
+import { connectCalendarFeed, disconnectCalendarFeed } from "./jobs/calendar-feed.js";
 import { runDiagnostics } from "./jobs/diagnostics.js";
 import { eraseProspect, exportWorkspace } from "./jobs/retention.js";
 import { inviteEmail } from "@le/email";
@@ -68,6 +69,12 @@ const BookingConfirmRequest = BookingPageRequest.extend({
   // Checked because it is what the calendar invitation is addressed to. A
   // booking whose invitation bounces is a meeting the prospect never sees.
   email: z.string().trim().email().max(320),
+});
+
+// `url: null` disconnects. A separate route for that would be one more thing
+// to authorise the same way.
+const CalendarFeedRequest = LinkRequest.extend({
+  url: z.string().trim().min(1).max(2000).nullable(),
 });
 
 const InviteEmailRequest = LinkRequest.extend({
@@ -176,6 +183,23 @@ export function createServer(ctx: WorkerContext, queues: Queues): Hono {
   // Read-only, and scoped to the caller's own workspace and account: it reports
   // whether this rep's LinkedIn is reachable, never what other accounts the
   // provider holds.
+  // Attaching a published calendar. The URL is validated and fetched here
+  // before it is stored -- a rep who pastes the wrong link should find out
+  // while they are still looking at the page, not from a nightly job.
+  app.post("/jobs/calendar-feed", async (c) => {
+    const parsed = CalendarFeedRequest.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "invalid request" }, 400);
+    if (!(await assertMembership(ctx.db, parsed.data.workspaceId, parsed.data.userId))) {
+      return c.json({ error: "not a member of that workspace" }, 403);
+    }
+    if (parsed.data.url === null) {
+      await disconnectCalendarFeed(ctx, parsed.data);
+      return c.json({ ok: true });
+    }
+    const result = await connectCalendarFeed(ctx, { ...parsed.data, url: parsed.data.url });
+    return result.ok ? c.json(result) : c.json({ error: result.error }, 400);
+  });
+
   app.post("/jobs/diagnostics", async (c) => {
     const parsed = LinkRequest.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: "invalid request" }, 400);

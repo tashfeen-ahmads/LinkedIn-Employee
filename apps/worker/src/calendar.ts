@@ -90,7 +90,9 @@ export async function resolveCalendar(
 
   const microsoft = integration.kind === "microsoft_calendar";
   const clientId = microsoft ? env.MICROSOFT_CLIENT_ID : env.GOOGLE_CLIENT_ID;
-  const clientSecret = microsoft ? env.MICROSOFT_CLIENT_SECRET : env.GOOGLE_CLIENT_SECRET;
+  const clientSecret = microsoft
+    ? env.MICROSOFT_CLIENT_SECRET
+    : env.GOOGLE_CLIENT_SECRET;
   if (!clientId || !clientSecret) return null;
 
   const tokens = await loadRefreshedCredential(db, {
@@ -105,7 +107,11 @@ export async function resolveCalendar(
             clientSecret,
             tenant: env.MICROSOFT_TENANT,
           })
-        : refreshGoogleAccessToken({ refreshToken: current.refreshToken!, clientId, clientSecret }),
+        : refreshGoogleAccessToken({
+            refreshToken: current.refreshToken!,
+            clientId,
+            clientSecret,
+          }),
   });
   if (!tokens) return null;
 
@@ -114,13 +120,17 @@ export async function resolveCalendar(
   // -- but it is not ownOnly: it can see meetings booked elsewhere.
   const { data: settings } = await db
     .from("availability")
-    .select("timezone, working_hours, meeting_minutes, min_notice_hours, buffer_minutes, max_per_day, location")
+    .select(
+      "timezone, working_hours, meeting_minutes, min_notice_hours, buffer_minutes, max_per_day, location",
+    )
     .eq("workspace_id", input.workspaceId)
     .eq("user_id", input.userId)
     .maybeSingle();
 
   return {
-    provider: microsoft ? new MicrosoftCalendarProvider() : new GoogleCalendarProvider(),
+    provider: microsoft
+      ? new MicrosoftCalendarProvider()
+      : new GoogleCalendarProvider(),
     accessToken: tokens.accessToken,
     timezone: settings?.timezone || input.timezone,
     rules: toRules(settings),
@@ -176,9 +186,11 @@ export async function offerSlots(
     busy,
   });
 
-  return { iso, readable: iso.map((slot) => formatSlot(slot, binding.timezone)) };
+  return {
+    iso,
+    readable: iso.map((slot) => formatSlot(slot, binding.timezone)),
+  };
 }
-
 
 /**
  * The rep's own calendar: their declared hours, the meetings we booked, and the
@@ -196,10 +208,18 @@ async function buildOwnCalendar(
   const horizonFrom = new Date(Date.now() - 86_400_000).toISOString();
   const horizonTo = new Date(Date.now() + 45 * 86_400_000).toISOString();
 
-  const [{ data: settings }, { data: meetings }, { data: blackouts }] = await Promise.all([
+  const [
+    { data: settings },
+    { data: meetings },
+    { data: blackouts },
+    { data: feedBusy },
+    { data: feed },
+  ] = await Promise.all([
     db
       .from("availability")
-      .select("timezone, working_hours, meeting_minutes, min_notice_hours, buffer_minutes, max_per_day, location")
+      .select(
+        "timezone, working_hours, meeting_minutes, min_notice_hours, buffer_minutes, max_per_day, location",
+      )
       .eq("workspace_id", input.workspaceId)
       .eq("user_id", input.userId)
       .maybeSingle(),
@@ -217,6 +237,23 @@ async function buildOwnCalendar(
       .eq("user_id", input.userId)
       .gte("ends_at", horizonFrom)
       .lte("starts_at", horizonTo),
+    // What the rep's real calendar says, from the last successful read of their
+    // published feed. Taken from that read rather than fetched now: a booking
+    // page that called out to Google on every render would be slow, would tell
+    // Google's logs when this product is being used, and would fail the booking
+    // outright whenever that host had a bad minute.
+    db
+      .from("calendar_feed_busy")
+      .select("starts_at, ends_at")
+      .eq("user_id", input.userId)
+      .gte("ends_at", horizonFrom)
+      .lte("starts_at", horizonTo),
+    db
+      .from("calendar_feeds")
+      .select("status, last_synced_at, url_host")
+      .eq("workspace_id", input.workspaceId)
+      .eq("user_id", input.userId)
+      .maybeSingle(),
   ]);
 
   const toInterval = (row: { starts_at: string; ends_at: string }) => ({
@@ -227,12 +264,18 @@ async function buildOwnCalendar(
   return {
     provider: new OwnCalendarProvider({
       meetings: (meetings ?? []).map(toInterval),
-      blackouts: (blackouts ?? []).map(toInterval),
+      // One list. A block is a block, whether the rep typed it or their own
+      // calendar did -- keeping them apart would only invite a caller to
+      // consult one and forget the other.
+      blackouts: [...(blackouts ?? []), ...(feedBusy ?? [])].map(toInterval),
     }),
     accessToken: "own",
     timezone: settings?.timezone || input.timezone,
     rules: toRules(settings),
-    ownOnly: true,
+    // Still own-only when the feed is failing: a snapshot going stale is not a
+    // calendar we can see, and the screens say so rather than implying the
+    // rep's real diary is being watched when the last read of it broke.
+    ownOnly: !feed || feed.status !== "ok",
   };
 }
 
@@ -258,10 +301,18 @@ function toRules(
   };
 }
 
-function parseHours(value: unknown): { start: number; end: number; days: number[] } {
+function parseHours(value: unknown): {
+  start: number;
+  end: number;
+  days: number[];
+} {
   if (value && typeof value === "object") {
     const v = value as { start?: unknown; end?: unknown; days?: unknown };
-    if (typeof v.start === "number" && typeof v.end === "number" && Array.isArray(v.days)) {
+    if (
+      typeof v.start === "number" &&
+      typeof v.end === "number" &&
+      Array.isArray(v.days)
+    ) {
       return { start: v.start, end: v.end, days: v.days as number[] };
     }
   }

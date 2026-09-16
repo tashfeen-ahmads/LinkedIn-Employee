@@ -372,6 +372,35 @@ export type BookingLinkRow = {
   created_at: string;
 };
 
+/**
+ * A published .ics address, and how the last read of it went. See migration
+ * 0013. `url_encrypted` is a bearer credential: the web app must never select
+ * it, and nothing may log it.
+ */
+export type CalendarFeedRow = {
+  id: string;
+  workspace_id: string;
+  user_id: string;
+  url_encrypted: string;
+  url_host: string;
+  status: string;
+  last_synced_at: string | null;
+  last_error: string | null;
+  event_count: number;
+  created_at: string;
+  updated_at: string;
+};
+
+/** Busy intervals the last successful read of a feed produced. */
+export type CalendarFeedBusyRow = {
+  id: string;
+  workspace_id: string;
+  user_id: string;
+  feed_id: string;
+  starts_at: string;
+  ends_at: string;
+};
+
 export type IntegrationRow = {
   id: string;
   workspace_id: string;
@@ -448,6 +477,8 @@ export type Database = {
       availability: Table<AvailabilityRow>;
       availability_blackouts: Table<AvailabilityBlackoutRow>;
       booking_links: Table<BookingLinkRow>;
+      calendar_feeds: Table<CalendarFeedRow>;
+      calendar_feed_busy: Table<CalendarFeedBusyRow>;
       integrations: Table<IntegrationRow>;
       knowledge_documents: Table<KnowledgeDocumentRow>;
       events: Table<EventRow>;

@@ -3,6 +3,7 @@ import type { WorkerContext } from "../context.js";
 import { pollHealth } from "../accounts.js";
 import { recordEvent } from "../context.js";
 import { detectAcceptedInvitations } from "./acceptance.js";
+import { syncCalendarFeeds } from "./calendar-feed.js";
 import { runLifecycleEmails } from "./lifecycle.js";
 import { runRetentionSweep } from "./retention.js";
 import type { Queues } from "../queues.js";
@@ -41,6 +42,15 @@ export async function runMaintenance(
     } catch (err) {
       console.error("health poll failed", account.id, err);
     }
+  }
+
+  // Re-read every connected calendar feed before anything offers times today.
+  // A failure here marks the feed and keeps yesterday's intervals; it must not
+  // stop the rest of the night's work.
+  try {
+    await syncCalendarFeeds(ctx);
+  } catch (err) {
+    console.error("calendar feed sync failed", err);
   }
 
   const accepted = await detectAcceptedInvitations(ctx, now);

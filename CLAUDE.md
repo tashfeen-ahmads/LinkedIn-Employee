@@ -193,6 +193,29 @@ tests that were verified by deliberately breaking the code.
     same thing whether the token is expired, revoked or invented, or the page
     becomes a way to learn which tokens exist.
 
+18. **A calendar feed URL is typed by a user and fetched by the worker, which
+    is server-side request forgery unless it is stopped.** The worker holds the
+    service-role key and answers its own internal API on localhost, so a feed
+    pointed at `127.0.0.1:4000` or `169.254.169.254` reaches things no browser
+    could, with our credentials. `checkFeedUrl` requires https and refuses
+    private hosts; `fetchIcs` resolves DNS and vets the address, follows
+    redirects by hand and re-checks every hop, because a 302 undoes every check
+    made before it. The address itself is a bearer credential for the rep's
+    whole calendar: encrypted before insert, never returned to the browser
+    (`url_host` is what the UI shows), never logged.
+
+    A feed that fails to refresh **keeps the intervals from its last good
+    read** and is marked `failing`. Deleting them would turn a rotated URL or a
+    bad afternoon at Google into a calendar that suddenly looks completely
+    free, and of the two failures that is the one that double-books somebody.
+    `ownOnly` stays true while a feed is failing, so no screen tells a rep
+    their diary is being watched when the last read of it broke.
+
+    In `parseIcsBusy` every ambiguity errs towards more busy time, not less: a
+    block we invent costs an offered slot, a block we miss costs the meeting.
+    `STATUS:CANCELLED` and `TRANSP:TRANSPARENT` are the two exceptions, and
+    both are events the rep has said are not busy.
+
 ## Conventions
 
 - Agent output is validated against a zod schema before it touches the

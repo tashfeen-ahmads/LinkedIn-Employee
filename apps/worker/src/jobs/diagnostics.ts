@@ -236,12 +236,28 @@ export async function runDiagnostics(
   });
 
   // ---- Meetings ---------------------------------------------------------
-  const { data: availability } = await db
-    .from("availability")
-    .select("working_hours, meeting_minutes, location")
-    .eq("workspace_id", input.workspaceId)
-    .eq("user_id", input.userId)
-    .maybeSingle();
+  const [{ data: availability }, { data: feed }] = await Promise.all([
+    db
+      .from("availability")
+      .select("working_hours, meeting_minutes, location")
+      .eq("workspace_id", input.workspaceId)
+      .eq("user_id", input.userId)
+      .maybeSingle(),
+    db
+      .from("calendar_feeds")
+      .select("url_host, status, last_synced_at, last_error, event_count")
+      .eq("workspace_id", input.workspaceId)
+      .eq("user_id", input.userId)
+      .maybeSingle(),
+  ]);
+
+  // The dangerous state is not "no calendar connected" but "a calendar the rep
+  // believes is being read and is not": we keep honouring the last snapshot, it
+  // gets older every day, and nothing else would ever say so.
+  const staleHours = feed?.last_synced_at
+    ? Math.floor((Date.now() - Date.parse(feed.last_synced_at)) / 3_600_000)
+    : null;
+  const feedStale = feed && (feed.status !== "ok" || (staleHours !== null && staleHours > 48));
 
   const own = env.CALENDAR_PROVIDER === "own";
   add({
@@ -250,10 +266,30 @@ export async function runDiagnostics(
     label: "A prospect can be offered a time",
     state: "ok",
     detail: own
-      ? "Using this product's own calendar. It knows about meetings booked here and nothing else — anything in your Google or Outlook diary has to be blocked out, or a prospect can pick a time you are not free."
+      ? feed && !feedStale
+        ? "Using this product's own calendar, with your published calendar read alongside it, so anything already in your diary is protected."
+        : "Using this product's own calendar. It knows about meetings booked here and nothing else — anything in your Google or Outlook diary has to be blocked out, or a prospect can pick a time you are not free."
       : `Using the ${env.CALENDAR_PROVIDER} calendar.`,
     fix: own && !availability ? "You have not set your hours, so the defaults are in use: 9 to 5, weekdays, 30 minutes." : undefined,
     href: own ? "/app/meetings" : undefined,
+  });
+
+  add({
+    key: "calendar-feed",
+    stage: STAGES.calendar,
+    label: "Your own calendar is being read",
+    state: !feed ? "todo" : feedStale ? "blocked" : "ok",
+    detail: !feed
+      ? "No calendar connected, so the only thing protecting your existing commitments is the time you block by hand."
+      : feedStale
+        ? `${feed.url_host} is not being read: ${feed.last_error ?? `last read ${staleHours} hours ago`}. The times from the last successful read are still avoided, but anything added since is not.`
+        : `${feed.url_host}, ${feed.event_count} busy period${feed.event_count === 1 ? "" : "s"} read.`,
+    fix: !feed
+      ? "Paste the secret .ics address from Google or Outlook. No sign-in, read-only."
+      : feedStale
+        ? "Copy the secret address again — these links are rotated when sharing is turned off."
+        : undefined,
+    href: feed && !feedStale ? undefined : "/app/meetings",
   });
 
   add({
