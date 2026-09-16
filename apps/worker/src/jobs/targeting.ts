@@ -16,6 +16,17 @@ import type { TargetingJob } from "../queues.js";
 const MIN_FIT_TO_QUEUE = 60;
 
 /**
+ * Stamped on every `targeting.stopped` event.
+ *
+ * Three separate rounds of this were spent unable to tell whether a report came
+ * from the build that was meant to fix it or the one before, because both
+ * emitted the same sentences. A report that cannot identify the code that
+ * produced it is a report that costs a deploy to interpret. Bump it whenever
+ * the search behaviour changes.
+ */
+const TARGETING_BUILD = "2026-09-16.per-term-search";
+
+/**
  * Why the job stopped, written where anyone can read it.
  *
  * Every exit below used to be a bare `return null`. The rep pressed "find
@@ -38,7 +49,7 @@ async function giveUp(
     actorUserId: job.userId,
     subjectType: "customer_profile",
     subjectId: job.customerProfileId,
-    payload: { reason, ...detail },
+    payload: { reason, build: TARGETING_BUILD, ...detail },
   });
   return null;
 }
@@ -143,10 +154,24 @@ export async function runTargetingJob(ctx: WorkerContext, job: TargetingJob): Pr
     (c) => !matchExclusion(exclusions, { company: c.company, linkedinUrl: c.linkedinUrl }),
   );
   if (fresh.length === 0) {
+    // A search that reaches LinkedIn and comes back with nobody, at the widest
+    // setting this product will go to, is not an answer LinkedIn really gives.
+    // It means a field in the request is silently matching nothing, and working
+    // out which one by editing code and asking somebody to press a button is a
+    // round trip per guess.
+    //
+    // So the probe runs here, attached to the report nobody has to go looking
+    // for. Whoever is stuck is already reading this event; the answer belongs
+    // in it. Only when the provider returned literally nothing -- a list that
+    // was filtered down to nobody is a different problem and needs no probe.
+    const probe =
+      page.items.length === 0 ? await probeProvider(ctx, account.provider_account_id) : undefined;
+
     // The three reasons a page of results yields nobody are completely
     // different problems, so they are counted separately rather than reported
     // as one empty list.
     return giveUp(ctx, job, "The search returned nobody new to contact.", {
+      ...(probe ? { probe } : {}),
       searchTier,
       returnedByProvider: page.items.length,
       alreadyKnown: page.items.length - unknown.length,
@@ -325,4 +350,34 @@ async function loadKnownUrls(
     .in("linkedin_url", normalized);
 
   return new Set((data ?? []).map((p) => normalizeLinkedInUrl(p.linkedin_url)));
+}
+
+/**
+ * Which parts of a classic search body LinkedIn honours, asked all at once.
+ *
+ * A diagnostic rather than a feature: it runs only when a search has already
+ * come back empty, asks for one result per probe, and never stops the job. The
+ * row that matters most is the one with no filters at all — if even that
+ * returns nobody, the problem is the account or the subscription and no amount
+ * of query fixing will touch it.
+ */
+async function probeProvider(
+  ctx: WorkerContext,
+  accountId: string,
+): Promise<Record<string, string> | undefined> {
+  const provider = ctx.linkedin as {
+    probeSearch?: (id: string) => Promise<Array<{ label: string; count: number | null; error?: string }>>;
+  };
+  if (typeof provider.probeSearch !== "function") return undefined;
+
+  try {
+    const rows = await provider.probeSearch(accountId);
+    return Object.fromEntries(
+      rows.map((r) => [r.label, r.error ? `refused: ${r.error}` : `${r.count}`]),
+    );
+  } catch (err) {
+    // A probe that fails is worth reporting too: it is the same provider the
+    // search just used.
+    return { probeFailed: (err as { message?: string })?.message ?? "unknown" };
+  }
 }

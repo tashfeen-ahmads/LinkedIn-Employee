@@ -178,6 +178,22 @@ const MUTATIONS = [
     pkg: "@le/worker",
   },
   {
+    id: "targeting/a-report-names-its-build",
+    rule: "Every stopped report stamps the build that produced it; a report that cannot be placed against a deploy costs a deploy to interpret",
+    file: "apps/worker/src/jobs/targeting.ts",
+    from: "    payload: { reason, build: TARGETING_BUILD, ...detail },",
+    to: "    payload: { reason, ...detail },",
+    pkg: "@le/worker",
+  },
+  {
+    id: "targeting/an-empty-search-is-probed",
+    rule: "A search that reached the provider and matched nobody carries the probe that says which filters the provider honours",
+    file: "apps/worker/src/jobs/targeting.ts",
+    from: "      page.items.length === 0 ? await probeProvider(ctx, account.provider_account_id) : undefined;",
+    to: "      undefined;",
+    pkg: "@le/worker",
+  },
+  {
     id: "targeting/says-why-it-stopped",
     rule: "A prospect search that finds nobody says why, instead of looking like a button that did nothing",
     file: "apps/worker/src/jobs/targeting.ts",

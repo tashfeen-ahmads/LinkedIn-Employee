@@ -561,3 +561,65 @@ describe("targeting says why it stopped", () => {
     expect(db.rows("linkedin_accounts")[0]?.status).toBe("active");
   });
 });
+
+/**
+ * A report that can identify the code that produced it.
+ *
+ * Three rounds of a live incident were spent unable to tell whether a stopped
+ * event came from the build meant to fix it or the one before, because both
+ * emitted the same sentences. Every guess after that cost a deploy and somebody
+ * else's click.
+ */
+describe("what a stopped report carries", () => {
+  it("stamps the build, so a report can be placed against a deploy", async () => {
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    linkedin.candidates = { items: [], cursor: null, droppedFilters: [] };
+
+    await runTargetingJob(ctx, job);
+
+    const stop = db.rows("events").find((e) => e.name === "targeting.stopped");
+    expect(String(stop?.payload?.build)).toMatch(/\d{4}-\d{2}-\d{2}/);
+  });
+});
+
+describe("a search that reached the provider and found nobody", () => {
+  it("carries the probe, in the report somebody is already reading", async () => {
+    // Whoever is stuck is reading this event. Making them navigate somewhere
+    // else for the answer is how three rounds went by without one.
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    linkedin.candidates = { items: [], cursor: null, droppedFilters: [] };
+    (linkedin as unknown as { probeSearch: unknown }).probeSearch = async () => [
+      { label: "no filters at all", count: 0 },
+      { label: "keywords only", count: 1 },
+    ];
+
+    await runTargetingJob(ctx, job);
+
+    const stop = db.rows("events").find((e) => e.name === "targeting.stopped");
+    expect(stop?.payload?.probe).toMatchObject({ "no filters at all": "0", "keywords only": "1" });
+  });
+
+  it("does not probe when the provider returned people and we filtered them out", async () => {
+    // A different problem entirely, and one more request against a paid seat
+    // answers nothing about it.
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    linkedin.candidates = {
+      items: [candidate("p1", "https://www.linkedin.com/in/jane-one")],
+      cursor: null,
+      droppedFilters: [],
+    };
+    db.seed("prospects", [{ workspace_id: WORKSPACE, linkedin_url: "linkedin.com/in/jane-one" }]);
+    let probed = false;
+    (linkedin as unknown as { probeSearch: unknown }).probeSearch = async () => {
+      probed = true;
+      return [];
+    };
+
+    await runTargetingJob(ctx, job);
+
+    expect(probed).toBe(false);
+  });
+});
