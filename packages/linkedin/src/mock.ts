@@ -50,7 +50,11 @@ export class MockLinkedInProvider implements LinkedInProvider {
     return { url: "https://example.test/hosted-auth", expiresAt: new Date(Date.now() + 3_600_000).toISOString() };
   }
 
+  /** Set by a test to make the health call fail the way a dropped account does. */
+  healthError: Error | null = null;
+
   async getAccountHealth(): Promise<AccountHealth> {
+    if (this.healthError) throw this.healthError;
     return this.health;
   }
 

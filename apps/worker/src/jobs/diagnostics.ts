@@ -1,0 +1,327 @@
+import { isAccountGone } from "@le/linkedin";
+import type { WorkerContext } from "../context.js";
+
+/**
+ * Every precondition between signing up and a booked meeting, checked against
+ * what is actually true right now.
+ *
+ * This exists because of how the first live deployment went. Each stage failed
+ * silently in its own way — a queue that accepted a job and returned nothing, a
+ * connected account the provider had dropped, a search sent with words where
+ * LinkedIn wanted ids — and each one was found by reasoning from a screen that
+ * looked the same in every case. Days of that. The checks below turn "nothing
+ * happened" into a named stage, a reason, and the one thing to do about it.
+ *
+ * Two rules it follows. It never reports a stage as passing because it could
+ * not look: something it cannot determine says so. And it asks the provider
+ * rather than trusting a row, because the row saying `active` while the
+ * provider had never heard of the account is exactly what cost a week.
+ */
+
+export type CheckState = "ok" | "blocked" | "waiting" | "unknown" | "todo";
+
+export interface Check {
+  key: string;
+  stage: string;
+  label: string;
+  state: CheckState;
+  /** What is true, in a sentence someone can act on. */
+  detail: string;
+  /** What to do about it, when there is something. */
+  fix?: string;
+  href?: string;
+}
+
+export interface DiagnosticsReport {
+  checkedAt: string;
+  checks: Check[];
+}
+
+const STAGES = {
+  setup: "Deployment",
+  onboarding: "Onboarding",
+  strategy: "Strategy Agent",
+  account: "LinkedIn account",
+  targeting: "Targeting Agent",
+  campaign: "Campaign",
+  replies: "Reply Agent",
+} as const;
+
+export async function runDiagnostics(
+  ctx: WorkerContext,
+  input: { workspaceId: string; userId: string },
+): Promise<DiagnosticsReport> {
+  const checks: Check[] = [];
+  const add = (c: Check) => checks.push(c);
+  const { db, env } = ctx;
+
+  // ---- Deployment -------------------------------------------------------
+  const hasModelKey = Boolean(env.OPENAI_API_KEY || env.ANTHROPIC_API_KEY);
+  add({
+    key: "model-provider",
+    stage: STAGES.setup,
+    label: "A model provider is configured",
+    state: hasModelKey ? "ok" : "blocked",
+    detail: hasModelKey
+      ? `Agents run on ${env.OPENAI_API_KEY ? "OpenAI" : "Anthropic"}.`
+      : "Neither OPENAI_API_KEY nor ANTHROPIC_API_KEY is set, so no agent can run at all.",
+    fix: hasModelKey ? undefined : "Set one of them on the worker and redeploy.",
+  });
+
+  const live = env.LINKEDIN_PROVIDER !== "mock";
+  add({
+    key: "linkedin-provider",
+    stage: STAGES.setup,
+    label: "LinkedIn provider",
+    state: live ? "ok" : "waiting",
+    detail: live
+      ? "Connected to Unipile. Real invitations and messages will be sent."
+      : "Running on the mock provider. Nothing reaches a real LinkedIn account.",
+  });
+
+  add({
+    key: "webhook-secret",
+    stage: STAGES.setup,
+    label: "Inbound message webhook is secured",
+    state: env.UNIPILE_WEBHOOK_SECRET ? "ok" : live ? "blocked" : "waiting",
+    detail: env.UNIPILE_WEBHOOK_SECRET
+      ? "UNIPILE_WEBHOOK_SECRET is set, so deliveries are verified."
+      : "UNIPILE_WEBHOOK_SECRET is not set. Webhooks fail closed, so every reply from a prospect is rejected and the Reply Agent never sees it.",
+    fix: env.UNIPILE_WEBHOOK_SECRET ? undefined : "Set it to the value in Unipile's webhook settings.",
+  });
+
+  // ---- Onboarding and Strategy -----------------------------------------
+  const [{ data: business }, { data: profiles }, { data: lastStrategy }] = await Promise.all([
+    db.from("business_profiles").select("id").eq("workspace_id", input.workspaceId).limit(1),
+    db.from("customer_profiles").select("id, approved_at, do_not_pursue").eq("workspace_id", input.workspaceId),
+    db
+      .from("events")
+      .select("name, payload, created_at")
+      .eq("workspace_id", input.workspaceId)
+      .in("name", ["strategy.queued", "strategy.failed", "strategy.profile.created"])
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+
+  const hasBusiness = (business ?? []).length > 0;
+  const asked = Boolean(lastStrategy);
+  add({
+    key: "onboarding",
+    stage: STAGES.onboarding,
+    label: "Someone has said what this business sells",
+    state: asked || hasBusiness ? "ok" : "todo",
+    detail: asked || hasBusiness ? "Onboarding was submitted." : "Nobody has completed onboarding yet.",
+    fix: asked || hasBusiness ? undefined : "Fill in onboarding.",
+    href: asked || hasBusiness ? undefined : "/onboarding",
+  });
+
+  const failed = lastStrategy?.name === "strategy.failed";
+  add({
+    key: "strategy-run",
+    stage: STAGES.strategy,
+    label: "The Strategy Agent has written the profiles",
+    state: hasBusiness ? "ok" : failed ? "blocked" : asked ? "waiting" : "todo",
+    detail: hasBusiness
+      ? `${(profiles ?? []).length} customer profile${(profiles ?? []).length === 1 ? "" : "s"} written.`
+      : failed
+        ? `The last run failed: ${String((lastStrategy?.payload as { reason?: unknown })?.reason ?? "no reason recorded")}`
+        : asked
+          ? `Running since ${lastStrategy?.created_at}. It reads the site and writes three to five customer profiles.`
+          : "Not started, because onboarding has not been submitted.",
+    fix: failed ? "Run onboarding again." : undefined,
+    href: failed ? "/onboarding" : undefined,
+  });
+
+  const approved = (profiles ?? []).filter((p) => p.approved_at && !p.do_not_pursue);
+  add({
+    key: "approval",
+    stage: STAGES.strategy,
+    label: "A customer profile has been approved",
+    state: approved.length > 0 ? "ok" : hasBusiness ? "todo" : "waiting",
+    detail:
+      approved.length > 0
+        ? `${approved.length} approved.`
+        : hasBusiness
+          ? "None approved. Nothing is searched for until a human has read one and said yes — that is deliberate."
+          : "Nothing to approve yet.",
+    fix: approved.length === 0 && hasBusiness ? "Read one and approve it." : undefined,
+    href: approved.length === 0 && hasBusiness ? "/app/strategy" : undefined,
+  });
+
+  // ---- The LinkedIn account, asked of the provider ----------------------
+  const { data: account } = await db
+    .from("linkedin_accounts")
+    .select("id, provider_account_id, status, status_detail, has_sales_navigator")
+    .eq("workspace_id", input.workspaceId)
+    .eq("user_id", input.userId)
+    .maybeSingle();
+
+  add({
+    key: "account-row",
+    stage: STAGES.account,
+    label: "A LinkedIn account is connected here",
+    state: account?.status === "active" ? "ok" : account ? "blocked" : "todo",
+    detail: account
+      ? `This workspace has an account in state "${account.status}"${account.status_detail ? `: ${account.status_detail}` : "."}`
+      : "No LinkedIn account has been connected.",
+    fix: account?.status === "active" ? undefined : "Connect LinkedIn.",
+    href: account?.status === "active" ? undefined : "/app/team",
+  });
+
+  // The check the first deployment did not have. The row said active for a
+  // week while Unipile had never heard of the id it was holding.
+  const providerCheck = await probeAccount(ctx, account?.provider_account_id ?? null);
+  add({ ...providerCheck, stage: STAGES.account, key: "account-live" });
+
+  // ---- Can we actually search? -----------------------------------------
+  const searchCheck = await probeSearch(ctx, account?.provider_account_id ?? null, providerCheck.state);
+  add({ ...searchCheck, stage: STAGES.targeting, key: "search" });
+
+  // ---- Campaigns --------------------------------------------------------
+  const { data: campaigns } = await db
+    .from("campaigns")
+    .select("id, status, launched_at")
+    .eq("workspace_id", input.workspaceId);
+  const launched = (campaigns ?? []).filter((c) => c.launched_at);
+
+  add({
+    key: "campaign",
+    stage: STAGES.campaign,
+    label: "A campaign has been built",
+    state: (campaigns ?? []).length > 0 ? "ok" : approved.length > 0 ? "todo" : "waiting",
+    detail:
+      (campaigns ?? []).length > 0
+        ? `${campaigns!.length} campaign${campaigns!.length === 1 ? "" : "s"}, ${launched.length} launched.`
+        : approved.length > 0
+          ? "None yet. Run the Targeting Agent from an approved profile."
+          : "Nothing to build a campaign from yet.",
+    fix: (campaigns ?? []).length === 0 && approved.length > 0 ? "Find prospects." : undefined,
+    href: (campaigns ?? []).length === 0 && approved.length > 0 ? "/app/strategy" : undefined,
+  });
+
+  add({
+    key: "launched",
+    stage: STAGES.campaign,
+    label: "A campaign is live",
+    state: launched.length > 0 ? "ok" : (campaigns ?? []).length > 0 ? "todo" : "waiting",
+    detail:
+      launched.length > 0
+        ? `${launched.length} sending.`
+        : (campaigns ?? []).length > 0
+          ? "Built but not launched. Read the names and the copy, then launch — nothing sends until you do."
+          : "No campaign to launch.",
+    fix: launched.length === 0 && (campaigns ?? []).length > 0 ? "Review and launch." : undefined,
+    href: launched.length === 0 && (campaigns ?? []).length > 0 ? "/app/campaigns" : undefined,
+  });
+
+  // ---- Replies ----------------------------------------------------------
+  const { count: knowledge } = await db
+    .from("knowledge_documents")
+    .select("id", { count: "exact", head: true })
+    .eq("workspace_id", input.workspaceId);
+
+  add({
+    key: "knowledge",
+    stage: STAGES.replies,
+    label: "The Reply Agent has facts it may state",
+    state: (knowledge ?? 0) > 0 ? "ok" : "todo",
+    detail:
+      (knowledge ?? 0) > 0
+        ? `${knowledge} document${knowledge === 1 ? "" : "s"} loaded.`
+        : "None. The agent may not invent an answer, so every product question a prospect asks will be held for a human instead.",
+    fix: (knowledge ?? 0) > 0 ? undefined : "Add a page of product facts.",
+    href: (knowledge ?? 0) > 0 ? undefined : "/app/knowledge",
+  });
+
+  return { checkedAt: new Date().toISOString(), checks };
+}
+
+/** Does the provider still have the account this workspace is holding? */
+async function probeAccount(
+  ctx: WorkerContext,
+  providerAccountId: string | null,
+): Promise<Omit<Check, "key" | "stage">> {
+  if (!providerAccountId) {
+    return {
+      label: "The provider still has that account",
+      state: "waiting",
+      detail: "No provider account id stored yet, so there is nothing to ask about.",
+    };
+  }
+  try {
+    const health = await ctx.linkedin.getAccountHealth(providerAccountId);
+    if (health === "ok") {
+      return {
+        label: "The provider still has that account",
+        state: "ok",
+        detail: "Asked the provider directly and it answered that the account is healthy.",
+      };
+    }
+    return {
+      label: "The provider still has that account",
+      state: health === "warning" ? "waiting" : "blocked",
+      detail: `The provider reports this account as "${health}".`,
+      fix: health === "reauth_required" ? "Reconnect LinkedIn." : "Wait for the restriction to lift.",
+      href: health === "reauth_required" ? "/app/team" : undefined,
+    };
+  } catch (err) {
+    const gone = isAccountGone(err);
+    return {
+      label: "The provider still has that account",
+      state: "blocked",
+      detail: gone
+        ? "The provider has no such account. The connection here is stale — this is what makes every campaign fail with nothing to show for it."
+        : `Could not ask the provider: ${(err as { message?: string })?.message ?? "unknown error"}`,
+      fix: gone ? "Reconnect LinkedIn." : undefined,
+      href: gone ? "/app/team" : undefined,
+    };
+  }
+}
+
+/**
+ * A real search, for one person, run now.
+ *
+ * The only check here that costs anything, and the only one that would have
+ * caught the two bugs that mattered: a route the subscription does not include,
+ * and filters sent as words where LinkedIn takes ids.
+ */
+async function probeSearch(
+  ctx: WorkerContext,
+  providerAccountId: string | null,
+  accountState: CheckState,
+): Promise<Omit<Check, "key" | "stage">> {
+  if (!providerAccountId || accountState === "blocked") {
+    return {
+      label: "Prospect search works",
+      state: "waiting",
+      detail: "Not attempted: the account has to be connected and live first.",
+    };
+  }
+  try {
+    const page = await ctx.linkedin.searchProspects({
+      accountId: providerAccountId,
+      query: { titles: ["Founder"], geographies: ["United States"] },
+      limit: 1,
+      tier: "classic",
+    });
+    const notes = page.filterNotes ?? [];
+    return {
+      label: "Prospect search works",
+      state: page.items.length > 0 ? "ok" : "waiting",
+      detail:
+        page.items.length > 0
+          ? "A test search for one founder in the United States returned a result."
+          : "The search ran without error but matched nobody, which is unusual for so broad a query.",
+      fix: notes.length ? notes.join(" ") : undefined,
+    };
+  } catch (err) {
+    return {
+      label: "Prospect search works",
+      state: "blocked",
+      detail: `A test search was refused: ${(err as { message?: string })?.message ?? "unknown error"}`,
+      fix: isAccountGone(err) ? "Reconnect LinkedIn." : "The provider's own words are above — they name what to fix.",
+      href: isAccountGone(err) ? "/app/team" : undefined,
+    };
+  }
+}

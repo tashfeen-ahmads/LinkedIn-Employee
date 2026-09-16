@@ -15,6 +15,7 @@ import type { MiddlewareHandler } from "hono";
 import type { IntegrationKind } from "@le/db";
 import type { Queues } from "./queues.js";
 import type { WorkerContext } from "./context.js";
+import { runDiagnostics } from "./jobs/diagnostics.js";
 import { eraseProspect, exportWorkspace } from "./jobs/retention.js";
 import { inviteEmail } from "@le/email";
 import { trySend } from "./email.js";
@@ -155,6 +156,19 @@ export function createServer(ctx: WorkerContext, queues: Queues): Hono {
     }
     await queues.strategy.add("strategy", parsed.data);
     return c.json({ queued: true });
+  });
+
+  // Every precondition between signing up and a booked meeting, checked live.
+  // Read-only, and scoped to the caller's own workspace and account: it reports
+  // whether this rep's LinkedIn is reachable, never what other accounts the
+  // provider holds.
+  app.post("/jobs/diagnostics", async (c) => {
+    const parsed = LinkRequest.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "invalid request" }, 400);
+    if (!(await assertMembership(ctx.db, parsed.data.workspaceId, parsed.data.userId))) {
+      return c.json({ error: "not a member of that workspace" }, 403);
+    }
+    return c.json(await runDiagnostics(ctx, parsed.data));
   });
 
   app.post("/jobs/targeting", async (c) => {

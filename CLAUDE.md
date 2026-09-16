@@ -161,6 +161,17 @@ tests that were verified by deliberately breaking the code.
     makes "personalised" checkable rather than a matter of opinion — empty
     grounding is reported on the review screen, not hidden.
 
+16. **The system check never reports a stage as working because it could not
+    look.** `apps/worker/src/jobs/diagnostics.ts` walks every precondition from
+    onboarding to replies and renders on `/app/system`. Two of its checks call
+    the provider rather than reading a row — an account row saying `active` for
+    an id Unipile had dropped is what cost a week, and only asking catches it.
+    A stage it skips reports `waiting`, never `ok`: a check that passes because
+    it did not run sends someone to investigate the wrong stage, which is the
+    same disease as everything else on this list. It is read-only and scoped to
+    the caller's own workspace and account; it must never report what other
+    accounts the provider holds.
+
 ## Conventions
 
 - Agent output is validated against a zod schema before it touches the

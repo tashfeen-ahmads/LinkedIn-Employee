@@ -36,6 +36,7 @@ function navGroups(waiting: number): NavGroup[] {
         { href: "/app/reporting", label: "Reporting" },
         { href: "/app/usage", label: "Usage" },
         { href: "/app/team", label: "Team" },
+        { href: "/app/system", label: "System check" },
         { href: "/app/billing", label: "Billing" },
       ],
     },
