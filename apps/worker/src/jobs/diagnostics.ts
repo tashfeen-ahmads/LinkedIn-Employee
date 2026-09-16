@@ -188,6 +188,36 @@ export async function runDiagnostics(
   const searchCheck = await probeSearch(ctx, account?.provider_account_id ?? null, providerCheck.state);
   add({ ...searchCheck, stage: STAGES.targeting, key: "search" });
 
+  // A search that runs and finds nobody, at the widest setting this product
+  // will go to, is not an answer LinkedIn really gives — it means a field in
+  // the body is silently matching nothing. Working out which one by editing
+  // code and asking somebody to press a button is a round trip per guess, so
+  // every candidate is asked at once and the counts reported.
+  if (searchCheck.state === "waiting" && account?.provider_account_id) {
+    const probe = ctx.linkedin as { probeSearch?: (id: string) => Promise<Array<{ label: string; count: number | null; error?: string }>> };
+    if (typeof probe.probeSearch === "function") {
+      try {
+        const rows = await probe.probeSearch(account.provider_account_id);
+        const working = rows.filter((r) => (r.count ?? 0) > 0).map((r) => r.label);
+        add({
+          key: "search-probe",
+          stage: STAGES.targeting,
+          label: "Which search filters LinkedIn honours",
+          state: working.length > 0 ? "blocked" : "unknown",
+          detail: rows
+            .map((r) => `${r.label}: ${r.error ? `refused — ${r.error}` : `${r.count} result${r.count === 1 ? "" : "s"}`}`)
+            .join(" · "),
+          fix:
+            working.length > 0
+              ? `These forms return people: ${working.join(", ")}. The ones returning nothing are what is emptying your searches.`
+              : "Nothing returns a result, including a search with no filters at all — which points at the account or the subscription rather than the query.",
+        });
+      } catch (err) {
+        console.error("search probe failed", err);
+      }
+    }
+  }
+
   // ---- Campaigns --------------------------------------------------------
   const { data: campaigns } = await db
     .from("campaigns")

@@ -454,6 +454,68 @@ export class UnipileProvider implements LinkedInProvider {
   }
 
   /**
+   * Which parts of a classic search body LinkedIn actually honours.
+   *
+   * Built because the widest possible search — a keyword, two countries, second
+   * and third degree — returned zero people, which is not an answer the real
+   * LinkedIn gives. That means a field in the body is silently matching
+   * nothing, and working out which one by changing the code and asking someone
+   * to press a button is a round trip per guess.
+   *
+   * So every candidate is asked at once and the counts are reported. One click
+   * replaces six deployments. Each probe requests a single result: this is a
+   * diagnostic, and it runs against a seat somebody is paying for.
+   */
+  async probeSearch(accountId: string): Promise<Array<{ label: string; count: number | null; error?: string }>> {
+    const usId = (await this.lookupParameter(accountId, "LOCATION", "United States")).found?.id;
+
+    const candidates: Array<{ label: string; body: Record<string, unknown> }> = [
+      { label: "keywords only", body: { api: "classic", category: "people", keywords: "Founder" } },
+      {
+        label: "keywords + location",
+        body: { api: "classic", category: "people", keywords: "Founder", ...(usId ? { location: [usId] } : {}) },
+      },
+      {
+        label: "keywords as a boolean OR",
+        body: { api: "classic", category: "people", keywords: '"Founder" OR "Chief Executive Officer"' },
+      },
+      {
+        label: "keywords + network_distance",
+        body: { api: "classic", category: "people", keywords: "Founder", network_distance: [2, 3] },
+      },
+      {
+        label: "advanced_keywords.title",
+        body: { api: "classic", category: "people", advanced_keywords: { title: "Founder" } },
+      },
+      {
+        label: "no filters at all",
+        body: { api: "classic", category: "people" },
+      },
+    ];
+
+    const params = new URLSearchParams({ account_id: accountId, limit: "1" });
+    const out: Array<{ label: string; count: number | null; error?: string }> = [];
+    for (const candidate of candidates) {
+      try {
+        const res = await this.request<{ items?: unknown[] }>(`${ROUTES.search}?${params.toString()}`, {
+          method: "POST",
+          body: JSON.stringify(candidate.body),
+        });
+        out.push({ label: candidate.label, count: (res.items ?? []).length });
+      } catch (err) {
+        // A refusal is as informative as a count: a rejected field names
+        // itself, where one that is quietly ignored does not.
+        out.push({
+          label: candidate.label,
+          count: null,
+          error: (err as { message?: string })?.message ?? "unknown",
+        });
+      }
+    }
+    return out;
+  }
+
+  /**
    * Every account Unipile currently holds for this deployment.
    *
    * The hosted flow tells us an account connected by calling `notify_url`, and
