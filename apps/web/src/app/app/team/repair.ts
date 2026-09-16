@@ -50,12 +50,19 @@ export function describeRepair(result: WorkerResult<RefreshResult>): RepairNotic
 
   const found = data?.found ?? 0;
   if (found > 0 && (data?.mine ?? 0) === 0) {
+    // The shape, not the value. "an id that does not match" and "a person's
+    // name" are the two answers here and they mean completely different things
+    // -- a name means the account was made in the provider's own dashboard and
+    // carries no reference to anybody -- but printing the value itself would
+    // put one workspace's labels in another's browser.
+    const shapes = data?.referenceShape ?? [];
+    const labelled = shapes.length ? ` They are labelled: ${shapes.join(", ")}.` : "";
     return {
       tone: "danger",
       title: `LinkedIn's provider holds ${found} account${found === 1 ? "" : "s"}, and none of them is labelled as yours.`,
       body:
-        "That is what a connection made inside the provider's own dashboard looks like from here: it works perfectly on their side and belongs to nobody on ours. We cannot attach an unlabelled account to you — an account labelled with nobody could belong to anybody.",
-      fix: "Press Connect LinkedIn below and sign in through this flow once. It attaches your name to the account, and you can delete the stray one in the provider afterwards.",
+        `That is what a connection made inside the provider's own dashboard looks like from here: it works perfectly on their side and belongs to nobody on ours.${labelled} We cannot attach an unlabelled account to you — an account labelled with nobody could belong to anybody.`,
+      fix: "Press Connect LinkedIn below and sign in through this flow once. That is what writes your name onto the account; afterwards you can delete the stray one in the provider.",
     };
   }
   if (data?.lost || found === 0) {

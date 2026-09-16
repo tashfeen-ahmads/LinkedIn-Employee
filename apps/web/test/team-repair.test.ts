@@ -35,6 +35,19 @@ describe("describeRepair", () => {
     expect(notice?.fix).toMatch(/connect linkedin/i);
   });
 
+  it("says how the provider's accounts are labelled, which is the whole diagnosis", () => {
+    // "a uuid that does not match" and "a person's name" are different
+    // problems. A name means the account was created in the provider's own
+    // dashboard and carries no reference to anybody here, which is the case
+    // that kept a real deployment stuck for two days.
+    const notice = describeRepair({
+      ok: true,
+      data: { found: 1, mine: 0, referenceShape: ["text with spaces"] },
+    });
+
+    expect(notice?.body).toMatch(/labelled: text with spaces/);
+  });
+
   it("does not offer to attach an unlabelled account", () => {
     // An account labelled with nobody could belong to anybody. Attaching it to
     // whoever asks is how one company's campaign goes out from another
