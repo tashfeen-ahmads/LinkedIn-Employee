@@ -189,16 +189,33 @@ export class UnipileProvider implements LinkedInProvider {
 
     const resolved = await this.resolveFilters(input.accountId, input.query);
     const { body, droppedFilters } = toUnipileSearchBody(input.query, tier, resolved);
-    const res = await this.request<{ items?: UnipileRawProfile[]; cursor?: string | null }>(
-      `${ROUTES.search}?${params.toString()}`,
-      { method: "POST", body: JSON.stringify(body) },
-    );
-    return {
-      items: (res.items ?? []).map(toProspectCandidate),
-      cursor: res.cursor ?? null,
-      droppedFilters,
-      filterNotes: resolved.notes,
-    };
+    const notes = [...resolved.notes];
+
+    // Every constraint at once is an AND, and a customer profile is a
+    // description rather than a query: titles AND keywords AND industry AND
+    // location is a conjunction almost nobody on LinkedIn satisfies. The first
+    // live campaign asked for eight titles, five keywords, three industries and
+    // two countries and matched zero people, which read on screen as "your
+    // customer profile is wrong" when the profile was fine and the query was
+    // unsatisfiable.
+    //
+    // So a search that finds nobody is widened and tried again, in an order
+    // that gives up the weakest signal first. What was given up is named:
+    // a list broader than the one that was approved is fine, and a reviewer
+    // being told it is the one they approved is not.
+    for (const step of relaxations(input.query, tier, resolved, body)) {
+      const res = await this.request<{ items?: UnipileRawProfile[]; cursor?: string | null }>(
+        `${ROUTES.search}?${params.toString()}`,
+        { method: "POST", body: JSON.stringify(step.body) },
+      );
+      const items = (res.items ?? []).map(toProspectCandidate);
+      if (items.length > 0 || step.last) {
+        if (step.note) notes.push(step.note);
+        return { items, cursor: res.cursor ?? null, droppedFilters, filterNotes: notes };
+      }
+    }
+
+    return { items: [], cursor: null, droppedFilters, filterNotes: notes };
   }
 
   /**
@@ -632,6 +649,69 @@ function toUnipileSearchBody(
     },
     droppedFilters,
   };
+}
+
+/**
+ * The same search, asked less and less precisely.
+ *
+ * Ordered by what a list can most afford to lose. Free-text keywords go first:
+ * they are the loosest thing in a customer profile and the likeliest to exclude
+ * somebody who is a perfect fit but does not use that word. The title filter
+ * becomes ordinary keywords next, because classic search matches it against one
+ * field and a person whose title is "Chapter Director" is missed by a filter
+ * asking for "Chapter President". Industry goes last of the real filters, since
+ * LinkedIn's taxonomy rarely matches how a business describes its own market.
+ *
+ * Location is never given up. A campaign that quietly starts messaging another
+ * continent is worse than one that finds nobody.
+ */
+function relaxations(
+  query: SearchQuery,
+  tier: SearchTier,
+  resolved: ResolvedFilters,
+  full: Record<string, unknown>,
+): Array<{ body: Record<string, unknown>; note?: string; last?: boolean }> {
+  // Sales Navigator expresses the whole profile properly, so an empty result
+  // there means an empty result, not a query we mangled.
+  if (tier === "sales_navigator") return [{ body: full, last: true }];
+
+  const steps: Array<{ body: Record<string, unknown>; note?: string; last?: boolean }> = [
+    { body: full },
+  ];
+
+  const hasKeywords = Boolean(full.keywords);
+  const hasTitle = Boolean(full.advanced_keywords);
+
+  if (hasKeywords && hasTitle) {
+    steps.push({
+      body: { ...full, keywords: undefined },
+      note: "Nobody matched every part of the profile at once, so the search was widened: the keywords were dropped and the titles kept.",
+    });
+  }
+
+  if (hasTitle) {
+    // Titles as ordinary keywords, which matches them anywhere on a profile
+    // rather than against the one title field.
+    steps.push({
+      body: { ...full, advanced_keywords: undefined, keywords: anyOf(query.titles ?? []) },
+      note: "Nobody matched the titles as written, so they were searched as keywords instead — this list is broader than the profile asked for.",
+    });
+  }
+
+  if (resolved.industries.length > 0) {
+    steps.push({
+      body: {
+        ...full,
+        advanced_keywords: undefined,
+        industry: undefined,
+        keywords: anyOf([...(query.titles ?? []), ...(query.keywords ?? [])]),
+      },
+      note: "Nobody matched inside those industries, so the industry filter was dropped. Read the names carefully — this list is not filtered by industry at all.",
+    });
+  }
+
+  steps[steps.length - 1]!.last = true;
+  return steps;
 }
 
 function toProspectCandidate(raw: UnipileRawProfile): ProspectCandidate {

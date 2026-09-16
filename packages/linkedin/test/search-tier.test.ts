@@ -55,7 +55,10 @@ function providerWithCapturedBody(parameters: Record<string, { id: string; title
       return json({ items: hit ? [hit] : [] });
     }
     bodies.push(JSON.parse(String(init?.body)));
-    return json({ items: [], cursor: null });
+    // One result, so the widening ladder never starts: these tests are about
+    // what the first request looks like, and an empty answer would send the
+    // provider off asking three more questions.
+    return json({ items: [{ provider_id: "p1", public_identifier: "jane" }], cursor: null });
   }) as typeof fetch;
 
   const provider = new UnipileProvider({ dsn: "https://api.test", accessToken: "t", fetchImpl });
@@ -177,7 +180,7 @@ describe("searchProspects tier", () => {
         return new Response(JSON.stringify({ title: "Account not found" }), { status: 404 });
       }
       void init;
-      return json({ items: [], cursor: null });
+      return json({ items: [{ provider_id: "p1", public_identifier: "jane" }], cursor: null });
     }) as typeof fetch;
     const provider = new UnipileProvider({ dsn: "https://api.test", accessToken: "t", fetchImpl });
 
@@ -246,5 +249,86 @@ describe("searchProspects tier", () => {
     // campaign would train people to ignore the one that matters.
     expect(page.droppedFilters).toEqual([]);
     expect(page.filterNotes).toEqual([]);
+  });
+});
+
+/**
+ * A profile that matches nobody because it was asked as one conjunction.
+ *
+ * Titles AND keywords AND industries AND countries is a query almost nobody on
+ * LinkedIn satisfies. The first live campaign asked for eight titles, five
+ * keywords, three industries and two countries and matched zero people — which
+ * read on screen as "your customer profile is wrong" when the profile was fine
+ * and the query was unsatisfiable.
+ */
+function providerWithResults(pages: Array<Array<Record<string, unknown>>>) {
+  const bodies: Record<string, unknown>[] = [];
+  let call = 0;
+  const fetchImpl = (async (url: string | URL | Request, init?: RequestInit) => {
+    if (String(url).includes("/search/parameters")) {
+      const asked = new URL(String(url)).searchParams.get("keywords") ?? "";
+      return json({ items: [{ id: `id_${asked}`, title: asked }] });
+    }
+    bodies.push(JSON.parse(String(init?.body)));
+    return json({ items: pages[call++] ?? [], cursor: null });
+  }) as typeof fetch;
+  const provider = new UnipileProvider({ dsn: "https://api.test", accessToken: "t", fetchImpl });
+  return { provider, bodies };
+}
+
+const person = { provider_id: "p1", public_identifier: "jane", first_name: "Jane", last_name: "Doe" };
+
+describe("a search that finds nobody", () => {
+  it("widens instead of giving up, and says what it gave up", async () => {
+    // Empty, empty, then results once the keywords are relaxed.
+    const { provider, bodies } = providerWithResults([[], [], [person]]);
+
+    const page = await provider.searchProspects({ accountId: "a1", query: QUERY, tier: "classic" });
+
+    expect(page.items).toHaveLength(1);
+    expect(bodies.length).toBeGreaterThan(1);
+    // A broader list is fine. A reviewer being told it is the one they
+    // approved is not.
+    expect(page.filterNotes?.some((n) => /widened|broader/i.test(n))).toBe(true);
+  });
+
+  it("does not widen when the first search already found people", async () => {
+    const { provider, bodies } = providerWithResults([[person]]);
+
+    const page = await provider.searchProspects({ accountId: "a1", query: QUERY, tier: "classic" });
+
+    expect(page.items).toHaveLength(1);
+    expect(bodies).toHaveLength(1);
+    expect(page.filterNotes?.some((n) => /widened|broader/i.test(n))).toBe(false);
+  });
+
+  it("never gives up the location, however wide it has to go", async () => {
+    // A campaign that quietly starts messaging another continent is worse than
+    // one that finds nobody.
+    const { provider, bodies } = providerWithResults([[], [], [], []]);
+
+    await provider.searchProspects({ accountId: "a1", query: QUERY, tier: "classic" });
+
+    for (const body of bodies) {
+      expect(body.location).toBeTruthy();
+    }
+  });
+
+  it("returns an honest empty list when even the widest search finds nobody", async () => {
+    const { provider } = providerWithResults([[], [], [], []]);
+
+    const page = await provider.searchProspects({ accountId: "a1", query: QUERY, tier: "classic" });
+
+    expect(page.items).toEqual([]);
+  });
+
+  it("does not widen a Sales Navigator search", async () => {
+    // That tier expresses the whole profile properly, so empty means empty
+    // rather than a query we mangled.
+    const { provider, bodies } = providerWithResults([[], [person]]);
+
+    await provider.searchProspects({ accountId: "a1", query: QUERY, tier: "sales_navigator" });
+
+    expect(bodies).toHaveLength(1);
   });
 });
