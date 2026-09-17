@@ -161,8 +161,11 @@ export async function buildCampaign(
       input.extraGuidance ? `\nAdditional instruction from the rep:\n${input.extraGuidance}` : "",
       "\nStop conditions should cover at minimum: prospect replies, prospect opts out, meeting booked.",
     ].join(""),
-    effort: "high",
-    maxTokens: 8000,
+    // Writing, not reasoning. High effort on a copywriting task spent the whole
+    // budget thinking and returned nothing -- a live campaign died on exactly
+    // that -- and the extra thinking was never what made the copy good.
+    effort: "medium",
+    maxTokens: 16000,
   });
 }
 

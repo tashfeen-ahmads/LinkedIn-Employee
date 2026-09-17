@@ -40,6 +40,18 @@ export interface LlmRequest {
   effort?: Effort;
 }
 
+/**
+ * Why a response came back with nothing in it, when the provider says.
+ *
+ * A reasoning model spends its thinking against the same budget as its answer,
+ * so a generous-looking `maxTokens` and a high effort setting together produce
+ * a perfectly successful call that contains no output at all. Without this the
+ * caller sees "no parsable output" and cannot tell a truncated answer from a
+ * model that ignored the schema -- one needs a bigger budget, the other needs a
+ * different prompt.
+ */
+export type IncompleteReason = "max_tokens" | "other";
+
 export interface LlmUsageCounts {
   /**
    * Tokens charged at the full input rate. Cache reads are NOT included here —
@@ -56,6 +68,8 @@ export interface LlmResponse {
   parsed: unknown;
   /** The refusal category when the model declined, otherwise null. */
   refusal: string | null;
+  /** Set when the provider stopped before finishing. See IncompleteReason. */
+  incomplete: IncompleteReason | null;
   usage: LlmUsageCounts;
 }
 
@@ -118,6 +132,10 @@ export class OpenAiClient implements LlmClient {
 
     return {
       parsed: response.output_parsed ?? null,
+      incomplete: toIncomplete(
+        (response as { status?: string }).status,
+        (response as { incomplete_details?: { reason?: string } }).incomplete_details?.reason,
+      ),
       refusal: findRefusal(response),
       usage: {
         // OpenAI reports cached tokens as a subset of input_tokens; Anthropic
@@ -131,6 +149,12 @@ export class OpenAiClient implements LlmClient {
       },
     };
   }
+}
+
+/** OpenAI reports truncation as an incomplete status with a reason beside it. */
+function toIncomplete(status: string | undefined, reason: string | undefined): IncompleteReason | null {
+  if (status !== "incomplete") return null;
+  return reason === "max_output_tokens" ? "max_tokens" : "other";
 }
 
 /** OpenAI reports a refusal as a content part, not a stop reason. */
@@ -186,6 +210,7 @@ export class AnthropicClient implements LlmClient {
 
     return {
       parsed: response.parsed_output ?? null,
+      incomplete: response.stop_reason === "max_tokens" ? "max_tokens" : null,
       refusal:
         response.stop_reason === "refusal" ? (response.stop_details?.category ?? "unspecified") : null,
       usage: {

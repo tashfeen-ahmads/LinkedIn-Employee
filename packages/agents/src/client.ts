@@ -48,6 +48,46 @@ export async function callStructured<T extends z.ZodTypeAny>(
   ctx: AgentContext,
   call: StructuredCall<T>,
 ): Promise<z.infer<T>> {
+  try {
+    return await attempt(ctx, call);
+  } catch (error) {
+    // A reasoning model spends its thinking against the same budget as its
+    // answer, so a high effort setting and a generous-looking maxTokens can
+    // produce a wholly successful call containing nothing at all. That is a
+    // budget we set wrong, not a model that misbehaved, and it is fixable
+    // without anybody being told -- once.
+    //
+    // Retried with the effort lowered rather than only the budget raised:
+    // doubling the budget for the same thinking usually buys more thinking.
+    // The task here is writing, and writing does not need the highest setting.
+    if (!(error instanceof TruncatedOutputError)) throw error;
+    console.warn(`${call.agent}: ran out of budget while thinking; retrying with more room`);
+    return attempt(ctx, {
+      ...call,
+      maxTokens: (call.maxTokens ?? 16000) * 2,
+      effort: call.effort === "low" ? "low" : "medium",
+    });
+  }
+}
+
+/**
+ * The output ran out of room before the answer began.
+ *
+ * Separate from every other empty response because it has a different fix: a
+ * model ignoring its schema needs a different prompt, a model that thought
+ * until its budget was gone needs a bigger one.
+ */
+export class TruncatedOutputError extends Error {
+  constructor(readonly agent: string) {
+    super(`${agent}: the model used its whole token budget before producing an answer`);
+    this.name = "TruncatedOutputError";
+  }
+}
+
+async function attempt<T extends z.ZodTypeAny>(
+  ctx: AgentContext,
+  call: StructuredCall<T>,
+): Promise<z.infer<T>> {
   const startedAt = Date.now();
   // A refusal and an unparsable response are both recorded by the success path
   // above before they throw. Without this flag the catch records a second,
@@ -78,6 +118,7 @@ export async function callStructured<T extends z.ZodTypeAny>(
       throw new AgentRefusalError(call.agent, response.refusal);
     }
     if (response.parsed == null) {
+      if (response.incomplete === "max_tokens") throw new TruncatedOutputError(call.agent);
       throw new Error(`${call.agent}: model returned no parsable output`);
     }
     return response.parsed as z.infer<T>;

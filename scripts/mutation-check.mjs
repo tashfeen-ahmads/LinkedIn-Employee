@@ -912,6 +912,22 @@ const MUTATIONS = [
     pkg: "@le/agents",
   },
   {
+    id: "llm/a-truncated-answer-is-retried-with-room",
+    rule: "A model that spent its budget thinking is retried with more room and less effort; a live campaign died because that read as an unparsable answer",
+    file: "packages/agents/src/client.ts",
+    from: '      if (response.incomplete === "max_tokens") throw new TruncatedOutputError(call.agent);',
+    to: "      // mutated: reports it as unparsable",
+    pkg: "@le/agents",
+  },
+  {
+    id: "llm/only-truncation-is-retried",
+    rule: "A refusal or a model ignoring its schema is never retried; both need a different prompt, not a bigger budget",
+    file: "packages/agents/src/client.ts",
+    from: "    if (!(error instanceof TruncatedOutputError)) throw error;",
+    to: "    if (false) throw error;",
+    pkg: "@le/agents",
+  },
+  {
     id: "llm/refusal-is-not-an-answer",
     rule: "A refusal is surfaced, never returned as prose a prospect could receive",
     file: "packages/agents/src/llm.ts",
