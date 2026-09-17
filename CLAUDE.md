@@ -318,14 +318,20 @@ tests that were verified by deliberately breaking the code.
 
     So `queueReachable` pings with a **deadline**, and that deadline is the
     whole mechanism: without it the check waits exactly as long as the client
-    does, and a health check that hangs tells you nothing. A worker that cannot
-    reach its queue answers 503 and gets restarted rather than trusted, and
-    `/jobs/*` refuses work it cannot store instead of answering "queued" — an
-    accepted job that was never queued is the worse lie, because it reaches the
-    person as a button that did nothing, which is also what a correctly paced
-    campaign looks like. `loadEnv` also refuses to boot a production worker
+    does, and a health check that hangs tells you nothing.
+
+    The queue's state goes in `/health`'s **body, never its status code**. The
+    platform reads this route to decide whether a deployment may go live, so
+    answering 503 on an unreachable queue makes the build that would explain
+    the problem the one build that can never be promoted — the deployment keeps
+    serving older code that says nothing. A restart does not reach a Redis that
+    is not there; ioredis reconnects on its own. `/jobs/*` does refuse outright,
+    because that is a different question: not "may I run" but "may I promise to
+    do this piece of work", and an accepted job that was never queued reaches
+    the person as a button that did nothing — which is also what a correctly
+    paced campaign looks like. `loadEnv` refuses to boot a production worker
     whose `REDIS_URL` is localhost, which is what an unset variable falls back
-    to, and was the shape this took.
+    to.
 
 23. **The worker reports itself, and not through the queue.** Everything this
     deployment says about its own health used to travel through the thing most

@@ -147,24 +147,30 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
   const app = new Hono();
 
   /**
-   * Render decides whether this deployment is healthy from this one route, and
-   * it used to answer `{ ok: true }` without looking at anything.
+   * Whether this process is serving, and what it can see from here.
    *
-   * So the afternoon this product lost went like this: the process was up, the
-   * health check was green, Render said Live, the HTTP API answered — and every
-   * job queued since the morning was sitting unconsumed, because the queue was
-   * unreachable and a client that retries for ever reports that as nothing at
-   * all. A campaign launched into it looked exactly like a campaign pacing
-   * itself. The one check whose job was to notice was the one thing in the
-   * building not looking.
+   * It used to answer `{ ok: true }` without looking at anything, which is how
+   * an afternoon went: the process up, the platform reporting the service Live,
+   * the HTTP API answering every request — and every job queued since the
+   * morning unconsumed, because the queue was unreachable and a client that
+   * retries for ever reports that as nothing at all.
    *
-   * A worker that cannot reach its queue cannot do the thing it exists for, so
-   * it says so and answers 503. Better to be restarted than to be trusted.
+   * The queue's state is reported in the body and **not** in the status code,
+   * which is a correction of the obvious fix. The platform reads this route to
+   * decide whether a deployment may go live: answering 503 on an unreachable
+   * queue means the build that would explain the problem is the one build that
+   * can never be promoted, and the deployment keeps serving the older code that
+   * says nothing. A restart does not reach a Redis that is not there anyway —
+   * ioredis reconnects on its own — so the 503 buys nothing and costs the
+   * diagnosis. Being wrong about this is worse than being quiet about it.
+   *
+   * `/jobs/*` still refuses outright, because that is a different question:
+   * not "may I run" but "may I promise to do this piece of work".
    */
   app.get("/health", async (c) => {
     if (!connection) return c.json({ ok: true, queue: "unchecked" });
     const queue = await queueReachable(connection);
-    return c.json({ ok: queue, queue: queue ? "reachable" : "unreachable" }, queue ? 200 : 503);
+    return c.json({ ok: true, queue: queue ? "reachable" : "unreachable" });
   });
 
   /**

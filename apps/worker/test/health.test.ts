@@ -74,20 +74,26 @@ describe("/health", () => {
     expect(await res.json()).toMatchObject({ ok: true, queue: "reachable" });
   });
 
-  it("is unhealthy when the queue does not answer at all", async () => {
+  it("reports an unreachable queue in the body, and still serves", async () => {
     // The real failure mode. A retrying client does not refuse the command, it
     // keeps it — so a check that waits for an answer waits for ever, and a
     // health check that hangs tells you nothing.
     const { app } = makeApp(hanging);
     const res = await app.request("/health");
-    expect(res.status).toBe(503);
-    expect(await res.json()).toMatchObject({ ok: false, queue: "unreachable" });
+    expect(await res.json()).toMatchObject({ queue: "unreachable" });
   }, 10_000);
 
-  it("is unhealthy when the queue refuses the connection", async () => {
-    const { app } = makeApp(refusing);
-    expect((await app.request("/health")).status).toBe(503);
-  });
+  it("does not fail the platform's health check over the queue", async () => {
+    // The correction that matters. The platform reads this to decide whether a
+    // deployment may go live: 503 here means the build that would explain the
+    // problem is the one build that can never be promoted, and the deployment
+    // keeps serving older code that says nothing at all. A restart does not
+    // reach a Redis that is not there.
+    for (const redis of [hanging, refusing]) {
+      const { app } = makeApp(redis);
+      expect((await app.request("/health")).status).toBe(200);
+    }
+  }, 10_000);
 });
 
 describe("accepting work", () => {

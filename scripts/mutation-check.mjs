@@ -461,8 +461,8 @@ const MUTATIONS = [
     id: "health/the-health-check-looks-at-the-queue",
     rule: "A worker that cannot reach its queue reports itself unhealthy, rather than Live with nothing being consumed",
     file: "apps/worker/src/server.ts",
-    from: "    const queue = await queueReachable(connection);",
-    to: "    const queue = true;",
+    from: "    return c.json({ ok: true, queue: queue ? \"reachable\" : \"unreachable\" });",
+    to: "    return c.json({ ok: true, queue: \"reachable\" });",
     pkg: "@le/worker",
   },
   {
