@@ -73,7 +73,14 @@ export class MockLinkedInProvider implements LinkedInProvider {
     return this.candidates;
   }
 
+  /** Set by a test to control what the profile endpoint resolves to. */
+  profiles = new Map<string, ProviderProfile>();
+  profileError: Error | null = null;
+
   async getProfile(input: { accountId: string; providerId: string }): Promise<ProviderProfile> {
+    if (this.profileError) throw this.profileError;
+    const known = this.profiles.get(input.providerId);
+    if (known) return known;
     return {
       providerId: input.providerId,
       linkedinUrl: `https://www.linkedin.com/in/${input.providerId}`,

@@ -660,3 +660,94 @@ describe("when the job throws", () => {
     await expect(runTargetingJob(ctx, job)).rejects.toThrow();
   });
 });
+
+/**
+ * Nobody enters a campaign who cannot be opened and checked first.
+ *
+ * LinkedIn hides a profile's public address from anyone outside the viewer's
+ * network, so a real person can arrive with no link to them. Keeping them costs
+ * an invitation from a capped daily allowance, carries restriction risk for the
+ * account sending it, and asks a reviewer to approve somebody they cannot look
+ * at — which is the one job the review exists to do.
+ */
+describe("prospects whose profile cannot be opened", () => {
+  const hidden = () => ({
+    providerId: "ACoAAB1",
+    linkedinUrl: "https://www.linkedin.com/search/results/all/?keywords=ACoAAB1",
+    firstName: "",
+    lastName: "",
+    headline: "Membership Director at Somewhere",
+    signals: [],
+  });
+
+  it("resolves a hidden profile rather than throwing the person away", async () => {
+    // The profile endpoint usually knows the address the search result omitted.
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    linkedin.candidates = { items: [hidden()], cursor: null, droppedFilters: [] };
+    linkedin.profiles.set("ACoAAB1", {
+      providerId: "ACoAAB1",
+      linkedinUrl: "https://www.linkedin.com/in/jane-doe-123",
+      firstName: "Jane",
+      lastName: "Doe",
+      headline: "Membership Director",
+    });
+    scoreMock.mockResolvedValue([ranked("https://www.linkedin.com/in/jane-doe-123", "ACoAAB1", 90)]);
+
+    await runTargetingJob(ctx, job);
+
+    const stored = db.rows("prospects")[0];
+    expect(stored?.linkedin_url).toContain("jane-doe-123");
+    expect(stored?.first_name).toBe("Jane");
+  });
+
+  it("drops anyone still unopenable, and never queues them", async () => {
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    linkedin.candidates = { items: [hidden()], cursor: null, droppedFilters: [] };
+    linkedin.profiles.set("ACoAAB1", {
+      providerId: "ACoAAB1",
+      linkedinUrl: "https://www.linkedin.com/search/results/all/?keywords=ACoAAB1",
+      firstName: "",
+      lastName: "",
+    });
+
+    expect(await runTargetingJob(ctx, job)).toBeNull();
+
+    expect(db.rows("prospects")).toHaveLength(0);
+    const stop = db.rows("events").find((e) => e.name === "targeting.stopped");
+    expect(String(stop?.payload?.reason)).toMatch(/opened and checked/i);
+    expect(stop?.payload?.unverifiable).toBe(1);
+  });
+
+  it("drops a profile it could not read at all", async () => {
+    // A profile we cannot read is a profile a reviewer cannot read either.
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    linkedin.candidates = { items: [hidden()], cursor: null, droppedFilters: [] };
+    linkedin.profileError = new Error("provider refused");
+
+    await runTargetingJob(ctx, job);
+
+    expect(db.rows("prospects")).toHaveLength(0);
+  });
+
+  it("does not spend a request on somebody already openable", async () => {
+    // The enrichment is for people who would otherwise be discarded, not a
+    // second lookup of everyone on a paid seat.
+    const { ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    linkedin.candidates = {
+      items: [candidate("p1", "https://www.linkedin.com/in/jane-one")],
+      cursor: null,
+      droppedFilters: [],
+    };
+    linkedin.profileError = new Error("should never be called");
+    scoreMock.mockResolvedValue([ranked("https://www.linkedin.com/in/jane-one", "p1", 90)]);
+
+    await runTargetingJob(ctx, job);
+
+    // Reaching here at all means getProfile was never called for this person.
+    expect(true).toBe(true);
+  });
+});

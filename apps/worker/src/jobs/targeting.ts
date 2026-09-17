@@ -1,8 +1,10 @@
 import { buildCampaign, personalizeInvites, scoreProspects } from "@le/agents";
+import type { ProspectCandidate } from "@le/shared";
 import {
   BusinessProfileSchema,
   CustomerProfileSchema,
   LINKEDIN_LIMITS,
+  isPublicProfileUrl,
   matchExclusion,
   normalizeLinkedInUrl,
 } from "@le/shared";
@@ -214,7 +216,33 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
     });
   }
 
-  const ranked = await scoreProspects(ctx.agentsFor(job.workspaceId), { profile, candidates: fresh });
+  // Nobody enters a campaign who cannot be opened and checked first.
+  //
+  // LinkedIn hides a profile's public address from anyone outside the viewer's
+  // network, so a real person can arrive here with no link to them. They are
+  // not fake — but an invitation is spent from a capped daily allowance, it
+  // carries restriction risk for the account sending it, and a reviewer who
+  // cannot open the profile cannot do the one job the review exists for. A
+  // list nobody can verify is not a list worth launching.
+  //
+  // Resolving is tried before dropping: the profile endpoint usually knows the
+  // public identifier the search result omitted, which turns a real person into
+  // a usable prospect rather than discarding them.
+  const { verified, unverifiable } = await verifyProfiles(
+    ctx,
+    account.provider_account_id,
+    fresh,
+  );
+
+  if (verified.length === 0) {
+    return giveUp(ctx, job, "Nobody found had a profile that can be opened and checked.", {
+      searchTier,
+      returnedByProvider: page.items.length,
+      unverifiable,
+    });
+  }
+
+  const ranked = await scoreProspects(ctx.agentsFor(job.workspaceId), { profile, candidates: verified });
   const shortlist = ranked.filter((r) => !r.disqualified && r.fitScore >= MIN_FIT_TO_QUEUE);
   if (shortlist.length === 0) {
     return giveUp(ctx, job, `Nobody scored above the minimum fit of ${MIN_FIT_TO_QUEUE}.`, {
@@ -410,4 +438,63 @@ async function probeProvider(
     // search just used.
     return { probeFailed: (err as { message?: string })?.message ?? "unknown" };
   }
+}
+
+/**
+ * How many profiles can be opened, and by whom.
+ *
+ * A search result carries a public identifier for people in or near the
+ * viewer's network and omits it for everyone else. The profile endpoint
+ * usually has it, so it is asked once per candidate that arrived without one —
+ * an extra request each, spent only on people who would otherwise be thrown
+ * away.
+ *
+ * Anyone still without a public address after that is dropped, not hidden. The
+ * cost of keeping them is an invitation from a capped daily allowance, aimed by
+ * a reviewer who could not open the profile to check who they were aiming at.
+ */
+async function verifyProfiles(
+  ctx: WorkerContext,
+  accountId: string,
+  candidates: ProspectCandidate[],
+): Promise<{ verified: ProspectCandidate[]; unverifiable: number }> {
+  const verified: ProspectCandidate[] = [];
+  let unverifiable = 0;
+
+  for (const candidate of candidates) {
+    if (isPublicProfileUrl(candidate.linkedinUrl, candidate.providerId)) {
+      verified.push(candidate);
+      continue;
+    }
+
+    try {
+      const profile = await ctx.linkedin.getProfile({ accountId, providerId: candidate.providerId });
+      if (isPublicProfileUrl(profile.linkedinUrl, candidate.providerId)) {
+        // Everything the profile knows and the search result did not. A page
+        // built from a search row alone is thin exactly where a reviewer looks.
+        verified.push({
+          ...candidate,
+          linkedinUrl: profile.linkedinUrl,
+          firstName: profile.firstName || candidate.firstName,
+          lastName: profile.lastName || candidate.lastName,
+          headline: profile.headline ?? candidate.headline,
+          title: profile.title ?? candidate.title,
+          company: profile.company ?? candidate.company,
+          location: profile.location ?? candidate.location,
+          about: profile.about ?? candidate.about,
+        });
+        continue;
+      }
+    } catch (err) {
+      // A profile we cannot read is a profile a reviewer cannot read either.
+      console.error("could not resolve a prospect profile", {
+        providerId: candidate.providerId,
+        reason: (err as { message?: string })?.message ?? "unknown",
+      });
+    }
+
+    unverifiable++;
+  }
+
+  return { verified, unverifiable };
 }

@@ -178,6 +178,22 @@ const MUTATIONS = [
     pkg: "@le/worker",
   },
   {
+    id: "targeting/only-verifiable-people-are-queued",
+    rule: "Nobody enters a campaign whose profile cannot be opened; an invitation is capped, carries restriction risk, and a reviewer must be able to see who they are approving",
+    file: "apps/worker/src/jobs/targeting.ts",
+    from: "    if (isPublicProfileUrl(candidate.linkedinUrl, candidate.providerId)) {\n      verified.push(candidate);\n      continue;\n    }",
+    to: "    verified.push(candidate);\n    continue;",
+    pkg: "@le/worker",
+  },
+  {
+    id: "targeting/a-hidden-profile-is-resolved-first",
+    rule: "A hidden profile is resolved through the provider before being discarded; the profile endpoint usually knows the address the search omitted",
+    file: "apps/worker/src/jobs/targeting.ts",
+    from: "      if (isPublicProfileUrl(profile.linkedinUrl, candidate.providerId)) {",
+    to: "      if (false) {",
+    pkg: "@le/worker",
+  },
+  {
     id: "targeting/queued-is-visible",
     rule: "Queueing the Targeting Agent is recorded, so a job that never reached the worker is not the same blank screen as one that died in it",
     file: "apps/worker/src/server.ts",

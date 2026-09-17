@@ -136,7 +136,28 @@ tests that were verified by deliberately breaking the code.
     term it renamed (its industry taxonomy changed in 2022) narrows the list
     without anyone asking. Several titles or keywords are joined with `OR`, not
     with spaces — space-joined they are an AND that matches nobody.
-13. **The shared exclusion list is checked immediately before every send**, not
+13. **Nobody enters a campaign whose profile cannot be opened and checked**
+    (`verifyProfiles` in `apps/worker/src/jobs/targeting.ts`). LinkedIn hides a
+    profile's public address from anyone outside the viewer's network, so a
+    real person can arrive from a search with no link to them — they are not
+    fake, and the screens must not call them that. But an invitation is spent
+    from a capped daily allowance, it carries restriction risk for the account
+    sending it, and a reviewer who cannot open the profile cannot do the one
+    job the review exists for. So they are dropped, and the count is reported
+    rather than quietly shrinking the list.
+
+    Resolving is tried before dropping: the profile endpoint usually knows the
+    public identifier the search result omitted, which turns a real person into
+    a usable prospect instead of discarding them. That lookup is spent only on
+    candidates that arrived without one — never as a second pass over everybody,
+    because every request comes off a seat somebody pays for.
+
+    `isPublicProfileUrl` is the one definition, and it takes the provider id on
+    purpose: `linkedin.com/in/<provider id>` is shaped exactly like a real
+    address and 404s every time. A rule that checked only the shape passed every
+    one of them, which is how a list of real people came to look invented twice.
+
+14. **The shared exclusion list is checked immediately before every send**, not
     only when a campaign is built (`matchExclusion` in
     `packages/shared/src/exclusions.ts`). A campaign launched this morning
     already has invitations queued against every name on it; an account added
@@ -144,7 +165,7 @@ tests that were verified by deliberately breaking the code.
     reason opt-outs are — "never contact this account" is a promise a colleague
     made to a customer.
 
-14. **The operator console can see that a workspace exists, not what it says.**
+15. **The operator console can see that a workspace exists, not what it says.**
     Platform admins (`platform_admins`, migration 0010) get additive SELECT
     policies on workspaces, members, accounts, campaigns, events and spend —
     never on `messages`, `conversations`, `reply_drafts` or `prospects`, which
@@ -159,7 +180,7 @@ tests that were verified by deliberately breaking the code.
     set up that way passes without proving anything — which is exactly what
     happened the first time.
 
-15. **A connection request is written for the person who receives it.**
+16. **A connection request is written for the person who receives it.**
     `personalizeInvites` writes one note per prospect from that prospect's own
     details, stored on `campaign_prospects` and read by a human before launch.
     Before it existed, everyone in a campaign got the campaign's template with
@@ -174,7 +195,7 @@ tests that were verified by deliberately breaking the code.
     makes "personalised" checkable rather than a matter of opinion — empty
     grounding is reported on the review screen, not hidden.
 
-16. **The system check never reports a stage as working because it could not
+17. **The system check never reports a stage as working because it could not
     look.** `apps/worker/src/jobs/diagnostics.ts` walks every precondition from
     onboarding to replies and renders on `/app/system`. Two of its checks call
     the provider rather than reading a row — an account row saying `active` for
@@ -185,7 +206,7 @@ tests that were verified by deliberately breaking the code.
     the caller's own workspace and account; it must never report what other
     accounts the provider holds.
 
-17. **The calendar this product owns knows only what we put in it.**
+18. **The calendar this product owns knows only what we put in it.**
     Google will not grant calendar scopes to an app that has not been through
     brand verification, and that needs a verified domain and a review measured
     in weeks — so requiring it made the last stage of the product impossible to
@@ -206,7 +227,7 @@ tests that were verified by deliberately breaking the code.
     same thing whether the token is expired, revoked or invented, or the page
     becomes a way to learn which tokens exist.
 
-18. **A calendar feed URL is typed by a user and fetched by the worker, which
+19. **A calendar feed URL is typed by a user and fetched by the worker, which
     is server-side request forgery unless it is stopped.** The worker holds the
     service-role key and answers its own internal API on localhost, so a feed
     pointed at `127.0.0.1:4000` or `169.254.169.254` reaches things no browser
