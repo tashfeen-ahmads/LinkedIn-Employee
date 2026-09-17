@@ -351,6 +351,30 @@ tests that were verified by deliberately breaking the code.
     shipped, and sending somebody to restart a healthy worker is its own
     wasted hour.
 
+24. **Once somebody has been contacted, they are never contacted again.** Not
+    "unless they replied", and not "unless it is a different campaign" — the
+    second message a stranger gets from the same company under a different
+    pretext is what makes the first look like a mail-merge. `last_contacted_at`
+    on `prospects` is the record, and the check is in
+    `apps/worker/src/jobs/linkedin-action.ts` immediately before the send, for
+    the same reason the exclusion list is: two campaigns built from the same
+    customer profile read `prospects` before either of them writes to it, so
+    both can queue the same person quite legitimately, and there is no earlier
+    moment at which the question has a settled answer. An invitation is a first
+    contact by definition, so any contact at all is already too much.
+
+    The rule stops a second conversation being opened; it never stops the first
+    one finishing. It applies to invitations only — read as "never message a
+    contacted person" it would silence every campaign the moment its invitation
+    was accepted, which is the one outcome the campaign exists for. A person
+    dropped this way is `closed` with a reason, because a name that quietly
+    goes missing from a list somebody reviewed is its own bug report.
+
+    `/app/prospects` is the history: who has been reached out to and when,
+    filterable, contacted-first. Ranked by fit alone, somebody messaged last
+    week sat wherever their score put them and looked exactly like somebody
+    nobody had ever written to.
+
 ## Conventions
 
 - Agent output is validated against a zod schema before it touches the

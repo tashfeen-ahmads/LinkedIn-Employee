@@ -522,6 +522,22 @@ const MUTATIONS = [
     pkg: "@le/worker",
   },
   {
+    id: "dedupe/nobody-is-contacted-twice",
+    rule: "Somebody another campaign has already contacted is never invited again, whether or not they replied",
+    file: "apps/worker/src/jobs/linkedin-action.ts",
+    from: '  if (job.kind === "invite" && prospect.last_contacted_at) {',
+    to: "  if (false) {",
+    pkg: "@le/worker",
+  },
+  {
+    id: "dedupe/a-campaign-still-finishes-its-own-conversation",
+    rule: "The rule stops a second conversation being opened, never the follow-ups of the first",
+    file: "apps/worker/src/jobs/linkedin-action.ts",
+    from: '  if (job.kind === "invite" && prospect.last_contacted_at) {',
+    to: "  if (prospect.last_contacted_at) {",
+    pkg: "@le/worker",
+  },
+  {
     id: "targeting/position-moves-on",
     rule: "A page that yielded nobody new is still a page the search has passed",
     file: "apps/worker/src/jobs/targeting.ts",

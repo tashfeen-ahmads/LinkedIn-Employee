@@ -534,6 +534,14 @@ form { display: flex; flex-direction: column; gap: var(--space-4); }
 .pill.warning  { background: var(--warning-soft);  color: var(--warning);  border-color: transparent; }
 .pill.danger   { background: var(--danger-soft);   color: var(--danger);   border-color: transparent; }
 
+/* A row of links that filter what is below them. Pills rather than a control
+   bar: the count belongs in the label, because "Contacted (0)" answers the
+   question without anybody having to click it. */
+.tabs { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.tabs a { text-decoration: none; }
+.tabs a:hover { border-color: var(--accent-border); color: var(--text); }
+.tabs a[aria-current="page"] { font-weight: 650; }
+
 /* ---------------------------------------------------------------- tables */
 
 .table-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-raised); }

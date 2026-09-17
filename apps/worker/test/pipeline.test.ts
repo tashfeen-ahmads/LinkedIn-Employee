@@ -293,6 +293,76 @@ describe("campaign pipeline", () => {
     expect(db.find("campaign_prospects", { id: CP })?.status).toBe("closed");
   });
 
+  /**
+   * The rule as the customer stated it: once we have reached out to a person,
+   * they are not added to any campaign again, whether or not they replied.
+   *
+   * Enforced here and not only when a list is built, because two campaigns
+   * built from the same customer profile read `prospects` before either of them
+   * writes to it — so both can queue the same person quite legitimately, and
+   * this is the first moment the question has a settled answer.
+   */
+  it("never invites somebody another campaign has already contacted", async () => {
+    const { db, ctx, linkedin } = harness();
+    db.find("prospects", { id: PROSPECT })!.last_contacted_at = "2026-09-01T09:00:00Z";
+
+    await runLinkedInAction(ctx, { kind: "invite", workspaceId: WORKSPACE, campaignProspectId: CP });
+
+    expect(linkedin.sentInvitations).toHaveLength(0);
+    const cp = db.find("campaign_prospects", { id: CP })!;
+    expect(cp.status).toBe("closed");
+    // Readable on the campaign screen. A name that quietly goes missing from a
+    // list somebody reviewed is its own bug report.
+    expect(cp.status_reason).toMatch(/already contacted on 2026-09-01/);
+  });
+
+  it("does not care whether they replied to the first campaign", async () => {
+    // "No matter if they respond to first one campaign or not" — a reply is a
+    // conversation somebody is already having, which is a stronger reason not
+    // to open a second one under a different pretext, not a weaker one.
+    const { db, ctx, linkedin } = harness();
+    const prospect = db.find("prospects", { id: PROSPECT })!;
+    prospect.last_contacted_at = "2026-09-01T09:00:00Z";
+    db.seed("conversations", [
+      { id: "conv-1", workspace_id: WORKSPACE, prospect_id: PROSPECT, status: "replied" },
+    ]);
+
+    await runLinkedInAction(ctx, { kind: "invite", workspaceId: WORKSPACE, campaignProspectId: CP });
+
+    expect(linkedin.sentInvitations).toHaveLength(0);
+  });
+
+  it("still sends the follow-ups of the campaign that did contact them", async () => {
+    // The rule is about opening a second conversation, not about finishing the
+    // first. Reading it as "never message a contacted person" would silence
+    // every campaign the moment its invitation was accepted.
+    const { db, ctx, linkedin } = harness();
+    const prospect = db.find("prospects", { id: PROSPECT })!;
+    prospect.last_contacted_at = "2026-09-01T09:00:00Z";
+    const cp = db.find("campaign_prospects", { id: CP })!;
+    cp.status = "accepted";
+    cp.last_step_sent = 0;
+
+    await runLinkedInAction(ctx, {
+      kind: "follow_up",
+      workspaceId: WORKSPACE,
+      campaignProspectId: CP,
+      stepNumber: 1,
+    });
+
+    expect(linkedin.sentMessages).toHaveLength(1);
+  });
+
+  it("invites somebody nobody has contacted", async () => {
+    // The guard must not be a blanket refusal that happens to pass the tests
+    // above: a fresh prospect is the entire normal case.
+    const { ctx, linkedin } = harness();
+
+    await runLinkedInAction(ctx, { kind: "invite", workspaceId: WORKSPACE, campaignProspectId: CP });
+
+    expect(linkedin.sentInvitations).toHaveLength(1);
+  });
+
   it("never contacts an account added to the shared exclusion list after launch", async () => {
     // The scenario the list exists for: a colleague closes Northwind at 10am
     // and the campaign already has this invitation queued.

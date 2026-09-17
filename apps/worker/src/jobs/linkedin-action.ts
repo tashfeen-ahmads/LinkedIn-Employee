@@ -13,6 +13,14 @@ import type { LinkedInActionJob } from "../queues.js";
  * through here so the limiter, the health check and the audit log cannot be
  * bypassed by adding a new caller.
  */
+/**
+ * Said on the campaign screen, so a person dropped from a list is a decision
+ * somebody can read rather than a name that quietly went missing.
+ */
+export function alreadyContactedReason(lastContactedAt: string): string {
+  return `already contacted on ${lastContactedAt.slice(0, 10)} — nobody is contacted twice, in any campaign`;
+}
+
 export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJob): Promise<void> {
   if (job.kind === "reply") return sendApprovedReply(ctx, job);
 
@@ -33,7 +41,7 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
 
   const { data: prospect } = await db
     .from("prospects")
-    .select("id, provider_id, linkedin_url, first_name, company, do_not_contact")
+    .select("id, provider_id, linkedin_url, first_name, company, do_not_contact, last_contacted_at")
     .eq("id", cp.prospect_id)
     .single();
   if (!prospect) return;
@@ -55,6 +63,26 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
   });
   if (excluded) {
     await closeProspect(ctx, cp.id, exclusionReason(excluded));
+    return;
+  }
+
+  // Once we have reached out to somebody, we do not reach out to them again.
+  //
+  // Not "unless they replied", and not "unless it was a different campaign".
+  // The second message a stranger gets from the same company under a different
+  // pretext is the one that makes the first look like a mail-merge, and the
+  // Prospects page has promised for months that nobody here can be contacted
+  // twice — a promise nothing enforced at the moment it mattered.
+  //
+  // Checked immediately before sending rather than only when a list is built,
+  // for the same reason the exclusion list is. Two campaigns built from the
+  // same customer profile read `prospects` before either of them writes to it,
+  // so both can queue the same person quite legitimately; there is no moment
+  // earlier than this one at which the question has a settled answer. An
+  // invitation is a first contact by definition, so any contact at all is
+  // already too much.
+  if (job.kind === "invite" && prospect.last_contacted_at) {
+    await closeProspect(ctx, cp.id, alreadyContactedReason(prospect.last_contacted_at));
     return;
   }
 

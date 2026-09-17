@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase-server";
 import { callWorker, errorQuery } from "@/lib/worker";
 import { isPublicProfileUrl } from "@le/shared";
 import { redirect } from "next/navigation";
-import { PageNotice, type NoticeParams } from "@/components/page-notice";
+import { PageNotice } from "@/components/page-notice";
 
 /**
  * Erasure on request. A prospect who asks to be forgotten is a request the
@@ -52,21 +52,54 @@ const SIGNAL_LABELS: Record<string, string> = {
 };
 
 /** The lead list, with the evidence behind every score visible on the row. */
-export default async function ProspectsPage({ searchParams }: { searchParams: NoticeParams }) {
+export default async function ProspectsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string; notice?: string; show?: string }>;
+}) {
   const params = await searchParams;
   const session = await requireSession();
   const supabase = await createClient();
 
-  const { data: prospects } = await supabase
+  // Contacted people first, and by when. "There is no backup of the data — who
+  // I have reached out to, who I know" was the report, and it was accurate: the
+  // list was ranked by fit score, so somebody messaged last week sat wherever
+  // their score put them, indistinguishable at a glance from somebody nobody
+  // has ever written to.
+  const showing = params.show === "contacted" ? "contacted" : params.show === "new" ? "new" : "all";
+
+  let query = supabase
     .from("prospects")
     .select(
       "id, provider_id, first_name, last_name, headline, title, company, location, linkedin_url, fit_score, fit_reasons, intent_score, signals, do_not_contact, last_contacted_at",
     )
-    .eq("workspace_id", session.workspaceId)
-    .order("fit_score", { ascending: false, nullsFirst: false })
+    .eq("workspace_id", session.workspaceId);
+
+  if (showing === "contacted") query = query.not("last_contacted_at", "is", null);
+  if (showing === "new") query = query.is("last_contacted_at", null);
+
+  const { data: prospects } = await query
+    // Most recently contacted first when that is what is being read; by fit
+    // otherwise, which is the order you build a list in rather than review one.
+    .order(showing === "contacted" ? "last_contacted_at" : "fit_score", {
+      ascending: false,
+      nullsFirst: false,
+    })
     .limit(200);
 
-  if (!prospects?.length) {
+  const [{ count: contactedCount }, { count: totalCount }] = await Promise.all([
+    supabase
+      .from("prospects")
+      .select("id", { count: "exact", head: true })
+      .eq("workspace_id", session.workspaceId)
+      .not("last_contacted_at", "is", null),
+    supabase
+      .from("prospects")
+      .select("id", { count: "exact", head: true })
+      .eq("workspace_id", session.workspaceId),
+  ]);
+
+  if (!prospects?.length && showing === "all") {
     return (
       <>
         <div className="page-head">
@@ -85,11 +118,44 @@ export default async function ProspectsPage({ searchParams }: { searchParams: No
       <div className="page-head">
         <h1>Prospects</h1>
         <p className="muted">
-          {prospects.length} in this workspace, ranked by fit. Nobody here can be contacted twice by two
-          different reps. Erasing someone removes everything we hold about them and keeps only a
-          do-not-contact record, so a later campaign cannot re-import them.
+          {totalCount ?? 0} in this workspace, {contactedCount ?? 0} of whom have been contacted. Once
+          somebody has been reached out to they are never added to another campaign — checked again in
+          the moment before every send, not only when a list is built. Erasing someone removes
+          everything we hold about them and keeps only a do-not-contact record, so a later campaign
+          cannot re-import them.
         </p>
+        {/*
+          The history, as a place to stand rather than a column to squint at.
+          Ranked by fit, somebody messaged last week sat wherever their score
+          put them and looked exactly like somebody nobody had ever written to.
+        */}
+        <nav className="tabs" aria-label="Which prospects to show">
+          {(
+            [
+              { key: "all", label: `Everyone (${totalCount ?? 0})` },
+              { key: "contacted", label: `Contacted (${contactedCount ?? 0})` },
+              { key: "new", label: `Not yet contacted (${Math.max(0, (totalCount ?? 0) - (contactedCount ?? 0))})` },
+            ] as const
+          ).map((tab) => (
+            <a
+              key={tab.key}
+              className={`pill ${showing === tab.key ? "accent" : ""}`}
+              href={tab.key === "all" ? "/app/prospects" : `/app/prospects?show=${tab.key}`}
+              aria-current={showing === tab.key ? "page" : undefined}
+            >
+              {tab.label}
+            </a>
+          ))}
+        </nav>
       </div>
+
+      {prospects?.length === 0 ? (
+        <p className="small muted">
+          {showing === "contacted"
+            ? "Nobody has been contacted yet."
+            : "Everybody here has been contacted."}
+        </p>
+      ) : null}
 
       <div className="table-scroll">
         <table>
@@ -104,7 +170,7 @@ export default async function ProspectsPage({ searchParams }: { searchParams: No
             </tr>
           </thead>
           <tbody>
-            {prospects.map((prospect) => {
+            {(prospects ?? []).map((prospect) => {
               const signals = Array.isArray(prospect.signals) ? (prospect.signals as unknown as Signal[]) : [];
               const reasons = Array.isArray(prospect.fit_reasons) ? (prospect.fit_reasons as string[]) : [];
               return (
@@ -159,7 +225,13 @@ export default async function ProspectsPage({ searchParams }: { searchParams: No
                     {prospect.do_not_contact ? (
                       <span className="pill danger">Do not contact</span>
                     ) : prospect.last_contacted_at ? (
-                      <span className="pill">Contacted</span>
+                      // The date, not just the fact. "Contacted" alone cannot
+                      // answer the question somebody opens this page with,
+                      // which is when, and therefore whether it was this
+                      // campaign or one from two months ago.
+                      <span className="pill" title={prospect.last_contacted_at}>
+                        Contacted {prospect.last_contacted_at.slice(0, 10)}
+                      </span>
                     ) : (
                       <span className="pill positive">New</span>
                     )}
