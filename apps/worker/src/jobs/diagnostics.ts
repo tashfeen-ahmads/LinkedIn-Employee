@@ -281,7 +281,10 @@ export async function runDiagnostics(
       : beat?.beat_at
         ? `It last ran ${new Date(beat.beat_at).toISOString()} and should run every five minutes. Nothing queued is being sent.`
         : "It has never reported in. Nothing queued is being sent, whatever the campaign screens say.",
-    fix: beating ? undefined : "Check that the worker process is running.",
+    // Named, because "the worker is down" is the wrong half of the answer more
+    // often than it is the right one: the process stays up and reports healthy
+    // while its queue is unreachable, and then nothing is consumed at all.
+    fix: beating ? undefined : "Check the worker process and that it can reach Redis — its /health says which.",
   });
 
   // ---- Replies ----------------------------------------------------------

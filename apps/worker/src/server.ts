@@ -14,6 +14,8 @@ import { decryptJson, encryptJson } from "./crypto.js";
 import type { MiddlewareHandler } from "hono";
 import type { IntegrationKind } from "@le/db";
 import type { Queues } from "./queues.js";
+import { queueReachable } from "./queues.js";
+import type IORedis from "ioredis";
 import type { WorkerContext } from "./context.js";
 import { bookFromLink, readBookingPage } from "./jobs/book.js";
 import { connectCalendarFeed, disconnectCalendarFeed } from "./jobs/calendar-feed.js";
@@ -141,10 +143,29 @@ function encodeState(workspaceId: string, userId: string, key: string): string {
  * verify the signature, resolve the account, and hand off to the queue so the
  * HTTP response stays fast and delivery is retried by BullMQ, not the provider.
  */
-export function createServer(ctx: WorkerContext, queues: Queues): Hono {
+export function createServer(ctx: WorkerContext, queues: Queues, connection?: IORedis): Hono {
   const app = new Hono();
 
-  app.get("/health", (c) => c.json({ ok: true }));
+  /**
+   * Render decides whether this deployment is healthy from this one route, and
+   * it used to answer `{ ok: true }` without looking at anything.
+   *
+   * So the afternoon this product lost went like this: the process was up, the
+   * health check was green, Render said Live, the HTTP API answered — and every
+   * job queued since the morning was sitting unconsumed, because the queue was
+   * unreachable and a client that retries for ever reports that as nothing at
+   * all. A campaign launched into it looked exactly like a campaign pacing
+   * itself. The one check whose job was to notice was the one thing in the
+   * building not looking.
+   *
+   * A worker that cannot reach its queue cannot do the thing it exists for, so
+   * it says so and answers 503. Better to be restarted than to be trusted.
+   */
+  app.get("/health", async (c) => {
+    if (!connection) return c.json({ ok: true, queue: "unchecked" });
+    const queue = await queueReachable(connection);
+    return c.json({ ok: queue, queue: queue ? "reachable" : "unreachable" }, queue ? 200 : 503);
+  });
 
   /**
    * Everything under /jobs and /auth/*\/link is a privileged internal API: the
@@ -157,6 +178,23 @@ export function createServer(ctx: WorkerContext, queues: Queues): Hono {
    * their own signed state, and the Unipile webhook its own signature.
    */
   app.use("/jobs/*", requireInternalAuth(ctx.env.INTERNAL_API_SECRET));
+
+  /**
+   * Refuses to accept work the queue cannot hold.
+   *
+   * Every route below ends in `queue.add`, and against an unreachable Redis
+   * that call does not fail — the client keeps the command and waits for a
+   * connection that is not coming. The request hangs, the caller times out, and
+   * what the person sees is a button that did nothing, which is the same thing
+   * they see when everything is fine and the work is merely paced. Accepting a
+   * job we cannot store and answering "queued" is the worse lie of the two.
+   */
+  app.use("/jobs/*", async (c, next) => {
+    if (connection && !(await queueReachable(connection))) {
+      return c.json({ error: "the job queue is unreachable, so nothing can be queued" }, 503);
+    }
+    await next();
+  });
   app.use("/auth/:provider/link", requireInternalAuth(ctx.env.INTERNAL_API_SECRET));
 
   // Job entry points used by the web app. These enqueue and return; nothing

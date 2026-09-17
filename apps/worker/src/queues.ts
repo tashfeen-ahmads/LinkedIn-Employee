@@ -60,7 +60,42 @@ export interface InboundMessageJob {
 }
 
 export function createConnection(redisUrl: string): IORedis {
+  // `maxRetriesPerRequest: null` is BullMQ's requirement -- a blocking read
+  // that gives up mid-wait loses the job it was holding. The cost is that a
+  // command against an unreachable Redis never fails either: it queues in the
+  // client and waits, for ever, with no error and no log line after the first
+  // connect attempt. Which is why `queueReachable` below exists rather than
+  // anything simply trying a command and seeing what happens.
   return new IORedis(redisUrl, { maxRetriesPerRequest: null });
+}
+
+/**
+ * Whether the queue is actually reachable, answered within a deadline.
+ *
+ * This deployment spent an afternoon in the state this function exists to
+ * detect: the worker process up, Render reporting the service Live, its HTTP
+ * API answering every request -- and not one queued job being consumed,
+ * because the health check returned `{ ok: true }` without ever touching
+ * Redis, and a retrying client turns "the queue is gone" into silence rather
+ * than an error. Every screen in the product agreed the deployment was fine.
+ *
+ * The deadline is the whole point: without it this waits as long as the client
+ * does, which is for ever, and a health check that hangs is a health check that
+ * tells you nothing.
+ */
+export async function queueReachable(connection: IORedis, timeoutMs = 2_000): Promise<boolean> {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    const pong = connection.ping();
+    const deadline = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error("redis did not answer in time")), timeoutMs);
+    });
+    return (await Promise.race([pong, deadline])) === "PONG";
+  } catch {
+    return false;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 export interface Queues {

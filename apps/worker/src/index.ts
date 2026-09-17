@@ -87,7 +87,7 @@ process.on("uncaughtException", (error) => {
   void Sentry.flush(2000).then(() => process.exit(1));
 });
 
-const server = serve({ fetch: createServer(ctx, queues).fetch, port: env.WORKER_PORT });
+const server = serve({ fetch: createServer(ctx, queues, connection).fetch, port: env.WORKER_PORT });
 console.log(`worker listening on :${env.WORKER_PORT}, provider=${ctx.linkedin.name}`);
 
 async function shutdown(signal: string): Promise<void> {

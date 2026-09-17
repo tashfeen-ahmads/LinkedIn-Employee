@@ -302,6 +302,29 @@ tests that were verified by deliberately breaking the code.
     reported ahead of every gentler explanation: "waiting for your sending
     hours" is a reassuring sentence about a system that will never send.
 
+    Launching calls the worker (`/jobs/campaign-tick`) rather than setting a
+    row and trusting the schedule to notice. The action that most needs the
+    worker was the only one that never spoke to it.
+
+22. **`/health` is the check the platform believes, so it has to look.** It
+    answered `{ ok: true }` unconditionally, and an afternoon went into what
+    that hides: the process up, Render reporting the service Live, the HTTP API
+    answering every request, and every job queued since the morning unconsumed.
+    BullMQ requires `maxRetriesPerRequest: null` — a blocking read that gives
+    up mid-wait loses the job it holds — and the price is that a command against
+    an unreachable Redis never fails either. It waits, silently, for ever. "The
+    queue is gone" and "there is nothing to do" are the same observation from
+    every screen in the product.
+
+    So `queueReachable` pings with a **deadline**, and that deadline is the
+    whole mechanism: without it the check waits exactly as long as the client
+    does, and a health check that hangs tells you nothing. A worker that cannot
+    reach its queue answers 503 and gets restarted rather than trusted, and
+    `/jobs/*` refuses work it cannot store instead of answering "queued" — an
+    accepted job that was never queued is the worse lie, because it reaches the
+    person as a button that did nothing, which is also what a correctly paced
+    campaign looks like.
+
 ## Conventions
 
 - Agent output is validated against a zod schema before it touches the
