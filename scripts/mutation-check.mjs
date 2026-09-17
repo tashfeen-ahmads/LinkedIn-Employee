@@ -434,6 +434,22 @@ const MUTATIONS = [
     pkg: "@le/worker",
   },
   {
+    id: "health/the-worker-says-it-started",
+    rule: "The worker records its own boot straight to the database, because every other report it makes travels through the queue",
+    file: "apps/worker/src/jobs/diagnostics.ts",
+    from: '    state: boot ? (bootDetail.queueReachable === false ? "blocked" : "ok") : "unknown",',
+    to: '    state: "ok",',
+    pkg: "@le/worker",
+  },
+  {
+    id: "health/an-unreachable-queue-is-named-as-one",
+    rule: "A worker that is up but cannot reach its queue is reported as that, not as a worker that is down",
+    file: "apps/web/src/lib/pacing.ts",
+    from: "  if (boot && detail.queueReachable === false) {",
+    to: "  if (false) {",
+    pkg: "@le/web",
+  },
+  {
     id: "health/a-production-worker-must-have-a-real-queue",
     rule: "A production worker pointed at its own localhost is refused at boot, not discovered at the first campaign",
     file: "apps/worker/src/config.ts",

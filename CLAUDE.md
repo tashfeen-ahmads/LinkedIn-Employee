@@ -323,7 +323,27 @@ tests that were verified by deliberately breaking the code.
     `/jobs/*` refuses work it cannot store instead of answering "queued" — an
     accepted job that was never queued is the worse lie, because it reaches the
     person as a button that did nothing, which is also what a correctly paced
-    campaign looks like.
+    campaign looks like. `loadEnv` also refuses to boot a production worker
+    whose `REDIS_URL` is localhost, which is what an unset variable falls back
+    to, and was the shape this took.
+
+23. **The worker reports itself, and not through the queue.** Everything this
+    deployment says about its own health used to travel through the thing most
+    likely to be broken. So `BOOT_BEAT` is written straight to Postgres as the
+    process starts (`apps/worker/src/heartbeat.ts`), carrying whether the queue
+    was reachable and which build is running — `RENDER_GIT_COMMIT`, from the
+    process itself rather than from a dashboard reporting on it, because those
+    disagreed here for an afternoon and the dashboard was the one being read.
+
+    Two stamps, because one cannot answer the question. `PACING_LOOP` is
+    written by a loop that needs the queue in order to run at all, so a dead
+    queue and a dead process erase it identically — and "restart the worker",
+    "fix `REDIS_URL`" and "the build has not shipped yet" are three different
+    people doing three different things. `describePacing` and `/app/system`
+    name which. A missing boot stamp reports `unknown`, never `blocked`: it is
+    also what a deployment looks like before the build carrying the stamp has
+    shipped, and sending somebody to restart a healthy worker is its own
+    wasted hour.
 
 ## Conventions
 

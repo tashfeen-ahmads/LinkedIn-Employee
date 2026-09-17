@@ -1,7 +1,7 @@
 import { revalidatePath } from "next/cache";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
-import { LINKEDIN_LIMITS, PACING_LOOP, countFunnel, FUNNEL_STAGES } from "@le/shared";
+import { BOOT_BEAT, LINKEDIN_LIMITS, PACING_LOOP, countFunnel, FUNNEL_STAGES } from "@le/shared";
 import { ACCOUNT_USAGE_COLUMNS } from "@le/linkedin";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
@@ -347,7 +347,7 @@ export default async function CampaignPage({
     .maybeSingle();
   if (!campaign) notFound();
 
-  const [{ data: steps }, { data: members }, { data: account }, { data: lastSearch }, { data: heartbeat }, { data: owner }] =
+  const [{ data: steps }, { data: members }, { data: account }, { data: lastSearch }, { data: heartbeat }, { data: boot }, { data: owner }] =
     await Promise.all([
     supabase
       .from("campaign_steps")
@@ -383,6 +383,10 @@ export default async function CampaignPage({
     // Whether the thing that sends the messages is running at all. Without it
     // a dead worker and a paced one are the same unchanged page.
     supabase.from("worker_heartbeats").select("beat_at").eq("name", PACING_LOOP).maybeSingle(),
+    // The worker's own account of itself, written as it started and without
+    // going through the queue — which is what makes it readable in exactly the
+    // failures that erase everything else.
+    supabase.from("worker_heartbeats").select("beat_at, detail").eq("name", BOOT_BEAT).maybeSingle(),
     // Working hours are evaluated in the rep's zone, so the same clock time is
     // inside them for one person and outside for another.
     supabase.from("profiles").select("timezone").eq("id", campaign.owner_user_id).maybeSingle(),
@@ -412,6 +416,7 @@ export default async function CampaignPage({
     account: account ?? null,
     timezone: owner?.timezone ?? "UTC",
     lastBeatAt: heartbeat?.beat_at ?? null,
+    boot: boot ?? null,
   });
 
   return (

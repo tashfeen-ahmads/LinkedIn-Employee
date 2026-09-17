@@ -29,6 +29,8 @@ export function describePacing(input: {
   timezone: string;
   /** When the pacing loop last ran, from `worker_heartbeats`. */
   lastBeatAt: string | null;
+  /** The worker's boot stamp: when it started, and what it could see. */
+  boot?: { beat_at: string; detail: unknown } | null;
   now?: Date;
 }): PacingState | null {
   const now = input.now ?? new Date();
@@ -38,13 +40,7 @@ export function describePacing(input: {
   // declines is only meaningful if something is there to obey it.
   const beat = input.lastBeatAt ? new Date(input.lastBeatAt).getTime() : null;
   if (beat === null || now.getTime() - beat > PACING_STALE_MS) {
-    return {
-      tone: "danger",
-      title: "The sending loop is not running.",
-      body: beat
-        ? `It last ran ${minutesAgo(now.getTime() - beat)}, and it should run every five minutes. Nothing will go out until it is back — this is a problem with the deployment, not with your campaign.`
-        : "It has never reported in, so nothing this campaign has queued will be sent. This is a problem with the deployment, not with your campaign.",
-    };
+    return { tone: "danger", ...notSending(input.boot ?? null, beat, now) };
   }
 
   if (!input.account || input.account.status !== "active") {
@@ -107,6 +103,55 @@ export function describePacing(input: {
     // a working campaign look like a broken one: they open LinkedIn expecting
     // five invitations and find none, a minute after pressing Launch.
     body: `Invitations go out ${Math.round(LINKEDIN_LIMITS.minGapMs / 60_000)}–${Math.round(LINKEDIN_LIMITS.maxGapMs / 60_000)} minutes apart, never two together, up to ${left} more today. The first can take up to a quarter of an hour to appear.`,
+  };
+}
+
+/**
+ * Why nothing is being sent, as specifically as the evidence allows.
+ *
+ * "The sending loop is not running" is true in three quite different
+ * situations, and they need three different people to do three different
+ * things. The pacing stamp cannot tell them apart — it is written by a loop
+ * that needs the queue in order to run at all, so a dead queue and a dead
+ * process erase it identically. The boot stamp can: the worker writes it
+ * straight to the database as it starts, before any of that is relied on.
+ */
+function notSending(
+  boot: { beat_at: string; detail: unknown } | null,
+  beat: number | null,
+  now: Date,
+): { title: string; body: string } {
+  const detail = boot?.detail && typeof boot.detail === "object" ? (boot.detail as Record<string, unknown>) : {};
+  const startedAgo = boot ? minutesAgo(now.getTime() - new Date(boot.beat_at).getTime()) : null;
+
+  if (boot && detail.queueReachable === false) {
+    // The specific afternoon this cost: process up, platform reporting the
+    // service healthy, and every queued job unconsumed.
+    return {
+      title: "The worker is running, but it cannot reach its job queue.",
+      body: `It started ${startedAgo} and could not see the queue at ${typeof detail.redisHost === "string" ? detail.redisHost : "its configured address"}. Nothing queued will be sent until that is fixed — this is a problem with the deployment, not with your campaign.`,
+    };
+  }
+
+  if (boot && beat === null) {
+    // Booted, saw the queue, and the loop still never ran. Not a config
+    // problem, so it must not be reported as one.
+    return {
+      title: "The worker started but its sending loop has not run.",
+      body: `It started ${startedAgo}${typeof detail.commit === "string" ? ` on build ${detail.commit.slice(0, 7)}` : ""} and reached its queue, but no run has been recorded. Check the worker's logs — this is a problem with the deployment, not with your campaign.`,
+    };
+  }
+
+  if (!boot) {
+    return {
+      title: "The worker is not running.",
+      body: "It has not reported starting, so nothing this campaign has queued will be sent. Either the process is down or the build carrying this check has not deployed yet. This is a problem with the deployment, not with your campaign.",
+    };
+  }
+
+  return {
+    title: "The sending loop has stopped.",
+    body: `It last ran ${minutesAgo(now.getTime() - beat!)} and should run every five minutes. Nothing will go out until it is back — this is a problem with the deployment, not with your campaign.`,
   };
 }
 

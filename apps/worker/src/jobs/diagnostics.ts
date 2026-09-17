@@ -1,4 +1,4 @@
-import { PACING_LOOP, PACING_STALE_MS } from "@le/shared";
+import { BOOT_BEAT, PACING_LOOP, PACING_STALE_MS } from "@le/shared";
 import { isAccountGone } from "@le/linkedin";
 import type { WorkerContext } from "../context.js";
 
@@ -263,13 +263,40 @@ export async function runDiagnostics(
   // the building if this is not running. It is the only check here whose
   // failure makes every other green tick meaningless, and it was missing for
   // the entire first live launch.
-  const { data: beat } = await db
+  const { data: beats } = await db
     .from("worker_heartbeats")
-    .select("beat_at")
-    .eq("name", PACING_LOOP)
-    .maybeSingle();
+    .select("name, beat_at, detail")
+    .in("name", [PACING_LOOP, BOOT_BEAT]);
+  const beat = (beats ?? []).find((b) => b.name === PACING_LOOP);
+  const boot = (beats ?? []).find((b) => b.name === BOOT_BEAT);
+  const bootDetail =
+    boot?.detail && typeof boot.detail === "object" ? (boot.detail as Record<string, unknown>) : {};
   const beatAge = beat?.beat_at ? Date.now() - new Date(beat.beat_at).getTime() : null;
   const beating = beatAge !== null && beatAge <= PACING_STALE_MS;
+
+  // Two stamps, because one cannot answer the question. The pacing stamp is
+  // written by a loop that needs the queue to run at all, so a dead queue and a
+  // dead process erase it identically — and they need different people to do
+  // different things. The boot stamp goes straight to the database as the
+  // process starts, which is what makes it readable in exactly the failure
+  // that erases everything else.
+  add({
+    key: "worker-boot",
+    stage: STAGES.campaign,
+    label: "The worker process is up",
+    state: boot ? (bootDetail.queueReachable === false ? "blocked" : "ok") : "unknown",
+    detail: !boot
+      ? "It has not reported starting. Either the process is down, or the build carrying this check has not deployed yet."
+      : bootDetail.queueReachable === false
+        ? `Started ${boot.beat_at}, and could not reach its job queue at ${typeof bootDetail.redisHost === "string" ? bootDetail.redisHost : "its configured address"}. Nothing queued is consumed.`
+        : `Started ${boot.beat_at}${typeof bootDetail.commit === "string" ? ` on build ${bootDetail.commit.slice(0, 7)}` : ""}, queue reachable.`,
+    fix:
+      boot && bootDetail.queueReachable === false
+        ? "Point REDIS_URL at a reachable queue and redeploy."
+        : boot
+          ? undefined
+          : "Check the worker process, and that the latest build actually deployed.",
+  });
 
   add({
     key: "pacing-loop",
@@ -281,10 +308,8 @@ export async function runDiagnostics(
       : beat?.beat_at
         ? `It last ran ${new Date(beat.beat_at).toISOString()} and should run every five minutes. Nothing queued is being sent.`
         : "It has never reported in. Nothing queued is being sent, whatever the campaign screens say.",
-    // Named, because "the worker is down" is the wrong half of the answer more
-    // often than it is the right one: the process stays up and reports healthy
-    // while its queue is unreachable, and then nothing is consumed at all.
-    fix: beating ? undefined : "Check the worker process and that it can reach Redis — its /health says which.",
+    // The row above names the cause when it can. This one says what it costs.
+    fix: beating ? undefined : "Read the row above — it says whether the worker is down or cannot reach its queue.",
   });
 
   // ---- Replies ----------------------------------------------------------

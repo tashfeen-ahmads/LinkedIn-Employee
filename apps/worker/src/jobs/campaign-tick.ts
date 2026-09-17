@@ -4,6 +4,7 @@ import { checkAction, dailyInviteCap, nextGapMs } from "@le/linkedin";
 import type { Db } from "@le/db";
 import type { Queues } from "../queues.js";
 import { resetCountersIfNeeded, toUsage, type AccountRecord, ACCOUNT_USAGE_COLUMNS } from "../accounts.js";
+import { recordBeat } from "../heartbeat.js";
 
 /**
  * The pacing loop. Runs every few minutes and, for each running campaign, asks
@@ -76,13 +77,7 @@ export async function runCampaignTick(db: Db, queues: Queues, now: Date = new Da
  * stretch it exists to explain.
  */
 async function beat(db: Db, now: Date, detail: { campaigns: number; enqueued: number }): Promise<void> {
-  const { error } = await db
-    .from("worker_heartbeats")
-    .upsert({ name: PACING_LOOP, beat_at: now.toISOString(), detail }, { onConflict: "name" });
-
-  // Never fatal. This is the loop that sends a customer's messages; it does not
-  // stop because a note about itself failed to write.
-  if (error) console.error("could not record the pacing heartbeat", { reason: error.message });
+  await recordBeat(db, PACING_LOOP, detail, now);
 }
 
 type CampaignRow = {

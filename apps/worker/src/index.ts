@@ -5,7 +5,9 @@ import { initObservability, reportJobFailure, Sentry } from "./observability.js"
 import { DelayedError, Worker } from "bullmq";
 import { loadEnv } from "./config.js";
 import { createWorkerContext } from "./context.js";
-import { createConnection, createQueues, QUEUE_NAMES, scheduleRepeatables } from "./queues.js";
+import { createConnection, createQueues, QUEUE_NAMES, queueReachable, scheduleRepeatables } from "./queues.js";
+import { recordBeat } from "./heartbeat.js";
+import { BOOT_BEAT } from "@le/shared";
 import type { CampaignTickJob, InboundMessageJob, LinkedInActionJob, StrategyJob, TargetingJob } from "./queues.js";
 import { runCampaignTick } from "./jobs/campaign-tick.js";
 import { runLinkedInAction, RescheduleError } from "./jobs/linkedin-action.js";
@@ -18,10 +20,55 @@ import { createServer } from "./server.js";
 
 initObservability();
 
+/**
+ * The queue's host, for a report somebody reads. Never the whole URL: it
+ * carries the password.
+ */
+function redisHost(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return "unparseable";
+  }
+}
+
 const env = loadEnv();
 const ctx = createWorkerContext(env);
 const connection = createConnection(env.REDIS_URL);
 const queues = createQueues(connection);
+
+/**
+ * Says this process started, which build it is, and whether it can see its
+ * queue — written straight to Postgres before any of that is relied on.
+ *
+ * Everything else that reports on this worker's health goes through the queue.
+ * So when the queue is what is broken, nothing arrives, and "the worker is not
+ * running", "the worker is running but cannot reach its queue" and "the
+ * platform is still serving the previous build" all present as the same
+ * absence. They are three different things to do about it, and an hour went
+ * into telling them apart from the outside. Now the worker says which.
+ *
+ * `RENDER_GIT_COMMIT` is the answer to "is the latest commit actually
+ * deployed", from the process itself rather than from a dashboard reporting on
+ * it — those disagreed here for most of an afternoon, and the dashboard was
+ * the one being read.
+ */
+const queueOk = await queueReachable(connection);
+await recordBeat(ctx.db, BOOT_BEAT, {
+  commit: process.env.RENDER_GIT_COMMIT ?? process.env.GIT_COMMIT ?? null,
+  queueReachable: queueOk,
+  redisHost: redisHost(env.REDIS_URL),
+  nodeEnv: process.env.NODE_ENV ?? null,
+});
+if (!queueOk) {
+  // Not a crash: the HTTP API still answers, /health now says 503, and the
+  // boot stamp above is readable from the product's own screens. A process
+  // that exits here would be restarted into the same state with nothing
+  // written down, which is how this was invisible in the first place.
+  console.error("the job queue is unreachable; nothing queued will be consumed", {
+    redisHost: redisHost(env.REDIS_URL),
+  });
+}
 
 await scheduleRepeatables(queues);
 

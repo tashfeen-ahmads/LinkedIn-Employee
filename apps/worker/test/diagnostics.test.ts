@@ -137,6 +137,50 @@ describe("system check", () => {
     expect(check(await run(ctx), "pacing-loop").state).toBe("ok");
   });
 
+  it("names an unreachable queue rather than a worker that is down", async () => {
+    // The two need different people to do different things, and the pacing
+    // stamp reports them identically because it cannot be written without the
+    // queue it is reporting on.
+    const { db, ctx } = harness();
+    db.seed("worker_heartbeats", [
+      {
+        name: "worker-boot",
+        beat_at: new Date().toISOString(),
+        detail: { queueReachable: false, redisHost: "red-abc:6379" },
+      },
+    ]);
+
+    const report = await run(ctx);
+
+    expect(check(report, "worker-boot").state).toBe("blocked");
+    expect(check(report, "worker-boot").detail).toContain("red-abc:6379");
+    expect(check(report, "worker-boot").fix).toMatch(/REDIS_URL/);
+  });
+
+  it("does not call a worker down when it has only never said it started", async () => {
+    // Which is also what a deployment looks like before the build carrying the
+    // stamp has shipped. "unknown", not "blocked": a check that asserts more
+    // than it knows sends somebody to restart a healthy process.
+    const { ctx } = harness();
+    expect(check(await run(ctx), "worker-boot").state).toBe("unknown");
+  });
+
+  it("reports a healthy worker without claiming its loop has run", async () => {
+    const { db, ctx } = harness();
+    db.seed("worker_heartbeats", [
+      { name: "worker-boot", beat_at: new Date().toISOString(), detail: { queueReachable: true, commit: "abc1234def" } },
+    ]);
+
+    const report = await run(ctx);
+
+    expect(check(report, "worker-boot").state).toBe("ok");
+    // Which build is actually running, from the process rather than from the
+    // dashboard reporting on it.
+    expect(check(report, "worker-boot").detail).toContain("abc1234");
+    // Booting is not sending. Two rows, because they fail separately.
+    expect(check(report, "pacing-loop").state).toBe("blocked");
+  });
+
   it("says a deployment with no model key cannot run an agent at all", async () => {
     const { ctx } = harness({ env: { OPENAI_API_KEY: undefined, ANTHROPIC_API_KEY: undefined } });
 

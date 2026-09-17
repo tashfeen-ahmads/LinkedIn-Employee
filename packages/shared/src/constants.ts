@@ -46,6 +46,19 @@ export const LINKEDIN_LIMITS = {
 export const PACING_LOOP = "campaign-tick";
 
 /**
+ * The name the worker stamps the moment it starts.
+ *
+ * Written straight to Postgres, before and regardless of the queue, because it
+ * is the one signal that separates the failures the pacing heartbeat cannot
+ * tell apart: a process that is not running, a process that is running but
+ * cannot reach its queue, and a deployment still serving the previous build.
+ * Those are three different things to do about it and the pacing stamp reports
+ * all three as the same absence -- it can only be written by a loop that needs
+ * the queue in order to run at all.
+ */
+export const BOOT_BEAT = "worker-boot";
+
+/**
  * How long the pacing loop may go unheard before a screen says so.
  *
  * It wakes every five minutes; three missed wake-ups is a gap no amount of

@@ -76,6 +76,55 @@ describe("describePacing", () => {
     expect(state?.title).toMatch(/not running/);
   });
 
+  /**
+   * "Nothing is being sent" is true in three quite different situations, and
+   * each needs a different person to do a different thing. The pacing stamp
+   * cannot tell them apart: it is written by a loop that needs the queue in
+   * order to run, so a dead queue and a dead process erase it identically.
+   */
+  it("says the queue is unreachable rather than blaming the worker", () => {
+    const state = describePacing({
+      ...live,
+      lastBeatAt: null,
+      boot: {
+        beat_at: "2026-09-17T16:20:00Z",
+        detail: { queueReachable: false, redisHost: "red-abc:6379", commit: "abc1234" },
+      },
+    });
+
+    expect(state?.tone).toBe("danger");
+    expect(state?.title).toMatch(/cannot reach its job queue/);
+    // The address, so somebody can check the one they configured against the
+    // one it actually tried.
+    expect(state?.body).toContain("red-abc:6379");
+  });
+
+  it("does not blame the queue when the worker reached it and still never ran", () => {
+    const state = describePacing({
+      ...live,
+      lastBeatAt: null,
+      boot: { beat_at: "2026-09-17T16:20:00Z", detail: { queueReachable: true, commit: "abc1234def" } },
+    });
+
+    expect(state?.title).toMatch(/sending loop has not run/);
+    // Which build is actually running, from the process rather than from a
+    // dashboard reporting on it — those disagreed for most of an afternoon.
+    expect(state?.body).toContain("abc1234");
+    // Not the queue's fault, and it must not be reported as one: sending
+    // somebody to check REDIS_URL when the queue answered is a wasted hour
+    // and it is the hour this whole mechanism exists to stop.
+    expect(state?.body).not.toMatch(/cannot reach|unreachable/i);
+    expect(state?.body).toMatch(/logs/);
+  });
+
+  it("does not claim the process is down when it has simply never said", () => {
+    // No boot stamp is also what a deployment looks like before the build
+    // carrying the stamp has shipped, and sending somebody to restart a
+    // healthy worker is its own wasted hour.
+    const state = describePacing({ ...live, lastBeatAt: null, boot: null });
+    expect(state?.body).toMatch(/has not deployed yet/);
+  });
+
   it("names the working hours when the clock is outside them", () => {
     const state = describePacing({ ...live, now: new Date("2026-09-17T19:30:00Z"), lastBeatAt: "2026-09-17T19:28:00Z" });
     expect(state?.title).toMatch(/sending hours/);
