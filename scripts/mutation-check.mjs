@@ -1024,6 +1024,22 @@ const MUTATIONS = [
     pkg: "@le/linkedin",
   },
   {
+    id: "search/a-fabricated-url-is-never-a-link",
+    rule: "A URL whose slug is the provider id is never rendered as a link, however much it looks like a profile address",
+    file: "packages/shared/src/exclusions.ts",
+    from: "  if (providerId && slug.toLowerCase() === providerId.toLowerCase()) return false;",
+    to: "  if (false) return false;",
+    pkg: "@le/shared",
+  },
+  {
+    id: "search/a-provider-id-slug-is-never-a-link",
+    rule: "A LinkedIn internal id in a profile slug is rejected even when the provider id was not kept, because legacy rows hold exactly that",
+    file: "packages/shared/src/exclusions.ts",
+    from: "  return !/^acoaa/i.test(slug);",
+    to: "  return true;",
+    pkg: "@le/shared",
+  },
+  {
     id: "search/never-fabricate-a-profile-url",
     rule: "A provider id is never pasted into a profile URL; every one of those links is a 404 and a reviewer concludes the list is fake",
     file: "packages/linkedin/src/unipile.ts",

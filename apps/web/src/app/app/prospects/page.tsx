@@ -60,7 +60,7 @@ export default async function ProspectsPage({ searchParams }: { searchParams: No
   const { data: prospects } = await supabase
     .from("prospects")
     .select(
-      "id, first_name, last_name, headline, title, company, location, linkedin_url, fit_score, fit_reasons, intent_score, signals, do_not_contact, last_contacted_at",
+      "id, provider_id, first_name, last_name, headline, title, company, location, linkedin_url, fit_score, fit_reasons, intent_score, signals, do_not_contact, last_contacted_at",
     )
     .eq("workspace_id", session.workspaceId)
     .order("fit_score", { ascending: false, nullsFirst: false })
@@ -118,7 +118,7 @@ export default async function ProspectsPage({ searchParams }: { searchParams: No
                         it. Falling back to the headline is not a placeholder:
                         "Membership Director at Lawton Fort Sill Chamber of
                         Commerce" is the most useful line on the card. */}
-                    {isPublicProfileUrl(prospect.linkedin_url) ? (
+                    {isPublicProfileUrl(prospect.linkedin_url, prospect.provider_id) ? (
                       <a
                         className="strongish"
                         href={prospect.linkedin_url.startsWith("http") ? prospect.linkedin_url : `https://${prospect.linkedin_url}`}

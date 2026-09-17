@@ -125,12 +125,22 @@ export function exclusionReason(rule: ExclusionRule): string {
  *
  * Some profiles have no public URL — LinkedIn hides the vanity address outside
  * your network and shows those people as "LinkedIn Member". They are real, and
- * messageable through the provider by id, but there is nothing to link to. We
- * store a search address as their key instead, and every screen has to know the
- * difference: a name rendered as a link that 404s is how a rep concludes a list
- * of fourteen real people is invented.
+ * messageable through the provider by id, but there is nothing to link to.
+ *
+ * `providerId` matters and is not optional in practice. Rows written before
+ * this existed hold `linkedin.com/in/<provider id>`, which is shaped exactly
+ * like a real profile address and is a 404 every time. Checking the shape alone
+ * passes every one of them, so the slug is compared against the id it would
+ * have been built from: a URL whose last segment is the provider id was
+ * fabricated, whatever it looks like.
  */
-export function isPublicProfileUrl(url: string | null | undefined): boolean {
+export function isPublicProfileUrl(url: string | null | undefined, providerId?: string | null): boolean {
   if (!url) return false;
-  return /(^|\/)in\/[^/?#]+/.test(url) && !url.includes("/search/results/");
+  if (url.includes("/search/results/")) return false;
+  const slug = /(?:^|\/)in\/([^/?#]+)/.exec(url)?.[1];
+  if (!slug) return false;
+  if (providerId && slug.toLowerCase() === providerId.toLowerCase()) return false;
+  // LinkedIn's internal ids all begin this way and are never vanity slugs, so
+  // a row whose provider id was lost still does not become a broken link.
+  return !/^acoaa/i.test(slug);
 }
