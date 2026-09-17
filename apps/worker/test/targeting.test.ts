@@ -751,3 +751,169 @@ describe("prospects whose profile cannot be opened", () => {
     expect(true).toBe(true);
   });
 });
+
+/**
+ * Growing a list rather than starting a new one.
+ *
+ * A campaign was one search: about fifty people, and no way at all to reach the
+ * fifty-first. Pressing the button again ran the identical query, got the
+ * identical page, and reported every person on it as already known — so "we
+ * need a thousand prospects, across several campaigns" had no answer.
+ */
+describe("continuing a campaign's search", () => {
+  const CAMPAIGN = "66666666-6666-4666-8666-666666666666";
+
+  function seedCampaign(db: FakeDb, overrides: Record<string, unknown> = {}) {
+    db.seed("campaigns", [
+      {
+        id: CAMPAIGN,
+        workspace_id: WORKSPACE,
+        customer_profile_id: PROFILE,
+        linkedin_account_id: ACCOUNT,
+        owner_user_id: USER,
+        name: "Ops leaders — UK",
+        status: "draft",
+        connection_note: "Hi {{first_name}}, we work with ops leaders.",
+        daily_invite_cap: 20,
+        search_cursor: "page-2",
+        search_exhausted: false,
+        ...overrides,
+      },
+    ]);
+  }
+
+  const more = { ...job, campaignId: CAMPAIGN };
+
+  it("adds to the campaign it was given instead of creating another", async () => {
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    seedCampaign(db);
+    linkedin.candidates = {
+      items: [candidate("p9", "https://www.linkedin.com/in/jane-nine")],
+      cursor: "page-3",
+      droppedFilters: [],
+    };
+    scoreMock.mockResolvedValue([ranked("https://www.linkedin.com/in/jane-nine", "p9", 90)]);
+
+    const campaignId = await runTargetingJob(ctx, more);
+
+    expect(campaignId).toBe(CAMPAIGN);
+    expect(db.rows("campaigns")).toHaveLength(1);
+    expect(db.rows("campaign_prospects").map((r) => r.campaign_id)).toEqual([CAMPAIGN]);
+    // The copy a human already read and approved is not rewritten because the
+    // list grew — that would change what everybody already queued receives.
+    expect(campaignMock).not.toHaveBeenCalled();
+    expect(db.rows("campaign_steps")).toHaveLength(0);
+  });
+
+  it("resumes from where the last run stopped", async () => {
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    seedCampaign(db);
+    linkedin.candidates = {
+      items: [candidate("p9", "https://www.linkedin.com/in/jane-nine")],
+      cursor: "page-3",
+      droppedFilters: [],
+    };
+    scoreMock.mockResolvedValue([ranked("https://www.linkedin.com/in/jane-nine", "p9", 90)]);
+
+    await runTargetingJob(ctx, more);
+
+    expect(linkedin.searches[0]?.cursor).toBe("page-2");
+    expect(db.find("campaigns", { id: CAMPAIGN })?.search_cursor).toBe("page-3");
+  });
+
+  it("moves past a page on which it already knew everybody", async () => {
+    // The common case once a campaign is a few hundred deep, and the one that
+    // used to kill the button: a run that produced no prospects left the
+    // position where it was, so every later press re-read the same page and
+    // reported the same people as already known, for ever.
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    seedCampaign(db);
+    db.seed("prospects", [
+      { workspace_id: WORKSPACE, linkedin_url: "linkedin.com/in/jane-nine", owner_user_id: USER },
+    ]);
+    linkedin.candidates = {
+      items: [candidate("p9", "https://www.linkedin.com/in/jane-nine")],
+      cursor: "page-3",
+      droppedFilters: [],
+    };
+
+    expect(await runTargetingJob(ctx, more)).toBeNull();
+    expect(db.find("campaigns", { id: CAMPAIGN })?.search_cursor).toBe("page-3");
+    expect(scoreMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses a search LinkedIn has already read to the end", async () => {
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    seedCampaign(db, { search_exhausted: true, search_cursor: null });
+
+    expect(await runTargetingJob(ctx, more)).toBeNull();
+    // Not a wasted request against a paid seat, and not a report blaming the
+    // customer profile for a list that is simply finished.
+    expect(linkedin.searches).toHaveLength(0);
+    const stop = db.rows("events").find((e) => e.name === "targeting.stopped");
+    expect((stop?.payload as { campaignId?: string })?.campaignId).toBe(CAMPAIGN);
+  });
+
+  it("records that the search is over when the provider runs out", async () => {
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    seedCampaign(db);
+    linkedin.candidates = {
+      items: [candidate("p9", "https://www.linkedin.com/in/jane-nine")],
+      cursor: null,
+      droppedFilters: [],
+    };
+    scoreMock.mockResolvedValue([ranked("https://www.linkedin.com/in/jane-nine", "p9", 90)]);
+
+    await runTargetingJob(ctx, more);
+
+    // Distinct from a run that found nobody new: this is the end of LinkedIn's
+    // answer, and the screen stops offering a button that cannot work.
+    expect(db.find("campaigns", { id: CAMPAIGN })?.search_exhausted).toBe(true);
+  });
+
+  it("takes the profile and the account off the campaign, not the request", async () => {
+    // Otherwise the request is a way to graft one campaign's list onto another
+    // customer profile's search, under the first campaign's approved copy.
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    const OTHER = "77777777-7777-4777-8777-777777777777";
+    db.seed("customer_profiles", [
+      {
+        id: OTHER,
+        workspace_id: WORKSPACE,
+        business_profile_id: BUSINESS,
+        name: "Somebody else",
+        spec: { ...CUSTOMER_PROFILE, name: "Somebody else" },
+        priority: 1,
+        do_not_pursue: false,
+        approved_at: "2026-09-01T09:00:00Z",
+      },
+    ]);
+    seedCampaign(db);
+    linkedin.candidates = {
+      items: [candidate("p9", "https://www.linkedin.com/in/jane-nine")],
+      cursor: "page-3",
+      droppedFilters: [],
+    };
+    scoreMock.mockResolvedValue([ranked("https://www.linkedin.com/in/jane-nine", "p9", 90)]);
+
+    await runTargetingJob(ctx, { ...more, customerProfileId: OTHER });
+
+    const scored = scoreMock.mock.calls[0]?.[1] as { profile: { name: string } };
+    expect(scored.profile.name).toBe("Ops leaders");
+  });
+
+  it("stops rather than searching for a customer profile that has been deleted", async () => {
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    seedCampaign(db, { customer_profile_id: null });
+
+    expect(await runTargetingJob(ctx, more)).toBeNull();
+    expect(linkedin.searches).toHaveLength(0);
+  });
+});

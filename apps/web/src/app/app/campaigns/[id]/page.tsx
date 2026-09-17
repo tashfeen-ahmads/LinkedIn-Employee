@@ -4,9 +4,21 @@ import Link from "next/link";
 import { LINKEDIN_LIMITS, countFunnel, FUNNEL_STAGES } from "@le/shared";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
-import { errorQuery } from "@/lib/worker";
+import { callWorker, errorQuery, noticeQuery } from "@/lib/worker";
+import { SubmitButton } from "@/components/submit-button";
+import { describeSearch } from "./search-state";
 import { PageNotice, type NoticeParams } from "@/components/page-notice";
 import { CONNECTION_NOTE_MAX, daysToSendAll, launchBlockers } from "@/lib/campaign";
+
+/**
+ * How many people one press of "Find more" reads.
+ *
+ * The same size as the first search, deliberately. A list grows in pages a
+ * person can actually review — a button that added a thousand names at once
+ * would produce a list nobody reads, which is the review step this product is
+ * built around quietly becoming a rubber stamp.
+ */
+const FIND_MORE_BATCH = 50;
 
 /**
  * The review screen. The product's central claim is that a person reads the
@@ -154,6 +166,81 @@ async function setStatus(formData: FormData) {
   revalidatePath(`/app/campaigns/${campaignId}`);
 }
 
+/**
+ * Reads the next page of the same search and adds whoever is new to this list.
+ *
+ * A campaign used to be one search: about fifty people, and no way to reach the
+ * fifty-first. Pressing "find prospects" again ran the identical query, got the
+ * identical page, and reported every person on it as already known — so the
+ * honest answer to "we need a thousand prospects" was that the product could
+ * not do it.
+ *
+ * The campaign is what remembers the position, so continuing is a matter of
+ * naming it. Everything else — which profile, which account, where the search
+ * stopped — comes off its own row in the worker, which is also what stops this
+ * form being a way to point one campaign's search at another profile.
+ */
+async function findMore(formData: FormData) {
+  "use server";
+  const campaignId = String(formData.get("campaignId"));
+  const session = await requireSession();
+  const supabase = await createClient();
+
+  const { data: campaign } = await supabase
+    .from("campaigns")
+    .select("customer_profile_id, linkedin_account_id, search_exhausted")
+    .eq("id", campaignId)
+    .eq("workspace_id", session.workspaceId)
+    .maybeSingle();
+  if (!campaign?.customer_profile_id) {
+    redirect(
+      errorQuery(
+        `/app/campaigns/${campaignId}`,
+        "This campaign's customer profile has been deleted, so there is nothing left to search for.",
+      ),
+    );
+  }
+  if (campaign.search_exhausted) {
+    redirect(
+      errorQuery(
+        `/app/campaigns/${campaignId}`,
+        "This search has already reached the end of what LinkedIn returns for this profile.",
+      ),
+    );
+  }
+
+  const { data: account } = await supabase
+    .from("linkedin_accounts")
+    .select("status")
+    .eq("id", campaign.linkedin_account_id)
+    .maybeSingle();
+  if (account?.status !== "active") {
+    redirect(
+      errorQuery(`/app/campaigns/${campaignId}`, "Reconnect the LinkedIn account on the Team page first."),
+    );
+  }
+
+  const queued = await callWorker("/jobs/targeting", {
+    workspaceId: session.workspaceId,
+    userId: session.userId,
+    customerProfileId: campaign.customer_profile_id,
+    linkedinAccountId: campaign.linkedin_account_id,
+    campaignId,
+    limit: FIND_MORE_BATCH,
+  });
+  if (!queued.ok) {
+    redirect(errorQuery(`/app/campaigns/${campaignId}`, `Could not start the search: ${queued.error}`));
+  }
+
+  revalidatePath(`/app/campaigns/${campaignId}`);
+  redirect(
+    noticeQuery(
+      `/app/campaigns/${campaignId}`,
+      "Reading the next page of the same search. It takes about a minute — reload this page and the new names appear at the bottom of the list.",
+    ),
+  );
+}
+
 /** Reads exactly what launchBlockers needs, for the server-action re-check. */
 async function launchState(campaignId: string, workspaceId: string) {
   const supabase = await createClient();
@@ -220,13 +307,13 @@ export default async function CampaignPage({
 
   const { data: campaign } = await supabase
     .from("campaigns")
-    .select("id, name, status, connection_note, daily_invite_cap, reply_mode, launched_at, linkedin_account_id, rules")
+    .select("id, name, status, connection_note, daily_invite_cap, reply_mode, launched_at, linkedin_account_id, rules, customer_profile_id, search_exhausted, searched_at")
     .eq("id", id)
     .eq("workspace_id", session.workspaceId)
     .maybeSingle();
   if (!campaign) notFound();
 
-  const [{ data: steps }, { data: members }, { data: account }] = await Promise.all([
+  const [{ data: steps }, { data: members }, { data: account }, { data: lastSearch }] = await Promise.all([
     supabase
       .from("campaign_steps")
       .select("id, step_number, delay_days, message")
@@ -238,6 +325,19 @@ export default async function CampaignPage({
       .eq("campaign_id", id)
       .order("created_at"),
     supabase.from("linkedin_accounts").select("status, display_name").eq("id", campaign.linkedin_account_id).maybeSingle(),
+    // How the last press of Find more went. The work happens in the worker, so
+    // this page never learns the outcome of the job it started — and a search
+    // that stopped early looks exactly like one that is still running, which is
+    // the ambiguity that had somebody pressing a button over and over.
+    supabase
+      .from("events")
+      .select("name, payload, created_at")
+      .eq("workspace_id", session.workspaceId)
+      .in("name", ["targeting.queued", "targeting.stopped", "campaign.extended"])
+      .eq("payload->>campaignId", id)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
 
   const rows = members ?? [];
@@ -257,6 +357,7 @@ export default async function CampaignPage({
   const filterNotes = ruleStrings(campaign.rules, "filterNotes");
   const running = campaign.status === "running";
   const reached = FUNNEL_STAGES.filter((stage) => counts[stage.key] > 0);
+  const searchNotice = describeSearch(lastSearch);
 
   return (
     <>
@@ -409,6 +510,46 @@ export default async function CampaignPage({
             {rows.length} {rows.length === 1 ? "person" : "people"}
           </p>
         </div>
+
+        {searchNotice ? (
+          <div className={searchNotice.tone === "danger" ? "notice danger" : "notice"}>
+            <strong>{searchNotice.title}</strong>
+            <p className="small">{searchNotice.body}</p>
+          </div>
+        ) : null}
+
+        {/*
+          One list grown a page at a time, rather than a new campaign per page.
+          Everyone already on it is excluded from the next read, so the list
+          only ever gets longer and nobody appears on it twice.
+        */}
+        <form action={findMore} className="between card">
+          <div>
+            <p className="small">
+              <strong>Need more people?</strong>
+              {campaign.searched_at && !searchNotice ? (
+                <span className="muted">
+                  {" "}Last read {new Date(campaign.searched_at).toLocaleDateString()}.
+                </span>
+              ) : null}
+            </p>
+            <p className="tiny subtle">
+              {campaign.search_exhausted
+                ? "LinkedIn has no more profiles matching this customer profile. Widen the profile on the Strategy page to reach more people."
+                : !campaign.customer_profile_id
+                  ? "The customer profile this list was built from has been deleted, so there is nothing left to search for."
+                  : `Reads the next ${FIND_MORE_BATCH} profiles from where this search stopped and adds whoever is new. Everyone already on your prospect list is skipped, so nobody is contacted twice.`}
+            </p>
+          </div>
+          <input type="hidden" name="campaignId" value={campaign.id} />
+          <SubmitButton
+            className="btn ghost"
+            pendingLabel="Searching…"
+            disabled={campaign.search_exhausted || !campaign.customer_profile_id}
+          >
+            Find {FIND_MORE_BATCH} more
+          </SubmitButton>
+        </form>
 
         {rows.length === 0 ? (
           <p className="small muted">Nobody yet.</p>

@@ -13,6 +13,8 @@ import type {
   ProviderRelation,
   SearchQuery,
 } from "./provider.js";
+import type { ClassicPosition } from "./cursor.js";
+import { decodeClassicCursor, encodeClassicCursor, isClassicCursor } from "./cursor.js";
 
 /**
  * Unipile hosts the LinkedIn session and exposes a REST API over it, so we never
@@ -187,8 +189,7 @@ export class UnipileProvider implements LinkedInProvider {
     tier?: SearchTier;
   }): Promise<ProspectPage> {
     const tier = input.tier ?? "classic";
-    const params = new URLSearchParams({ account_id: input.accountId, limit: String(input.limit ?? 50) });
-    if (input.cursor) params.set("cursor", input.cursor);
+    const limit = input.limit ?? 50;
 
     const resolved = await this.resolveFilters(input.accountId, input.query);
     const { body, droppedFilters } = toUnipileSearchBody(input.query, tier, resolved);
@@ -197,6 +198,10 @@ export class UnipileProvider implements LinkedInProvider {
     // Sales Navigator takes the whole profile as one structured query, which is
     // what the seat is for.
     if (tier === "sales_navigator") {
+      const params = new URLSearchParams({ account_id: input.accountId, limit: String(limit) });
+      // A classic position describes six searches and means nothing here. An
+      // account that gained a seat since the last run carries one.
+      if (input.cursor && !isClassicCursor(input.cursor)) params.set("cursor", input.cursor);
       const res = await this.request<{ items?: UnipileRawProfile[]; cursor?: string | null }>(
         `${ROUTES.search}?${params.toString()}`,
         { method: "POST", body: JSON.stringify(body) },
@@ -222,17 +227,49 @@ export class UnipileProvider implements LinkedInProvider {
     // it, and the answers are merged. More requests, but each is a question
     // LinkedIn can actually answer.
     const terms = classicTerms(input.query);
-    const limit = input.limit ?? 50;
+    const resume = decodeClassicCursor(input.cursor);
+
+    // Where the last pass attempted got to, for the case where it answered with
+    // nobody at all. An empty page is usually the end, but a provider that
+    // hands back a cursor with it is saying otherwise, and reading that as the
+    // end would retire a search that still had people in it.
+    let position: ClassicPosition | null = null;
 
     for (const round of [0, 1]) {
+      // A resumed search does not redo the passes it already finished.
+      if (resume && round < resume.round) continue;
+
       // Second pass without the industry filter. LinkedIn's taxonomy rarely
       // matches how a business describes its own market, and this profile
       // named four industries, one of which LinkedIn does not have at all.
       const withIndustry = round === 0 && resolved.industries.length > 0;
+
+      // Where each term begins. A pass being resumed begins where it stopped,
+      // and only for the terms that had anything left; any other pass begins at
+      // the first page of every term.
+      const start =
+        resume && round === resume.round
+          ? { ...resume.terms }
+          : Object.fromEntries(terms.map((t) => [t, ""]));
+
+      // Advanced as each term answers, and carried into the cursor below. A
+      // term this run had no room to reach keeps its starting position rather
+      // than being skipped, or the next run would step over it entirely.
+      const next: Record<string, string> = { ...start };
       const merged = new Map<string, UnipileRawProfile>();
 
-      for (const term of terms) {
-        if (merged.size >= limit) break;
+      for (const [term, at] of Object.entries(start)) {
+        // Each term asks for what is still missing rather than a full page, so
+        // the merged list stops at the limit instead of overshooting it. The
+        // overshoot used to be trimmed off the end -- which was fine while
+        // every run started from the first page, and throws away people whose
+        // page has now been read and paid for.
+        const want = limit - merged.size;
+        if (want <= 0) break;
+
+        const params = new URLSearchParams({ account_id: input.accountId, limit: String(want) });
+        if (at) params.set("cursor", at);
+
         const res = await this.request<{ items?: UnipileRawProfile[]; cursor?: string | null }>(
           `${ROUTES.search}?${params.toString()}`,
           {
@@ -259,7 +296,15 @@ export class UnipileProvider implements LinkedInProvider {
           const id = item.provider_id ?? item.id ?? item.public_identifier ?? "";
           if (id && !merged.has(id)) merged.set(id, item);
         }
+
+        // No cursor back means this term has no more people to give. It leaves
+        // the position entirely: an exhausted term asked again from the start
+        // returns the same first page for as long as the campaign runs.
+        if (res.cursor) next[term] = res.cursor;
+        else delete next[term];
       }
+
+      position = nextPosition(round, next, terms, withIndustry);
 
       if (merged.size > 0) {
         if (terms.length > 1) {
@@ -273,8 +318,8 @@ export class UnipileProvider implements LinkedInProvider {
           );
         }
         return {
-          items: [...merged.values()].slice(0, limit).map(toProspectCandidate),
-          cursor: null,
+          items: [...merged.values()].map(toProspectCandidate),
+          cursor: encodeClassicCursor(position),
           droppedFilters,
           filterNotes: notes,
         };
@@ -283,7 +328,7 @@ export class UnipileProvider implements LinkedInProvider {
       if (!withIndustry) break;
     }
 
-    return { items: [], cursor: null, droppedFilters, filterNotes: notes };
+    return { items: [], cursor: encodeClassicCursor(position), droppedFilters, filterNotes: notes };
   }
 
   /**
@@ -779,6 +824,28 @@ function toUnipileSearchBody(
     },
     droppedFilters,
   };
+}
+
+/**
+ * Where the next run of a classic search should pick up, or nothing when there
+ * is nowhere left to pick up from.
+ *
+ * A pass with terms left resumes itself. A pass that ran every term to the end
+ * is finished — but the industry pass being finished is not the search being
+ * finished, because dropping the industry filter is a different search over
+ * people the first pass could never have returned. Only the unfiltered pass
+ * running out means there is genuinely nobody else, and that is the one answer
+ * that lets a screen stop offering to look again.
+ */
+function nextPosition(
+  round: number,
+  next: Record<string, string>,
+  terms: string[],
+  withIndustry: boolean,
+): ClassicPosition | null {
+  if (Object.keys(next).length > 0) return { round, terms: next };
+  if (withIndustry) return { round: round + 1, terms: Object.fromEntries(terms.map((t) => [t, ""])) };
+  return null;
 }
 
 /**

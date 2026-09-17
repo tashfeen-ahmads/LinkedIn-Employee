@@ -213,6 +213,11 @@ export type CampaignRow = {
   reply_mode: ReplyModeDb;
   rules: Json;
   stop_conditions: Json;
+  /** Where the prospect search had got to, so it can be continued. Opaque. */
+  search_cursor: string | null;
+  /** The search has no more people to give — not merely none new this run. */
+  search_exhausted: boolean;
+  searched_at: string | null;
   launched_at: string | null;
   created_at: string;
   updated_at: string;

@@ -26,7 +26,7 @@ const MIN_FIT_TO_QUEUE = 60;
  * produced it is a report that costs a deploy to interpret. Bump it whenever
  * the search behaviour changes.
  */
-const TARGETING_BUILD = "2026-09-16.per-term-search";
+const TARGETING_BUILD = "2026-09-17.continuable-search";
 
 /**
  * Why the job stopped, written where anyone can read it.
@@ -51,7 +51,9 @@ async function giveUp(
     actorUserId: job.userId,
     subjectType: "customer_profile",
     subjectId: job.customerProfileId,
-    payload: { reason, build: TARGETING_BUILD, ...detail },
+    // Named on every stop, so the campaign screen can find the report for the
+    // press somebody just made rather than the last one anywhere.
+    payload: { reason, build: TARGETING_BUILD, campaignId: job.campaignId ?? null, ...detail },
   });
   return null;
 }
@@ -86,6 +88,7 @@ export async function runTargetingJob(ctx: WorkerContext, job: TargetingJob): Pr
       payload: {
         reason: `The Targeting Agent hit an error: ${reason}`,
         build: TARGETING_BUILD,
+        campaignId: job.campaignId ?? null,
         threw: true,
       },
     });
@@ -96,10 +99,44 @@ export async function runTargetingJob(ctx: WorkerContext, job: TargetingJob): Pr
 async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string | null> {
   const { db } = ctx;
 
+  // A continuation names a campaign and takes everything else off its row: the
+  // profile it was built from, the account that searched, and the position the
+  // last run reached. Reading those from the request instead would let a
+  // caller graft one campaign's list onto another profile's search.
+  let continuing: CampaignPosition | null = null;
+  if (job.campaignId) {
+    const { data: row } = await db
+      .from("campaigns")
+      .select("id, customer_profile_id, linkedin_account_id, connection_note, search_cursor, search_exhausted")
+      .eq("id", job.campaignId)
+      .eq("workspace_id", job.workspaceId)
+      .maybeSingle();
+    if (!row) return giveUp(ctx, job, "That campaign no longer exists.");
+    if (!row.customer_profile_id) {
+      return giveUp(
+        ctx,
+        job,
+        "The customer profile this campaign was built from has been deleted, so there is nothing left to search for.",
+      );
+    }
+    if (row.search_exhausted) {
+      // Different from finding nobody new. LinkedIn has been read to the end
+      // of this profile, and pressing again would re-read the first page and
+      // report every person on it as already known.
+      return giveUp(ctx, job, "This search has reached the end of what LinkedIn will return for this profile.", {
+        campaignId: row.id,
+      });
+    }
+    continuing = row as CampaignPosition;
+  }
+
+  const customerProfileId = continuing?.customer_profile_id ?? job.customerProfileId;
+  const linkedinAccountId = continuing?.linkedin_account_id ?? job.linkedinAccountId;
+
   const { data: profileRow } = await db
     .from("customer_profiles")
     .select("id, spec, business_profile_id, do_not_pursue, approved_at")
-    .eq("id", job.customerProfileId)
+    .eq("id", customerProfileId)
     .single();
   if (!profileRow) return giveUp(ctx, job, "That customer profile no longer exists.");
   if (profileRow.do_not_pursue) {
@@ -126,7 +163,7 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
   const { data: account } = await db
     .from("linkedin_accounts")
     .select("id, provider_account_id, status, has_sales_navigator")
-    .eq("id", job.linkedinAccountId)
+    .eq("id", linkedinAccountId)
     .single();
   if (!account?.provider_account_id || account.status !== "active") {
     return giveUp(ctx, job, "The LinkedIn account is not connected and active.", {
@@ -147,6 +184,7 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
       query: profile.salesNavFilters,
       limit: job.limit,
       tier: searchTier,
+      ...(continuing?.search_cursor ? { cursor: continuing.search_cursor } : {}),
     });
   } catch (err) {
     // A throw here is retried by the queue and then given up on, all of it out
@@ -171,6 +209,17 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
       cause: (err as { message?: string })?.message ?? "unknown",
     });
   }
+
+  // Written before anything else can stop the run, and whatever the run finds.
+  //
+  // A page read is a page spent: those profiles came off a seat somebody pays
+  // for, and LinkedIn will not hand them back a second time except by handing
+  // back the same page. If the position only moved on a run that produced
+  // prospects, then a run whose fifty people were all already known -- the
+  // common case once a campaign is a few hundred deep -- would leave the
+  // campaign parked on that page, and every future press would read it again.
+  // "Find more" would go permanently dead at the first repeat page.
+  if (continuing) await rememberPosition(ctx, job, continuing.id, page.cursor);
 
   // Anyone this workspace already knows about is excluded, whichever rep owns
   // them. This is the cross-rep duplicate prevention promised in the spec.
@@ -202,7 +251,15 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
     // The three reasons a page of results yields nobody are completely
     // different problems, so they are counted separately rather than reported
     // as one empty list.
-    return giveUp(ctx, job, "The search returned nobody new to contact.", {
+    //
+    // A page of people we already have is the one that is not a problem at
+    // all, and reads exactly like the ones that are. It is what a repeated
+    // search over a profile a campaign has already worked through looks like,
+    // and the answer to it is to read further, not to change anything.
+    const reason = wholePageKnown(page, unknown)
+      ? nothingNewYet(continuing, page)
+      : "The search returned nobody new to contact.";
+    return giveUp(ctx, job, reason, {
       ...(probe ? { probe } : {}),
       searchTier,
       returnedByProvider: page.items.length,
@@ -253,11 +310,43 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
   }
 
   const { data: rep } = await db.from("profiles").select("full_name").eq("id", job.userId).single();
+  const repName = rep?.full_name ?? "the sender";
+
+  // Continuing a list adds people to it. The copy, the steps and the angle are
+  // the ones a human already read and approved — rewriting them because the
+  // list grew would change what everybody already queued is about to receive,
+  // silently, at the moment somebody asked for more names.
+  if (continuing) {
+    const added = await attachProspects(ctx, job, {
+      campaignId: continuing.id,
+      campaignAngle: continuing.connection_note,
+      business,
+      profile,
+      repName,
+      shortlist,
+    });
+    await recordEvent(db, {
+      workspaceId: job.workspaceId,
+      name: "campaign.extended",
+      actorUserId: job.userId,
+      subjectType: "campaign",
+      subjectId: continuing.id,
+      payload: {
+        campaignId: continuing.id,
+        added,
+        searched: page.items.length,
+        alreadyKnown: page.items.length - unknown.length,
+        searchTier,
+        exhausted: page.cursor === null,
+      },
+    });
+    return continuing.id;
+  }
 
   const plan = await buildCampaign(ctx.agentsFor(job.workspaceId), {
     business,
     profile,
-    repName: rep?.full_name ?? "the sender",
+    repName,
     dailyInviteCap: Math.min(LINKEDIN_LIMITS.invitesPerDayMax, 20),
   });
 
@@ -296,10 +385,132 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
     })),
   );
 
+  const attached = await attachProspects(ctx, job, {
+    campaignId: campaign.id,
+    campaignAngle: plan.connectionNote,
+    business,
+    profile,
+    repName,
+    shortlist,
+  });
+
+  // Where the search stopped, so the next press reads past it rather than
+  // re-reading the page this campaign was built from.
+  await rememberPosition(ctx, job, campaign.id, page.cursor);
+
+  await recordEvent(db, {
+    workspaceId: job.workspaceId,
+    name: "campaign.created",
+    actorUserId: job.userId,
+    subjectType: "campaign",
+    subjectId: campaign.id,
+    payload: {
+      prospects: attached,
+      searched: page.items.length,
+      searchTier,
+      droppedFilters: page.droppedFilters,
+      filterNotes: page.filterNotes ?? [],
+    },
+  });
+
+  return campaign.id;
+}
+
+/**
+ * Whether the provider answered with people and every one of them was somebody
+ * this workspace already has.
+ */
+function wholePageKnown(page: { items: unknown[] }, unknown: unknown[]): boolean {
+  return page.items.length > 0 && unknown.length === 0;
+}
+
+/**
+ * What to say when a run read a full page and knew everybody on it.
+ *
+ * Not a failure, and it must not read like one. A continuation has already
+ * moved past that page, so the useful instruction is to press again; a fresh
+ * search has not, and pressing the same button would re-read the same page for
+ * ever, so it points at the campaign that can read further instead.
+ */
+function nothingNewYet(continuing: CampaignPosition | null, page: { cursor: string | null }): string {
+  if (!continuing) {
+    return "Everyone LinkedIn returned is already on your prospect list. Open the campaign built from this profile and use Find more, which reads past the page this search keeps landing on.";
+  }
+  return page.cursor
+    ? "Everyone on this page is already on your prospect list. The search has moved past them — press Find more again to read the next page."
+    : "Everyone on this page is already on your prospect list, and that was the last page LinkedIn will return for this profile.";
+}
+
+/**
+ * A campaign being added to, and where its search had reached.
+ */
+interface CampaignPosition {
+  id: string;
+  customer_profile_id: string;
+  linkedin_account_id: string;
+  connection_note: string;
+  search_cursor: string | null;
+  search_exhausted: boolean;
+}
+
+/**
+ * Stores where the search stopped, and whether there is anywhere left to go.
+ *
+ * A null cursor here means the provider has nothing further for this profile,
+ * which is not the same as a run finding nobody new: one is the end of
+ * LinkedIn's answer and the other is a page of people we already had. The
+ * screen has to tell those apart or it either offers a button that cannot work
+ * or hides one that would have.
+ */
+async function rememberPosition(
+  ctx: WorkerContext,
+  job: TargetingJob,
+  campaignId: string,
+  cursor: string | null,
+): Promise<void> {
+  const { error } = await ctx.db
+    .from("campaigns")
+    .update({
+      search_cursor: cursor,
+      search_exhausted: cursor === null,
+      searched_at: new Date().toISOString(),
+    })
+    .eq("id", campaignId)
+    .eq("workspace_id", job.workspaceId);
+
+  // Loud, and never fatal. The prospects this run found are already stored and
+  // are the thing the person asked for; losing the position costs one repeated
+  // page on the next press, and throwing here would throw them away instead.
+  if (error) console.error("could not store the search position", { campaignId, reason: error.message });
+}
+
+/**
+ * Writes a shortlist into `prospects` and onto a campaign, with a note per
+ * person. Returns how many people were added.
+ *
+ * Shared by the run that creates a campaign and the run that adds to one,
+ * because they differ in exactly one thing — where the angle comes from — and
+ * the personalisation, the provider-id matching and the upsert are the part
+ * that must not drift between them.
+ */
+async function attachProspects(
+  ctx: WorkerContext,
+  job: TargetingJob,
+  input: {
+    campaignId: string;
+    campaignAngle: string;
+    business: Parameters<typeof personalizeInvites>[1]["business"];
+    profile: Parameters<typeof personalizeInvites>[1]["profile"];
+    repName: string;
+    shortlist: Array<{ candidate: ProspectCandidate; fitScore: number; fitReasons: unknown; intentScore: number }>;
+  },
+): Promise<number> {
+  const { db } = ctx;
+
   const { data: insertedProspects } = await db
     .from("prospects")
     .upsert(
-      shortlist.map((r) => ({
+      input.shortlist.map((r) => ({
         workspace_id: job.workspaceId,
         linkedin_url: normalizeLinkedInUrl(r.candidate.linkedinUrl),
         provider_id: r.candidate.providerId,
@@ -322,67 +533,56 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
     )
     .select("id");
 
-  if (insertedProspects?.length) {
-    // One note per person, written from that person's own details.
-    //
-    // Done here rather than at send time for two reasons. A human reviews and
-    // launches the campaign, and they cannot review copy that does not exist
-    // yet. And a send-time model call sits on the path of an action the rate
-    // limiter has already scheduled, where a slow or failed response becomes a
-    // missed send rather than a visible problem.
-    //
-    // The upsert above returns ids in the order it was given, so the shortlist
-    // and the inserted rows line up — but "lines up" is an assumption that
-    // breaks silently, so the note is matched by provider id instead.
-    const notes = await personalizeInvites(ctx.agentsFor(job.workspaceId), {
-      business,
-      profile,
-      repName: rep?.full_name ?? "the sender",
-      campaignAngle: plan.connectionNote,
-      prospects: shortlist.map((r) => r.candidate),
-    });
+  if (!insertedProspects?.length) return 0;
 
-    const providerIdByProspectId = new Map<string, string>();
-    for (const [index, p] of insertedProspects.entries()) {
-      const candidate = shortlist[index]?.candidate;
-      if (candidate) providerIdByProspectId.set(p.id, candidate.providerId);
-    }
-
-    await db.from("campaign_prospects").insert(
-      insertedProspects.map((p) => {
-        const note = notes.get(providerIdByProspectId.get(p.id) ?? "");
-        return {
-          workspace_id: job.workspaceId,
-          campaign_id: campaign.id,
-          prospect_id: p.id,
-          status: "queued" as const,
-          // Absent is not an error: the send falls back to the campaign
-          // template, which is exactly what happened before any of this.
-          invite_note: note?.note ?? null,
-          invite_note_prompt_version: note?.promptVersion ?? null,
-          invite_note_grounding: (note?.grounding ?? []) as never,
-          invite_note_thin: note?.tooThin ?? false,
-        };
-      }),
-    );
-  }
-
-  await recordEvent(db, {
-    workspaceId: job.workspaceId,
-    name: "campaign.created",
-    actorUserId: job.userId,
-    subjectType: "campaign",
-    subjectId: campaign.id,
-    payload: {
-      prospects: insertedProspects?.length ?? 0,
-      searched: page.items.length,
-      searchTier,
-      droppedFilters: page.droppedFilters,
-      filterNotes: page.filterNotes ?? [],
-    },
+  // One note per person, written from that person's own details.
+  //
+  // Done here rather than at send time for two reasons. A human reviews and
+  // launches the campaign, and they cannot review copy that does not exist
+  // yet. And a send-time model call sits on the path of an action the rate
+  // limiter has already scheduled, where a slow or failed response becomes a
+  // missed send rather than a visible problem.
+  //
+  // The upsert above returns ids in the order it was given, so the shortlist
+  // and the inserted rows line up — but "lines up" is an assumption that
+  // breaks silently, so the note is matched by provider id instead.
+  const notes = await personalizeInvites(ctx.agentsFor(job.workspaceId), {
+    business: input.business,
+    profile: input.profile,
+    repName: input.repName,
+    campaignAngle: input.campaignAngle,
+    prospects: input.shortlist.map((r) => r.candidate),
   });
 
-  return campaign.id;
+  const providerIdByProspectId = new Map<string, string>();
+  for (const [index, p] of insertedProspects.entries()) {
+    const candidate = input.shortlist[index]?.candidate;
+    if (candidate) providerIdByProspectId.set(p.id, candidate.providerId);
+  }
+
+  await db.from("campaign_prospects").upsert(
+    insertedProspects.map((p) => {
+      const note = notes.get(providerIdByProspectId.get(p.id) ?? "");
+      return {
+        workspace_id: job.workspaceId,
+        campaign_id: input.campaignId,
+        prospect_id: p.id,
+        status: "queued" as const,
+        // Absent is not an error: the send falls back to the campaign
+        // template, which is exactly what happened before any of this.
+        invite_note: note?.note ?? null,
+        invite_note_prompt_version: note?.promptVersion ?? null,
+        invite_note_grounding: (note?.grounding ?? []) as never,
+        invite_note_thin: note?.tooThin ?? false,
+      };
+    }),
+    // Somebody already on this campaign keeps the row they have. Overwriting it
+    // would replace a note a human may have rewritten, and reset a person the
+    // campaign has already invited back to `queued` — inviting them twice.
+    { onConflict: "campaign_id,prospect_id", ignoreDuplicates: true },
+  );
+
+  return insertedProspects.length;
 }
 
 /**

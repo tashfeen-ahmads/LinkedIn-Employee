@@ -28,6 +28,15 @@ export interface TargetingJob {
   linkedinAccountId: string;
   userId: string;
   limit: number;
+  /**
+   * The campaign to add to, when this run is continuing a list rather than
+   * starting one.
+   *
+   * A campaign is where the search's position is kept, so continuing means
+   * naming the campaign and nothing else: the profile and the account come off
+   * its own row. Absent, this is a first search and a new campaign.
+   */
+  campaignId?: string;
 }
 
 export interface CampaignTickJob {

@@ -30,7 +30,19 @@ export class MockLinkedInProvider implements LinkedInProvider {
    */
   searchError: Error | null = null;
   /** Every search performed, so a test can prove one did not happen. */
-  readonly searches: Array<{ accountId: string; query: SearchQuery; tier: SearchTier }> = [];
+  readonly searches: Array<{
+    accountId: string;
+    query: SearchQuery;
+    tier: SearchTier;
+    /** What position the caller asked to resume from, so a test can prove it did. */
+    cursor: string | null;
+  }> = [];
+  /**
+   * Answers keyed by the cursor asked for, so a test can walk a search the way
+   * "find more" does. The first page is the one under no cursor; anything not
+   * listed here falls back to `candidates`.
+   */
+  readonly pages = new Map<string, ProspectPage>();
   /** Connections the account has, i.e. who accepted an invitation. */
   relations: ProviderRelation[] = [];
 
@@ -67,10 +79,16 @@ export class MockLinkedInProvider implements LinkedInProvider {
     accountId: string;
     query: SearchQuery;
     tier?: SearchTier;
+    cursor?: string;
   }): Promise<ProspectPage> {
-    this.searches.push({ accountId: input.accountId, query: input.query, tier: input.tier ?? "classic" });
+    this.searches.push({
+      accountId: input.accountId,
+      query: input.query,
+      tier: input.tier ?? "classic",
+      cursor: input.cursor ?? null,
+    });
     if (this.searchError) throw this.searchError;
-    return this.candidates;
+    return this.pages.get(input.cursor ?? "") ?? this.candidates;
   }
 
   /** Set by a test to control what the profile endpoint resolves to. */

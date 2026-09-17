@@ -250,6 +250,35 @@ tests that were verified by deliberately breaking the code.
     `STATUS:CANCELLED` and `TRANSP:TRANSPARENT` are the two exceptions, and
     both are events the rep has said are not busy.
 
+20. **A search remembers where it stopped, and a page read is a page spent.**
+    A campaign is one list grown a page at a time, not one search: `Find more`
+    on `/app/campaigns/[id]` continues the same query from the position stored
+    on the campaign (`search_cursor`, migration 0014). Classic search is several
+    separate keyword searches, so that position is composite — every term's
+    place travels together (`packages/linkedin/src/cursor.ts`), because the
+    classic path used to return `cursor: null` and every run therefore began at
+    the first page, found the same fifty people, and reported all fifty as
+    already known. Everyone past the first page was unreachable by design.
+
+    The position moves on whatever the run found. A page whose fifty people
+    were all already on the list is the normal case once a campaign is a few
+    hundred deep, and advancing only on a run that produced prospects would
+    park the campaign on that page for ever. LinkedIn will not hand those
+    profiles back except by handing back the same page, and they came off a
+    seat somebody pays for, so nobody is trimmed off the end of a merged page
+    either: each term asks only for what the page still has room for.
+
+    `search_exhausted` is the end of LinkedIn's answer and is not the same as a
+    run finding nobody new — one means stop offering the button, the other
+    means press it again. Running out inside the industry filter is neither:
+    dropping that filter is a different search over people the filtered pass
+    could never have returned, so it is the next position, not the end.
+    Continuing reads the profile and the account off the campaign's own row and
+    never off the request, or the endpoint is a way to graft one campaign's
+    approved copy onto another profile's search. A campaign being added to
+    keeps the copy a human already approved; growing a list must not rewrite
+    what everybody already queued is about to receive.
+
 ## Conventions
 
 - Agent output is validated against a zod schema before it touches the

@@ -47,6 +47,13 @@ const TargetingRequest = z.object({
   customerProfileId: z.string().uuid(),
   linkedinAccountId: z.string().uuid(),
   limit: z.number().int().min(1).max(500).default(100),
+  /**
+   * Continue this campaign's list instead of starting a new one. The job reads
+   * the profile and the account off the campaign's own row rather than trusting
+   * the two above, so a caller cannot graft one campaign's search onto another
+   * profile's list.
+   */
+  campaignId: z.string().uuid().optional(),
 });
 
 const SendReplyRequest = z.object({
@@ -252,7 +259,7 @@ export function createServer(ctx: WorkerContext, queues: Queues): Hono {
         actorUserId: parsed.data.userId,
         subjectType: "customer_profile",
         subjectId: parsed.data.customerProfileId,
-        payload: { limit: parsed.data.limit ?? null },
+        payload: { limit: parsed.data.limit ?? null, campaignId: parsed.data.campaignId ?? null },
       });
     } catch (err) {
       console.error("could not record targeting.queued", err);
