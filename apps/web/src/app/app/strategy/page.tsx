@@ -2,12 +2,14 @@ import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { BusinessProfileSchema, CustomerProfileSchema } from "@le/shared";
+import { PageNotice } from "@/components/page-notice";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
-import { callWorker, errorQuery } from "@/lib/worker";
+import { callWorker, errorQuery, noticeQuery } from "@/lib/worker";
 import { FILTER_FIELDS, applyProfileEdits, formatList } from "@/lib/profile-form";
 import { readStrategyState } from "@/lib/strategy-state";
 import { StrategyStatus } from "@/components/strategy-status";
+import { SubmitButton } from "@/components/submit-button";
 
 /**
  * The Strategy Agent's output, and the only place it can be approved.
@@ -120,12 +122,23 @@ async function findProspects(formData: FormData) {
 
   revalidatePath("/app/strategy");
   revalidatePath("/app/campaigns");
+  // Said out loud, because the work happens somewhere else. The button returns
+  // the moment the job is accepted, the agent takes the better part of a
+  // minute, and without a sentence here the page looks exactly as it did
+  // before the click -- which is what had somebody pressing it repeatedly and
+  // queueing three searches of the same profile.
+  redirect(
+    noticeQuery(
+      "/app/strategy",
+      "Searching LinkedIn now. It takes about a minute — the list appears under Prospects, and this page will say if it stops early.",
+    ),
+  );
 }
 
 export default async function StrategyPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; notice?: string }>;
 }) {
   const params = await searchParams;
   const session = await requireSession();
@@ -215,11 +228,7 @@ export default async function StrategyPage({
         </p>
       </div>
 
-      {params.error ? (
-        <div className="notice danger">
-          {params.error}
-        </div>
-      ) : null}
+      <PageNotice error={params.error} notice={params.notice} />
 
       {/* Reported whether or not the run failed loudly: the interesting case is
           the one that succeeded at doing nothing. */}
@@ -302,9 +311,14 @@ export default async function StrategyPage({
                   ) : approved ? (
                     <form action={findProspects}>
                       <input type="hidden" name="profileId" value={row.id} />
-                      <button className="btn small" type="submit" disabled={!connected}>
+                      <SubmitButton
+                        className="btn small"
+                        disabled={!connected}
+                        pendingLabel="Searching LinkedIn…"
+                        title={connected ? undefined : "Connect your LinkedIn account first"}
+                      >
                         Find {HOW_MANY} prospects
-                      </button>
+                      </SubmitButton>
                     </form>
                   ) : (
                     <form action={approveProfile}>

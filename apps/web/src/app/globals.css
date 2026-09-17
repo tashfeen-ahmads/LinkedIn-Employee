@@ -1268,3 +1268,26 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
 }
 .step-meter span.is-done { background: var(--positive); }
 .step-meter span.is-next { background: var(--accent); }
+
+/* The mark that says a button is working. Small, quiet, and impossible to
+   confuse with a button that did nothing — which is what was there before. */
+.spinner {
+  display: inline-block;
+  width: 0.75em;
+  height: 0.75em;
+  margin-right: 0.5em;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  vertical-align: -0.1em;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Still visibly different from the resting state, without spinning. */
+  .spinner { animation: none; opacity: 0.6; }
+}

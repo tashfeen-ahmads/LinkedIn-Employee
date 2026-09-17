@@ -215,9 +215,11 @@ describe("searchProspects tier", () => {
     // profile is really about.
     expect(bodies[0]?.keywords).toBe("Head of Operations");
     expect(bodies[0]?.advanced_keywords).toBeUndefined();
-    // First-degree connections have already accepted; inviting them spends the
-    // day's allowance on nothing.
-    expect(bodies[0]?.network_distance).toEqual([2, 3]);
+    // Second degree only. First-degree connections have already accepted, so
+    // inviting one spends the day's allowance on nothing; third-degree
+    // profiles come back as "LinkedIn Member" with no name and no address, so
+    // nobody can check who they are before a request goes out.
+    expect(bodies[0]?.network_distance).toEqual([2]);
   });
 
   it("never builds a boolean string for the one keyword box", async () => {
@@ -436,5 +438,59 @@ describe("reading a prospect out of a search result", () => {
 
     expect(a.linkedinUrl).not.toBe(b.linkedinUrl);
     expect(a.linkedinUrl).toContain("ACoAAB1");
+  });
+});
+
+/**
+ * What LinkedIn returns for somebody outside your network.
+ *
+ * `name: "LinkedIn Member"`, and `public_identifier` set to the internal id
+ * rather than a vanity slug. Stored as written, that becomes a prospect called
+ * LinkedIn Member with a profile link that 404s — and thirty of them in a row
+ * is indistinguishable from fabricated data, which is how a list of real people
+ * was reported as fake twice.
+ */
+describe("a profile LinkedIn will not show", () => {
+  async function candidateFor(raw: Record<string, unknown>) {
+    const fetchImpl = (async (url: string | URL | Request) => {
+      if (String(url).includes("/search/parameters")) return json({ items: [] });
+      return json({ items: [raw], cursor: null });
+    }) as typeof fetch;
+    const provider = new UnipileProvider({ dsn: "https://api.test", accessToken: "t", fetchImpl });
+    const page = await provider.searchProspects({ accountId: "a1", query: { titles: ["x"] }, tier: "classic" });
+    return page.items[0]!;
+  }
+
+  it("does not store the placeholder as somebody's name", async () => {
+    // A note beginning "Hi LinkedIn" is the failure this prevents.
+    const c = await candidateFor({ provider_id: "ACoAAB1", name: "LinkedIn Member" });
+
+    expect(c.firstName).toBe("");
+    expect(c.lastName).toBe("");
+  });
+
+  it("does not build an address from an internal id dressed as a slug", async () => {
+    // `public_identifier` is present and is the provider id, so checking only
+    // that it exists produced `/in/ACoAAA...` — a 404 every time.
+    const c = await candidateFor({
+      provider_id: "ACoAAA33NwIBamI-WW-xVY2wbSYap1MYm99n_cA",
+      public_identifier: "ACoAAA33NwIBamI-WW-xVY2wbSYap1MYm99n_cA",
+      name: "LinkedIn Member",
+    });
+
+    expect(c.linkedinUrl).not.toMatch(/\/in\/ACoAAA/i);
+    expect(isPublicProfileUrl(c.linkedinUrl, c.providerId)).toBe(false);
+  });
+
+  it("still keeps a real name and slug when LinkedIn gives them", async () => {
+    const c = await candidateFor({
+      provider_id: "ACoAAB2",
+      public_identifier: "terrileib",
+      name: "Terri Leib",
+    });
+
+    expect(c.firstName).toBe("Terri");
+    expect(c.linkedinUrl).toBe("https://www.linkedin.com/in/terrileib");
+    expect(isPublicProfileUrl(c.linkedinUrl, c.providerId)).toBe(true);
   });
 });

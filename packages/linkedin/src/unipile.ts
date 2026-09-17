@@ -245,7 +245,13 @@ export class UnipileProvider implements LinkedInProvider {
               // Never given up, at any stage. A campaign that quietly starts
               // messaging another continent is worse than one finding nobody.
               ...(resolved.locations.length ? { location: resolved.locations } : {}),
-              network_distance: [2, 3],
+              // Second degree only. Third-degree profiles come back as
+              // "LinkedIn Member" with no name and no address -- real people,
+              // but nobody a reviewer can check and nobody an invitation
+              // should be spent on. Second-degree profiles carry their name,
+              // headline and vanity URL, and a shared connection is also the
+              // stronger reason to accept a request.
+              network_distance: [2],
             }),
           },
         );
@@ -841,7 +847,12 @@ function splitName(raw: UnipileRawProfile): { firstName: string; lastName: strin
     return { firstName: raw.first_name ?? "", lastName: raw.last_name ?? "" };
   }
   const whole = (raw.name ?? "").trim().replace(/\s+/g, " ");
-  if (!whole) return { firstName: "", lastName: "" };
+  // "LinkedIn Member" is the placeholder LinkedIn shows instead of a name for
+  // anyone outside the viewer's network. Stored as a name it becomes a
+  // prospect called LinkedIn Member, greeted as "Hi LinkedIn" -- and a list
+  // full of them is indistinguishable from fabricated data, which is exactly
+  // how it was reported.
+  if (!whole || /^linkedin member$/i.test(whole)) return { firstName: "", lastName: "" };
   const cut = whole.indexOf(" ");
   if (cut < 0) return { firstName: whole, lastName: "" };
   return { firstName: whole.slice(0, cut), lastName: whole.slice(cut + 1) };
@@ -864,9 +875,20 @@ function splitName(raw: UnipileRawProfile): { firstName: string; lastName: strin
  */
 function profileUrl(raw: UnipileRawProfile, identifier: string): string {
   const published = raw.public_profile_url ?? raw.profile_url;
-  if (published) return published;
-  if (raw.public_identifier) return `https://www.linkedin.com/in/${raw.public_identifier}`;
+  if (published && !isInternalId(published)) return published;
+  // A hidden profile comes back with `public_identifier` set to LinkedIn's
+  // internal id rather than a vanity slug, so "we have a public identifier" is
+  // not the same as "we have an address". Building `/in/ACoAAA...` from it
+  // produces a link that 404s and a list that looks invented.
+  if (raw.public_identifier && !isInternalId(raw.public_identifier)) {
+    return `https://www.linkedin.com/in/${raw.public_identifier}`;
+  }
   return `https://www.linkedin.com/search/results/all/?keywords=${encodeURIComponent(identifier)}`;
+}
+
+/** LinkedIn's internal ids all begin this way and are never vanity slugs. */
+function isInternalId(value: string): boolean {
+  return /(^|\/)acoaa/i.test(value);
 }
 
 function startedRoleRecently(raw: UnipileRawProfile): boolean {
