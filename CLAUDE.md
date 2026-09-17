@@ -279,6 +279,29 @@ tests that were verified by deliberately breaking the code.
     keeps the copy a human already approved; growing a list must not rewrite
     what everybody already queued is about to receive.
 
+21. **A quiet system has to prove it is running.** The pacing loop
+    (`apps/worker/src/jobs/campaign-tick.ts`) declines far more often than it
+    acts — outside working hours, allowance spent, nothing due — and every one
+    of those exits is a correct, silent `continue`. Which means a campaign
+    launched into a dead worker and a campaign waiting out the two-to-eleven
+    minute gap between invitations are the same screen: status `running`,
+    nobody invited, nothing changed. The first live launch was spent on that
+    question, and the answer was only in the deployment's logs, where the
+    person who pressed Launch cannot go.
+
+    So the loop stamps `worker_heartbeats` on **every** run, including the ones
+    that send nobody (migration 0015). A stamp written only on a productive run
+    would be missing during exactly the quiet stretch it exists to explain.
+    `/app/system` reports a stale heartbeat as `blocked`, because every other
+    green tick on that screen is meaningless if nothing is sending.
+
+    The campaign page answers "when does the next invitation go out" using
+    `checkAction` itself (`describePacing` in `apps/web/src/lib/pacing.ts`),
+    never a second reading of the rule written for the screen — two readings
+    drift, and the screen's is the one somebody believes. A dead loop is
+    reported ahead of every gentler explanation: "waiting for your sending
+    hours" is a reassuring sentence about a system that will never send.
+
 ## Conventions
 
 - Agent output is validated against a zod schema before it touches the

@@ -223,6 +223,50 @@ describe("campaign pipeline", () => {
     void ctx;
   });
 
+  /**
+   * The loop's silence and the loop's absence look identical from every screen
+   * this product has: status "running", nobody invited, a page that has not
+   * changed. It declines far more often than it acts — outside working hours,
+   * allowance spent, nothing due — and each of those is a correct, quiet exit.
+   * So the run itself is what gets recorded, not its outcome.
+   */
+  it("records that it ran, even on a run that sent nobody", async () => {
+    const { db, queues } = harness();
+    // Ten o'clock at night: the limiter declines, correctly, and the campaign
+    // sits exactly as it does when the worker is dead.
+    const night = new Date("2026-09-09T22:00:00Z");
+
+    const count = await runCampaignTick(db.asDb(), queues, night);
+
+    expect(count).toBe(0);
+    const beat = db.rows("worker_heartbeats")[0];
+    expect(beat?.name).toBe("campaign-tick");
+    expect(beat?.beat_at).toBe(night.toISOString());
+  });
+
+  it("records that it ran when there is no campaign to run", async () => {
+    // The first thing a new deployment does, and the state in which somebody
+    // most needs to know the worker is alive.
+    const { db, queues } = harness();
+    db.rows("campaigns").forEach((row) => (row.status = "draft"));
+
+    await runCampaignTick(db.asDb(), queues, NOW);
+
+    expect(db.rows("worker_heartbeats")).toHaveLength(1);
+  });
+
+  it("keeps one heartbeat rather than a log of them", async () => {
+    const { db, queues } = harness();
+
+    await runCampaignTick(db.asDb(), queues, NOW);
+    await runCampaignTick(db.asDb(), queues, new Date(NOW.getTime() + 300_000));
+
+    // Only the most recent run answers the question this exists for, and a row
+    // every five minutes for ever answers it no better.
+    expect(db.rows("worker_heartbeats")).toHaveLength(1);
+    expect(db.rows("worker_heartbeats")[0]?.beat_at).toBe(new Date(NOW.getTime() + 300_000).toISOString());
+  });
+
   it("sends the invitation, personalises it, and advances the state machine", async () => {
     const { db, ctx, linkedin } = harness();
 

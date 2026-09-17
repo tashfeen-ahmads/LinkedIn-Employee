@@ -102,6 +102,41 @@ describe("system check", () => {
     expect(check(report, "webhook-secret").detail).toMatch(/never sees it/i);
   });
 
+  /**
+   * Every other check on this screen can be green and not one message will
+   * leave the building if the loop that sends them is not running. It is the
+   * one failure that makes the rest of the report meaningless, and it was
+   * missing for the whole of the first live launch.
+   */
+  it("reports the sending loop as blocked when it has never reported in", async () => {
+    const { ctx } = harness();
+
+    const report = await run(ctx);
+
+    expect(check(report, "pacing-loop").state).toBe("blocked");
+    expect(check(report, "pacing-loop").detail).toMatch(/never reported in/);
+  });
+
+  it("reports the sending loop as blocked when it stopped running", async () => {
+    // Not "ok because it ran once". A loop that ran an hour ago and should run
+    // every five minutes is a loop that is not running.
+    const { db, ctx } = harness();
+    db.seed("worker_heartbeats", [
+      { name: "campaign-tick", beat_at: new Date(Date.now() - 60 * 60_000).toISOString(), detail: {} },
+    ]);
+
+    expect(check(await run(ctx), "pacing-loop").state).toBe("blocked");
+  });
+
+  it("reports the sending loop as fine when it has just run", async () => {
+    const { db, ctx } = harness();
+    db.seed("worker_heartbeats", [
+      { name: "campaign-tick", beat_at: new Date(Date.now() - 60_000).toISOString(), detail: {} },
+    ]);
+
+    expect(check(await run(ctx), "pacing-loop").state).toBe("ok");
+  });
+
   it("says a deployment with no model key cannot run an agent at all", async () => {
     const { ctx } = harness({ env: { OPENAI_API_KEY: undefined, ANTHROPIC_API_KEY: undefined } });
 

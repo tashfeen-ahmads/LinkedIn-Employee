@@ -438,6 +438,18 @@ export type EventRow = {
   created_at: string;
 };
 
+/**
+ * The last run of a worker loop, so its silence can be told from its absence.
+ *
+ * Deployment-wide rather than tenanted, and holding no customer data: it exists
+ * so a member can see whether the thing that sends their messages is alive.
+ */
+export type WorkerHeartbeatRow = {
+  name: string;
+  beat_at: string;
+  detail: Json;
+};
+
 export type LlmCallRow = {
   id: number;
   workspace_id: string | null;
@@ -488,6 +500,7 @@ export type Database = {
       knowledge_documents: Table<KnowledgeDocumentRow>;
       events: Table<EventRow>;
       llm_calls: Table<LlmCallRow>;
+      worker_heartbeats: Table<WorkerHeartbeatRow>;
     };
     // `{ [_ in never]: never }` and not `Record<string, never>`: an index
     // signature here intersects with Tables and collapses every row type to

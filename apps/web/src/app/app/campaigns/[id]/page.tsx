@@ -1,12 +1,14 @@
 import { revalidatePath } from "next/cache";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
-import { LINKEDIN_LIMITS, countFunnel, FUNNEL_STAGES } from "@le/shared";
+import { LINKEDIN_LIMITS, PACING_LOOP, countFunnel, FUNNEL_STAGES } from "@le/shared";
+import { ACCOUNT_USAGE_COLUMNS } from "@le/linkedin";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { callWorker, errorQuery, noticeQuery } from "@/lib/worker";
 import { SubmitButton } from "@/components/submit-button";
 import { describeSearch } from "./search-state";
+import { describePacing } from "@/lib/pacing";
 import { PageNotice, type NoticeParams } from "@/components/page-notice";
 import { CONNECTION_NOTE_MAX, daysToSendAll, launchBlockers } from "@/lib/campaign";
 
@@ -307,13 +309,14 @@ export default async function CampaignPage({
 
   const { data: campaign } = await supabase
     .from("campaigns")
-    .select("id, name, status, connection_note, daily_invite_cap, reply_mode, launched_at, linkedin_account_id, rules, customer_profile_id, search_exhausted, searched_at")
+    .select("id, name, status, connection_note, daily_invite_cap, reply_mode, launched_at, linkedin_account_id, rules, customer_profile_id, search_exhausted, searched_at, owner_user_id")
     .eq("id", id)
     .eq("workspace_id", session.workspaceId)
     .maybeSingle();
   if (!campaign) notFound();
 
-  const [{ data: steps }, { data: members }, { data: account }, { data: lastSearch }] = await Promise.all([
+  const [{ data: steps }, { data: members }, { data: account }, { data: lastSearch }, { data: heartbeat }, { data: owner }] =
+    await Promise.all([
     supabase
       .from("campaign_steps")
       .select("id, step_number, delay_days, message")
@@ -324,7 +327,14 @@ export default async function CampaignPage({
       .select("id, status, status_reason, invited_at, accepted_at, replied_at, invite_note, invite_note_grounding, invite_note_thin, invite_note_edited, prospects (id, first_name, last_name, headline, title, company, location, linkedin_url, fit_score, fit_reasons)")
       .eq("campaign_id", id)
       .order("created_at"),
-    supabase.from("linkedin_accounts").select("status, display_name").eq("id", campaign.linkedin_account_id).maybeSingle(),
+    // Every column the rate limiter reads, not only the two the header shows:
+    // this page now answers "when does the next invitation go out", and it
+    // answers it by asking the same limiter the sending loop asks.
+    supabase
+      .from("linkedin_accounts")
+      .select(`${ACCOUNT_USAGE_COLUMNS}, display_name`)
+      .eq("id", campaign.linkedin_account_id)
+      .maybeSingle(),
     // How the last press of Find more went. The work happens in the worker, so
     // this page never learns the outcome of the job it started — and a search
     // that stopped early looks exactly like one that is still running, which is
@@ -338,6 +348,12 @@ export default async function CampaignPage({
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
+    // Whether the thing that sends the messages is running at all. Without it
+    // a dead worker and a paced one are the same unchanged page.
+    supabase.from("worker_heartbeats").select("beat_at").eq("name", PACING_LOOP).maybeSingle(),
+    // Working hours are evaluated in the rep's zone, so the same clock time is
+    // inside them for one person and outside for another.
+    supabase.from("profiles").select("timezone").eq("id", campaign.owner_user_id).maybeSingle(),
   ]);
 
   const rows = members ?? [];
@@ -358,6 +374,13 @@ export default async function CampaignPage({
   const running = campaign.status === "running";
   const reached = FUNNEL_STAGES.filter((stage) => counts[stage.key] > 0);
   const searchNotice = describeSearch(lastSearch);
+  const pacing = describePacing({
+    status: campaign.status,
+    queued: queued.length,
+    account: account ?? null,
+    timezone: owner?.timezone ?? "UTC",
+    lastBeatAt: heartbeat?.beat_at ?? null,
+  });
 
   return (
     <>
@@ -384,6 +407,20 @@ export default async function CampaignPage({
           </button>
         </form>
       </div>
+
+      {/*
+        What the sending loop is doing, first on the page and above every other
+        notice. A launched campaign that has sent nothing looks identical
+        whether it is pacing itself, waiting for working hours, or running
+        against a worker that is not there — and a rep watching a launch reads
+        the top of this page, not the bottom.
+      */}
+      {pacing ? (
+        <div className={pacing.tone === "danger" ? "notice danger" : "notice"}>
+          <strong>{pacing.title}</strong>
+          <p className="small">{pacing.body}</p>
+        </div>
+      ) : null}
 
       {dropped.length > 0 ? (
         <div className="notice">

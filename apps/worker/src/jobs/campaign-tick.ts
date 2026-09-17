@@ -1,4 +1,4 @@
-import { canTransition, LINKEDIN_LIMITS, type CampaignProspectStatus } from "@le/shared";
+import { canTransition, LINKEDIN_LIMITS, PACING_LOOP, type CampaignProspectStatus } from "@le/shared";
 import { entitlementFor } from "@le/billing";
 import { checkAction, dailyInviteCap, nextGapMs } from "@le/linkedin";
 import type { Db } from "@le/db";
@@ -20,7 +20,10 @@ export async function runCampaignTick(db: Db, queues: Queues, now: Date = new Da
     .from("campaigns")
     .select("id, workspace_id, linkedin_account_id, daily_invite_cap, owner_user_id")
     .eq("status", "running");
-  if (!campaigns?.length) return 0;
+  if (!campaigns?.length) {
+    await beat(db, now, { campaigns: 0, enqueued: 0 });
+    return 0;
+  }
 
   let enqueued = 0;
   // One lookup per workspace and per account, not per campaign: several
@@ -53,7 +56,33 @@ export async function runCampaignTick(db: Db, queues: Queues, now: Date = new Da
     enqueued += await enqueueInvites(db, queues, campaign, usage, now);
   }
 
+  await beat(db, now, { campaigns: campaigns.length, enqueued });
   return enqueued;
+}
+
+/**
+ * Records that this loop ran, whatever it decided.
+ *
+ * Every exit above is a silent `continue` or `return 0`, and deliberately so —
+ * the loop declines far more often than it acts, and an event each time would
+ * bury the ones that matter. But that leaves a campaign launched into a dead
+ * worker looking exactly like one waiting out the gap between two invitations:
+ * status "running", nobody invited, nothing anywhere. A whole first live launch
+ * was spent not knowing which, and the answer was only in the deployment's
+ * logs, where the person who pressed Launch cannot go.
+ *
+ * So the run itself is the record, whether or not it did anything. A stamp that
+ * only appeared on a productive run would be missing during exactly the quiet
+ * stretch it exists to explain.
+ */
+async function beat(db: Db, now: Date, detail: { campaigns: number; enqueued: number }): Promise<void> {
+  const { error } = await db
+    .from("worker_heartbeats")
+    .upsert({ name: PACING_LOOP, beat_at: now.toISOString(), detail }, { onConflict: "name" });
+
+  // Never fatal. This is the loop that sends a customer's messages; it does not
+  // stop because a note about itself failed to write.
+  if (error) console.error("could not record the pacing heartbeat", { reason: error.message });
 }
 
 type CampaignRow = {

@@ -1,60 +1,14 @@
 import type { Db } from "@le/db";
 import type { AccountHealth, ConnectedAccount, LinkedInProvider } from "@le/linkedin";
-import type { AccountUsage, WorkingHours } from "@le/linkedin";
+// The limiter's view of an account moved into @le/linkedin, beside the limiter
+// itself, once a screen needed the same answer the pacing loop gets. Re-exported
+// so every existing caller keeps its import.
+export { ACCOUNT_USAGE_COLUMNS, parseWorkingHours, toUsage, type AccountRecord } from "@le/linkedin";
+import type { AccountRecord } from "@le/linkedin";
 import { accountPausedEmail } from "@le/email";
 import type { EmailProvider } from "@le/email";
 import { recordEvent } from "./context.js";
 import { trySend } from "./email.js";
-
-export interface AccountRecord {
-  id: string;
-  workspace_id: string;
-  user_id: string;
-  provider_account_id: string | null;
-  status: string;
-  connected_at: string | null;
-  /** Day zero of the warm-up ramp; null until the account has sent anything. */
-  first_action_at: string | null;
-  invites_today: number;
-  invites_this_week: number;
-  messages_today: number;
-  counters_reset_on: string | null;
-  last_action_at: string | null;
-  working_hours: unknown;
-}
-
-const DEFAULT_HOURS: WorkingHours = { start: 8, end: 18, days: [1, 2, 3, 4, 5] };
-
-/**
- * Every column `toUsage` reads. Selecting less silently produces undefined
- * fields and a limiter that decides on nothing, so the list lives beside the
- * function that needs it rather than being retyped at each call site.
- */
-export const ACCOUNT_USAGE_COLUMNS =
-  "id, workspace_id, user_id, provider_account_id, status, connected_at, first_action_at, invites_today, invites_this_week, messages_today, counters_reset_on, last_action_at, working_hours";
-
-export function parseWorkingHours(value: unknown): WorkingHours {
-  if (value && typeof value === "object") {
-    const v = value as Partial<WorkingHours>;
-    if (typeof v.start === "number" && typeof v.end === "number" && Array.isArray(v.days)) {
-      return { start: v.start, end: v.end, days: v.days };
-    }
-  }
-  return DEFAULT_HOURS;
-}
-
-export function toUsage(account: AccountRecord, timezone: string): AccountUsage {
-  return {
-    connectedAt: account.connected_at ? new Date(account.connected_at) : new Date(),
-    firstActionAt: account.first_action_at ? new Date(account.first_action_at) : null,
-    invitesToday: account.invites_today,
-    invitesThisWeek: account.invites_this_week,
-    messagesToday: account.messages_today,
-    lastActionAt: account.last_action_at ? new Date(account.last_action_at) : null,
-    workingHours: parseWorkingHours(account.working_hours),
-    timezone,
-  };
-}
 
 /**
  * Increment the counters that the rate limiter reads. Done after a successful

@@ -33,6 +33,7 @@ export class FakeDb {
     integrations: ["workspace_id", "kind", "user_id"],
     memberships: ["workspace_id", "user_id"],
     billing_events: ["id"],
+    worker_heartbeats: ["name"],
   };
 
   seed(table: string, rows: Row[]): void {

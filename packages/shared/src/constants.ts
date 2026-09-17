@@ -36,6 +36,24 @@ export const LINKEDIN_LIMITS = {
   minHealthyAcceptanceRate: 0.3,
 } as const;
 
+/**
+ * The name the pacing loop stamps its heartbeat under.
+ *
+ * One string, because the loop writes it and three screens read it, and a
+ * heartbeat filed under a name nobody queries is a heartbeat that does not
+ * exist.
+ */
+export const PACING_LOOP = "campaign-tick";
+
+/**
+ * How long the pacing loop may go unheard before a screen says so.
+ *
+ * It wakes every five minutes; three missed wake-ups is a gap no amount of
+ * normal jitter explains, and short enough that somebody watching a launch
+ * finds out during the launch.
+ */
+export const PACING_STALE_MS = 15 * 60_000;
+
 export const DEFAULT_WORKING_HOURS = { start: 8, end: 18, days: [1, 2, 3, 4, 5] } as const;
 
 /** Phrases that end a sequence immediately. Matched case-insensitively as substrings. */

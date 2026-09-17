@@ -1,3 +1,4 @@
+import { PACING_LOOP, PACING_STALE_MS } from "@le/shared";
 import { isAccountGone } from "@le/linkedin";
 import type { WorkerContext } from "../context.js";
 
@@ -253,6 +254,34 @@ export async function runDiagnostics(
           : "No campaign to launch.",
     fix: launched.length === 0 && (campaigns ?? []).length > 0 ? "Review and launch." : undefined,
     href: launched.length === 0 && (campaigns ?? []).length > 0 ? "/app/campaigns" : undefined,
+  });
+
+  // The loop that actually sends, asked whether it is alive.
+  //
+  // Everything above this line can be perfect — approved profile, active
+  // account, launched campaign, people queued — and not one message will leave
+  // the building if this is not running. It is the only check here whose
+  // failure makes every other green tick meaningless, and it was missing for
+  // the entire first live launch.
+  const { data: beat } = await db
+    .from("worker_heartbeats")
+    .select("beat_at")
+    .eq("name", PACING_LOOP)
+    .maybeSingle();
+  const beatAge = beat?.beat_at ? Date.now() - new Date(beat.beat_at).getTime() : null;
+  const beating = beatAge !== null && beatAge <= PACING_STALE_MS;
+
+  add({
+    key: "pacing-loop",
+    stage: STAGES.campaign,
+    label: "The sending loop is running",
+    state: beating ? "ok" : "blocked",
+    detail: beating
+      ? `Last ran ${Math.max(0, Math.round(beatAge! / 60_000))} minutes ago. It wakes every five.`
+      : beat?.beat_at
+        ? `It last ran ${new Date(beat.beat_at).toISOString()} and should run every five minutes. Nothing queued is being sent.`
+        : "It has never reported in. Nothing queued is being sent, whatever the campaign screens say.",
+    fix: beating ? undefined : "Check that the worker process is running.",
   });
 
   // ---- Replies ----------------------------------------------------------
