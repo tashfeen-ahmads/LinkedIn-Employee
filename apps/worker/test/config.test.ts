@@ -62,6 +62,49 @@ describe("loadEnv", () => {
   });
 });
 
+/**
+ * The setting whose absence cost an afternoon.
+ *
+ * With no Redis service, REDIS_URL is simply unset, takes the laptop default,
+ * and points the production worker at nothing on its own container. ioredis
+ * retries that address quietly for ever: the process boots, the health check
+ * passes, the platform reports the service Live, and not one queued job is
+ * ever consumed. Nothing in the product said a word.
+ */
+describe("REDIS_URL", () => {
+  const live = { ...complete, NODE_ENV: "production" };
+
+  it("refuses a production worker pointed at its own localhost", () => {
+    expect(() => loadEnv(live)).toThrow(/REDIS_URL/);
+    // The message has to name the cause, not the symptom: somebody reading it
+    // is looking for a setting they never knew to set.
+    expect(() => loadEnv(live)).toThrow(/queue service is missing/);
+  });
+
+  it("refuses the other spellings of the same mistake", () => {
+    for (const url of ["redis://127.0.0.1:6379", "redis://localhost:6380", "redis://[::1]:6379"]) {
+      expect(() => loadEnv({ ...live, REDIS_URL: url }), url).toThrow(/REDIS_URL/);
+    }
+  });
+
+  it("accepts a real queue", () => {
+    expect(() => loadEnv({ ...live, REDIS_URL: "redis://red-abc:6379" })).not.toThrow();
+  });
+
+  it("leaves the laptop alone", () => {
+    // The default exists so the worker runs locally with no configuration at
+    // all, and a rule that broke that would be paid for every day.
+    expect(loadEnv(complete).REDIS_URL).toBe("redis://localhost:6379");
+    expect(() => loadEnv({ ...complete, NODE_ENV: "development" })).not.toThrow();
+  });
+
+  it("does not turn an unparseable address into this error", () => {
+    // That is its own problem with its own message, and reporting it as a
+    // missing queue service sends somebody to create one they already have.
+    expect(() => loadEnv({ ...live, REDIS_URL: "not a url" })).not.toThrow();
+  });
+});
+
 describe("isoWeekStart", () => {
   it("groups a whole week onto its Monday", async () => {
     const { isoWeekStart } = await import("../src/accounts.js");

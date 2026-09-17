@@ -43,8 +43,28 @@ belongs only in the worker's environment, never in the web app's client bundle.
 
 ## 2. Redis
 
-Any managed Redis works; BullMQ needs nothing special. Upstash's free tier is
-enough to start. Set `REDIS_URL`.
+Any managed Redis works; BullMQ needs nothing special. Set `REDIS_URL`.
+
+**Do not skip this and deploy anyway.** Everything the worker does that is not
+a webhook goes through the queue, and a worker without one fails silently in
+the most complete way this product has managed: the process boots, the platform
+reports the service healthy and Live, the HTTP API answers every request, and
+not one queued job is ever consumed. A campaign launched into it sits at
+`running` with nobody invited, which is also what a correctly paced campaign
+looks like for the first quarter of an hour. That cost a live launch.
+
+Two things now catch it, and they catch it at different moments:
+
+- `loadEnv` refuses to boot a production worker whose `REDIS_URL` points at
+  localhost, which is what an unset variable falls back to.
+- `/health` pings the queue with a deadline and answers 503 when it cannot
+  reach it, so the platform restarts the worker instead of trusting it. Its
+  body says `"queue": "unreachable"` in words.
+
+If you are deploying from `render.yaml`, the Key Value service and the
+`REDIS_URL` wiring are both in the blueprint — but only a **Blueprint** deploy
+creates them. A worker created by hand in the Render UI has neither, and that
+is the shape this failure took here.
 
 ## 3. Worker
 

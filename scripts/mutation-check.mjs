@@ -434,6 +434,14 @@ const MUTATIONS = [
     pkg: "@le/worker",
   },
   {
+    id: "health/a-production-worker-must-have-a-real-queue",
+    rule: "A production worker pointed at its own localhost is refused at boot, not discovered at the first campaign",
+    file: "apps/worker/src/config.ts",
+    from: "  if (isProduction(env.NODE_ENV) && isLocalRedis(env.REDIS_URL)) {",
+    to: "  if (false) {",
+    pkg: "@le/worker",
+  },
+  {
     id: "health/the-health-check-looks-at-the-queue",
     rule: "A worker that cannot reach its queue reports itself unhealthy, rather than Live with nothing being consumed",
     file: "apps/worker/src/server.ts",

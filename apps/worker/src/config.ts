@@ -33,6 +33,20 @@ const EnvSchema = z.object({
   OPENAI_API_KEY: z.string().min(1).optional(),
   ANTHROPIC_API_KEY: z.string().min(1).optional(),
   LLM_PROVIDER: z.enum(["openai", "anthropic"]).optional(),
+  NODE_ENV: z.string().optional(),
+  /**
+   * The job queue. Everything this worker does that is not a webhook goes
+   * through it.
+   *
+   * The localhost default is for running the worker on a laptop, and in
+   * production it is a trap: a deployment whose Redis service was never created
+   * has no REDIS_URL, takes this default, and points at nothing on its own
+   * container. ioredis then retries that address quietly for ever, the process
+   * boots, the health check passes, the platform reports the service Live —
+   * and not one queued job is ever consumed. That is exactly how this
+   * deployment ran for an afternoon, and it is refused at boot below rather
+   * than discovered at the first campaign.
+   */
   REDIS_URL: z.string().default("redis://localhost:6379"),
   /**
    * Required only when LINKEDIN_PROVIDER is "unipile", which is the default.
@@ -132,6 +146,19 @@ const EnvSchema = z.object({
     });
   }
 
+  // A production deployment pointed at its own localhost has no queue, and the
+  // way that fails is silence: no crash, no error, no log line after the first
+  // connect attempt. Naming it here turns an afternoon of "the button does
+  // nothing" into a boot message that says which setting is missing.
+  if (isProduction(env.NODE_ENV) && isLocalRedis(env.REDIS_URL)) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["REDIS_URL"],
+      message:
+        "points at localhost in production, which means the queue service is missing or not wired to this worker",
+    });
+  }
+
   // Checked here rather than at the first send: a worker that boots without
   // the credentials it needs looks healthy for hours, and the failure surfaces
   // as a campaign that quietly never started.
@@ -147,6 +174,27 @@ const EnvSchema = z.object({
     }
   }
 });
+
+function isProduction(nodeEnv: string | undefined): boolean {
+  return nodeEnv === "production";
+}
+
+/**
+ * Whether this address is the laptop default rather than a real queue.
+ *
+ * Matched on the host, not on the exact default string: a deployment that sets
+ * `redis://127.0.0.1:6379` by hand has made the same mistake, and one that
+ * varies the port has made it too.
+ */
+function isLocalRedis(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "[::1]";
+  } catch {
+    // Unparseable is its own problem, and not this one. ioredis will say so.
+    return false;
+  }
+}
 
 export type Env = z.infer<typeof EnvSchema>;
 
