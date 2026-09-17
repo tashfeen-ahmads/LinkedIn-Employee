@@ -178,6 +178,22 @@ const MUTATIONS = [
     pkg: "@le/worker",
   },
   {
+    id: "targeting/queued-is-visible",
+    rule: "Queueing the Targeting Agent is recorded, so a job that never reached the worker is not the same blank screen as one that died in it",
+    file: "apps/worker/src/server.ts",
+    from: '        name: "targeting.queued",',
+    to: '        name: "targeting.ignored",',
+    pkg: "@le/worker",
+  },
+  {
+    id: "targeting/a-throw-still-says-why",
+    rule: "A job that throws records why before giving up; a throw is not an exit that says anything",
+    file: "apps/worker/src/jobs/targeting.ts",
+    from: "        reason: `The Targeting Agent hit an error: ${reason}`,",
+    to: "        reason: null,",
+    pkg: "@le/worker",
+  },
+  {
     id: "targeting/a-report-names-its-build",
     rule: "Every stopped report stamps the build that produced it; a report that cannot be placed against a deploy costs a deploy to interpret",
     file: "apps/worker/src/jobs/targeting.ts",

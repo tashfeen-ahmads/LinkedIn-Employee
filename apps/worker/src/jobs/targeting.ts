@@ -62,6 +62,36 @@ async function giveUp(
  * launches it.
  */
 export async function runTargetingJob(ctx: WorkerContext, job: TargetingJob): Promise<string | null> {
+  try {
+    return await targeting(ctx, job);
+  } catch (err) {
+    // Every deliberate exit from this job says why. A throw does not, and this
+    // job has several: a customer profile whose stored spec no longer matches
+    // its schema, a campaign insert the database refuses, a provider error
+    // outside the search. BullMQ catches those, retries, gives up, and the
+    // person who pressed the button sees the page they were already looking
+    // at -- no banner, no event, nothing at all. That silence is worse than
+    // any of the failures behind it, because it looks exactly like a button
+    // that is not wired up.
+    const reason = (err as { message?: string })?.message ?? "unknown";
+    console.error("targeting failed", { workspaceId: job.workspaceId, reason });
+    await recordEvent(ctx.db, {
+      workspaceId: job.workspaceId,
+      name: "targeting.stopped",
+      actorUserId: job.userId,
+      subjectType: "customer_profile",
+      subjectId: job.customerProfileId,
+      payload: {
+        reason: `The Targeting Agent hit an error: ${reason}`,
+        build: TARGETING_BUILD,
+        threw: true,
+      },
+    });
+    throw err;
+  }
+}
+
+async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string | null> {
   const { db } = ctx;
 
   const { data: profileRow } = await db

@@ -42,7 +42,10 @@ function harness(options: { failEvents?: boolean } = {}) {
     agentsFor: () => ({ client: {} as never }),
   } as unknown as WorkerContext;
 
-  const queues = { strategy: { add: async (_n: string, d: unknown) => { added.push(d); } } } as unknown as Queues;
+  const queues = {
+    strategy: { add: async (_n: string, d: unknown) => { added.push(d); } },
+    targeting: { add: async (_n: string, d: unknown) => { added.push(d); } },
+  } as unknown as Queues;
 
   return { db, added, app: createServer(ctx, queues) };
 }
@@ -74,6 +77,45 @@ describe("queueing the Strategy Agent", () => {
     const { added, app } = harness({ failEvents: true });
 
     expect((await queueStrategy(app)).status).toBe(200);
+    expect(added).toHaveLength(1);
+  });
+});
+
+function queueTargeting(app: ReturnType<typeof createServer>) {
+  return app.request("/jobs/targeting", {
+    method: "POST",
+    body: JSON.stringify({
+      workspaceId: WORKSPACE,
+      userId: USER,
+      customerProfileId: "33333333-3333-4333-8333-333333333333",
+      linkedinAccountId: "44444444-4444-4444-8444-444444444444",
+      limit: 50,
+    }),
+    headers: { "content-type": "application/json", authorization: `Bearer ${INTERNAL_SECRET}` },
+  });
+}
+
+/**
+ * Telling "never reached the worker" from "reached it and died".
+ *
+ * Without this note they are the same blank screen: a button pressed, no
+ * banner, no event, nothing. A night went on exactly that ambiguity.
+ */
+describe("queueing the Targeting Agent", () => {
+  it("records that it was asked", async () => {
+    const { db, app } = harness();
+
+    expect((await queueTargeting(app)).status).toBe(200);
+
+    expect(db.rows("events").find((e) => e.name === "targeting.queued")).toBeTruthy();
+  });
+
+  it("still queues the run when the note cannot be written", async () => {
+    // Visibility must never cost the thing it describes: a 500 here means the
+    // button gets pressed again and two agents search.
+    const { added, app } = harness({ failEvents: true });
+
+    expect((await queueTargeting(app)).status).toBe(200);
     expect(added).toHaveLength(1);
   });
 });

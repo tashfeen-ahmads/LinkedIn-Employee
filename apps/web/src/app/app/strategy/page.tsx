@@ -139,9 +139,9 @@ export default async function StrategyPage({
   // this shipped, and exactly what got reported.
   const { data: lastStop } = await supabase
     .from("events")
-    .select("payload, created_at")
+    .select("name, payload, created_at")
     .eq("workspace_id", session.workspaceId)
-    .eq("name", "targeting.stopped")
+    .in("name", ["targeting.stopped", "targeting.queued"])
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -226,8 +226,14 @@ export default async function StrategyPage({
       {lastStop ? (
         <div className="notice warning">
           <p>
-            <strong>The last prospect search stopped early.</strong>{" "}
-            {String((lastStop.payload as Record<string, unknown>)?.reason ?? "No reason recorded.")}
+            <strong>
+              {lastStop.name === "targeting.queued"
+                ? "The last prospect search has not reported back."
+                : "The last prospect search stopped early."}
+            </strong>{" "}
+            {lastStop.name === "targeting.queued"
+              ? "The Targeting Agent was asked to run and has not reported back. If this does not change in a minute, the background worker took the job and did not finish it."
+              : String((lastStop.payload as Record<string, unknown>)?.reason ?? "No reason recorded.")}
           </p>
           <p className="tiny subtle">
             {new Date(lastStop.created_at).toLocaleString()} ·{" "}

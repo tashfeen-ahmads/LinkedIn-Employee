@@ -236,6 +236,27 @@ export function createServer(ctx: WorkerContext, queues: Queues): Hono {
     if (!(await assertMembership(ctx.db, parsed.data.workspaceId, parsed.data.userId))) {
       return c.json({ error: "not a member of that workspace" }, 403);
     }
+    // Recorded before the job is queued, and for the same reason the Strategy
+    // Agent's is: without it, "the request never reached the worker" and "the
+    // worker took it and died" are the same blank screen. A night was spent on
+    // exactly that ambiguity -- a button pressed, no banner, no event, nothing
+    // to tell the two apart.
+    //
+    // Never at the cost of the run: a failure to write the note must not 500 a
+    // request whose job was accepted, or the caller presses again and two
+    // agents search.
+    try {
+      await recordEvent(ctx.db, {
+        workspaceId: parsed.data.workspaceId,
+        name: "targeting.queued",
+        actorUserId: parsed.data.userId,
+        subjectType: "customer_profile",
+        subjectId: parsed.data.customerProfileId,
+        payload: { limit: parsed.data.limit ?? null },
+      });
+    } catch (err) {
+      console.error("could not record targeting.queued", err);
+    }
     await queues.targeting.add("targeting", parsed.data);
     return c.json({ queued: true });
   });

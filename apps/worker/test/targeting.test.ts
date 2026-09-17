@@ -623,3 +623,40 @@ describe("a search that reached the provider and found nobody", () => {
     expect(probed).toBe(false);
   });
 });
+
+/**
+ * A throw is not an exit that says why.
+ *
+ * Every deliberate return from this job records a reason. The throws did not:
+ * a customer profile whose stored spec no longer matches its schema, a campaign
+ * insert the database refuses. BullMQ catches those, retries, gives up, and the
+ * person who pressed the button sees the page they were already looking at — no
+ * banner, no event, nothing. That silence is indistinguishable from a button
+ * that was never wired up, and it cost a live deployment a night.
+ */
+describe("when the job throws", () => {
+  it("records why before it gives up", async () => {
+    const { db, ctx } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    // A spec that no longer matches its schema: exactly what a stored profile
+    // becomes when the schema moves underneath it.
+    db.rows("customer_profiles")[0]!.spec = { nonsense: true };
+
+    await expect(runTargetingJob(ctx, job)).rejects.toThrow();
+
+    const stop = db.rows("events").find((e) => e.name === "targeting.stopped");
+    expect(stop).toBeTruthy();
+    expect(String(stop?.payload?.reason)).toMatch(/hit an error/i);
+    expect(stop?.payload?.threw).toBe(true);
+  });
+
+  it("still rethrows, so the queue can retry it", async () => {
+    // Reporting must not swallow. A transient database error should be tried
+    // again, not quietly turned into "nothing to do".
+    const { db, ctx } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    db.rows("customer_profiles")[0]!.spec = { nonsense: true };
+
+    await expect(runTargetingJob(ctx, job)).rejects.toThrow();
+  });
+});
