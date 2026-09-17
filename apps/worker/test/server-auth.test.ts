@@ -95,6 +95,53 @@ describe("internal API authentication", () => {
     expect(added).toHaveLength(1);
   });
 
+  /**
+   * Launching a campaign is a round trip now, so this route is the one the
+   * person pressing Launch is waiting on. It must be as closed as the rest: an
+   * unauthenticated caller who could name a workspace could make somebody
+   * else's campaign start sending.
+   */
+  it("guards the launch kick", async () => {
+    const body = JSON.stringify({
+      workspaceId: "11111111-1111-4111-8111-111111111111",
+      userId: "22222222-2222-4222-8222-222222222222",
+      campaignId: "33333333-3333-4333-8333-333333333333",
+    });
+
+    const { app: open, added: none } = makeApp();
+    const rejected = await open.request("/jobs/campaign-tick", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body,
+    });
+    expect(rejected.status).toBe(401);
+    expect(none).toHaveLength(0);
+
+    const { app, added } = makeApp();
+    const accepted = await app.request("/jobs/campaign-tick", {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${SECRET}` },
+      body,
+    });
+    expect(accepted.status).toBe(200);
+    expect(added[0]?.queue).toBe("campaignTick");
+  });
+
+  it("refuses to kick a campaign in a workspace the caller is not in", async () => {
+    const { app, added } = makeApp({ secret: SECRET, isMember: false });
+    const res = await app.request("/jobs/campaign-tick", {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${SECRET}` },
+      body: JSON.stringify({
+        workspaceId: "11111111-1111-4111-8111-111111111111",
+        userId: "22222222-2222-4222-8222-222222222222",
+        campaignId: "33333333-3333-4333-8333-333333333333",
+      }),
+    });
+    expect(res.status).toBe(403);
+    expect(added).toHaveLength(0);
+  });
+
   it("guards the account-linking endpoints, not just job dispatch", async () => {
     const { app } = makeApp();
     for (const path of ["/auth/linkedin/link", "/auth/google/link", "/auth/hubspot/link"]) {

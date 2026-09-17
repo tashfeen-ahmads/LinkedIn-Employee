@@ -166,6 +166,38 @@ async function setStatus(formData: FormData) {
     .eq("workspace_id", session.workspaceId);
 
   revalidatePath(`/app/campaigns/${campaignId}`);
+  if (status !== "running") return;
+
+  // Launching used to touch nothing but this row, and trust a loop somewhere
+  // else to notice within five minutes. The one action in this product that
+  // most needs the worker was the only one that never spoke to it: a worker
+  // that was not running produced no error and no banner, and the page looked
+  // exactly as it had before. That is how the first live launch went.
+  //
+  // Now it is a round trip. It also means the first invitation is paced from
+  // the press rather than from whenever the schedule next comes round.
+  const kicked = await callWorker("/jobs/campaign-tick", {
+    workspaceId: session.workspaceId,
+    userId: session.userId,
+    campaignId,
+  });
+  if (!kicked.ok) {
+    // Launched, and said so: the campaign really is running and the loop will
+    // pick it up if it comes back. What must not happen is this being silent.
+    redirect(
+      errorQuery(
+        `/app/campaigns/${campaignId}`,
+        `Launched, but the sending service did not answer: ${kicked.error}. Nothing will go out until it is back — check the system page.`,
+      ),
+    );
+  }
+
+  redirect(
+    noticeQuery(
+      `/app/campaigns/${campaignId}`,
+      "Launched. Invitations are paced a few minutes apart, so the first one takes a little while to appear on LinkedIn — this page says where it is up to.",
+    ),
+  );
 }
 
 /**

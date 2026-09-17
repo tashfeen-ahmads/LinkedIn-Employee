@@ -434,6 +434,14 @@ const MUTATIONS = [
     pkg: "@le/worker",
   },
   {
+    id: "pacing/launching-is-a-round-trip",
+    rule: "Launching asks the worker to start, so a worker that is not there is found out at the press rather than never",
+    file: "apps/worker/src/server.ts",
+    from: '  app.post("/jobs/campaign-tick", async (c) => {\n    const parsed = CampaignTickRequest.safeParse(await c.req.json().catch(() => null));\n    if (!parsed.success) return c.json({ error: "invalid request" }, 400);\n    if (!(await assertMembership(ctx.db, parsed.data.workspaceId, parsed.data.userId))) {',
+    to: '  app.post("/jobs/campaign-tick", async (c) => {\n    const parsed = CampaignTickRequest.safeParse(await c.req.json().catch(() => null));\n    if (!parsed.success) return c.json({ error: "invalid request" }, 400);\n    if (false) {',
+    pkg: "@le/worker",
+  },
+  {
     id: "pacing/a-run-that-sent-nobody-still-says-it-ran",
     rule: "The sending loop records every run, so its silence can be told from its absence",
     file: "apps/worker/src/jobs/campaign-tick.ts",

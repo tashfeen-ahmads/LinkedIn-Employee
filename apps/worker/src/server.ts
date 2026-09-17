@@ -56,6 +56,12 @@ const TargetingRequest = z.object({
   campaignId: z.string().uuid().optional(),
 });
 
+const CampaignTickRequest = z.object({
+  workspaceId: z.string().uuid(),
+  userId: z.string().uuid(),
+  campaignId: z.string().uuid(),
+});
+
 const SendReplyRequest = z.object({
   workspaceId: z.string().uuid(),
   draftId: z.string().uuid(),
@@ -265,6 +271,38 @@ export function createServer(ctx: WorkerContext, queues: Queues): Hono {
       console.error("could not record targeting.queued", err);
     }
     await queues.targeting.add("targeting", parsed.data);
+    return c.json({ queued: true });
+  });
+
+  /**
+   * Runs the pacing loop now, rather than within the next five minutes.
+   *
+   * Launching a campaign used to touch nothing but the database: the row went
+   * to `running` and a background loop was trusted to notice. So the one action
+   * in this product that most needs the worker was the only one that never
+   * spoke to it — and a worker that was not running produced no error, no
+   * banner and no clue, just a page that looked exactly as it had before. The
+   * first live launch went that way.
+   *
+   * This makes launching a round trip. The tick it queues is the same one the
+   * schedule queues, so a failure here costs nothing but the wait; what it buys
+   * is that the person pressing Launch finds out immediately whether anything
+   * is listening.
+   */
+  app.post("/jobs/campaign-tick", async (c) => {
+    const parsed = CampaignTickRequest.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "invalid request" }, 400);
+    if (!(await assertMembership(ctx.db, parsed.data.workspaceId, parsed.data.userId))) {
+      return c.json({ error: "not a member of that workspace" }, 403);
+    }
+    // The loop reads every running campaign itself, so the id names the reason
+    // rather than the work. Deduplicated per campaign per minute: a rep
+    // pressing Launch, Pause and Launch again should not queue three sweeps.
+    await queues.campaignTick.add(
+      "tick",
+      { workspaceId: parsed.data.workspaceId, campaignId: parsed.data.campaignId },
+      { jobId: `launch:${parsed.data.campaignId}:${Math.floor(Date.now() / 60_000)}` },
+    );
     return c.json({ queued: true });
   });
 
