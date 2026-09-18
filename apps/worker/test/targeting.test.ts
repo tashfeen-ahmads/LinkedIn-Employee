@@ -143,12 +143,20 @@ beforeEach(() => {
         angle: "Lean on referrals that arrive and are never followed up.",
         painPoint: "Warm introductions going cold in an inbox",
         connectionNote: "Hi {{first_name}}, most referrals we see never get a second touch.",
+        steps: [
+          { delayDays: 2, message: "Following up on referrals." },
+          { delayDays: 4, message: "Closing the referral loop." },
+        ],
       },
       {
         name: "Chasing invoices",
         angle: "Lean on the admin time a small team loses to chasing.",
         painPoint: "Hours a week spent chasing",
         connectionNote: "Hi {{first_name}}, curious how your team handles the chasing.",
+        steps: [
+          { delayDays: 3, message: "Following up on the chasing." },
+          { delayDays: 5, message: "Closing the chasing loop." },
+        ],
       },
     ],
   });
@@ -323,7 +331,12 @@ describe("runTargetingJob", () => {
 
     await runTargetingJob(ctx, job);
 
-    const steps = db.rows("campaign_steps").sort((a, b) => Number(a.step_number) - Number(b.step_number));
+    // The campaign's own sequence, which each angle's steps sit beside rather
+    // than replace.
+    const steps = db
+      .rows("campaign_steps")
+      .filter((s) => !s.variant_id)
+      .sort((a, b) => Number(a.step_number) - Number(b.step_number));
     expect(steps.map((s) => s.step_number)).toEqual([1, 2]);
     expect(steps[0]?.delay_days).toBe(2);
   });
@@ -912,6 +925,39 @@ describe("testing angles against each other", () => {
     // second batch would land 4/2 — balanced within each batch and lopsided
     // across the campaign, which is the split that matters.
     expect([...counts.values()].sort()).toEqual([3, 3]);
+  });
+
+  it("gives each angle its own follow-ups as well as its own note", async () => {
+    // An angle that stops at the connection request is only half tested: the
+    // prospect accepted because of it, and a generic first message then
+    // attributes the acceptance to the angle and the reply to nothing.
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    linkedin.candidates = twoProspects();
+    scoreMock.mockResolvedValue(bothRanked);
+
+    await runTargetingJob(ctx, job);
+
+    const steps = db.rows("campaign_steps");
+    // Two campaign-wide, plus two per angle.
+    expect(steps.filter((s) => !s.variant_id)).toHaveLength(2);
+    expect(steps.filter((s) => s.variant_id)).toHaveLength(4);
+    expect(steps.some((s) => String(s.message).includes("referrals"))).toBe(true);
+    expect(steps.some((s) => String(s.message).includes("chasing"))).toBe(true);
+  });
+
+  it("keeps the campaign's own sequence for anybody with no angle", async () => {
+    // Not a leftover: it is the whole sequence for every campaign built before
+    // angles existed, and every campaign whose angles could not be stored.
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    linkedin.candidates = twoProspects();
+    scoreMock.mockResolvedValue(bothRanked);
+
+    await runTargetingJob(ctx, job);
+
+    const wide = db.rows("campaign_steps").filter((s) => !s.variant_id);
+    expect(wide.map((s) => s.step_number).sort()).toEqual([1, 2]);
   });
 
   it("still builds the campaign when the angles cannot be stored", async () => {

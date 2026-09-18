@@ -46,7 +46,15 @@ For each angle give:
 - connectionNote: this angle's fallback note, under 300 characters, following
   every rule above. It must carry the angle — a fallback that reads generically
   moves that person into an unnamed fourth angle while still being counted
-  under this one.`;
+  under this one.
+- steps: this angle's own two or three follow-ups, same rules as the campaign's,
+  each carrying this angle rather than the campaign's generic line. Somebody
+  accepted the connection because of this angle; the first message they then
+  receive has to sound like the same person who sent it.
+
+The campaign's own connectionNote and steps are still required. They are what a
+prospect receives when no angle was assigned, and they should read as the most
+general version of the pitch.`;
 
 /**
  * Writes the connection note that one named person actually receives.

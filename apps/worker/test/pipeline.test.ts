@@ -383,6 +383,94 @@ describe("campaign pipeline", () => {
     expect(db.rows("worker_heartbeats")[0]?.beat_at).toBe(new Date(NOW.getTime() + 300_000).toISOString());
   });
 
+  /**
+   * A prospect counted under an angle has to receive that angle all the way
+   * through. Reading the campaign's step while the invitation came from an
+   * angle means the results table describes a group that got the angle's
+   * opener and somebody else's follow-up.
+   */
+  it("sends the follow-up belonging to the angle the person was assigned", async () => {
+    const { db, ctx, linkedin } = harness();
+    db.seed("campaign_variants", [
+      { id: "var-1", workspace_id: WORKSPACE, campaign_id: CAMPAIGN, name: "Referrals", angle: "a", connection_note: "n", enabled: true },
+    ]);
+    db.seed("campaign_steps", [
+      {
+        workspace_id: WORKSPACE,
+        campaign_id: CAMPAIGN,
+        variant_id: "var-1",
+        step_number: 1,
+        delay_days: 3,
+        message: "The angle's own first message.",
+      },
+    ]);
+    const cp = db.find("campaign_prospects", { id: CP })!;
+    cp.status = "accepted";
+    cp.variant_id = "var-1";
+
+    await runLinkedInAction(ctx, { kind: "follow_up", workspaceId: WORKSPACE, campaignProspectId: CP, stepNumber: 1 });
+
+    expect(linkedin.sentMessages[0]?.text).toContain("The angle's own first message.");
+  });
+
+  it("schedules the next step on the angle's own delay, not the campaign's", async () => {
+    // The campaign's step 2 waits four days; this angle's waits nine. Reading
+    // the campaign's here would put the whole group on a schedule its angle
+    // did not choose — and an angle with a shorter sequence than the
+    // campaign's would keep going past its own end.
+    const { db, ctx } = harness();
+    db.seed("campaign_variants", [
+      { id: "var-2", workspace_id: WORKSPACE, campaign_id: CAMPAIGN, name: "Slow burn", angle: "a", connection_note: "n", enabled: true },
+    ]);
+    db.seed("campaign_steps", [
+      { workspace_id: WORKSPACE, campaign_id: CAMPAIGN, variant_id: "var-2", step_number: 1, delay_days: 1, message: "Angle opener." },
+      { workspace_id: WORKSPACE, campaign_id: CAMPAIGN, variant_id: "var-2", step_number: 2, delay_days: 9, message: "Angle closer." },
+    ]);
+    const cp = db.find("campaign_prospects", { id: CP })!;
+    cp.status = "accepted";
+    cp.variant_id = "var-2";
+
+    await runLinkedInAction(ctx, { kind: "follow_up", workspaceId: WORKSPACE, campaignProspectId: CP, stepNumber: 1 });
+
+    const after = db.find("campaign_prospects", { id: CP })!;
+    const days = Math.round(
+      (new Date(String(after.next_action_at)).getTime() - NOW.getTime()) / 86_400_000,
+    );
+    expect(days).toBe(9);
+  });
+
+  it("stops when the angle's sequence ends, even if the campaign's is longer", async () => {
+    // One step on this angle, two on the campaign. Falling through would
+    // schedule a follow-up this angle never wrote.
+    const { db, ctx } = harness();
+    db.seed("campaign_variants", [
+      { id: "var-3", workspace_id: WORKSPACE, campaign_id: CAMPAIGN, name: "Short", angle: "a", connection_note: "n", enabled: true },
+    ]);
+    db.seed("campaign_steps", [
+      { workspace_id: WORKSPACE, campaign_id: CAMPAIGN, variant_id: "var-3", step_number: 1, delay_days: 1, message: "The only one." },
+    ]);
+    const cp = db.find("campaign_prospects", { id: CP })!;
+    cp.status = "accepted";
+    cp.variant_id = "var-3";
+
+    await runLinkedInAction(ctx, { kind: "follow_up", workspaceId: WORKSPACE, campaignProspectId: CP, stepNumber: 1 });
+
+    expect(db.find("campaign_prospects", { id: CP })?.next_action_at).toBeNull();
+  });
+
+  it("falls back to the campaign's step when the angle has none", async () => {
+    // Every campaign built before angles existed reaches this path for its
+    // whole sequence, so it is the common case and not the edge.
+    const { db, ctx, linkedin } = harness();
+    const cp = db.find("campaign_prospects", { id: CP })!;
+    cp.status = "accepted";
+    cp.variant_id = null;
+
+    await runLinkedInAction(ctx, { kind: "follow_up", workspaceId: WORKSPACE, campaignProspectId: CP, stepNumber: 1 });
+
+    expect(linkedin.sentMessages).toHaveLength(1);
+  });
+
   it("sends the invitation, personalises it, and advances the state machine", async () => {
     const { db, ctx, linkedin } = harness();
 

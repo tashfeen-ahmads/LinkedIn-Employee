@@ -236,6 +236,11 @@ export type CampaignStepRow = {
   id: string;
   workspace_id: string;
   campaign_id: string;
+  /**
+   * The angle this step belongs to, or null for the campaign-wide step used by
+   * anybody who was assigned no angle.
+   */
+  variant_id: string | null;
   step_number: number;
   delay_days: number;
   message: string;

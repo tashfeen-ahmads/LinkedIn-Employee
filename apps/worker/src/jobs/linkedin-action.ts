@@ -1,5 +1,6 @@
 import { checkAction } from "@le/linkedin";
 import { canTransition, exclusionReason, matchExclusion, type CampaignProspectStatus } from "@le/shared";
+import type { Db } from "@le/db";
 import type { WorkerContext } from "../context.js";
 import { recordEvent } from "../context.js";
 import { applyHealth, recordAction, toUsage, type AccountRecord, ACCOUNT_USAGE_COLUMNS } from "../accounts.js";
@@ -164,12 +165,13 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
   const target = `messaged_${job.stepNumber}` as CampaignProspectStatus;
   if (!canTransition(cp.status as CampaignProspectStatus, target)) return;
 
-  const { data: step } = await db
-    .from("campaign_steps")
-    .select("message, delay_days")
-    .eq("campaign_id", cp.campaign_id)
-    .eq("step_number", job.stepNumber)
-    .single();
+  // The step belonging to this person's angle, falling back to the campaign's.
+  //
+  // Same reasoning as the connection note: somebody counted under an angle has
+  // to receive that angle, or the results table describes a group that partly
+  // got something else. The fallback is not a formality — it is the whole
+  // sequence for every prospect on a campaign built before angles existed.
+  const step = await stepFor(db, cp.campaign_id, cp.variant_id, job.stepNumber);
   if (!step) return;
 
   const conversation = await ensureConversation(ctx, {
@@ -203,12 +205,11 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
     sent_at: new Date().toISOString(),
   });
 
-  const { data: nextStep } = await db
-    .from("campaign_steps")
-    .select("delay_days")
-    .eq("campaign_id", cp.campaign_id)
-    .eq("step_number", job.stepNumber + 1)
-    .maybeSingle();
+  // The next step is read the same way. Reading the campaign's here while the
+  // message came from the angle would schedule the follow-up to a delay the
+  // angle did not choose, and an angle whose sequence is shorter than the
+  // campaign's would keep going past its own end.
+  const nextStep = await stepFor(db, cp.campaign_id, cp.variant_id, job.stepNumber + 1);
 
   await db
     .from("campaign_prospects")
@@ -375,6 +376,46 @@ async function failProspect(ctx: WorkerContext, campaignProspectId: string, reas
     .from("campaign_prospects")
     .update({ status: "failed", status_reason: reason, next_action_at: null })
     .eq("id", campaignProspectId);
+}
+
+/**
+ * The message for one step of one prospect's sequence.
+ *
+ * An angle's step when they were assigned an angle and that angle has one;
+ * otherwise the campaign's. Two queries at most, and only the second when the
+ * first finds nothing — a prospect on a campaign with no angles never pays for
+ * the lookup.
+ */
+async function stepFor(
+  db: Db,
+  campaignId: string,
+  variantId: string | null,
+  stepNumber: number,
+): Promise<{ message: string; delay_days: number } | null> {
+  if (variantId) {
+    // The angle's whole sequence, not just this step. An angle that wrote a
+    // sequence owns it end to end: falling through to the campaign's step 2
+    // because this angle only wrote one would send that group an opener in one
+    // voice and a follow-up in another, and the results would no longer be
+    // measuring a single thing. The end of the angle's sequence is the end.
+    const { data: own } = await db
+      .from("campaign_steps")
+      .select("message, delay_days, step_number")
+      .eq("campaign_id", campaignId)
+      .eq("variant_id", variantId);
+    if (own?.length) return own.find((s) => s.step_number === stepNumber) ?? null;
+    // No sequence of its own: an angle stored without one, which the schema
+    // does not produce but a partial write could. The campaign's is better
+    // than silence.
+  }
+  const { data } = await db
+    .from("campaign_steps")
+    .select("message, delay_days")
+    .eq("campaign_id", campaignId)
+    .is("variant_id", null)
+    .eq("step_number", stepNumber)
+    .maybeSingle();
+  return data ?? null;
 }
 
 /** Only {{first_name}} is supported; anything else stays literal by design. */

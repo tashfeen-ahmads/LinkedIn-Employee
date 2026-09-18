@@ -308,7 +308,17 @@ function matches(row: Row, filter: Filter): boolean {
     case "not-in":
       return !(filter.value as unknown[]).includes(value as string);
     case "is":
-      return filter.value === "not-null" ? value !== null && value !== undefined : value === filter.value;
+      // A column a row never set is `undefined` here and NULL in Postgres, so
+      // both readings of "is null" have to accept it. Comparing with `===`
+      // alone made `.is("variant_id", null)` match nothing at all — which is an
+      // answer Postgres never gives, and the caller then took its "no such
+      // row" branch and stopped sending. Exactly the class of silent wrongness
+      // this fake is supposed to refuse rather than reproduce.
+      return filter.value === "not-null"
+        ? value !== null && value !== undefined
+        : filter.value === null
+          ? value === null || value === undefined
+          : value === filter.value;
     case "neq":
       return value !== null && value !== undefined && value !== filter.value;
     case "lt":

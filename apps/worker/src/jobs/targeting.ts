@@ -411,15 +411,37 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
     console.error("could not store campaign variants", { campaignId: campaign.id });
   }
 
-  await db.from("campaign_steps").insert(
-    plan.steps.map((step, index) => ({
+  // The campaign's own sequence, and one per angle.
+  //
+  // The campaign-wide steps (variant_id null) are not a leftover: they are what
+  // a prospect receives when no angle was assigned, which is every campaign
+  // built before angles existed and every campaign whose angles could not be
+  // stored. Inserted in one statement so a partial sequence is not possible —
+  // a campaign holding step 1 and step 3 sends a follow-up and then silently
+  // stops.
+  const variantIdByName = new Map((variantRows ?? []).map((v) => [v.name, v.id]));
+  await db.from("campaign_steps").insert([
+    ...plan.steps.map((step, index) => ({
       workspace_id: job.workspaceId,
       campaign_id: campaign.id,
+      variant_id: null,
       step_number: index + 1,
       delay_days: step.delayDays,
       message: step.message,
     })),
-  );
+    ...plannedVariants.flatMap((variant) => {
+      const variantId = variantIdByName.get(variant.name);
+      if (!variantId) return [];
+      return (variant.steps ?? []).map((step, index) => ({
+        workspace_id: job.workspaceId,
+        campaign_id: campaign.id,
+        variant_id: variantId,
+        step_number: index + 1,
+        delay_days: step.delayDays,
+        message: step.message,
+      }));
+    }),
+  ]);
 
   const attached = await attachProspects(ctx, job, {
     campaignId: campaign.id,

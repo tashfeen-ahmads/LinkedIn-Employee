@@ -470,6 +470,16 @@ tests that were verified by deliberately breaking the code.
     reassignment attributes an outcome to an angle that did not produce it,
     which is the one way a test is worse than no test.
 
+    The angle carries past the invitation. A prospect accepts *because of* the
+    angle, so a generic first message would attribute the acceptance to the
+    angle and the reply to nothing — the two halves of the funnel measuring
+    different things. `campaign_steps.variant_id` (migration 0018) gives each
+    angle its own sequence, and an angle that has one **owns it end to end**:
+    when its sequence runs out, the sequence is over. Falling through to the
+    campaign's step 2 would send that group an opener in one voice and a
+    follow-up in another. The campaign-wide steps (`variant_id` null) are not a
+    leftover — they are the whole sequence for anybody assigned no angle.
+
     The comparison is deliberately reluctant. Rates use a **Wilson interval**,
     not rate ± 1.96·√(p(1−p)/n), which at 0 of 8 claims perfect certainty from
     no evidence and at small n runs outside [0, 1] — precisely the range an

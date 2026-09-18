@@ -149,6 +149,24 @@ export const CampaignVariantSchema = z.object({
   /** The specific pain this angle names, or null when it names none. */
   painPoint: z.string().max(300).nullable(),
   connectionNote: z.string().max(300),
+  /**
+   * This angle's own follow-ups.
+   *
+   * An angle that stops at the connection request is only half tested. The
+   * prospect accepted *because of* the angle; if the first message then arrives
+   * in the campaign's generic voice, the acceptance is attributed to the angle
+   * and the reply is not, and the two halves of the funnel are measuring
+   * different things.
+   */
+  steps: z
+    .array(
+      z.object({
+        delayDays: z.number().int().min(1).max(14),
+        message: z.string().max(1200),
+      }),
+    )
+    .min(2)
+    .max(3),
 });
 export type CampaignVariantPlan = z.infer<typeof CampaignVariantSchema>;
 
