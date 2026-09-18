@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { MAX_PAGES, PAGE_SIZE, fetchAllRows } from "../src/lib/rows";
+import { MAX_PAGES, PAGE_SIZE, fetchAllRows } from "../src/paging.js";
 
 /**
  * The cap that used to be silent.
+ *
+ * These live beside the code rather than in the web app that first needed it:
+ * `@le/web` resolves `@le/db` through its built `dist/`, so a test there proves
+ * nothing about the source a mutation would break — it would pass against the
+ * last build whatever the source said.
  *
  * PostgREST returns at most 1000 rows and reports the fact nowhere. Every
  * funnel in this product counts rows in the application tier, so a workspace

@@ -104,6 +104,29 @@ export default async function BillingPage({ searchParams }: { searchParams: Noti
         ))}
       </section>
 
+      <section className="card stack-2">
+        <h2>Export everything</h2>
+        <p className="small muted">
+          Every prospect, conversation, message, meeting and campaign in this workspace, as one JSON
+          file. This is what answers a subject-access request, and it is here rather than behind a
+          support email because a promise only we can keep is not a promise you have.
+        </p>
+        {/*
+          A link, not a form: the answer is a download, and a server action can
+          only redirect or re-render. Owners and admins only — the file holds
+          other people's personal data in bulk.
+        */}
+        {["owner", "admin"].includes(session.role) ? (
+          <p>
+            <a className="btn secondary small" href="/app/export" download>
+              Download workspace export
+            </a>
+          </p>
+        ) : (
+          <p className="tiny subtle">An owner or an admin can download this.</p>
+        )}
+      </section>
+
       <p className="small muted">
         Cancelling stops outreach. Your prospects, conversations and booked meetings stay readable and
         exportable — we do not hold your record of what was said hostage.

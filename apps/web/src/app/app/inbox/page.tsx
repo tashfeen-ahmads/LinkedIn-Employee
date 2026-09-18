@@ -39,7 +39,11 @@ async function approveDraft(formData: FormData) {
   // send rather than losing it. Said plainly, because "approved" and "sent" are
   // not the same thing and the person who clicked is entitled to know which
   // happened.
-  const queued = await callWorker("/jobs/send-reply", { workspaceId: session.workspaceId, draftId });
+  const queued = await callWorker("/jobs/send-reply", {
+    workspaceId: session.workspaceId,
+    userId: session.userId,
+    draftId,
+  });
   if (!queued.ok) {
     redirect(errorQuery("/app/inbox", `Approved, but sending could not be confirmed: ${queued.error} It will be retried automatically.`));
   }
@@ -74,7 +78,11 @@ async function sendManualReply(formData: FormData) {
 
   // Sent through the same path as everything else, so it still passes the rate
   // limiter and lands in the message history. Rule 1 in CLAUDE.md.
-  const queued = await callWorker("/jobs/send-reply", { workspaceId: session.workspaceId, draftId: draft.id });
+  const queued = await callWorker("/jobs/send-reply", {
+    workspaceId: session.workspaceId,
+    userId: session.userId,
+    draftId: draft.id,
+  });
   if (!queued.ok) {
     redirect(errorQuery("/app/inbox", `Saved, but sending could not be confirmed: ${queued.error} It will be retried automatically.`));
   }

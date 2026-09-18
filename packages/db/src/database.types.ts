@@ -631,6 +631,23 @@ export type Database = {
         }[];
       };
       /**
+       * Model spend per workspace, summed in the database rather than by
+       * reading every row of `llm_calls` into the browser tier — that table
+       * gains a row per agent call and was the first to cross PostgREST's
+       * silent thousand-row cap. `priced_calls` against `calls` says how much
+       * of the total is real: an unpriced model stores null, and null is
+       * skipped rather than counted as free.
+       */
+      platform_workspace_spend: {
+        Args: Record<string, never>;
+        Returns: {
+          workspace_id: string;
+          spend_usd: number;
+          calls: number;
+          priced_calls: number;
+        }[];
+      };
+      /**
        * Writes an operator's reply onto a ticket. A definer function rather
        * than an update policy because RLS cannot restrict columns, and the
        * customer's own `subject` and `body` must not change after the fact.

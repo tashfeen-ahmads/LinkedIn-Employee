@@ -1,12 +1,13 @@
 import Link from "next/link";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
+import { fetchAllRows } from "@/lib/rows";
 
 export default async function CampaignsPage() {
   const session = await requireSession();
   const supabase = await createClient();
 
-  const [{ data: campaigns }, { data: counts }, { data: strategies }] = await Promise.all([
+  const [{ data: campaigns }, counts, { data: strategies }] = await Promise.all([
     supabase
       .from("campaigns")
       .select(
@@ -14,7 +15,18 @@ export default async function CampaignsPage() {
       )
       .eq("workspace_id", session.workspaceId)
       .order("created_at", { ascending: false }),
-    supabase.from("campaign_prospects").select("campaign_id, status").eq("workspace_id", session.workspaceId),
+    // Paged, because these rows are counted rather than shown: a plain select
+    // stops at PostgREST's thousandth row without saying so, and a campaign
+    // grown past that with `Find more` would report a queue smaller than it is
+    // — which reads as the campaign having nearly finished.
+    fetchAllRows<{ campaign_id: string; status: string }>((from, to) =>
+      supabase
+        .from("campaign_prospects")
+        .select("campaign_id, status")
+        .eq("workspace_id", session.workspaceId)
+        .order("id", { ascending: true })
+        .range(from, to),
+    ),
     supabase
       .from("customer_profiles")
       .select("id, name, priority")
@@ -23,7 +35,7 @@ export default async function CampaignsPage() {
   ]);
 
   const byCampaign = new Map<string, { queued: number; total: number }>();
-  for (const row of counts ?? []) {
+  for (const row of counts.rows) {
     const entry = byCampaign.get(row.campaign_id) ?? { queued: 0, total: 0 };
     entry.total += 1;
     if (row.status === "queued") entry.queued += 1;

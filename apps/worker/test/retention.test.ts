@@ -1,3 +1,4 @@
+import { MAX_PAGES, PAGE_SIZE } from "@le/db";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { FakeDb } from "./fake-db.js";
 import { eraseProspect, exportWorkspace, runRetentionSweep } from "../src/jobs/retention.js";
@@ -207,5 +208,37 @@ describe("exportWorkspace", () => {
     const serialized = JSON.stringify(await exportWorkspace(ctx, WORKSPACE));
     expect(serialized).not.toContain("ciphertext");
     expect(serialized).not.toContain("credentials_encrypted");
+  });
+
+  it("includes everyone past PostgREST's thousand-row cap", async () => {
+    // This is what answers a subject-access request. A plain select stops at
+    // a thousand rows and reports the fact nowhere, so the file would look
+    // complete and omit everybody after that — a worse answer than no file.
+    const { db, ctx } = harness();
+    db.seed(
+      "prospects",
+      Array.from({ length: PAGE_SIZE + 250 }, (_, i) => ({
+        workspace_id: WORKSPACE,
+        linkedin_url: `https://www.linkedin.com/in/person-${i}/`,
+      })),
+    );
+
+    const dump = await exportWorkspace(ctx, WORKSPACE);
+
+    // The one seeded by the harness, plus every one of these.
+    expect(dump.prospects).toHaveLength(PAGE_SIZE + 251);
+    expect(dump.complete).toBe(true);
+  });
+
+  it("says so when it gave up rather than handing over a partial file", async () => {
+    const { db, ctx } = harness();
+    db.seed(
+      "conversations",
+      Array.from({ length: PAGE_SIZE * MAX_PAGES + 1 }, () => ({ workspace_id: WORKSPACE })),
+    );
+
+    const dump = await exportWorkspace(ctx, WORKSPACE);
+
+    expect(dump.complete).toBe(false);
   });
 });

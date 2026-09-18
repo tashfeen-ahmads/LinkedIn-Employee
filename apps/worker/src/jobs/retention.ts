@@ -1,4 +1,4 @@
-import type { Db } from "@le/db";
+import { fetchAllRows, type Db } from "@le/db";
 import type { WorkerContext } from "../context.js";
 import { recordEvent } from "../context.js";
 
@@ -167,6 +167,8 @@ async function hasLiveActivity(db: Db, workspaceId: string, prospectId: string, 
 
 export interface WorkspaceExport {
   exportedAt: string;
+  /** False when a table stopped short of its end. Never hidden from the file. */
+  complete: boolean;
   workspace: unknown;
   prospects: unknown[];
   conversations: unknown[];
@@ -183,26 +185,50 @@ export interface WorkspaceExport {
 export async function exportWorkspace(ctx: WorkerContext, workspaceId: string): Promise<WorkspaceExport> {
   const { db } = ctx;
 
-  const [workspace, prospects, conversations, meetings, campaigns] = await Promise.all([
-    db.from("workspaces").select("id, name, plan, created_at").eq("id", workspaceId).maybeSingle(),
-    db.from("prospects").select("*").eq("workspace_id", workspaceId),
-    db.from("conversations").select("*").eq("workspace_id", workspaceId),
-    db.from("meetings").select("*").eq("workspace_id", workspaceId),
-    db.from("campaigns").select("*").eq("workspace_id", workspaceId),
-  ]);
+  const { data: workspace } = await db
+    .from("workspaces")
+    .select("id, name, plan, created_at")
+    .eq("id", workspaceId)
+    .maybeSingle();
 
-  const { data: messages } = await db
-    .from("messages")
-    .select("id, conversation_id, direction, source, body, sent_at, created_at")
-    .eq("workspace_id", workspaceId);
+  /**
+   * Every table paged to the end.
+   *
+   * These were plain selects, and PostgREST caps a select at a thousand rows
+   * without saying so — to the service role exactly as to anyone else. This
+   * file is what answers a subject-access request: a file described as
+   * everything held about somebody, silently missing everyone after the
+   * thousandth, is a worse answer than no file, because it looks complete.
+   */
+  const all = <T>(table: "prospects" | "conversations" | "meetings" | "campaigns" | "messages", columns: string) =>
+    fetchAllRows<T>((from, to) =>
+      db
+        .from(table)
+        .select(columns)
+        .eq("workspace_id", workspaceId)
+        // Ordered, because paging an unordered query can repeat or skip a row.
+        .order("id", { ascending: true })
+        .range(from, to) as never,
+    );
+
+  const [prospects, conversations, meetings, campaigns, messages] = await Promise.all([
+    all<unknown>("prospects", "*"),
+    all<unknown>("conversations", "*"),
+    all<unknown>("meetings", "*"),
+    all<unknown>("campaigns", "*"),
+    all<unknown>("messages", "id, conversation_id, direction, source, body, sent_at, created_at"),
+  ]);
 
   return {
     exportedAt: new Date().toISOString(),
-    workspace: workspace.data ?? null,
-    prospects: prospects.data ?? [],
-    conversations: conversations.data ?? [],
-    messages: messages ?? [],
-    meetings: meetings.data ?? [],
-    campaigns: campaigns.data ?? [],
+    workspace: workspace ?? null,
+    prospects: prospects.rows,
+    conversations: conversations.rows,
+    messages: messages.rows,
+    meetings: meetings.rows,
+    campaigns: campaigns.rows,
+    // Said rather than hidden: an export that stopped short must not be handed
+    // over as if it were everything.
+    complete: ![prospects, conversations, meetings, campaigns, messages].some((r) => r.truncated),
   };
 }

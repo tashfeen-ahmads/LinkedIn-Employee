@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { MockLinkedInProvider } from "@le/linkedin";
 import { createServer } from "../src/server.js";
@@ -194,6 +195,39 @@ describe("internal API authentication", () => {
       }),
     });
     expect(res.status).toBe(403);
+  });
+
+  it("refuses to send a reply into a workspace the caller is not in", async () => {
+    // This was the one /jobs route with no membership check. The shared secret
+    // alone got you as far as naming any workspace and any draft id — on the
+    // route that puts a message in front of a real person, under a real rep's
+    // name. Every sibling route checked; this one did not.
+    const { app, added } = makeApp({ secret: SECRET, isMember: false });
+    const res = await app.request("/jobs/send-reply", {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${SECRET}` },
+      body: JSON.stringify({
+        workspaceId: "11111111-1111-4111-8111-111111111111",
+        userId: "22222222-2222-4222-8222-222222222222",
+        draftId: "33333333-3333-4333-8333-333333333333",
+      }),
+    });
+
+    expect(res.status).toBe(403);
+    expect(added).toHaveLength(0);
+  });
+
+  it("names the caller on every job route, so membership is checkable at all", () => {
+    // The gap above was possible because the request schema had no userId:
+    // there was no caller to check. A route that takes a workspace and not a
+    // user cannot be guarded, however carefully the handler is written.
+    const source = readFileSync(new URL("../src/server.ts", import.meta.url), "utf8");
+    const guarded = source.matchAll(/app\.post\("(\/jobs\/[^"]+)"/g);
+    for (const [, route] of guarded) {
+      const handler = source.slice(source.indexOf(`app.post("${route}"`));
+      const body = handler.slice(0, handler.indexOf("\n  });"));
+      expect(body, `${route} does not check membership`).toContain("assertMembership");
+    }
   });
 
   it("leaves the health check open", async () => {

@@ -1,60 +1,10 @@
 import "server-only";
 
 /**
- * PostgREST answers at most `db-max-rows` rows — 1000 by default — and says so
- * nowhere in the payload. A select that hits the cap returns a shorter array
- * and no error.
+ * Paging past PostgREST's silent row cap.
  *
- * Every funnel on every screen is computed by counting rows in the browser
- * tier, so the cap is not a paging inconvenience: it is a dashboard that stops
- * counting at a thousand and reports the shortfall as a number somebody reads
- * as their result. `Find more` exists to grow a campaign past that (rule 20),
- * and rule 24 keeps every prospect row for ever, so a workspace crosses it in
- * weeks and nothing announces the day it did.
- *
- * Counting in SQL instead would be faster and would put a second definition of
- * the funnel in the database, where it would drift from
- * `packages/shared/src/funnel.ts` — the failure this codebase keeps finding.
- * So the rows are fetched in pages and the one definition keeps counting them.
+ * The helper itself lives in `@le/db` — the cap is a fact about PostgREST, not
+ * about the web tier, and the worker's GDPR export hit it too. This re-export
+ * keeps the import path the pages already use.
  */
-export const PAGE_SIZE = 1000;
-
-/** A safety stop, so a bad filter cannot walk a table for ever. */
-export const MAX_PAGES = 50;
-
-export interface PagedResult<T> {
-  rows: T[];
-  /**
-   * True when the walk stopped at `MAX_PAGES` with more still to come. The
-   * caller says so on screen rather than presenting a partial count as the
-   * answer — which is the very thing the cap did silently.
-   */
-  truncated: boolean;
-}
-
-/**
- * Walks a PostgREST query to the end.
- *
- * `query(from, to)` must apply `.range(from, to)` to an otherwise complete,
- * **ordered** query. Without a stable order two pages can overlap or skip: the
- * server is free to return rows in any order, and "any order" is not the same
- * one twice.
- */
-export async function fetchAllRows<T>(
-  query: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
-): Promise<PagedResult<T>> {
-  const rows: T[] = [];
-
-  for (let page = 0; page < MAX_PAGES; page += 1) {
-    const from = page * PAGE_SIZE;
-    const { data, error } = await query(from, from + PAGE_SIZE - 1);
-    if (error) throw new Error(error.message);
-    const batch = data ?? [];
-    rows.push(...batch);
-    // A short page is the end. A full one might be, and costs one more request
-    // to find out — cheaper than being wrong about the total.
-    if (batch.length < PAGE_SIZE) return { rows, truncated: false };
-  }
-
-  return { rows, truncated: true };
-}
+export { PAGE_SIZE, MAX_PAGES, fetchAllRows, type PagedResult } from "@le/db";

@@ -73,6 +73,10 @@ const SendOneRequest = z.object({
 
 const SendReplyRequest = z.object({
   workspaceId: z.string().uuid(),
+  // Who is sending it. Every other /jobs route names the caller and checks
+  // their membership; this one did not, and it is the route that puts a
+  // message in front of a real person under a rep's own name.
+  userId: z.string().uuid(),
   draftId: z.string().uuid(),
 });
 
@@ -383,6 +387,9 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
   app.post("/jobs/send-reply", async (c) => {
     const parsed = SendReplyRequest.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: "invalid request" }, 400);
+    if (!(await assertMembership(ctx.db, parsed.data.workspaceId, parsed.data.userId))) {
+      return c.json({ error: "not a member of that workspace" }, 403);
+    }
 
     // Only a draft a human already approved may be sent, and only within its
     // own workspace: the id alone is not authority to message someone.

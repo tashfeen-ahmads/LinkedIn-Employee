@@ -101,6 +101,7 @@ class QueryBuilder implements PromiseLike<{ data: Row[] | null; error: null | { 
   private returning = false;
   private orderBy: { column: string; ascending: boolean } | null = null;
   private limitTo: number | null = null;
+  private rangeTo: { from: number; to: number } | null = null;
   private countMode: "exact" | null = null;
   private headOnly = false;
 
@@ -214,6 +215,20 @@ class QueryBuilder implements PromiseLike<{ data: Row[] | null; error: null | { 
     return this;
   }
 
+  /**
+   * PostgREST's `.range(from, to)`, inclusive at both ends.
+   *
+   * Modelled rather than stubbed, because what it is used for here is walking
+   * past PostgREST's silent thousand-row cap — and a `range` that ignored its
+   * arguments would return every row on the first page, so the walk would look
+   * correct in a test and short in production, which is the failure it exists
+   * to prevent.
+   */
+  range(from: number, to: number): this {
+    this.rangeTo = { from, to };
+    return this;
+  }
+
   async single(): Promise<{ data: Row | null; error: null | { message: string } }> {
     const { data, error } = await this.run();
     if (error) return { data: null, error };
@@ -290,6 +305,8 @@ class QueryBuilder implements PromiseLike<{ data: Row[] | null; error: null | { 
       });
     }
     if (this.limitTo !== null) result = result.slice(0, this.limitTo);
+    // After limit, as PostgREST applies it: `to` is inclusive.
+    if (this.rangeTo) result = result.slice(this.rangeTo.from, this.rangeTo.to + 1);
 
     if (this.countMode) {
       return { data: this.headOnly ? null : result, error: null, count: matched.length };

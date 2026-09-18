@@ -23,7 +23,11 @@ export default async function AdminWorkspacesPage() {
       supabase.from("linkedin_accounts").select("workspace_id, status, invites_today, first_action_at"),
       supabase.from("campaigns").select("workspace_id, status"),
       supabase.rpc("platform_workspace_stats"),
-      supabase.from("llm_calls").select("workspace_id, cost_usd"),
+      // Summed in the database. Read row by row this stopped at PostgREST's
+      // thousandth, and `llm_calls` gains a row per agent call — so the bill
+      // an operator reads was the first number on the platform to go quietly
+      // short.
+      supabase.rpc("platform_workspace_spend"),
     ]);
 
   const byWorkspace = statsByWorkspace((stats ?? null) as WorkspaceStats[] | null);
@@ -35,10 +39,9 @@ export default async function AdminWorkspacesPage() {
   // is wrong in the flattering direction.
   const costs = new Map<string, number>();
   for (const row of spend ?? []) {
-    // workspace_id is nullable on llm_calls — a call made before a workspace
-    // exists has nowhere to charge itself to.
-    if (row.cost_usd === null || !row.workspace_id) continue;
-    costs.set(row.workspace_id, (costs.get(row.workspace_id) ?? 0) + Number(row.cost_usd));
+    // The function already excludes calls with no workspace to charge — one
+    // made before a workspace exists has nowhere to go.
+    costs.set(row.workspace_id, Number(row.spend_usd));
   }
 
   const accountsByWorkspace = new Map<string, { status: string; invites_today: number; first_action_at: string | null }[]>();
