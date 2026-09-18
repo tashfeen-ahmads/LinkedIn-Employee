@@ -275,6 +275,49 @@ async function findMore(formData: FormData) {
   );
 }
 
+/**
+ * Sends the next queued invitation now, and puts the answer on the screen.
+ *
+ * Every other way of finding out whether a real invitation can leave this
+ * deployment costs a quarter of an hour — five minutes for a tick, two to
+ * eleven for the jittered gap — and answers with an unchanged page if anything
+ * went wrong in between. Eight days went by that way without a single live
+ * send, and none of the waiting was ever a safety rule: the limiter, the
+ * exclusion list, the do-not-contact flag and the never-twice rule all still
+ * apply, and all of them still refuse out loud.
+ */
+async function sendOneNow(formData: FormData) {
+  "use server";
+  const campaignId = String(formData.get("campaignId"));
+  const session = await requireSession();
+
+  const result = await callWorker<{ ok: boolean; detail: string }>("/jobs/send-one", {
+    workspaceId: session.workspaceId,
+    userId: session.userId,
+    campaignId,
+  });
+
+  revalidatePath(`/app/campaigns/${campaignId}`);
+  if (!result.ok) {
+    redirect(errorQuery(`/app/campaigns/${campaignId}`, `Could not reach the sender: ${result.error}`));
+  }
+  // The worker's own sentence, verbatim. A paraphrase here is a second reading
+  // of what happened, and this is the one screen where the exact words matter.
+  const answer = result.data;
+  if (!answer) {
+    // A 200 with no body is not "it worked". Saying nothing here is how a
+    // failed send became a page that looked exactly like a successful one.
+    redirect(
+      errorQuery(`/app/campaigns/${campaignId}`, "The sender answered without saying what happened."),
+    );
+  }
+  redirect(
+    answer.ok
+      ? noticeQuery(`/app/campaigns/${campaignId}`, answer.detail)
+      : errorQuery(`/app/campaigns/${campaignId}`, answer.detail),
+  );
+}
+
 /** Reads exactly what launchBlockers needs, for the server-action re-check. */
 async function launchState(campaignId: string, workspaceId: string) {
   const supabase = await createClient();
@@ -436,13 +479,28 @@ export default async function CampaignPage({
             {account?.display_name ? ` · sending as ${account.display_name}` : ""}
           </p>
         </div>
-        <form action={setStatus}>
-          <input type="hidden" name="campaignId" value={campaign.id} />
-          <input type="hidden" name="status" value={running ? "paused" : "running"} />
-          <button className="btn" type="submit" disabled={!running && blockers.length > 0}>
-            {running ? "Pause" : "Launch campaign"}
-          </button>
-        </form>
+        <div className="row">
+          {/*
+            Proof, on demand. A campaign that has sent nothing is otherwise
+            indistinguishable from one that cannot, and the difference took
+            eight days to establish once.
+          */}
+          {running && queued.length > 0 ? (
+            <form action={sendOneNow}>
+              <input type="hidden" name="campaignId" value={campaign.id} />
+              <SubmitButton className="btn secondary" pendingLabel="Sending…">
+                Send one now
+              </SubmitButton>
+            </form>
+          ) : null}
+          <form action={setStatus}>
+            <input type="hidden" name="campaignId" value={campaign.id} />
+            <input type="hidden" name="status" value={running ? "paused" : "running"} />
+            <SubmitButton pendingLabel={running ? "Pausing…" : "Launching…"} disabled={!running && blockers.length > 0}>
+              {running ? "Pause" : "Launch campaign"}
+            </SubmitButton>
+          </form>
+        </div>
       </div>
 
       {/*

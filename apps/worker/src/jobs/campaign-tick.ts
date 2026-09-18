@@ -15,6 +15,26 @@ import { recordBeat } from "../heartbeat.js";
  * sent, because minutes pass in between and a rep may act manually meanwhile.
  */
 export async function runCampaignTick(db: Db, queues: Queues, now: Date = new Date()): Promise<number> {
+  // The heartbeat used to be written at the end of the run, which meant a run
+  // that threw wrote nothing — and "threw" and "never ran" are the same absence
+  // from every screen. That is not a hypothetical: the first tick with actual
+  // work to do threw, and the product reported eight hours of silence as a
+  // stopped loop while the loop was in fact running and failing every five
+  // minutes. A report you only get when the work succeeded is a report about
+  // the times you did not need it.
+  try {
+    return await tick(db, queues, now);
+  } catch (err) {
+    const reason = (err as { message?: string })?.message ?? "unknown";
+    console.error("campaign tick failed", { reason });
+    await beat(db, now, { failed: reason });
+    // Rethrown so the queue retries and the error tracker sees it. The point of
+    // the stamp above is that it is written before this line, not instead of it.
+    throw err;
+  }
+}
+
+async function tick(db: Db, queues: Queues, now: Date): Promise<number> {
   const today = now.toISOString().slice(0, 10);
 
   const { data: campaigns } = await db

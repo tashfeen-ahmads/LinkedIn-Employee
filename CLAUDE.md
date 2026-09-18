@@ -316,6 +316,31 @@ tests that were verified by deliberately breaking the code.
     row and trusting the schedule to notice. The action that most needs the
     worker was the only one that never spoke to it.
 
+    The stamp is written **even when the run throws** — before the rethrow, not
+    instead of it. It used to be written last, so a tick that failed wrote
+    nothing, and a loop running and failing every five minutes was reported as
+    a loop that had stopped. That is not hypothetical: the first tick that had
+    real work to do threw, and eight hours of that read as silence.
+
+25. **You can send one now, and find out what happened.** `sendOneNow`
+    (`apps/worker/src/jobs/send-one.ts`, behind `Send one now` on the campaign)
+    takes the next queued invitation off the conveyor belt and reports the
+    outcome to the caller. Eight days went by without a single live send
+    because every way of asking cost a quarter of an hour — five minutes for a
+    tick, two to eleven more for the jittered gap — and answered with an
+    unchanged page when anything went wrong in between.
+
+    It skips the waiting and nothing else. It runs `runLinkedInAction`, so the
+    limiter, the health check, the exclusion list, do-not-contact, the
+    never-twice rule and the audit log all still apply, and it refuses a
+    campaign nobody has launched — otherwise it is a way around the review this
+    product is built on. Every refusal is reported in words: the limiter
+    declining is the system working and says so, and a provider error is handed
+    back verbatim, because "422: Cannot send invitation to this member" is the
+    single most useful sentence in the flow and it used to go to a log on a
+    host the person pressing the button cannot reach. A run that refused
+    without throwing is reported as not sent, never as success.
+
 22. **`/health` is the check the platform believes, so it has to look.** It
     answered `{ ok: true }` unconditionally, and an afternoon went into what
     that hides: the process up, Render reporting the service Live, the HTTP API

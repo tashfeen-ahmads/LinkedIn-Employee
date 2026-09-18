@@ -251,6 +251,38 @@ describe("campaign pipeline", () => {
    * identically — the count was never the useful half, and an afternoon went
    * into working out which zero it was from the outside.
    */
+  /**
+   * The heartbeat used to be written at the end of the run, so a run that threw
+   * wrote nothing — and "threw" and "never ran" are the same absence from every
+   * screen. Not hypothetical: the first tick that had actual work to do threw,
+   * and the product reported eight hours of silence as a stopped loop while the
+   * loop was running and failing every five minutes.
+   */
+  it("records a run that threw, rather than looking like a run that never happened", async () => {
+    const { db, queues } = harness();
+    (queues.linkedinAction as unknown as { add: () => Promise<void> }).add = async () => {
+      throw new Error("queue refused the job");
+    };
+
+    await expect(runCampaignTick(db.asDb(), queues, NOW)).rejects.toThrow(/queue refused/);
+
+    const beat = db.rows("worker_heartbeats")[0];
+    expect(beat?.name).toBe("campaign-tick");
+    // The message, not just the fact. It is the only description of the failure
+    // that reaches anybody who cannot open the deployment's logs.
+    expect((beat?.detail as { failed: string }).failed).toMatch(/queue refused/);
+  });
+
+  it("still rethrows, so the queue retries and the tracker sees it", async () => {
+    // The stamp is written before the rethrow, not instead of it.
+    const { db, queues } = harness();
+    (queues.linkedinAction as unknown as { add: () => Promise<void> }).add = async () => {
+      throw new Error("boom");
+    };
+
+    await expect(runCampaignTick(db.asDb(), queues, NOW)).rejects.toThrow("boom");
+  });
+
   it("says why it declined, not only that it did", async () => {
     const { db, queues } = harness();
     const night = new Date("2026-09-09T22:00:00Z");

@@ -15,6 +15,7 @@ import type { MiddlewareHandler } from "hono";
 import type { IntegrationKind } from "@le/db";
 import type { Queues } from "./queues.js";
 import { queueReachable } from "./queues.js";
+import { sendOneNow } from "./jobs/send-one.js";
 import type IORedis from "ioredis";
 import type { WorkerContext } from "./context.js";
 import { bookFromLink, readBookingPage } from "./jobs/book.js";
@@ -59,6 +60,12 @@ const TargetingRequest = z.object({
 });
 
 const CampaignTickRequest = z.object({
+  workspaceId: z.string().uuid(),
+  userId: z.string().uuid(),
+  campaignId: z.string().uuid(),
+});
+
+const SendOneRequest = z.object({
   workspaceId: z.string().uuid(),
   userId: z.string().uuid(),
   campaignId: z.string().uuid(),
@@ -348,6 +355,29 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
       { jobId: `launch:${parsed.data.campaignId}:${Math.floor(Date.now() / 60_000)}` },
     );
     return c.json({ queued: true });
+  });
+
+  /**
+   * Sends the next queued invitation now, and answers with what happened.
+   *
+   * Not a queue route despite living here: the whole point is that the caller
+   * waits for the outcome. Every other way of finding out whether a real
+   * invitation can leave this deployment costs a quarter of an hour and answers
+   * with a blank page, which is how eight days went by without one.
+   */
+  app.post("/jobs/send-one", async (c) => {
+    const parsed = SendOneRequest.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "invalid request" }, 400);
+    if (!(await assertMembership(ctx.db, parsed.data.workspaceId, parsed.data.userId))) {
+      return c.json({ error: "not a member of that workspace" }, 403);
+    }
+    const result = await sendOneNow(ctx, {
+      workspaceId: parsed.data.workspaceId,
+      campaignId: parsed.data.campaignId,
+    });
+    // 200 either way: "the limiter is holding this" is a successful answer to
+    // the question asked, and the caller renders `detail` regardless.
+    return c.json(result);
   });
 
   app.post("/jobs/send-reply", async (c) => {

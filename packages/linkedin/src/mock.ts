@@ -107,7 +107,15 @@ export class MockLinkedInProvider implements LinkedInProvider {
     };
   }
 
+  /**
+   * Set by a test to make the provider refuse a send the way LinkedIn does —
+   * a 422 naming the member, not a network failure. That sentence is the most
+   * useful thing this product can show somebody, so it has to be reachable.
+   */
+  invitationError: Error | null = null;
+
   async sendInvitation(input: { accountId: string; providerId: string; note?: string }): Promise<ActionResult> {
+    if (this.invitationError) throw this.invitationError;
     this.sentInvitations.push(input);
     return { ok: true, providerId: `inv_${this.sentInvitations.length}` };
   }
