@@ -322,25 +322,6 @@ tests that were verified by deliberately breaking the code.
     a loop that had stopped. That is not hypothetical: the first tick that had
     real work to do threw, and eight hours of that read as silence.
 
-25. **You can send one now, and find out what happened.** `sendOneNow`
-    (`apps/worker/src/jobs/send-one.ts`, behind `Send one now` on the campaign)
-    takes the next queued invitation off the conveyor belt and reports the
-    outcome to the caller. Eight days went by without a single live send
-    because every way of asking cost a quarter of an hour — five minutes for a
-    tick, two to eleven more for the jittered gap — and answered with an
-    unchanged page when anything went wrong in between.
-
-    It skips the waiting and nothing else. It runs `runLinkedInAction`, so the
-    limiter, the health check, the exclusion list, do-not-contact, the
-    never-twice rule and the audit log all still apply, and it refuses a
-    campaign nobody has launched — otherwise it is a way around the review this
-    product is built on. Every refusal is reported in words: the limiter
-    declining is the system working and says so, and a provider error is handed
-    back verbatim, because "422: Cannot send invitation to this member" is the
-    single most useful sentence in the flow and it used to go to a log on a
-    host the person pressing the button cannot reach. A run that refused
-    without throwing is reported as not sent, never as success.
-
 22. **`/health` is the check the platform believes, so it has to look.** It
     answered `{ ok: true }` unconditionally, and an afternoon went into what
     that hides: the process up, Render reporting the service Live, the HTTP API
@@ -409,6 +390,63 @@ tests that were verified by deliberately breaking the code.
     filterable, contacted-first. Ranked by fit alone, somebody messaged last
     week sat wherever their score put them and looked exactly like somebody
     nobody had ever written to.
+25. **You can send one now, and find out what happened.** `sendOneNow`
+    (`apps/worker/src/jobs/send-one.ts`, behind `Send one now` on the campaign)
+    takes the next queued invitation off the conveyor belt and reports the
+    outcome to the caller. Eight days went by without a single live send
+    because every way of asking cost a quarter of an hour — five minutes for a
+    tick, two to eleven more for the jittered gap — and answered with an
+    unchanged page when anything went wrong in between.
+
+    It skips the waiting and nothing else. It runs `runLinkedInAction`, so the
+    limiter, the health check, the exclusion list, do-not-contact, the
+    never-twice rule and the audit log all still apply, and it refuses a
+    campaign nobody has launched — otherwise it is a way around the review this
+    product is built on. Every refusal is reported in words: the limiter
+    declining is the system working and says so, and a provider error is handed
+    back verbatim, because "422: Cannot send invitation to this member" is the
+    single most useful sentence in the flow and it used to go to a log on a
+    host the person pressing the button cannot reach. A run that refused
+    without throwing is reported as not sent, never as success.
+
+26. **A strategy is what a prospect came from, and a fit score means nothing
+    without it.** A customer profile *is* a strategy; a business runs fifteen or
+    twenty. `prospects.customer_profile_id` (migration 0016) records which one's
+    search found each person, and it is a column rather than a join table
+    because discovery is single-valued **by construction**: targeting excludes
+    everyone the workspace already knows, so the first strategy to reach a
+    person is the only one that ever can. Modelling it many-to-many would invent
+    a relationship the system cannot produce, and invite code that puts one
+    person on two strategies' lists — which is the duplicate contact rule 24
+    exists to prevent.
+
+    `fit_score` is a fact about a person **and** a strategy. 87 against "small
+    B2B agencies" says nothing about "chamber leaders", and the number was shown
+    unlabelled for months, which made it a ranking nobody could interpret.
+    `/app/prospects` filters by strategy and names what each score was scored
+    against; `/app/campaigns` groups by strategy in the strategies' own priority
+    order; `/app/strategy` shows what each one has actually produced.
+
+    Deleting a strategy sets the link null and **never** cascades to the people
+    it found: those rows are the record of who has been contacted, and rule 24
+    depends on them outliving everything else.
+
+27. **A prospect row is a commitment, so it is never written on its own.**
+    Writing one excludes that person from every future search this workspace
+    runs — that is how rule 24 works — so writing it before the person is
+    actually on a campaign spends the exclusion on an outreach that never
+    happened. `attachProspects` used to let `personalizeInvites` throw between
+    the two writes, and forty-nine real people ended up in the workspace on no
+    campaign at all: unreachable, invisible, and blocking themselves from ever
+    being found again. Nothing anywhere said so.
+
+    Rule 16 already said a writer outage must degrade a campaign rather than
+    stop it — `inviteNote` falls back to the template — and an uncaught
+    exception walked straight past the fallback that existed for it. The failure
+    is caught, the campaign is built with template notes, and
+    `campaign.notes_missing` is recorded: degrading **silently** is the other
+    way this goes wrong, because the review screen then shows a campaign that
+    reads as personalised and is not.
 
 ## Conventions
 

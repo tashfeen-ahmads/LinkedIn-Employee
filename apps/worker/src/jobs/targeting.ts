@@ -319,6 +319,7 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
   if (continuing) {
     const added = await attachProspects(ctx, job, {
       campaignId: continuing.id,
+      customerProfileId: profileRow.id,
       campaignAngle: continuing.connection_note,
       business,
       profile,
@@ -387,6 +388,7 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
 
   const attached = await attachProspects(ctx, job, {
     campaignId: campaign.id,
+    customerProfileId: profileRow.id,
     campaignAngle: plan.connectionNote,
     business,
     profile,
@@ -498,6 +500,16 @@ async function attachProspects(
   job: TargetingJob,
   input: {
     campaignId: string;
+    /**
+     * The strategy whose search found these people.
+     *
+     * Recorded on the prospect, not only on the campaign, because a prospect
+     * outlives every campaign it appears in — and because a fit score is only
+     * meaningful against the customer profile it was scored for. Storing the
+     * number without the thing it was scored against leaves a ranking nobody
+     * can interpret.
+     */
+    customerProfileId: string;
     campaignAngle: string;
     business: Parameters<typeof personalizeInvites>[1]["business"];
     profile: Parameters<typeof personalizeInvites>[1]["profile"];
@@ -512,6 +524,7 @@ async function attachProspects(
     .upsert(
       input.shortlist.map((r) => ({
         workspace_id: job.workspaceId,
+        customer_profile_id: input.customerProfileId,
         linkedin_url: normalizeLinkedInUrl(r.candidate.linkedinUrl),
         provider_id: r.candidate.providerId,
         first_name: r.candidate.firstName,
@@ -546,13 +559,40 @@ async function attachProspects(
   // The upsert above returns ids in the order it was given, so the shortlist
   // and the inserted rows line up — but "lines up" is an assumption that
   // breaks silently, so the note is matched by provider id instead.
-  const notes = await personalizeInvites(ctx.agentsFor(job.workspaceId), {
-    business: input.business,
-    profile: input.profile,
-    repName: input.repName,
-    campaignAngle: input.campaignAngle,
-    prospects: input.shortlist.map((r) => r.candidate),
-  });
+  // A writer outage degrades a campaign; it does not strand the people in it.
+  //
+  // `inviteNote` already falls back to the campaign template when a prospect
+  // has no personalised note — that is rule 16, and it is the whole reason the
+  // fallback exists. But letting this call throw walked straight past it: the
+  // prospects were written a few lines above, the exception unwound the run
+  // before `campaign_prospects` was touched, and the result was people in the
+  // workspace who belong to no campaign at all.
+  //
+  // Which is worse than it sounds, because a `prospects` row is what enforces
+  // "never contact anybody twice". Every one of those people is now excluded
+  // from every future search, permanently, on the strength of an outreach that
+  // never happened. Forty-nine real people went that way on this deployment,
+  // over two failed runs, and nothing anywhere said so.
+  let notes = new Map<string, Awaited<ReturnType<typeof personalizeInvites>> extends Map<string, infer V> ? V : never>();
+  let writerFailed: string | null = null;
+  try {
+    notes = await personalizeInvites(ctx.agentsFor(job.workspaceId), {
+      business: input.business,
+      profile: input.profile,
+      repName: input.repName,
+      campaignAngle: input.campaignAngle,
+      prospects: input.shortlist.map((r) => r.candidate),
+    });
+  } catch (err) {
+    // Degraded, and said out loud. Silently sending everyone the template is
+    // the other way this goes wrong: the review screen would show a campaign
+    // that looks personalised and is not.
+    writerFailed = (err as { message?: string })?.message ?? "unknown";
+    console.error("the invite writer failed; falling back to the campaign template", {
+      campaignId: input.campaignId,
+      reason: writerFailed,
+    });
+  }
 
   const providerIdByProspectId = new Map<string, string>();
   for (const [index, p] of insertedProspects.entries()) {
@@ -581,6 +621,17 @@ async function attachProspects(
     // campaign has already invited back to `queued` — inviting them twice.
     { onConflict: "campaign_id,prospect_id", ignoreDuplicates: true },
   );
+
+  if (writerFailed) {
+    await recordEvent(db, {
+      workspaceId: job.workspaceId,
+      name: "campaign.notes_missing",
+      actorUserId: job.userId,
+      subjectType: "campaign",
+      subjectId: input.campaignId,
+      payload: { reason: writerFailed, prospects: insertedProspects.length },
+    });
+  }
 
   return insertedProspects.length;
 }

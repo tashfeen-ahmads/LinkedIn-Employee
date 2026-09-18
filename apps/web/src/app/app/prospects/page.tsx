@@ -55,7 +55,7 @@ const SIGNAL_LABELS: Record<string, string> = {
 export default async function ProspectsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; notice?: string; show?: string }>;
+  searchParams: Promise<{ error?: string; notice?: string; show?: string; strategy?: string }>;
 }) {
   const params = await searchParams;
   const session = await requireSession();
@@ -68,15 +68,33 @@ export default async function ProspectsPage({
   // has ever written to.
   const showing = params.show === "contacted" ? "contacted" : params.show === "new" ? "new" : "all";
 
+  // Which strategy found them. A business runs fifteen or twenty of these —
+  // different markets, different pains, different angles — and until now they
+  // all emptied into one undifferentiated list, so "is the agencies angle
+  // producing anybody" had no way of being asked.
+  //
+  // Read from the customer profiles rather than trusted from the query string:
+  // an id in a URL is a claim, and this one would otherwise be a way to name
+  // another workspace's strategy and see whether it exists.
+  const { data: strategies } = await supabase
+    .from("customer_profiles")
+    .select("id, name")
+    .eq("workspace_id", session.workspaceId)
+    .order("priority", { ascending: true });
+
+  const strategyList = strategies ?? [];
+  const strategy = strategyList.find((s) => s.id === params.strategy) ?? null;
+
   let query = supabase
     .from("prospects")
     .select(
-      "id, provider_id, first_name, last_name, headline, title, company, location, linkedin_url, fit_score, fit_reasons, intent_score, signals, do_not_contact, last_contacted_at",
+      "id, provider_id, first_name, last_name, headline, title, company, location, linkedin_url, fit_score, fit_reasons, intent_score, signals, do_not_contact, last_contacted_at, customer_profile_id",
     )
     .eq("workspace_id", session.workspaceId);
 
   if (showing === "contacted") query = query.not("last_contacted_at", "is", null);
   if (showing === "new") query = query.is("last_contacted_at", null);
+  if (strategy) query = query.eq("customer_profile_id", strategy.id);
 
   const { data: prospects } = await query
     // Most recently contacted first when that is what is being read; by fit
@@ -87,17 +105,36 @@ export default async function ProspectsPage({
     })
     .limit(200);
 
-  const [{ count: contactedCount }, { count: totalCount }] = await Promise.all([
-    supabase
+  // Counted within the strategy being viewed, not across the workspace. A
+  // header reading "412 in this workspace, 9 contacted" above a list of
+  // eighteen is two unrelated facts stacked on one line.
+  const scopeCount = (build: (q: ReturnType<typeof countQuery>) => ReturnType<typeof countQuery>) =>
+    build(countQuery());
+  function countQuery() {
+    const q = supabase
       .from("prospects")
       .select("id", { count: "exact", head: true })
-      .eq("workspace_id", session.workspaceId)
-      .not("last_contacted_at", "is", null),
+      .eq("workspace_id", session.workspaceId);
+    return strategy ? q.eq("customer_profile_id", strategy.id) : q;
+  }
+
+  const [{ count: contactedCount }, { count: totalCount }, { data: perStrategy }] = await Promise.all([
+    scopeCount((q) => q.not("last_contacted_at", "is", null)),
+    scopeCount((q) => q),
+    // One row per prospect, reduced below. A count per strategy would be one
+    // query per strategy, and a business is expected to run twenty of them.
     supabase
       .from("prospects")
-      .select("id", { count: "exact", head: true })
+      .select("customer_profile_id")
       .eq("workspace_id", session.workspaceId),
   ]);
+
+  const countByStrategy = new Map<string, number>();
+  for (const row of perStrategy ?? []) {
+    const key = row.customer_profile_id ?? "none";
+    countByStrategy.set(key, (countByStrategy.get(key) ?? 0) + 1);
+  }
+  const strategyNames = new Map(strategyList.map((s) => [s.id, s.name]));
 
   if (!prospects?.length && showing === "all") {
     return (
@@ -118,7 +155,8 @@ export default async function ProspectsPage({
       <div className="page-head">
         <h1>Prospects</h1>
         <p className="muted">
-          {totalCount ?? 0} in this workspace, {contactedCount ?? 0} of whom have been contacted. Once
+          {totalCount ?? 0} {strategy ? `found by "${strategy.name}"` : "in this workspace"},{" "}
+          {contactedCount ?? 0} of whom have been contacted. Once
           somebody has been reached out to they are never added to another campaign — checked again in
           the moment before every send, not only when a list is built. Erasing someone removes
           everything we hold about them and keeps only a do-not-contact record, so a later campaign
@@ -129,6 +167,43 @@ export default async function ProspectsPage({
           Ranked by fit, somebody messaged last week sat wherever their score
           put them and looked exactly like somebody nobody had ever written to.
         */}
+        {/*
+          Two filters, kept separate because they answer different questions:
+          which market a person came from, and whether we have written to them.
+          Folded into one row they read as alternatives, and "Contacted" would
+          look like a strategy.
+        */}
+        {strategyList.length > 0 ? (
+          <nav className="tabs" aria-label="Which strategy found them">
+            <a
+              className={`pill ${strategy ? "" : "accent"}`}
+              href={showing === "all" ? "/app/prospects" : `/app/prospects?show=${showing}`}
+              aria-current={strategy ? undefined : "page"}
+            >
+              All strategies ({perStrategy?.length ?? 0})
+            </a>
+            {strategyList.map((s) => (
+              <a
+                key={s.id}
+                className={`pill ${strategy?.id === s.id ? "accent" : ""}`}
+                href={`/app/prospects?strategy=${s.id}${showing === "all" ? "" : `&show=${showing}`}`}
+                aria-current={strategy?.id === s.id ? "page" : undefined}
+                title={s.name}
+              >
+                {shortName(s.name)} ({countByStrategy.get(s.id) ?? 0})
+              </a>
+            ))}
+            {countByStrategy.get("none") ? (
+              // Named rather than hidden. These are people found before the
+              // link existed, and a count that does not add up is its own
+              // question somebody has to chase.
+              <span className="pill" title="Found before prospects recorded their strategy">
+                No strategy ({countByStrategy.get("none")})
+              </span>
+            ) : null}
+          </nav>
+        ) : null}
+
         <nav className="tabs" aria-label="Which prospects to show">
           {(
             [
@@ -140,7 +215,10 @@ export default async function ProspectsPage({
             <a
               key={tab.key}
               className={`pill ${showing === tab.key ? "accent" : ""}`}
-              href={tab.key === "all" ? "/app/prospects" : `/app/prospects?show=${tab.key}`}
+              href={`/app/prospects?${new URLSearchParams({
+                ...(strategy ? { strategy: strategy.id } : {}),
+                ...(tab.key === "all" ? {} : { show: tab.key }),
+              }).toString()}`}
               aria-current={showing === tab.key ? "page" : undefined}
             >
               {tab.label}
@@ -209,7 +287,22 @@ export default async function ProspectsPage({
                         (displayName(prospect) === prospect.headline ? "" : prospect.headline ?? "")}
                     </p>
                   </td>
-                  <td className="mono">{prospect.fit_score ?? "—"}</td>
+                  <td className="mono">
+                    {/*
+                      A fit score is a fact about a person AND a strategy: 87
+                      against "small B2B agencies" says nothing about how well
+                      they fit "chamber leaders". Shown unlabelled for months,
+                      it was a ranking nobody could interpret and everybody had
+                      to take on trust. The strategy is only repeated on the
+                      row when the list is not already filtered to one.
+                    */}
+                    {prospect.fit_score ?? "—"}
+                    {prospect.fit_score !== null && !strategy && prospect.customer_profile_id ? (
+                      <span className="tiny subtle block" title={strategyNames.get(prospect.customer_profile_id)}>
+                        vs {shortName(strategyNames.get(prospect.customer_profile_id) ?? "")}
+                      </span>
+                    ) : null}
+                  </td>
                   <td className="mono">{prospect.intent_score ?? 0}</td>
                   <td className="medium">
                     <div className="cluster">
@@ -258,6 +351,19 @@ export default async function ProspectsPage({
       </div>
     </>
   );
+}
+
+/**
+ * A strategy name short enough to sit in a filter pill.
+ *
+ * The Strategy Agent writes descriptive names — "Networking group leaders &
+ * organizations (BNI chapters, Chambers, masterminds)" — which are exactly
+ * right on the strategy page and unusable as a tab. The full name stays in the
+ * title attribute rather than being lost.
+ */
+function shortName(name: string): string {
+  const head = name.split(/[(\u2014\u2013]/)[0]!.trim();
+  return head.length > 34 ? `${head.slice(0, 33).trimEnd()}\u2026` : head;
 }
 
 /**

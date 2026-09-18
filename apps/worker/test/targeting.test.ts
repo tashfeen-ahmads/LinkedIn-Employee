@@ -760,6 +760,92 @@ describe("prospects whose profile cannot be opened", () => {
  * identical page, and reported every person on it as already known — so "we
  * need a thousand prospects, across several campaigns" had no answer.
  */
+/**
+ * A prospect row is what enforces "never contact anybody twice", so writing one
+ * is a commitment: from that moment the person is excluded from every future
+ * search this workspace runs. Writing them before they are actually on a
+ * campaign means a crash halfway through spends that exclusion on an outreach
+ * that never happened — and the person is then unreachable for ever, on no
+ * list, invisible. Forty-nine real people went that way on the live
+ * deployment, over two runs, and nothing said a word.
+ */
+describe("a run that half-finished", () => {
+  it("still puts people on the campaign when the note writer fails", async () => {
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    linkedin.candidates = {
+      items: [candidate("p1", "https://www.linkedin.com/in/jane-one")],
+      cursor: null,
+      droppedFilters: [],
+    };
+    scoreMock.mockResolvedValue([ranked("https://www.linkedin.com/in/jane-one", "p1", 90)]);
+    notesMock.mockRejectedValue(new Error("targeting.invite-note: model returned no parsable output"));
+
+    const campaignId = await runTargetingJob(ctx, job);
+
+    expect(campaignId).toBeTruthy();
+    // The prospect exists AND is on the campaign. Either without the other is
+    // the bug: a prospect alone is a permanent exclusion for nobody's benefit.
+    expect(db.rows("prospects")).toHaveLength(1);
+    expect(db.rows("campaign_prospects")).toHaveLength(1);
+  });
+
+  it("falls back to the campaign template rather than sending nothing", async () => {
+    // The fallback already existed — `inviteNote` uses the template when a
+    // prospect has no note. Letting the writer throw walked straight past it.
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    linkedin.candidates = {
+      items: [candidate("p1", "https://www.linkedin.com/in/jane-one")],
+      cursor: null,
+      droppedFilters: [],
+    };
+    scoreMock.mockResolvedValue([ranked("https://www.linkedin.com/in/jane-one", "p1", 90)]);
+    notesMock.mockRejectedValue(new Error("model returned no parsable output"));
+
+    await runTargetingJob(ctx, job);
+
+    expect(db.rows("campaign_prospects")[0]?.invite_note).toBeNull();
+  });
+
+  it("says the campaign is not personalised rather than letting it look like it is", async () => {
+    // Degrading silently is the other way this goes wrong: the review screen
+    // shows a campaign that reads as personalised and is not.
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    linkedin.candidates = {
+      items: [candidate("p1", "https://www.linkedin.com/in/jane-one")],
+      cursor: null,
+      droppedFilters: [],
+    };
+    scoreMock.mockResolvedValue([ranked("https://www.linkedin.com/in/jane-one", "p1", 90)]);
+    notesMock.mockRejectedValue(new Error("model returned no parsable output"));
+
+    await runTargetingJob(ctx, job);
+
+    const said = db.rows("events").find((e) => e.name === "campaign.notes_missing");
+    expect(said).toBeTruthy();
+    expect((said?.payload as { reason: string }).reason).toMatch(/no parsable output/);
+  });
+
+  it("records which strategy found each person", async () => {
+    // A fit score is a fact about a person AND a strategy. Stored without the
+    // strategy it was scored against, the number cannot be interpreted.
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    linkedin.candidates = {
+      items: [candidate("p1", "https://www.linkedin.com/in/jane-one")],
+      cursor: null,
+      droppedFilters: [],
+    };
+    scoreMock.mockResolvedValue([ranked("https://www.linkedin.com/in/jane-one", "p1", 90)]);
+
+    await runTargetingJob(ctx, job);
+
+    expect(db.rows("prospects")[0]?.customer_profile_id).toBe(PROFILE);
+  });
+});
+
 describe("continuing a campaign's search", () => {
   const CAMPAIGN = "66666666-6666-4666-8666-666666666666";
 

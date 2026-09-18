@@ -176,6 +176,15 @@ export type CustomerProfileRow = {
 export type ProspectRow = {
   id: string;
   workspace_id: string;
+  /**
+   * The strategy whose search found this person, or null for anybody found
+   * before the link existed or imported by hand.
+   *
+   * Single-valued by construction rather than by simplification: targeting
+   * excludes everyone the workspace already knows, so the first strategy to
+   * reach a person is the only one that ever can.
+   */
+  customer_profile_id: string | null;
   linkedin_url: string;
   provider_id: string | null;
   first_name: string | null;

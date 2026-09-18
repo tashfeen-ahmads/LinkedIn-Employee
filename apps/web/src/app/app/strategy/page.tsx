@@ -210,6 +210,45 @@ export default async function StrategyPage({
     );
   }
 
+  // What each strategy has actually produced.
+  //
+  // The page ranks strategies by a priority somebody typed and shows nothing
+  // about how any of them performed. A business running fifteen of these needs
+  // the opposite: the one that found four hundred people and booked nothing is
+  // a different problem from the one that found nobody at all, and neither is
+  // visible from a priority number. Read as two flat queries and reduced here —
+  // a count per strategy would be one query per strategy.
+  const [{ data: prospectRows }, { data: campaignRows }] = await Promise.all([
+    supabase
+      .from("prospects")
+      .select("customer_profile_id, last_contacted_at")
+      .eq("workspace_id", session.workspaceId),
+    supabase
+      .from("campaigns")
+      .select("customer_profile_id, status")
+      .eq("workspace_id", session.workspaceId),
+  ]);
+
+  const yieldByStrategy = new Map<string, { found: number; contacted: number; campaigns: number; running: number }>();
+  const bucket = (id: string | null) => {
+    if (!id) return null;
+    const existing = yieldByStrategy.get(id) ?? { found: 0, contacted: 0, campaigns: 0, running: 0 };
+    yieldByStrategy.set(id, existing);
+    return existing;
+  };
+  for (const row of prospectRows ?? []) {
+    const entry = bucket(row.customer_profile_id);
+    if (!entry) continue;
+    entry.found += 1;
+    if (row.last_contacted_at) entry.contacted += 1;
+  }
+  for (const row of campaignRows ?? []) {
+    const entry = bucket(row.customer_profile_id);
+    if (!entry) continue;
+    entry.campaigns += 1;
+    if (row.status === "running") entry.running += 1;
+  }
+
   const business = BusinessProfileSchema.safeParse(businessRow.spec);
   const profiles = (profileRows ?? []).map((row) => ({
     row,
@@ -299,6 +338,28 @@ export default async function StrategyPage({
                     Priority {row.priority} ·{" "}
                     {row.do_not_pursue ? "not pursuing" : approved ? "approved" : "waiting for your approval"}
                   </p>
+                  {/*
+                    What this strategy has produced, not just where it ranks. A
+                    strategy that found four hundred people and contacted none
+                    is a different problem from one that found nobody, and a
+                    priority number tells you neither.
+                  */}
+                  {(() => {
+                    const stats = yieldByStrategy.get(row.id);
+                    if (!stats?.found && !stats?.campaigns) return null;
+                    return (
+                      <p className="tiny subtle">
+                        <Link href={`/app/prospects?strategy=${row.id}`}>
+                          {stats.found} {stats.found === 1 ? "prospect" : "prospects"}
+                        </Link>
+                        {" · "}
+                        {stats.contacted} contacted
+                        {" · "}
+                        {stats.campaigns} {stats.campaigns === 1 ? "campaign" : "campaigns"}
+                        {stats.running ? `, ${stats.running} running` : ""}
+                      </p>
+                    );
+                  })()}
                 </div>
                 <div className="cluster">
                   {row.do_not_pursue ? (

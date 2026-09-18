@@ -534,6 +534,9 @@ form { display: flex; flex-direction: column; gap: var(--space-4); }
 .pill.warning  { background: var(--warning-soft);  color: var(--warning);  border-color: transparent; }
 .pill.danger   { background: var(--danger-soft);   color: var(--danger);   border-color: transparent; }
 
+/* A span that needs its own line, e.g. a label under a number. */
+.block { display: block; }
+
 /* Two or three controls side by side, keeping their own widths. */
 .row { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
 
