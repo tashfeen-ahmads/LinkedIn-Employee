@@ -32,13 +32,28 @@ export async function runCampaignTick(db: Db, queues: Queues, now: Date = new Da
   const entitled = new Map<string, boolean>();
   const accounts = new Map<string, { account: AccountRecord; timezone: string } | null>();
 
+  // Why each campaign got what it got.
+  //
+  // Reporting only the count made a healthy decline and a broken deployment
+  // the same line: `enqueued: 0` is what this loop says when it is two o'clock
+  // in the morning, and also what it says when the account is disconnected,
+  // the trial has lapsed, or there is nobody left to invite. Four different
+  // things to do about it. The count was never the useful half.
+  const decisions: Array<{ campaign: string; reason: string }> = [];
+  const say = (campaign: string, reason: string) => {
+    if (decisions.length < 20) decisions.push({ campaign, reason });
+  };
+
   for (const campaign of campaigns) {
     // A trial that has ended, or a subscription that has, stops outreach here.
     // Reading is never blocked; see packages/billing/src/entitlement.ts.
     if (!entitled.has(campaign.workspace_id)) {
       entitled.set(campaign.workspace_id, await canWorkspaceSend(db, campaign.workspace_id, now));
     }
-    if (!entitled.get(campaign.workspace_id)) continue;
+    if (!entitled.get(campaign.workspace_id)) {
+      say(campaign.id, "workspace cannot send: trial or subscription");
+      continue;
+    }
 
     if (!accounts.has(campaign.linkedin_account_id)) {
       accounts.set(
@@ -47,18 +62,52 @@ export async function runCampaignTick(db: Db, queues: Queues, now: Date = new Da
       );
     }
     const loaded = accounts.get(campaign.linkedin_account_id);
-    if (!loaded) continue;
+    if (!loaded) {
+      say(campaign.id, "linkedin account is not active");
+      continue;
+    }
 
     const usage = toUsage(loaded.account, loaded.timezone);
 
     // Follow-ups first: a conversation already started is worth more than a
     // new invitation, and both draw on the same daily message budget.
     enqueued += await enqueueFollowUps(db, queues, campaign, usage, now);
-    enqueued += await enqueueInvites(db, queues, campaign, usage, now);
+    const invites = await enqueueInvites(db, queues, campaign, usage, now);
+    enqueued += invites.enqueued;
+    say(campaign.id, invites.reason);
   }
 
-  await beat(db, now, { campaigns: campaigns.length, enqueued });
+  await beat(db, now, {
+    campaigns: campaigns.length,
+    enqueued,
+    decisions,
+    // What is actually sitting in the queue. A job already holding the id this
+    // loop would use is accepted silently by BullMQ and never added, so a
+    // single stuck or failed invitation can stop a campaign for ever with the
+    // loop reporting a cheerful zero every five minutes. The counts are the
+    // only place that shows.
+    queue: await jobCounts(queues),
+  });
   return enqueued;
+}
+
+/**
+ * How much work is waiting, per queue, if the queue can say.
+ *
+ * Guarded because the test double is a plain object with an `add`. A
+ * diagnostic that throws is worse than one that is absent — it would take the
+ * pacing loop down with it, which is the one loop that must keep running.
+ */
+async function jobCounts(queues: Queues): Promise<Record<string, unknown>> {
+  const queue = queues.linkedinAction as unknown as {
+    getJobCounts?: () => Promise<Record<string, number>>;
+  };
+  if (typeof queue.getJobCounts !== "function") return { counts: "unavailable" };
+  try {
+    return await queue.getJobCounts();
+  } catch (err) {
+    return { counts: (err as { message?: string })?.message ?? "unknown" };
+  }
 }
 
 /**
@@ -76,7 +125,7 @@ export async function runCampaignTick(db: Db, queues: Queues, now: Date = new Da
  * only appeared on a productive run would be missing during exactly the quiet
  * stretch it exists to explain.
  */
-async function beat(db: Db, now: Date, detail: { campaigns: number; enqueued: number }): Promise<void> {
+async function beat(db: Db, now: Date, detail: Record<string, unknown>): Promise<void> {
   await recordBeat(db, PACING_LOOP, detail, now);
 }
 
@@ -94,14 +143,24 @@ async function enqueueInvites(
   campaign: CampaignRow,
   usage: ReturnType<typeof toUsage>,
   now: Date,
-): Promise<number> {
+): Promise<{ enqueued: number; reason: string }> {
   const decision = checkAction("invite", usage, now);
-  if (!decision.allowed && decision.reason !== "too_soon") return 0;
+  if (!decision.allowed && decision.reason !== "too_soon") {
+    // The limiter's own word for it, not a paraphrase. "outside_working_hours"
+    // and "daily_invite_cap" are correct behaviour and need saying as such;
+    // reported as a bare zero they read as a product that does not work.
+    return { enqueued: 0, reason: `limiter: ${decision.reason}` };
+  }
 
   const accountCap = dailyInviteCap(usage.firstActionAt, now) - usage.invitesToday;
   const weeklyLeft = LINKEDIN_LIMITS.invitesPerWeek - usage.invitesThisWeek;
   const budget = Math.max(0, Math.min(accountCap, weeklyLeft, campaign.daily_invite_cap));
-  if (budget === 0) return 0;
+  if (budget === 0) {
+    return {
+      enqueued: 0,
+      reason: `no allowance left today (account ${accountCap}, week ${weeklyLeft}, campaign ${campaign.daily_invite_cap})`,
+    };
+  }
 
   const { data: queued } = await db
     .from("campaign_prospects")
@@ -109,7 +168,7 @@ async function enqueueInvites(
     .eq("campaign_id", campaign.id)
     .eq("status", "queued")
     .limit(budget);
-  if (!queued?.length) return 0;
+  if (!queued?.length) return { enqueued: 0, reason: "nobody left to invite" };
 
   let delay = decision.allowed ? 0 : decision.retryAfterMs;
   for (const row of queued) {
@@ -117,10 +176,13 @@ async function enqueueInvites(
     await queues.linkedinAction.add(
       "invite",
       { kind: "invite", workspaceId: campaign.workspace_id, campaignProspectId: row.id },
+      // The id is what stops a second tick queueing the same invitation five
+      // minutes later. It also means a job already holding it is never
+      // replaced, which is why the queue counts go into the heartbeat.
       { delay, jobId: `invite:${row.id}` },
     );
   }
-  return queued.length;
+  return { enqueued: queued.length, reason: `queued ${queued.length} invitation(s)` };
 }
 
 async function enqueueFollowUps(

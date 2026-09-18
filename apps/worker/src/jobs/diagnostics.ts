@@ -304,7 +304,7 @@ export async function runDiagnostics(
     label: "The sending loop is running",
     state: beating ? "ok" : "blocked",
     detail: beating
-      ? `Last ran ${Math.max(0, Math.round(beatAge! / 60_000))} minutes ago. It wakes every five.`
+      ? `Last ran ${Math.max(0, Math.round(beatAge! / 60_000))} minutes ago. It wakes every five.${lastDecision(beat)}`
       : beat?.beat_at
         ? `It last ran ${new Date(beat.beat_at).toISOString()} and should run every five minutes. Nothing queued is being sent.`
         : "It has never reported in. Nothing queued is being sent, whatever the campaign screens say.",
@@ -413,6 +413,43 @@ export async function runDiagnostics(
   });
 
   return { checkedAt: new Date().toISOString(), checks };
+}
+
+/**
+ * What the last run of the pacing loop decided, and what is waiting behind it.
+ *
+ * "Last ran two minutes ago" is reassuring and can be true of a loop that has
+ * been declining for a week. The reason it declined is the useful half, and a
+ * job already holding the id the loop would use is accepted silently by BullMQ
+ * and never added — so one stuck invitation stops a campaign for ever while
+ * every screen reports a healthy loop. The counts are the only place that
+ * shows.
+ */
+function lastDecision(beat: { detail?: unknown } | undefined): string {
+  const detail = beat?.detail && typeof beat.detail === "object" ? (beat.detail as Record<string, unknown>) : {};
+  const parts: string[] = [];
+
+  const decisions = Array.isArray(detail.decisions) ? detail.decisions : [];
+  const reasons = decisions
+    .map((d) => (d && typeof d === "object" ? (d as { reason?: unknown }).reason : null))
+    .filter((r): r is string => typeof r === "string");
+  if (reasons.length) parts.push(`Last run: ${reasons.join("; ")}.`);
+
+  const queue = detail.queue && typeof detail.queue === "object" ? (detail.queue as Record<string, unknown>) : null;
+  if (queue) {
+    const failed = typeof queue.failed === "number" ? queue.failed : 0;
+    const delayed = typeof queue.delayed === "number" ? queue.delayed : 0;
+    const waiting = typeof queue.waiting === "number" ? queue.waiting : 0;
+    if (failed || delayed || waiting) {
+      parts.push(`Queue: ${waiting} waiting, ${delayed} delayed, ${failed} failed.`);
+    }
+    if (failed) {
+      // The specific trap: the id is never reused while a failed job holds it.
+      parts.push("A failed action keeps its slot, so the same person is never re-queued while it sits there.");
+    }
+  }
+
+  return parts.length ? ` ${parts.join(" ")}` : "";
 }
 
 /** Does the provider still have the account this workspace is holding? */

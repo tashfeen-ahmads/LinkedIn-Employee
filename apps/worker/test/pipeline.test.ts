@@ -244,6 +244,90 @@ describe("campaign pipeline", () => {
     expect(beat?.beat_at).toBe(night.toISOString());
   });
 
+  /**
+   * `enqueued: 0` is what this loop says at two in the morning, and also what
+   * it says when the account is disconnected, the trial has lapsed, or there
+   * is nobody left to invite. Four different things to do about it, reported
+   * identically — the count was never the useful half, and an afternoon went
+   * into working out which zero it was from the outside.
+   */
+  it("says why it declined, not only that it did", async () => {
+    const { db, queues } = harness();
+    const night = new Date("2026-09-09T22:00:00Z");
+
+    await runCampaignTick(db.asDb(), queues, night);
+
+    const detail = db.rows("worker_heartbeats")[0]?.detail as { decisions: Array<{ reason: string }> };
+    // The limiter's own word for it. Correct behaviour, and it needs saying as
+    // such rather than reading as a product that does not work.
+    expect(detail.decisions[0]?.reason).toContain("outside_working_hours");
+  });
+
+  it("distinguishes a disconnected account from a quiet night", async () => {
+    const { db, queues } = harness();
+    db.rows("linkedin_accounts").forEach((row) => (row.status = "reauth_required"));
+
+    await runCampaignTick(db.asDb(), queues, NOW);
+
+    const detail = db.rows("worker_heartbeats")[0]?.detail as { decisions: Array<{ reason: string }> };
+    expect(detail.decisions[0]?.reason).toMatch(/account is not active/);
+  });
+
+  it("distinguishes a finished list from a blocked one", async () => {
+    const { db, queues } = harness();
+    db.rows("campaign_prospects").forEach((row) => (row.status = "invited"));
+
+    await runCampaignTick(db.asDb(), queues, NOW);
+
+    const detail = db.rows("worker_heartbeats")[0]?.detail as { decisions: Array<{ reason: string }> };
+    expect(detail.decisions[0]?.reason).toMatch(/nobody left to invite/);
+  });
+
+  it("says what it did on a run that worked", async () => {
+    const { db, queues } = harness();
+
+    await runCampaignTick(db.asDb(), queues, NOW);
+
+    const detail = db.rows("worker_heartbeats")[0]?.detail as {
+      enqueued: number;
+      decisions: Array<{ reason: string }>;
+    };
+    expect(detail.enqueued).toBe(1);
+    expect(detail.decisions[0]?.reason).toMatch(/queued 1 invitation/);
+  });
+
+  it("carries what is sitting in the queue", async () => {
+    // A job already holding the id this loop would use is accepted silently by
+    // BullMQ and never added, so one stuck or failed invitation can stop a
+    // campaign for ever while the loop reports a cheerful zero every five
+    // minutes. The counts are the only place that shows.
+    const { db, queues } = harness();
+    (queues.linkedinAction as unknown as { getJobCounts: () => Promise<unknown> }).getJobCounts =
+      async () => ({ waiting: 0, delayed: 4, failed: 1, active: 0, completed: 9 });
+
+    await runCampaignTick(db.asDb(), queues, NOW);
+
+    const detail = db.rows("worker_heartbeats")[0]?.detail as { queue: { failed: number; delayed: number } };
+    expect(detail.queue.failed).toBe(1);
+    expect(detail.queue.delayed).toBe(4);
+  });
+
+  it("does not let a queue that cannot count take the loop down with it", async () => {
+    // The pacing loop is the one loop that must keep running. A diagnostic
+    // that throws inside it costs the sends it was meant to explain.
+    const { db, queues } = harness();
+    (queues.linkedinAction as unknown as { getJobCounts: () => Promise<unknown> }).getJobCounts =
+      async () => {
+        throw new Error("redis gone");
+      };
+
+    const count = await runCampaignTick(db.asDb(), queues, NOW);
+
+    expect(count).toBe(1);
+    const detail = db.rows("worker_heartbeats")[0]?.detail as { queue: { counts: string } };
+    expect(detail.queue.counts).toBe("redis gone");
+  });
+
   it("records that it ran when there is no campaign to run", async () => {
     // The first thing a new deployment does, and the state in which somebody
     // most needs to know the worker is alive.

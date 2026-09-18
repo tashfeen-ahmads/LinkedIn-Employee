@@ -295,6 +295,16 @@ tests that were verified by deliberately breaking the code.
     `/app/system` reports a stale heartbeat as `blocked`, because every other
     green tick on that screen is meaningless if nothing is sending.
 
+    The stamp carries **why**, not only how many. `enqueued: 0` is what the
+    loop says at two in the morning and also what it says when the account is
+    disconnected, the trial has lapsed, or there is nobody left to invite —
+    four different things to do about it, reported identically. It carries the
+    queue counts too, because `jobId: invite:<id>` is what stops a second tick
+    queueing the same invitation, and BullMQ accepts an add whose id is already
+    taken without replacing the job: one failed action keeps its slot for the
+    whole `removeOnFail` window, so that person is never re-queued while every
+    screen reports a healthy loop. The counts are the only place that shows.
+
     The campaign page answers "when does the next invitation go out" using
     `checkAction` itself (`describePacing` in `apps/web/src/lib/pacing.ts`),
     never a second reading of the rule written for the screen — two readings

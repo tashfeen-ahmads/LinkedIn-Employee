@@ -137,6 +137,46 @@ describe("system check", () => {
     expect(check(await run(ctx), "pacing-loop").state).toBe("ok");
   });
 
+  it("carries the last run's reason and what is stuck behind it", async () => {
+    // "Last ran two minutes ago" is reassuring and can be true of a loop that
+    // has been declining for a week.
+    const { db, ctx } = harness();
+    db.seed("worker_heartbeats", [
+      {
+        name: "campaign-tick",
+        beat_at: new Date().toISOString(),
+        detail: {
+          enqueued: 0,
+          decisions: [{ campaign: "c1", reason: "limiter: outside_working_hours" }],
+          queue: { waiting: 0, delayed: 0, failed: 2, active: 0 },
+        },
+      },
+    ]);
+
+    const check1 = check(await run(ctx), "pacing-loop");
+
+    expect(check1.state).toBe("ok");
+    expect(check1.detail).toContain("outside_working_hours");
+    // The trap worth naming: BullMQ accepts an add whose id is already taken
+    // and never replaces the job, so a failed action stops that person being
+    // re-queued at all while every screen reports a healthy loop.
+    expect(check1.detail).toMatch(/failed/);
+    expect(check1.detail).toMatch(/keeps its slot/);
+  });
+
+  it("stays quiet about a queue with nothing in it", async () => {
+    const { db, ctx } = harness();
+    db.seed("worker_heartbeats", [
+      {
+        name: "campaign-tick",
+        beat_at: new Date().toISOString(),
+        detail: { enqueued: 1, decisions: [], queue: { waiting: 0, delayed: 0, failed: 0 } },
+      },
+    ]);
+
+    expect(check(await run(ctx), "pacing-loop").detail).not.toMatch(/Queue:/);
+  });
+
   it("names an unreachable queue rather than a worker that is down", async () => {
     // The two need different people to do different things, and the pacing
     // stamp reports them identically because it cannot be written without the
