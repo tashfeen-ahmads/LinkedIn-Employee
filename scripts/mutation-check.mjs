@@ -317,8 +317,8 @@ const MUTATIONS = [
     id: "billing/trial-expiry",
     rule: "An expired trial stops outreach",
     file: "apps/worker/src/jobs/campaign-tick.ts",
-    from: "if (!entitled.get(campaign.workspace_id)) continue;",
-    to: "",
+    from: "    if (!entitled.get(campaign.workspace_id)) {\n      say(campaign.id, \"workspace cannot send: trial or subscription\");\n      continue;\n    }",
+    to: "    /* mutated */",
     pkg: "@le/worker",
   },
   {
