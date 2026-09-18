@@ -51,6 +51,22 @@ const AT_LEAST_ACCEPTED = [
 
 const AT_LEAST_REPLIED = ["replied", "positive", "negative", "meeting_booked"] as const;
 
+/**
+ * The stages a campaign is judged on, given what it was asking for.
+ *
+ * A link campaign has no meetings and never will, so a funnel ending in
+ * "Meetings: 0" reports a campaign that did exactly what it was asked to do as
+ * a failure. The last stage has to be the thing the campaign wanted.
+ */
+export function stagesFor(kind: "meeting" | "link" | "reply"): readonly FunnelStage[] {
+  if (kind === "meeting") return FUNNEL_STAGES;
+  // "Positive" is the end for both of the others: for a link campaign the
+  // click is invisible to us, and for a conversation campaign a positive reply
+  // is the whole goal. Counting a stage nobody can reach is worse than
+  // stopping at the last one anybody can.
+  return FUNNEL_STAGES.filter((stage) => stage.key !== "meetings");
+}
+
 export const FUNNEL_STAGES: readonly FunnelStage[] = [
   { key: "invited", label: "Invited", statuses: AT_LEAST_INVITED },
   { key: "accepted", label: "Accepted", statuses: AT_LEAST_ACCEPTED },

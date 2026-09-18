@@ -1,8 +1,10 @@
 import {
+  CTA_DEFINITIONS,
   CampaignPlanSchema,
   FitScoreBatchSchema,
   InviteNoteBatchSchema,
   type BusinessProfile,
+  type CtaKind,
   type CampaignPlan,
   type CustomerProfile,
   type FitScore,
@@ -138,6 +140,12 @@ export async function buildCampaign(
     repName: string;
     repTitle?: string;
     dailyInviteCap: number;
+    /**
+     * What this campaign is asking for. Not always a meeting — and a sequence
+     * written toward the wrong ask is a campaign that cannot convert whatever
+     * it does to the copy.
+     */
+    cta: { kind: CtaKind; label: string | null; url: string | null };
     extraGuidance?: string;
   },
 ): Promise<CampaignPlan> {
@@ -145,6 +153,7 @@ export async function buildCampaign(
     `Business profile:\n${JSON.stringify(input.business, null, 2)}`,
     `Customer profile being targeted:\n${JSON.stringify(input.profile, null, 2)}`,
     `The messages are sent by ${input.repName}${input.repTitle ? `, ${input.repTitle}` : ""}.`,
+    ctaBrief(input.cta),
   ].join("\n\n");
 
   return callStructured(ctx, {
@@ -167,6 +176,33 @@ export async function buildCampaign(
     effort: "medium",
     maxTokens: 16000,
   });
+}
+
+/**
+ * What this campaign is asking for, in the writer's terms.
+ *
+ * The ask is the last line of the sequence, so it has to be in the prompt
+ * rather than bolted on afterwards: a sequence written toward a call and then
+ * edited to carry a link is a sequence whose first two messages were building
+ * to something else.
+ */
+function ctaBrief(cta: { kind: CtaKind; label: string | null; url: string | null }): string {
+  const definition = CTA_DEFINITIONS[cta.kind];
+  const lines = [`The call to action for this campaign is: ${definition.label}.`, `Ask for ${definition.asks}.`];
+
+  if (cta.label) lines.push(`Name it as "${cta.label}" when the copy needs a phrase for it.`);
+  if (cta.kind === "link") {
+    lines.push(
+      "Write {{cta_link}} where the address goes — never the address itself, and never before the final step.",
+    );
+  }
+  if (cta.kind === "meeting") {
+    lines.push("Do not propose specific times; the product offers them and the prospect picks.");
+  }
+  if (cta.kind === "reply") {
+    lines.push("There is no link and no meeting. The ask is a reply, so make replying easy and specific.");
+  }
+  return lines.join(" ");
 }
 
 export interface PersonalizedInvite extends InviteNote {

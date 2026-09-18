@@ -458,6 +458,34 @@ describe("campaign pipeline", () => {
     expect(db.find("campaign_prospects", { id: CP })?.next_action_at).toBeNull();
   });
 
+  it("puts the campaign's destination into the follow-up", async () => {
+    // The URL lives on the campaign, not in the copy: changing where a
+    // campaign points must not mean rewriting three messages and
+    // re-reviewing them.
+    const { db, ctx, linkedin } = harness();
+    db.rows("campaigns")[0]!.cta_kind = "link";
+    db.rows("campaigns")[0]!.cta_url = "https://acme.test/signup";
+    db.rows("campaign_steps")[0]!.message = "Worth a look, {{first_name}}: {{cta_link}}";
+    db.find("campaign_prospects", { id: CP })!.status = "accepted";
+
+    await runLinkedInAction(ctx, { kind: "follow_up", workspaceId: WORKSPACE, campaignProspectId: CP, stepNumber: 1 });
+
+    expect(linkedin.sentMessages[0]?.text).toBe("Worth a look, Jane: https://acme.test/signup");
+  });
+
+  it("leaves the placeholder visible when a campaign has no destination", async () => {
+    // Substituting an empty string would send "Worth a look:" with nothing
+    // after it — a prospect reads that as a broken product. A visible
+    // {{cta_link}} is caught on the review screen instead.
+    const { db, ctx, linkedin } = harness();
+    db.rows("campaign_steps")[0]!.message = "Worth a look: {{cta_link}}";
+    db.find("campaign_prospects", { id: CP })!.status = "accepted";
+
+    await runLinkedInAction(ctx, { kind: "follow_up", workspaceId: WORKSPACE, campaignProspectId: CP, stepNumber: 1 });
+
+    expect(linkedin.sentMessages[0]?.text).toContain("{{cta_link}}");
+  });
+
   it("falls back to the campaign's step when the angle has none", async () => {
     // Every campaign built before angles existed reaches this path for its
     // whole sequence, so it is the common case and not the edge.

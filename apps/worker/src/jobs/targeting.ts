@@ -136,7 +136,7 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
 
   const { data: profileRow } = await db
     .from("customer_profiles")
-    .select("id, spec, business_profile_id, do_not_pursue, approved_at")
+    .select("id, spec, business_profile_id, do_not_pursue, approved_at, cta_kind, cta_label, cta_url")
     .eq("id", customerProfileId)
     .single();
   if (!profileRow) return giveUp(ctx, job, "That customer profile no longer exists.");
@@ -350,6 +350,14 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
     profile,
     repName,
     dailyInviteCap: Math.min(LINKEDIN_LIMITS.invitesPerDayMax, 20),
+    // Inherited from the strategy, because the copy is written toward the ask.
+    // Changing it afterwards on the campaign leaves a sequence whose first two
+    // messages were building to something else.
+    cta: {
+      kind: profileRow.cta_kind,
+      label: profileRow.cta_label,
+      url: profileRow.cta_url,
+    },
   });
 
   const { data: campaign, error } = await db
@@ -362,6 +370,9 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
       name: plan.name,
       status: "draft",
       connection_note: plan.connectionNote,
+      cta_kind: profileRow.cta_kind,
+      cta_label: profileRow.cta_label,
+      cta_url: profileRow.cta_url,
       daily_invite_cap: plan.dailyInviteCap,
       stop_conditions: plan.stopConditions as never,
       // Carried on the campaign, not only in the event log, because the person

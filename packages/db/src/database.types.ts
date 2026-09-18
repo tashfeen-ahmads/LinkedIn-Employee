@@ -161,6 +161,17 @@ export type BusinessProfileRow = {
 };
 
 export type CustomerProfileRow = {
+  /**
+   * What campaigns built from this strategy ask for.
+   *
+   * On the strategy rather than only on the campaign because the copy is
+   * written toward the ask: a sequence built for a call and then switched to a
+   * link is a sequence whose first two messages were arguing for something
+   * else.
+   */
+  cta_kind: "meeting" | "link" | "reply";
+  cta_label: string | null;
+  cta_url: string | null;
   id: string;
   workspace_id: string;
   business_profile_id: string;
@@ -218,6 +229,11 @@ export type CampaignRow = {
   name: string;
   status: CampaignStatus;
   connection_note: string;
+  /** What this campaign is asking for. Decides the copy, the Reply Agent's goal, and the funnel's last stage. */
+  cta_kind: "meeting" | "link" | "reply";
+  cta_label: string | null;
+  /** The destination for a link campaign. Stored plainly and never rewritten to count clicks. */
+  cta_url: string | null;
   daily_invite_cap: number;
   reply_mode: ReplyModeDb;
   rules: Json;

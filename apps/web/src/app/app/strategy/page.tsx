@@ -7,6 +7,7 @@ import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { callWorker, errorQuery, noticeQuery } from "@/lib/worker";
 import { FILTER_FIELDS, applyProfileEdits, formatList } from "@/lib/profile-form";
+import { CTA_DEFINITIONS, CTA_KINDS, checkCtaUrl, type CtaKind } from "@le/shared";
 import { readStrategyState } from "@/lib/strategy-state";
 import { StrategyStatus } from "@/components/strategy-status";
 import { SubmitButton } from "@/components/submit-button";
@@ -78,9 +79,36 @@ async function saveProfile(formData: FormData) {
   });
   if (!result.ok) redirect(`/app/strategy?error=${encodeURIComponent(result.error)}`);
 
+  // What campaigns from this strategy ask for. Set here rather than on the
+  // campaign, because the copy is written toward the ask: a sequence built for
+  // a call and then switched to a link is a sequence whose first two messages
+  // were arguing for something else.
+  const ctaKind = String(formData.get("ctaKind") ?? "meeting");
+  const kind: CtaKind = CTA_KINDS.includes(ctaKind as CtaKind) ? (ctaKind as CtaKind) : "meeting";
+  const ctaLabel = String(formData.get("ctaLabel") ?? "").trim() || null;
+
+  let ctaUrl: string | null = null;
+  if (CTA_DEFINITIONS[kind].needsUrl) {
+    // Checked before it is stored, because it is typed by a person here and
+    // then sent to a stranger under a real rep's name. The reason is shown
+    // rather than a generic refusal: somebody who pasted "acme.test/signup"
+    // needs to be told it is missing the https://, not that it is invalid.
+    const checked = checkCtaUrl(String(formData.get("ctaUrl") ?? ""));
+    if (!checked.ok) redirect(errorQuery("/app/strategy", checked.reason));
+    ctaUrl = checked.url;
+  }
+
   await supabase
     .from("customer_profiles")
-    .update({ spec: result.spec as never, priority: result.spec.priority })
+    .update({
+      spec: result.spec as never,
+      priority: result.spec.priority,
+      cta_kind: kind,
+      cta_label: ctaLabel,
+      // Cleared when the goal is no longer a link, or the database constraint
+      // and the screen would disagree about what this strategy is doing.
+      cta_url: ctaUrl,
+    })
     .eq("id", id)
     .eq("workspace_id", session.workspaceId);
 
@@ -169,7 +197,7 @@ export default async function StrategyPage({
       .maybeSingle(),
     supabase
       .from("customer_profiles")
-      .select("id, name, spec, priority, approved_at, do_not_pursue")
+      .select("id, name, spec, priority, approved_at, do_not_pursue, cta_kind, cta_label, cta_url")
       .eq("workspace_id", session.workspaceId)
       .order("priority", { ascending: true }),
     supabase
@@ -434,6 +462,45 @@ export default async function StrategyPage({
                     <label className="field">
                       <span>Priority · 1 goes first</span>
                       <input type="number" name="priority" min={1} max={5} defaultValue={row.priority} />
+                    </label>
+                    {/*
+                      The ask, set here rather than on the campaign. Every
+                      message in a sequence is written toward it, so choosing
+                      it afterwards leaves copy that was arguing for something
+                      else. Not everybody wants a meeting.
+                    */}
+                    <label className="field">
+                      <span>What campaigns from this strategy ask for</span>
+                      <select name="ctaKind" defaultValue={row.cta_kind}>
+                        {CTA_KINDS.map((kind) => (
+                          <option key={kind} value={kind}>
+                            {CTA_DEFINITIONS[kind].label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="field">
+                      <span>Name the ask · optional</span>
+                      <input
+                        type="text"
+                        name="ctaLabel"
+                        maxLength={60}
+                        placeholder="Try it free, See the comparison…"
+                        defaultValue={row.cta_label ?? ""}
+                      />
+                    </label>
+                    <label className="field">
+                      <span>Where it sends them · only for a link</span>
+                      <input
+                        type="url"
+                        name="ctaUrl"
+                        placeholder="https://…"
+                        defaultValue={row.cta_url ?? ""}
+                      />
+                      <span className="tiny subtle">
+                        Never appears in the connection request — LinkedIn penalises links there and they
+                        cut acceptance. It goes in the last message.
+                      </span>
                     </label>
                   </div>
                   <button className="btn secondary small" type="submit">

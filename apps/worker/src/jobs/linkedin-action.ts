@@ -1,5 +1,12 @@
 import { checkAction } from "@le/linkedin";
-import { canTransition, exclusionReason, matchExclusion, type CampaignProspectStatus } from "@le/shared";
+import {
+  canTransition,
+  containsLink,
+  exclusionReason,
+  matchExclusion,
+  renderCta,
+  type CampaignProspectStatus,
+} from "@le/shared";
 import type { Db } from "@le/db";
 import type { WorkerContext } from "../context.js";
 import { recordEvent } from "../context.js";
@@ -37,7 +44,7 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
 
   const { data: campaign } = await db
     .from("campaigns")
-    .select("id, status, connection_note, linkedin_account_id, owner_user_id")
+    .select("id, status, connection_note, linkedin_account_id, owner_user_id, cta_kind, cta_url, cta_label")
     .eq("id", cp.campaign_id)
     .single();
   if (!campaign || campaign.status !== "running") return;
@@ -134,7 +141,9 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
       // prospect the writer did not answer for, and for every campaign created
       // before notes existed — so this is additive, and a workspace that has
       // never seen a personalised note keeps working exactly as it did.
-      note: inviteNote(cp.invite_note, campaign.connection_note, prospect.first_name, variantNote),
+      // Empty means no note, not an empty one: the provider omits the field
+      // rather than sending a blank line.
+      note: inviteNote(cp.invite_note, campaign.connection_note, prospect.first_name, variantNote) || undefined,
     });
     if (result.health) await applyHealth(db, accountRow, result.health, { email: ctx.email, appUrl: ctx.env.APP_URL });
     if (!result.ok) {
@@ -174,6 +183,12 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
   const step = await stepFor(db, cp.campaign_id, cp.variant_id, job.stepNumber);
   if (!step) return;
 
+  // The destination goes in here rather than being written into the copy, so
+  // changing where a campaign points does not mean rewriting three messages and
+  // re-reviewing them — and a rep who edits one and forgets another does not
+  // end up sending two different destinations.
+  const body = renderCta(renderTemplate(step.message, prospect.first_name), campaign.cta_url);
+
   const conversation = await ensureConversation(ctx, {
     workspaceId: cp.workspace_id,
     prospectId: prospect.id,
@@ -181,7 +196,6 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
     campaignId: cp.campaign_id,
   });
 
-  const body = renderTemplate(step.message, prospect.first_name);
   const result = await ctx.linkedin.sendMessage({
     accountId: accountRow.provider_account_id,
     chatId: conversation.provider_chat_id ?? undefined,
@@ -451,9 +465,23 @@ export function inviteNote(
   variantTemplate?: string | null,
 ): string {
   const note = personalized?.trim();
-  if (note) return note;
+  // A connection request never carries a link.
+  //
+  // LinkedIn penalises links in invitations and they measurably cut
+  // acceptance, and the prompt saying so is not what makes it true — a model
+  // that ignores the instruction once, or a human who pastes a URL into a
+  // template, reaches a real account with real standing. So the text is
+  // checked rather than trusted, exactly as opt-outs are.
+  //
+  // Dropping to no note at all is the right fallback, not stripping the URL out
+  // of the sentence: an invitation with no note is ordinary on LinkedIn and
+  // costs a little acceptance, while a sentence with its link surgically
+  // removed reads as broken and is worse than either.
+  if (note && !containsLink(note)) return note;
+
   const fallback = variantTemplate?.trim() || template;
-  return renderTemplate(fallback, firstName);
+  const rendered = renderTemplate(fallback, firstName);
+  return containsLink(rendered) ? "" : rendered;
 }
 
 export function addDays(date: Date, days: number): Date {

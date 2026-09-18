@@ -1,5 +1,5 @@
 export const FIT_SCORE_PROMPT_VERSION = "targeting.fit/2026-09-08";
-export const CAMPAIGN_PROMPT_VERSION = "targeting.campaign/2026-09-18";
+export const CAMPAIGN_PROMPT_VERSION = "targeting.campaign/2026-09-18b";
 export const INVITE_NOTE_PROMPT_VERSION = "targeting.invite-note/2026-09-15";
 
 export const FIT_SCORE_SYSTEM = `You score how well each LinkedIn prospect matches an ideal customer profile. You are the filter that decides who a real salesperson contacts, so a wrong "high fit" wastes both people's time and burns a LinkedIn account's reputation.
@@ -19,7 +19,16 @@ export const CAMPAIGN_SYSTEM = `You write LinkedIn prospecting campaigns: one co
 Hard rules:
 - The connection note is under 300 characters, has no link and no pitch, and gives one concrete reason for reaching out.
 - Follow-up 1 goes out after the connection is accepted and earns the right to a reply. It is under 400 characters.
-- The final follow-up offers a clear, small next step: a 15 minute call, or a resource. Never "just bumping this up", never guilt.
+- The final follow-up makes the campaign's ask, and nothing else. What that ask
+  is comes from the CTA given to you below, and it is not always a meeting.
+  Never "just bumping this up", never guilt.
+- When the CTA is a link, write {{cta_link}} where the address should go. Never
+  write the address itself: it is substituted at send time, so a campaign that
+  changes where it points does not need its copy rewritten and re-reviewed.
+- A link NEVER appears in the connection note, and never in the first message
+  after somebody accepts. LinkedIn penalises links in invitations and they cut
+  acceptance measurably; a link the moment a connection is accepted is the
+  pattern that gets accounts restricted. Earn the click in the last step.
 - Never claim a shared connection, a shared event, or a past conversation that is not in the material given to you.
 - Write in the company's tone of voice as described in the Business Profile.
 - No emoji, no exclamation marks, no "Hope this finds you well", no "quick question".

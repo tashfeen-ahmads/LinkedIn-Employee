@@ -490,6 +490,46 @@ tests that were verified by deliberately breaking the code.
     because it read 40% against 60% on eleven invitations has lost more than
     the test could ever have won.
 
+29. **A CTA is the campaign's goal, and the goal decides what counts as
+    success.** "Book a meeting" was the only goal this product had and it was
+    wired in everywhere: the copy asked for a call, the Reply Agent proposed
+    times, the funnel's last stage counted bookings. Most outreach is not asking
+    for a meeting — sign-ups, a product looked at, a collaboration, a reply and
+    nothing more. Bolting a URL onto a meeting-shaped campaign would leave the
+    copy asking for a call and the dashboard reporting zero meetings for a
+    campaign that did exactly what was asked of it.
+
+    So `stagesFor` (`packages/shared/src/funnel.ts`) drops the meetings stage
+    for a goal that can never reach it. A funnel ending in a permanent zero
+    reports a working campaign as a failed one, every day, for ever.
+
+    The goal lives on the **strategy** and the campaign inherits it (migration
+    0019), because the copy is written toward the ask: a sequence built for a
+    call and then switched to a link is a sequence whose first two messages were
+    arguing for something else. It is campaign-level and never per-variant — a
+    variant tests the angle, and varying the goal too would leave a campaign
+    changing two things at once and able to attribute the result to neither.
+
+    **A link never appears in a connection request.** LinkedIn penalises them
+    there and they measurably cut acceptance, and the prompt saying so is not
+    what makes it true — `containsLink` checks the text, exactly as opt-outs are
+    checked. A note carrying one drops to **no note at all**, which is ordinary
+    on LinkedIn, rather than having the URL surgically removed and reaching
+    somebody as a broken sentence. The destination is substituted at send time
+    from `{{cta_link}}`, so changing where a campaign points does not mean
+    rewriting three messages and re-reviewing them — and a campaign with no
+    destination leaves the placeholder **visible**, because "take a look here:"
+    with nothing after it reaches a prospect looking like a broken product while
+    a visible `{{cta_link}}` is caught on the review screen.
+
+    **Clicks are not measured and never will be.** It would mean wrapping the
+    customer's URL in a redirect we own, which breaks the affiliate and tracking
+    parameters on the Amazon and Shopify links people actually send, and puts an
+    unfamiliar domain in a LinkedIn message — spam to the recipient and to
+    LinkedIn's own heuristics, on the account this product exists to protect.
+    `CLICKS_ARE_INVISIBLE` is that sentence, said on the screen rather than
+    shown as a zero somebody reads as failure.
+
 ## Conventions
 
 - Agent output is validated against a zod schema before it touches the

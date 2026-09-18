@@ -68,6 +68,34 @@ describe("inviteNote", () => {
     expect(inviteNote(null, TEMPLATE, "Jane", null)).toBe("Hi Jane, we work with heads of ops.");
   });
 
+  /**
+   * LinkedIn penalises links in connection requests and they measurably cut
+   * acceptance. The prompt already says not to, and the prompt saying so is not
+   * what makes it true: a model that ignores the instruction once, or a human
+   * who pastes a URL into a template, reaches a real account with real
+   * standing.
+   */
+  it("never sends a connection request carrying a link", () => {
+    expect(inviteNote("Take a look: https://acme.test", TEMPLATE, "Jane")).toBe(
+      "Hi Jane, we work with heads of ops.",
+    );
+  });
+
+  it("sends no note at all rather than a template with a link in it", () => {
+    // Dropping to no note is right; surgically removing the URL is not. An
+    // invitation with no note is ordinary on LinkedIn and costs a little
+    // acceptance, while "Take a look: " with nothing after it reads as broken.
+    expect(inviteNote(null, "Take a look: https://acme.test", "Jane")).toBe("");
+  });
+
+  it("catches the placeholder as well as a written-out address", () => {
+    // The substitution never runs on the invitation path, so a stray
+    // {{cta_link}} would otherwise go out literally.
+    expect(inviteNote("Try it {{cta_link}}", TEMPLATE, "Jane")).toBe(
+      "Hi Jane, we work with heads of ops.",
+    );
+  });
+
   it("prefers the written note over either fallback", () => {
     // The angle's note is a fallback, not an override: a note written for this
     // named person already leans on the angle they were assigned.

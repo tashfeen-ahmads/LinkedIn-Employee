@@ -1,7 +1,15 @@
 import { revalidatePath } from "next/cache";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
-import { BOOT_BEAT, LINKEDIN_LIMITS, PACING_LOOP, countFunnel, FUNNEL_STAGES } from "@le/shared";
+import {
+  BOOT_BEAT,
+  CLICKS_ARE_INVISIBLE,
+  CTA_DEFINITIONS,
+  LINKEDIN_LIMITS,
+  PACING_LOOP,
+  countFunnel,
+  stagesFor,
+} from "@le/shared";
 import { ACCOUNT_USAGE_COLUMNS } from "@le/linkedin";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
@@ -385,7 +393,7 @@ export default async function CampaignPage({
 
   const { data: campaign } = await supabase
     .from("campaigns")
-    .select("id, name, status, connection_note, daily_invite_cap, reply_mode, launched_at, linkedin_account_id, rules, customer_profile_id, search_exhausted, searched_at, owner_user_id")
+    .select("id, name, status, connection_note, daily_invite_cap, reply_mode, launched_at, linkedin_account_id, rules, customer_profile_id, search_exhausted, searched_at, owner_user_id, cta_kind, cta_label, cta_url")
     .eq("id", id)
     .eq("workspace_id", session.workspaceId)
     .maybeSingle();
@@ -457,7 +465,10 @@ export default async function CampaignPage({
   // places and industries by id, so every one of them was translated first.
   const filterNotes = ruleStrings(campaign.rules, "filterNotes");
   const running = campaign.status === "running";
-  const reached = FUNNEL_STAGES.filter((stage) => counts[stage.key] > 0);
+  // Judged on what this campaign was asking for. A link campaign has no
+  // meetings and never will; ending its funnel in a permanent zero reports a
+  // working campaign as a failed one.
+  const reached = stagesFor(campaign.cta_kind).filter((stage) => counts[stage.key] > 0);
   const searchNotice = describeSearch(lastSearch);
   // How each angle is doing, and whether anything can yet be said about it.
   //
@@ -583,6 +594,26 @@ export default async function CampaignPage({
           </ul>
         </div>
       ) : null}
+
+      <section className="card">
+        <p className="small">
+          <strong>This campaign asks for: {CTA_DEFINITIONS[campaign.cta_kind].label}</strong>
+          {campaign.cta_label ? ` — “${campaign.cta_label}”` : ""}
+        </p>
+        <p className="tiny subtle">
+          Judged on {CTA_DEFINITIONS[campaign.cta_kind].conversion}.
+          {campaign.cta_kind === "link" ? ` ${CLICKS_ARE_INVISIBLE}` : ""}
+        </p>
+        {campaign.cta_url ? (
+          <p className="tiny subtle">
+            Sends to{" "}
+            <a href={campaign.cta_url} target="_blank" rel="noreferrer noopener">
+              {campaign.cta_url}
+            </a>
+            . Set on the strategy, because the copy is written toward the ask.
+          </p>
+        ) : null}
+      </section>
 
       {reached.length > 0 ? (
         <section className="card">
