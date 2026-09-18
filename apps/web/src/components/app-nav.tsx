@@ -8,6 +8,22 @@ export interface NavItem {
   label: string;
   /** Rendered as a count badge; omitted when zero so an empty inbox is quiet. */
   count?: number;
+  /**
+   * What this section needs from the person, if anything.
+   *
+   * The nav is the one thing on every screen, so it is where "this is the bit
+   * that needs you" belongs. Twelve identically-weighted links is a list to
+   * read rather than a product to use, and somebody who has never seen it
+   * cannot tell that Team is where LinkedIn gets connected and that nothing
+   * sends until it is.
+   *
+   * `next` marks the single step this workspace is actually on; `attention`
+   * marks something broken. At most one of each, or the marking means
+   * nothing — a sidebar where six things are urgent has no urgent things.
+   */
+  state?: "next" | "attention";
+  /** Said out loud for a screen reader, which cannot see a coloured dot. */
+  stateLabel?: string;
 }
 
 export interface NavGroup {
@@ -39,6 +55,10 @@ export function AppNav({ groups }: { groups: NavGroup[] }) {
               aria-current={isCurrent(pathname, item.href) ? "page" : undefined}
             >
               <span>{item.label}</span>
+              {item.state ? (
+                <span className={`nav-dot ${item.state}`} aria-hidden="true" />
+              ) : null}
+              {item.state ? <span className="sr-only">{item.stateLabel ?? item.state}</span> : null}
               {item.count ? <span className="nav-count">{item.count}</span> : null}
             </Link>
           ))}

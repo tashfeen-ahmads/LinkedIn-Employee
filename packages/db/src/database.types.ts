@@ -515,6 +515,28 @@ export type WorkerHeartbeatRow = {
   detail: Json;
 };
 
+/**
+ * Somebody saying "this is broken", with what the product believed at the time.
+ *
+ * Every failure this deployment hit needed the same three facts to diagnose:
+ * which workspace, what they were doing, and what the product thought was true
+ * at that moment. The first two are always in the message somewhere. The third
+ * never was, and the person raising the ticket does not know which of those
+ * facts matters and should not have to.
+ */
+export type SupportTicketRow = {
+  id: string;
+  workspace_id: string;
+  raised_by: string | null;
+  subject: string;
+  body: string;
+  status: string;
+  context: Json;
+  answered_at: string | null;
+  answer: string | null;
+  created_at: string;
+};
+
 export type LlmCallRow = {
   id: number;
   workspace_id: string | null;
@@ -566,6 +588,7 @@ export type Database = {
       knowledge_documents: Table<KnowledgeDocumentRow>;
       events: Table<EventRow>;
       llm_calls: Table<LlmCallRow>;
+      support_tickets: Table<SupportTicketRow>;
       worker_heartbeats: Table<WorkerHeartbeatRow>;
     };
     // `{ [_ in never]: never }` and not `Record<string, never>`: an index
@@ -606,6 +629,15 @@ export type Database = {
           pending_drafts: number;
           messages_sent: number;
         }[];
+      };
+      /**
+       * Writes an operator's reply onto a ticket. A definer function rather
+       * than an update policy because RLS cannot restrict columns, and the
+       * customer's own `subject` and `body` must not change after the fact.
+       */
+      answer_support_ticket: {
+        Args: { p_ticket_id: string; p_answer: string | null; p_status: string };
+        Returns: undefined;
       };
     };
     Enums: {

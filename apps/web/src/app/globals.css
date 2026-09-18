@@ -534,11 +534,41 @@ form { display: flex; flex-direction: column; gap: var(--space-4); }
 .pill.warning  { background: var(--warning-soft);  color: var(--warning);  border-color: transparent; }
 .pill.danger   { background: var(--danger-soft);   color: var(--danger);   border-color: transparent; }
 
+/* The one section that wants you. A dot rather than a badge: it has to read at
+   a glance from across the sidebar, and it must not compete with the inbox
+   count beside it, which is a number somebody acts on. */
+.nav-dot {
+  width: 7px; height: 7px;
+  border-radius: var(--radius-pill);
+  flex: none;
+  margin-left: auto;
+}
+.nav-dot.next      { background: var(--accent); }
+.nav-dot.attention { background: var(--danger); }
+/* A count and a dot together: the count keeps the right edge. */
+.nav-dot + .nav-count { margin-left: var(--space-2); }
+
+/* The single next action. Given the width of the page on purpose: a person on
+   their first day needs one instruction, not a checklist of seven. */
+.next-step h2 { margin: 0.25rem 0 0.5rem; }
+.next-step.done { border-color: var(--positive); }
+
 /* A span that needs its own line, e.g. a label under a number. */
 .block { display: block; }
 
 /* Two or three controls side by side, keeping their own widths. */
 .row { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+
+/* Facts read together rather than scanned down a column — the four things a
+   support ticket captured, which mean something as a set and nothing apart. */
+.inline-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
 
 /* A row of links that filter what is below them. Pills rather than a control
    bar: the count belongs in the label, because "Contacted (0)" answers the

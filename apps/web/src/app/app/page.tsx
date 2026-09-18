@@ -2,6 +2,8 @@ import Link from "next/link";
 import { FUNNEL_STAGES, countFunnel } from "@le/shared";
 import { requireSession } from "@/lib/workspace";
 import { SetupChecklist } from "@/components/setup-checklist";
+import { NextStep } from "@/components/next-step";
+import { isReadyToSend, nextStep } from "@le/shared";
 import { createClient } from "@/lib/supabase-server";
 import { PageNotice, type NoticeParams } from "@/components/page-notice";
 import { hasToldUsWhatTheySell, readStrategyState } from "@/lib/strategy-state";
@@ -78,6 +80,8 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
   // would drift and quietly disagree about the same numbers.
   const tally = countFunnel(rows ?? []);
   const counts = FUNNEL_STAGES.map((stage) => ({ label: stage.label, value: tally[stage.key] }));
+  // The same reading the sidebar marks, from the same shared list of steps.
+  const next = nextStep(setup);
 
   const invited = tally.invited;
   const accepted = tally.accepted;
@@ -90,6 +94,13 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
         <p className="eyebrow">Overview</p>
         <h1>{session.fullName ? `Morning, ${session.fullName.split(" ")[0]}.` : "Overview"}</h1>
       </header>
+
+      {/*
+        One action first, and the whole width of the page. The checklist below
+        is the second reading: a reference for somebody who already knows the
+        product, where this is the instruction for somebody who does not.
+      */}
+      <NextStep step={next} ready={isReadyToSend(setup)} />
 
       <StrategyStatus state={strategy} />
 

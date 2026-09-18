@@ -9,7 +9,7 @@ plan. This file is for whoever works on the code next.
 pnpm install
 pnpm build          # packages compile to dist/; apps typecheck against those
 pnpm typecheck
-pnpm test           # 432 tests, no network, no API key needed
+pnpm test           # 775 tests, no network, no API key needed
 node scripts/mutation-check.mjs   # proves the safety tests actually bite
 node scripts/preflight.mjs        # is a deployment actually able to send?
 pnpm --filter @le/web dev
@@ -570,6 +570,51 @@ tests that were verified by deliberately breaking the code.
     be optimising the dashboard at the cost of the product: a rep who cannot
     send the link they actually use does not book fewer meetings through this
     product, they stop using this product.
+
+32. **The product says what to do next, in one voice.** `nextStep` and
+    `ONBOARDING_STEPS` have computed where a workspace has got to since the
+    first week and nothing led with it: the overview showed five equal-weight
+    sections and the sidebar twelve equal links, so the answer existed and was
+    on no screen. `readSetupState` (`apps/web/src/lib/setup-state.ts`) is read
+    once in the layout and again on the overview, so the nav and the page can
+    never disagree about which step somebody is on — two readings drift, and the
+    one the newcomer believes is whichever they looked at.
+
+    There is exactly **one** mark (`markFor` in `apps/web/src/lib/nav-marks.ts`).
+    A sidebar where six things are urgent has no urgent things. A disconnected
+    LinkedIn account takes the mark and silences every other one, because there
+    is no next step while the thing every step depends on is broken — pointing
+    at Knowledge while the account cannot send points at the wrong stage, which
+    is rule 17's disease in the navigation. The dot is `aria-hidden`, so every
+    mark carries a `stateLabel`: unsaid, a screen-reader user gets twelve
+    identical links and no indication of which one wants them.
+
+33. **A ticket carries what the product believed, and names what it did not
+    know.** `/app/support` writes to `support_tickets` (migration 0021) with a
+    `context` snapshot gathered at the moment somebody pressed the button:
+    which step they were on, whether LinkedIn was connected, whether the sending
+    loop had run and on which build. Every failure this deployment hit was
+    reported as a sentence — "I launched a campaign and nothing happened" —
+    that is true of four different problems, and the person raising the ticket
+    does not know which of those facts matters and should not have to work it
+    out. Asking them to go and check first is asking them to do the diagnosis.
+
+    `describeTicketContext` **names a fact it does not have** rather than
+    omitting it. Four facts listed with no mention of the sending loop reads as
+    a loop that was running, and sends whoever is answering to investigate the
+    wrong stage — the same disease as a diagnostics check reporting `ok`
+    because it could not look. `context` is jsonb, so a null, a string or an
+    array can land in that column and the console still has to render.
+
+    Answering happens **in the console**, through `answer_support_ticket` — a
+    definer function whose `is_platform_admin()` check is the whole
+    authorisation, exactly as rule 15's `platform_workspace_stats()`. There is
+    no update policy on the table: RLS cannot restrict columns, and the
+    customer's own `subject` and `body` are the one part of the row that must
+    survive being replied to. An operator who has to open psql to answer has
+    moved the chat window, not removed it — repair must never depend on
+    somebody finding a terminal, for the same reason rule 8 says it must never
+    depend on somebody finding a button.
 
 ## Conventions
 

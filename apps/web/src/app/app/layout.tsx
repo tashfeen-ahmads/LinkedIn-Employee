@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { AppNav, type NavGroup } from "@/components/app-nav";
+import { readSetupState } from "@/lib/setup-state";
+import { markFor, type NavMarks } from "@/lib/nav-marks";
 import { entitlementFor, entitlementMessage } from "@le/billing";
 
 /**
@@ -10,7 +12,11 @@ import { entitlementFor, entitlementMessage } from "@le/billing";
  * Grouped by what the rep is doing: the daily loop first, then the things that
  * shape it, then the account.
  */
-function navGroups(waiting: number): NavGroup[] {
+function navGroups(waiting: number, marks: NavMarks): NavGroup[] {
+  // One mark, decided in one place (`markFor`) so the rule is testable rather
+  // than a convention three call sites happen to keep.
+  const next = (href: string, label: string) => markFor(href, label, marks);
+
   return [
     {
       label: "Daily",
@@ -23,10 +29,10 @@ function navGroups(waiting: number): NavGroup[] {
     {
       label: "Outreach",
       items: [
-        { href: "/app/strategy", label: "Strategy" },
+        { href: "/app/strategy", label: "Strategy", ...next("/app/strategy", "Strategy") },
         { href: "/app/prospects", label: "Prospects" },
-        { href: "/app/campaigns", label: "Campaigns" },
-        { href: "/app/knowledge", label: "Knowledge" },
+        { href: "/app/campaigns", label: "Campaigns", ...next("/app/campaigns", "Campaigns") },
+        { href: "/app/knowledge", label: "Knowledge", ...next("/app/knowledge", "Knowledge") },
         { href: "/app/exclusions", label: "Exclusions" },
       ],
     },
@@ -35,9 +41,17 @@ function navGroups(waiting: number): NavGroup[] {
       items: [
         { href: "/app/reporting", label: "Reporting" },
         { href: "/app/usage", label: "Usage" },
-        { href: "/app/team", label: "Team" },
+        // Named rather than left to be discovered. Nothing this product does
+        // reaches anybody until LinkedIn is connected, and "Team" is not a word
+        // that tells a newcomer that is where it happens.
+        { href: "/app/team", label: "Team", ...next("/app/team", "Team") },
         { href: "/app/system", label: "System check" },
         { href: "/app/billing", label: "Billing" },
+        // Last, and always there. Somebody who cannot make the product work is
+        // the one person who will not go looking for a link, so the way to say
+        // so sits in the same place on every screen rather than at the bottom
+        // of a settings page.
+        { href: "/app/support", label: "Support" },
       ],
     },
   ];
@@ -88,6 +102,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     .eq("user_id", session.userId)
     .maybeSingle();
 
+  // Where this workspace has got to, read once here and handed to the nav. The
+  // dashboard reads the same function, so the sidebar and the page can never
+  // disagree about which step somebody is on.
+  const { next } = await readSetupState(supabase, session.workspaceId);
+  const linkedInNeedsYou = !account || account.status !== "active";
+
   return (
     <div className="app">
       <aside className="app-aside">
@@ -96,7 +116,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <p className="tiny subtle">{session.workspaceName}</p>
         </div>
 
-        <AppNav groups={navGroups(waiting ?? 0)} />
+        <AppNav
+          groups={navGroups(waiting ?? 0, {
+            nextHref: next?.href ?? null,
+            linkedInNeedsYou,
+          })}
+        />
 
         <div className="app-account">
           <div className="app-account-who">

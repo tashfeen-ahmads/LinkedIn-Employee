@@ -1,8 +1,45 @@
 import Link from "next/link";
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase-server";
 import { requirePlatformAdmin, daysUntil } from "@/lib/admin";
+import { errorQuery, noticeQuery } from "@/lib/worker";
+import { PageNotice, type NoticeParams } from "@/components/page-notice";
+import { SubmitButton } from "@/components/submit-button";
+import { describeTicketContext } from "@/lib/support";
 
 export const dynamic = "force-dynamic";
+
+/**
+ * Answering goes through a definer function, not an update: RLS cannot restrict
+ * columns, and the customer's own account of what went wrong is the one field
+ * in the row that must survive being replied to.
+ */
+async function answerTicket(formData: FormData) {
+  "use server";
+  await requirePlatformAdmin();
+  const ticketId = String(formData.get("ticketId") ?? "");
+  const answer = String(formData.get("answer") ?? "").trim();
+  const status = String(formData.get("status") ?? "answered");
+  if (!ticketId || !answer) {
+    redirect(errorQuery("/admin/support", "An answer with no words in it is not an answer."));
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("answer_support_ticket", {
+    p_ticket_id: ticketId,
+    p_answer: answer,
+    p_status: status,
+  });
+  if (error) {
+    // Said rather than swallowed: a reply that silently did not save is a
+    // customer waiting on an answer that was written and never sent.
+    redirect(errorQuery("/admin/support", `That did not save: ${error.message}`));
+  }
+
+  revalidatePath("/admin/support");
+  redirect(noticeQuery("/admin/support", "Answered. It is on their Support page now."));
+}
 
 /**
  * The support queue: everything on the platform that a person needs to look at.
@@ -11,11 +48,12 @@ export const dynamic = "force-dynamic";
  * system, because nobody files a ticket for "my account has been restricted for
  * three days and I assumed that was normal". The list being empty is the point.
  */
-export default async function AdminSupportPage() {
+export default async function AdminSupportPage({ searchParams }: { searchParams: NoticeParams }) {
+  const params = await searchParams;
   await requirePlatformAdmin();
   const supabase = await createClient();
 
-  const [{ data: accounts }, { data: workspaces }, { data: failures }] = await Promise.all([
+  const [{ data: accounts }, { data: workspaces }, { data: failures }, { data: tickets }] = await Promise.all([
     supabase
       .from("linkedin_accounts")
       .select("id, workspace_id, user_id, status, status_detail, display_name, connected_at, first_action_at")
@@ -29,6 +67,13 @@ export default async function AdminSupportPage() {
       .not("error", "is", null)
       .order("created_at", { ascending: false })
       .limit(25),
+    // Somebody typed these. Everything else on this page is inferred from a
+    // state; a ticket is a person asking, and it is read first.
+    supabase
+      .from("support_tickets")
+      .select("id, workspace_id, subject, body, status, answer, context, created_at")
+      .order("created_at", { ascending: false })
+      .limit(50),
   ]);
 
   const names = new Map((workspaces ?? []).map((w) => [w.id, w.name]));
@@ -39,10 +84,13 @@ export default async function AdminSupportPage() {
     .filter((w) => w.days !== null && w.days <= 3)
     .sort((a, b) => (a.days ?? 0) - (b.days ?? 0));
 
-  const nothing = !accounts?.length && !failures?.length && !expiring.length;
+  const open = (tickets ?? []).filter((t) => t.status === "open");
+  const answered = (tickets ?? []).filter((t) => t.status !== "open");
+  const nothing = !accounts?.length && !failures?.length && !expiring.length && !open.length;
 
   return (
     <>
+      <PageNotice error={params.error} notice={params.notice} />
       <div className="page-head">
         <h1>Needs attention</h1>
         <p className="muted small">
@@ -53,8 +101,90 @@ export default async function AdminSupportPage() {
 
       {nothing ? (
         <div className="notice positive">
-          <p>Nothing needs attention. Every connected account is healthy and no agent call has failed.</p>
+          <p>
+            Nothing needs attention. No ticket is open, every connected account is healthy, and no
+            agent call has failed.
+          </p>
         </div>
+      ) : null}
+
+      {open.length ? (
+        <section className="stack-3">
+          <h2>Open tickets</h2>
+          <p className="small muted">
+            Each one carries what the product believed at the moment it was raised, so the first
+            question an operator would ask is already answered.
+          </p>
+          {open.map((ticket) => (
+            <article key={ticket.id} className="card stack-3">
+              <div className="between">
+                <strong>{ticket.subject}</strong>
+                <Link className="small" href={`/admin/workspaces/${ticket.workspace_id}`}>
+                  {names.get(ticket.workspace_id) ?? "—"}
+                </Link>
+              </div>
+              <p className="small">{ticket.body}</p>
+              <ul className="tiny subtle inline-list">
+                {describeTicketContext(ticket.context).map((fact) => (
+                  <li key={fact}>{fact}</li>
+                ))}
+              </ul>
+              <form action={answerTicket} className="stack-2">
+                <input type="hidden" name="ticketId" value={ticket.id} />
+                <label className="field">
+                  <span className="sr-only">Answer</span>
+                  <textarea name="answer" rows={3} placeholder="What you found and what you did." />
+                </label>
+                <div className="row">
+                  <label className="field">
+                    <span className="tiny">Then</span>
+                    <select name="status" defaultValue="answered">
+                      <option value="answered">mark answered</option>
+                      <option value="closed">close it</option>
+                    </select>
+                  </label>
+                  <SubmitButton pendingLabel="Sending…">Answer</SubmitButton>
+                </div>
+              </form>
+            </article>
+          ))}
+        </section>
+      ) : null}
+
+      {answered.length ? (
+        <section className="card">
+          <h2>Answered</h2>
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Raised</th>
+                  <th>Workspace</th>
+                  <th>Subject</th>
+                  <th>Answer</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {answered.map((t) => (
+                  <tr key={t.id}>
+                    <td className="small subtle">{new Date(t.created_at).toLocaleDateString()}</td>
+                    <td>
+                      <Link href={`/admin/workspaces/${t.workspace_id}`}>
+                        {names.get(t.workspace_id) ?? "—"}
+                      </Link>
+                    </td>
+                    <td className="small">{t.subject}</td>
+                    <td className="small muted">{t.answer ?? "—"}</td>
+                    <td>
+                      <span className="pill tiny positive">{t.status}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
       ) : null}
 
       {accounts?.length ? (
