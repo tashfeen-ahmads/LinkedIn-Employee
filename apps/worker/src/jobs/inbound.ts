@@ -10,6 +10,8 @@ import {
   CustomerProfileSchema,
   RulesOfEngagementSchema,
   canTransition,
+  draftLinkCheck,
+  extractLinks,
   type CampaignProspectStatus,
 } from "@le/shared";
 import type { WorkerContext } from "../context.js";
@@ -105,7 +107,7 @@ export async function handleInboundMessage(
   const { data: campaign } = campaignId
     ? await db
         .from("campaigns")
-        .select("id, customer_profile_id, rules, reply_mode, owner_user_id")
+        .select("id, customer_profile_id, rules, reply_mode, owner_user_id, cta_kind, cta_url, cta_label")
         .eq("id", campaignId)
         .single()
     : { data: null };
@@ -175,7 +177,7 @@ export async function handleInboundMessage(
 
   const { data: rep } = await db
     .from("profiles")
-    .select("full_name, bio, timezone")
+    .select("full_name, bio, timezone, booking_url")
     .eq("id", account.user_id)
     .single();
 
@@ -214,6 +216,24 @@ export async function handleInboundMessage(
       })
     : { iso: [], readable: [] };
 
+  // What this campaign is asking for decides which link, if any, belongs in the
+  // reply. A campaign wanting sign-ups should not have its agent proposing
+  // times, and a campaign wanting a conversation should carry no link at all.
+  const goal = campaign?.cta_kind ?? "meeting";
+  const bookingUrl = rep?.booking_url?.trim() || null;
+  const ctaUrl = campaign?.cta_url?.trim() || null;
+
+  const offeredLink =
+    goal === "link" ? ctaUrl : goal === "meeting" ? bookingUrl : null;
+
+  // Anything already in the knowledge the agent was handed is fair to quote:
+  // it is the customer's own documentation, and a reply that cannot cite the
+  // page it is answering from is less useful and no safer.
+  const allowedLinks = [
+    offeredLink,
+    ...knowledge.flatMap((doc) => extractLinks(doc.content ?? "")),
+  ].filter((link): link is string => Boolean(link));
+
   let draft;
   try {
     draft = await draftReply(agents, {
@@ -225,10 +245,20 @@ export async function handleInboundMessage(
       history,
       message: job.text,
       classification,
-      rules,
+      rules: {
+        ...rules,
+        // The one link it may send, decided by what the campaign is asking
+        // for. Absent means it may send none.
+        ...(offeredLink ? { bookingLink: offeredLink } : { bookingLink: undefined }),
+      },
+      goal,
       // The only datetimes the agent may name. An empty list means it offers
       // to send times rather than inventing any.
-      availableSlots: slots.readable,
+      //
+      // A campaign not asking for a meeting offers none at all: proposing
+      // times to somebody who was asked to look at a page is the agent
+      // pursuing a goal nobody set.
+      availableSlots: goal === "meeting" ? slots.readable : [],
       bookedMeeting,
     });
   } catch (error) {
@@ -237,6 +267,25 @@ export async function handleInboundMessage(
     // ours, because the alternative is a warm reply nobody ever reads.
     await flagForHuman(db, conversation.id, "could not draft a reply, answer this one yourself");
     throw error;
+  }
+
+  // The links this agent was actually given, and the only ones it may send.
+  //
+  // Rule 6's sibling: the model may not invent a datetime and it may not invent
+  // a URL, for the same reason. `acme.com/demo` is exactly what a model writes
+  // when a reply wants a link and none was supplied — plausible, specific, a
+  // 404, and it reaches a real person under a real rep's name.
+  //
+  // Held rather than stripped. Removing the URL leaves "you can book a time
+  // here:" pointing at nothing, which reads worse than the invented link did,
+  // and a hallucinated link is evidence the draft as a whole drifted.
+  const linkCheck = draftLinkCheck(draft.message, allowedLinks);
+  const gate = linkCheck.ok ? decision : { action: "hold_for_human" as const, reason: linkCheck.reason };
+  if (!linkCheck.ok) {
+    console.error("held a draft carrying a link nobody gave the agent", {
+      conversationId: conversation.id,
+      links: linkCheck.links,
+    });
   }
 
   const { data: saved } = await db
@@ -253,14 +302,14 @@ export async function handleInboundMessage(
       proposed_slots: (draft.proposesMeeting ? slots.iso : []) as never,
       unanswered_questions: draft.unansweredQuestions as never,
       prompt_version: DRAFT_PROMPT_VERSION,
-      status: decision.action === "send" ? "approved" : "pending",
+      status: gate.action === "send" ? "approved" : "pending",
     })
     .select("id")
     .single();
 
   await recordEvent(db, {
     workspaceId: job.workspaceId,
-    name: decision.action === "send" ? "reply.drafted" : "reply.needs_human",
+    name: gate.action === "send" ? "reply.drafted" : "reply.needs_human",
     subjectType: "conversation",
     subjectId: conversation.id,
     payload: { reason: decision.reason ?? null, proposesMeeting: draft.proposesMeeting },

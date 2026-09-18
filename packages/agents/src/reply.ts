@@ -115,6 +115,14 @@ export interface DraftInput {
   message: string;
   classification: ReplyClassification;
   rules: RulesOfEngagement;
+  /**
+   * What this campaign is asking for.
+   *
+   * The agent used to pursue a meeting whatever the campaign wanted, which for
+   * a sign-up campaign meant proposing times to somebody who was asked to look
+   * at a page — the agent chasing a goal nobody set.
+   */
+  goal?: "meeting" | "link" | "reply";
   /** Human-readable slots genuinely free on the rep's calendar. */
   availableSlots: string[];
   /** True when this reply confirms a meeting we have already put in the diary. */
@@ -131,6 +139,14 @@ export async function draftReply(ctx: AgentContext, input: DraftInput): Promise<
     input.profile ? `\nSegment being targeted:\n${JSON.stringify(input.profile, null, 2)}` : "",
     `\nKnowledge base (the only product facts you may state):\n${renderKnowledge(input.knowledge)}`,
     `\nGoal for this conversation: ${input.rules.goal}`,
+    // What the campaign is asking for, which is not always a meeting. Without
+    // it the agent pursues a call in a conversation whose whole point was to
+    // get somebody to look at a page.
+    input.goal === "link"
+      ? "\nThis campaign is NOT asking for a meeting. Do not propose a call or offer times. The ask is that they take a look at the link above."
+      : input.goal === "reply"
+        ? "\nThis campaign is NOT asking for a meeting and has no link. The ask is a genuine reply — a conversation, an opinion, an introduction."
+        : "",
   ].join("\n");
 
   return callStructured(ctx, {
@@ -150,7 +166,9 @@ export async function draftReply(ctx: AgentContext, input: DraftInput): Promise<
         : input.availableSlots.length
           ? `\nFree slots on the calendar (offer at most three, exactly as written here):\n${input.availableSlots.join("\n")}`
           : `\nNo calendar availability was retrieved. Do not invent times.${
-              input.rules.bookingLink ? ` You may share this booking link: ${input.rules.bookingLink}` : ""
+              input.rules.bookingLink
+                ? ` The ONLY link you may send is ${input.rules.bookingLink} — copy it exactly, and never write any other address.`
+                : " You have no link to send. Do not write a URL of any kind: one you invent will 404 in front of the prospect."
             }`,
       "\nWrite the reply.",
     ].join("\n"),

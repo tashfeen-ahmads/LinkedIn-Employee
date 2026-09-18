@@ -1,6 +1,7 @@
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { callWorker, errorQuery, noticeQuery } from "@/lib/worker";
+import { checkCtaUrl } from "@le/shared";
 import { cannotSend, describeRepair, type RefreshResult, type RepairNotice } from "./repair";
 import { redirect } from "next/navigation";
 import { LINKEDIN_LIMITS } from "@le/shared";
@@ -196,11 +197,35 @@ async function saveMyDetails(formData: FormData) {
   const bio = String(formData.get("bio") ?? "").trim();
   const timezone = String(formData.get("timezone") ?? "").trim();
 
+  // Your own scheduling link, if you use one.
+  //
+  // The product owns a booking page and it works, but a rep who has used
+  // Calendly for three years keeps their availability, buffers and reminders
+  // there — asking them to maintain a second calendar so a LinkedIn reply can
+  // offer a time is asking them to maintain two. Google Calendar is the option
+  // that cannot be built: its scopes need brand verification, a verified domain
+  // and weeks of review. One pasted URL works the day somebody signs up.
+  const raw = String(formData.get("bookingUrl") ?? "").trim();
+  let bookingUrl: string | null = null;
+  if (raw) {
+    // Checked before it is stored, because the agent will send it to a stranger
+    // under this person's own name. The reason is shown rather than a generic
+    // refusal — somebody who pasted "cal.com/sam" needs telling it is missing
+    // the https://, not that it is invalid.
+    const checked = checkCtaUrl(raw);
+    if (!checked.ok) redirect(errorQuery("/app/team", checked.reason));
+    bookingUrl = checked.url;
+  }
+
   const session = await requireSession();
   const supabase = await createClient();
   await supabase
     .from("profiles")
-    .update({ bio: bio || null, ...(isKnownTimezone(timezone) ? { timezone } : {}) })
+    .update({
+      bio: bio || null,
+      booking_url: bookingUrl,
+      ...(isKnownTimezone(timezone) ? { timezone } : {}),
+    })
     .eq("id", session.userId);
 
   revalidatePath("/app/team");
@@ -343,7 +368,7 @@ export default async function TeamPage({
         .is("accepted_at", null)
         .is("revoked_at", null)
         .order("created_at", { ascending: false }),
-      supabase.from("profiles").select("bio, timezone").eq("id", session.userId).maybeSingle(),
+      supabase.from("profiles").select("bio, timezone, booking_url").eq("id", session.userId).maybeSingle(),
     ]);
 
   const canManage = ["owner", "admin", "manager"].includes(session.role);
@@ -389,6 +414,26 @@ export default async function TeamPage({
               defaultValue={me?.bio ?? ""}
               placeholder="Twelve years in logistics ops before this. I care about the boring parts."
             />
+          </label>
+          {/*
+            The link the agent sends when a campaign is asking for a meeting.
+            Optional: without one the product offers times from its own
+            calendar, which it can see and protect from double-booking.
+          */}
+          <label className="field medium">
+            <span>Your scheduling link · optional</span>
+            <input
+              type="url"
+              name="bookingUrl"
+              placeholder="https://cal.com/you/intro"
+              defaultValue={me?.booking_url ?? ""}
+            />
+            <span className="tiny subtle">
+              Calendly, Cal.com, SavvyCal — whatever you already use. The agent sends this instead of
+              offering times from here. A booking made there is invisible to this product, so meetings
+              booked through your own link will not appear in the funnel; everything up to the reply
+              still does.
+            </span>
           </label>
           <label className="field medium">
             <span>Your timezone</span>

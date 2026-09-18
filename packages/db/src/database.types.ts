@@ -106,6 +106,14 @@ export type BillingEventRow = {
 };
 
 export type ProfileRow = {
+  /**
+   * The rep's own scheduling link, when they use one.
+   *
+   * A booking made there is invisible to this product — no webhook, nothing to
+   * poll — so a campaign relying on it cannot report meetings automatically,
+   * and every screen that shows the funnel says so.
+   */
+  booking_url: string | null;
   id: string;
   email: string;
   full_name: string | null;

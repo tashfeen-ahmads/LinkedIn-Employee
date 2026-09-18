@@ -530,6 +530,47 @@ tests that were verified by deliberately breaking the code.
     `CLICKS_ARE_INVISIBLE` is that sentence, said on the screen rather than
     shown as a zero somebody reads as failure.
 
+30. **The agent never sends a link it was not given.** This is rule 6's
+    sibling: the model may not invent a datetime and it may not invent a URL,
+    for the same reason — both reach a real person under a real rep's name, and
+    both are the kind of detail a language model produces fluently and wrongly.
+    `acme.com/demo` is exactly what a model writes when a reply wants a link and
+    none was supplied: plausible, specific, a 404, and the rep never sees it.
+
+    `draftLinkCheck` (`packages/shared/src/links.ts`) compares every URL in a
+    draft against the ones the agent was actually handed — the campaign's
+    destination or the rep's scheduling link, plus anything already in the
+    knowledge documents, which are the customer's own words. **Held, never
+    stripped**: removing the URL leaves "you can book a time here:" pointing at
+    nothing, which reads worse than the invented link did, and a hallucinated
+    link is evidence the draft as a whole drifted rather than that one token was
+    unlucky. Host and path are compared exactly; a dropped query parameter is
+    not an invention, an added path is.
+
+    **Which link, and whether any, follows the campaign's goal** (rule 29). A
+    sign-up campaign's agent must not propose a call — that is the agent
+    pursuing a goal nobody set — so a campaign not asking for a meeting is given
+    no slots at all, and a conversation campaign is given no link, not even the
+    rep's own.
+
+31. **A rep's own scheduling link is allowed, and what it costs is said.**
+    `profiles.booking_url` (migration 0020) takes a Calendly or Cal.com address.
+    The product owns a booking page and it works, but a rep who has used one for
+    three years keeps their availability, buffers and reminders there, and
+    asking them to maintain a second calendar so a LinkedIn reply can offer a
+    time is asking them to maintain two. Google Calendar is the option that
+    cannot be built at all: its scopes need brand verification, a verified
+    domain and weeks of review, which is what made the last stage of this
+    product undemonstrable.
+
+    A booking made on Calendly happens on Calendly — no webhook we are entitled
+    to, nothing to poll — so a campaign relying on it **cannot report meetings
+    automatically**, and the screens say so rather than showing a zero that
+    reads as failure. Refusing external links to keep the funnel complete would
+    be optimising the dashboard at the cost of the product: a rep who cannot
+    send the link they actually use does not book fewer meetings through this
+    product, they stop using this product.
+
 ## Conventions
 
 - Agent output is validated against a zod schema before it touches the

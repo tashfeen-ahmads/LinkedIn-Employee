@@ -690,6 +690,83 @@ describe("campaign pipeline", () => {
     expect(db.rows("conversations")[0]?.needs_human).toBe(true);
   });
 
+  /**
+   * Rule 6's sibling. The model may not invent a datetime and it may not invent
+   * a URL, for the same reason: both reach a real person under a real rep's
+   * name, and both are the kind of detail a model produces fluently and wrongly.
+   */
+  it("holds a draft carrying a link nobody gave the agent, even on autopilot", async () => {
+    const { db, ctx, queues, linkedin } = harness();
+    db.find("campaigns", { id: CAMPAIGN })!.reply_mode = "autopilot";
+    db.find("campaign_prospects", { id: CP })!.status = "accepted";
+    draftMock.mockResolvedValue({
+      message: "Happy to help — grab a slot at https://acme.test/demo",
+      proposesMeeting: false,
+      proposedSlots: [],
+      usedKnowledge: [],
+      unansweredQuestions: [],
+    });
+
+    await handleInboundMessage(ctx, queues, inboundJob("Sounds interesting"));
+
+    expect(db.rows("reply_drafts")[0]?.status).toBe("pending");
+    expect(linkedin.sentMessages).toHaveLength(0);
+    // Held, not stripped: removing the URL leaves "grab a slot at" pointing at
+    // nothing, which reads worse than the invented link did.
+    expect(db.rows("reply_drafts")[0]?.body).toContain("https://acme.test/demo");
+  });
+
+  it("sends the rep's own scheduling link without holding it", async () => {
+    const { db, ctx, queues } = harness();
+    db.find("campaigns", { id: CAMPAIGN })!.reply_mode = "autopilot";
+    db.find("campaign_prospects", { id: CP })!.status = "accepted";
+    db.rows("profiles")[0]!.booking_url = "https://cal.com/sam/intro";
+    draftMock.mockResolvedValue({
+      message: "Grab a time here: https://cal.com/sam/intro",
+      proposesMeeting: false,
+      proposedSlots: [],
+      usedKnowledge: [],
+      unansweredQuestions: [],
+    });
+
+    await handleInboundMessage(ctx, queues, inboundJob("Sounds interesting"));
+
+    expect(db.rows("reply_drafts")[0]?.status).toBe("approved");
+  });
+
+  it("offers no times at all when the campaign is not asking for a meeting", async () => {
+    // Proposing a call to somebody who was asked to look at a page is the
+    // agent pursuing a goal nobody set.
+    const { db, ctx, queues } = harness();
+    db.find("campaigns", { id: CAMPAIGN })!.cta_kind = "link";
+    db.find("campaigns", { id: CAMPAIGN })!.cta_url = "https://acme.test/signup";
+
+    await handleInboundMessage(ctx, queues, inboundJob("Sounds interesting"));
+
+    const drafted = draftMock.mock.calls[0]?.[1] as {
+      availableSlots: string[];
+      goal: string;
+      rules: { bookingLink?: string };
+    };
+    expect(drafted.availableSlots).toEqual([]);
+    expect(drafted.goal).toBe("link");
+    // And the one link it may send is the campaign's destination.
+    expect(drafted.rules.bookingLink).toBe("https://acme.test/signup");
+  });
+
+  it("gives a conversation campaign no link at all", async () => {
+    const { db, ctx, queues } = harness();
+    db.find("campaigns", { id: CAMPAIGN })!.cta_kind = "reply";
+    db.rows("profiles")[0]!.booking_url = "https://cal.com/sam/intro";
+
+    await handleInboundMessage(ctx, queues, inboundJob("Sounds interesting"));
+
+    const drafted = draftMock.mock.calls[0]?.[1] as { rules: { bookingLink?: string } };
+    // Not even the rep's own booking link: this campaign asked for a reply,
+    // and a scheduling link turns it into a meeting request nobody wanted.
+    expect(drafted.rules.bookingLink).toBeUndefined();
+  });
+
   it("sends automatically on autopilot when nothing trips the gate", async () => {
     const { db, ctx, queues, enqueued } = harness();
     db.find("campaigns", { id: CAMPAIGN })!.reply_mode = "autopilot";
