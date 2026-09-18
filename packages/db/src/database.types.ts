@@ -241,11 +241,38 @@ export type CampaignStepRow = {
   message: string;
 };
 
+/**
+ * One angle a campaign is testing against the others.
+ *
+ * The angle is the variable, not the words: every prospect receives a note
+ * written from their own details, so what a group of them shares is the pain
+ * named and the reason for reaching out.
+ */
+export type CampaignVariantRow = {
+  id: string;
+  workspace_id: string;
+  campaign_id: string;
+  name: string;
+  angle: string;
+  pain_point: string | null;
+  /** This angle's fallback note, used when the writer produced none. */
+  connection_note: string;
+  /** Retired angles stop being assigned; they are never deleted while they hold results. */
+  enabled: boolean;
+  created_at: string;
+};
+
 export type CampaignProspectRow = {
   id: string;
   workspace_id: string;
   campaign_id: string;
   prospect_id: string;
+  /**
+   * The angle this person was written for, fixed when the list was built and
+   * never reassigned: reassignment would attribute an outcome to an angle that
+   * did not produce it.
+   */
+  variant_id: string | null;
   status: CampaignProspectStatusDb;
   status_reason: string | null;
   invitation_id: string | null;
@@ -496,6 +523,7 @@ export type Database = {
       campaigns: Table<CampaignRow>;
       campaign_steps: Table<CampaignStepRow>;
       campaign_prospects: Table<CampaignProspectRow>;
+      campaign_variants: Table<CampaignVariantRow>;
       conversations: Table<ConversationRow>;
       messages: Table<MessageRow>;
       reply_drafts: Table<ReplyDraftRow>;

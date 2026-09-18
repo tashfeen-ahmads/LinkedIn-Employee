@@ -48,6 +48,32 @@ describe("inviteNote", () => {
     expect(inviteNote(null, TEMPLATE, "Jane")).toBe("Hi Jane, we work with heads of ops.");
   });
 
+  /**
+   * A campaign testing two angles measures each by what its group received. A
+   * prospect whose note could not be written is still counted under the angle
+   * they were assigned — so if they receive the campaign's generic line
+   * instead, the results table is describing a group that partly got something
+   * else, and the whole comparison is quietly wrong.
+   */
+  it("falls back to the angle the person was assigned, not the campaign's note", () => {
+    const angleNote = "Hi {{first_name}}, most referrals never get a second touch.";
+    expect(inviteNote(null, TEMPLATE, "Jane", angleNote)).toBe(
+      "Hi Jane, most referrals never get a second touch.",
+    );
+  });
+
+  it("uses the campaign's note when the person was assigned no angle", () => {
+    // Every campaign built before angles existed, and every campaign whose
+    // angles could not be stored.
+    expect(inviteNote(null, TEMPLATE, "Jane", null)).toBe("Hi Jane, we work with heads of ops.");
+  });
+
+  it("prefers the written note over either fallback", () => {
+    // The angle's note is a fallback, not an override: a note written for this
+    // named person already leans on the angle they were assigned.
+    expect(inviteNote("Written for Jane.", TEMPLATE, "Jane", "Angle note.")).toBe("Written for Jane.");
+  });
+
   it("treats a blank note as absent rather than sending nothing", () => {
     // LinkedIn delivers an invitation with an empty note perfectly happily, so
     // an empty string here would quietly turn a personalised campaign into a

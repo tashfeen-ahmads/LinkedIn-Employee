@@ -131,9 +131,38 @@ export type InviteNote = z.infer<typeof InviteNoteSchema>;
 
 export const InviteNoteBatchSchema = z.object({ notes: z.array(InviteNoteSchema) });
 
+/**
+ * One angle a campaign is testing.
+ *
+ * The angle is the variable, not the words: every prospect gets a note written
+ * from their own details, so what a group of them shares is the pain named and
+ * the reason for reaching out. `connectionNote` here is this angle's fallback —
+ * what somebody receives when the writer produced nothing for them — and it has
+ * to carry the angle too, or a fallback quietly moves that person into an
+ * unnamed fourth variant while still counting under this one.
+ */
+export const CampaignVariantSchema = z.object({
+  /** Short enough to head a column on the results table. */
+  name: z.string().max(40),
+  /** What the writer leans on. Two or three sentences of instruction. */
+  angle: z.string().max(600),
+  /** The specific pain this angle names, or null when it names none. */
+  painPoint: z.string().max(300).nullable(),
+  connectionNote: z.string().max(300),
+});
+export type CampaignVariantPlan = z.infer<typeof CampaignVariantSchema>;
+
 export const CampaignPlanSchema = z.object({
   name: z.string(),
   connectionNote: z.string().max(300),
+  /**
+   * Two or three genuinely different angles, not rewordings.
+   *
+   * Capped at three because each one splits the same finite list: a campaign of
+   * fifty across four angles gives twelve apiece, which cannot separate
+   * anything and costs a week to find that out.
+   */
+  variants: z.array(CampaignVariantSchema).min(2).max(3),
   steps: z
     .array(
       z.object({

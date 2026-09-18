@@ -1,5 +1,5 @@
 export const FIT_SCORE_PROMPT_VERSION = "targeting.fit/2026-09-08";
-export const CAMPAIGN_PROMPT_VERSION = "targeting.campaign/2026-09-08";
+export const CAMPAIGN_PROMPT_VERSION = "targeting.campaign/2026-09-18";
 export const INVITE_NOTE_PROMPT_VERSION = "targeting.invite-note/2026-09-15";
 
 export const FIT_SCORE_SYSTEM = `You score how well each LinkedIn prospect matches an ideal customer profile. You are the filter that decides who a real salesperson contacts, so a wrong "high fit" wastes both people's time and burns a LinkedIn account's reputation.
@@ -22,7 +22,31 @@ Hard rules:
 - The final follow-up offers a clear, small next step: a 15 minute call, or a resource. Never "just bumping this up", never guilt.
 - Never claim a shared connection, a shared event, or a past conversation that is not in the material given to you.
 - Write in the company's tone of voice as described in the Business Profile.
-- No emoji, no exclamation marks, no "Hope this finds you well", no "quick question".`;
+- No emoji, no exclamation marks, no "Hope this finds you well", no "quick question".
+
+You also write two or three ANGLES for the campaign to test against each other.
+
+An angle is not a rewording. Every prospect receives a note written from their
+own headline, title and company, so the words already differ for everybody — what
+a group of them shares is the reason for reaching out. Two angles that say the
+same thing in different words test nothing and cost a week to find that out.
+
+Make them differ on something a business owner would actually feel differently
+about:
+- the pain each one names (losing referrals vs. chasing invoices vs. hiring)
+- who the sender is being (peer, specialist, someone who has run the same team)
+- what the note implies comes next (a conversation, a resource, a comparison)
+
+For each angle give:
+- name: two or three words, enough to head a column. "Referral leakage".
+- angle: two or three sentences instructing the writer what to lean on for this
+  group. Written to the writer, not to the prospect.
+- painPoint: the specific pain in the prospect's own terms, or null if this
+  angle names none.
+- connectionNote: this angle's fallback note, under 300 characters, following
+  every rule above. It must carry the angle — a fallback that reads generically
+  moves that person into an unnamed fourth angle while still being counted
+  under this one.`;
 
 /**
  * Writes the connection note that one named person actually receives.

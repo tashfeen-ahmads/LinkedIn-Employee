@@ -4,6 +4,7 @@ import {
   BusinessProfileSchema,
   CustomerProfileSchema,
   LINKEDIN_LIMITS,
+  assignVariants,
   isPublicProfileUrl,
   matchExclusion,
   normalizeLinkedInUrl,
@@ -376,6 +377,40 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
     .single();
   if (error || !campaign) throw new Error(`could not create campaign: ${error?.message}`);
 
+  // The angles this campaign will test against each other. Created with the
+  // campaign, not later: a variant added after people are already assigned
+  // starts with a deficit the rotation then spends the next batch correcting,
+  // and the comparison is skewed by the order somebody clicked in.
+  // `?? []` and not an assertion: the schema requires two or three, so this is
+  // always populated in production. But a campaign that cannot store its
+  // angles must still be a campaign — losing the test is better than losing
+  // the list, the copy and the search position with it.
+  const plannedVariants = plan.variants ?? [];
+  const { data: variantRows } = await db
+    .from("campaign_variants")
+    .insert(
+      plannedVariants.map((variant) => ({
+        workspace_id: job.workspaceId,
+        campaign_id: campaign.id,
+        name: variant.name,
+        angle: variant.angle,
+        pain_point: variant.painPoint,
+        connection_note: variant.connectionNote,
+        // Written rather than left to the column default. The default is real,
+        // but code that depends on one is code the in-memory database cannot
+        // model, and a test that silently reads `enabled` as absent assigns
+        // nobody to anything while passing.
+        enabled: true,
+      })),
+    )
+    .select("id, name, angle, connection_note");
+  if (plannedVariants.length && !variantRows?.length) {
+    // Not fatal. A campaign with no variants behaves exactly as every campaign
+    // did before they existed: one angle, the campaign's own note. Losing the
+    // test is better than losing the campaign.
+    console.error("could not store campaign variants", { campaignId: campaign.id });
+  }
+
   await db.from("campaign_steps").insert(
     plan.steps.map((step, index) => ({
       workspace_id: job.workspaceId,
@@ -441,6 +476,36 @@ function nothingNewYet(continuing: CampaignPosition | null, page: { cursor: stri
   return page.cursor
     ? "Everyone on this page is already on your prospect list. The search has moved past them — press Find more again to read the next page."
     : "Everyone on this page is already on your prospect list, and that was the last page LinkedIn will return for this profile.";
+}
+
+/**
+ * The prospects to write for, split by the angle each was assigned.
+ *
+ * One group per angle, plus one for anybody unassigned — which is every
+ * prospect on a campaign built before variants existed, and the whole campaign
+ * when the variant insert failed. That group keeps the campaign's own note as
+ * its angle, so a campaign without variants writes exactly as it always did.
+ */
+function groupByAngle(
+  insertedProspects: Array<{ id: string }>,
+  variantByProspectId: Map<string, { id: string; angle: string } | null>,
+  providerIdByProspectId: Map<string, string>,
+  input: { campaignAngle: string; shortlist: Array<{ candidate: ProspectCandidate }> },
+): Array<{ angle: string; prospects: ProspectCandidate[] }> {
+  const candidateByProviderId = new Map(input.shortlist.map((r) => [r.candidate.providerId, r.candidate]));
+  const groups = new Map<string, { angle: string; prospects: ProspectCandidate[] }>();
+
+  for (const p of insertedProspects) {
+    const candidate = candidateByProviderId.get(providerIdByProspectId.get(p.id) ?? "");
+    if (!candidate) continue;
+    const variant = variantByProspectId.get(p.id) ?? null;
+    const key = variant?.id ?? "none";
+    const group = groups.get(key) ?? { angle: variant?.angle ?? input.campaignAngle, prospects: [] };
+    group.prospects.push(candidate);
+    groups.set(key, group);
+  }
+
+  return [...groups.values()];
 }
 
 /**
@@ -548,6 +613,41 @@ async function attachProspects(
 
   if (!insertedProspects?.length) return 0;
 
+  // The angles this campaign is testing, and how many people each already has.
+  //
+  // Read here rather than passed in, because both callers need the same answer
+  // and the continuation path has no plan object to take it from. Counting what
+  // is already assigned is what makes "Find more" balanced: a second batch of
+  // fifty continues the rotation instead of handing the first angle another
+  // even split on top of the one it has.
+  const { data: variantRows } = await db
+    .from("campaign_variants")
+    .select("id, name, angle, connection_note")
+    .eq("campaign_id", input.campaignId)
+    .eq("enabled", true)
+    .order("created_at", { ascending: true });
+  const variants = variantRows ?? [];
+
+  const { data: alreadyAssigned } = await db
+    .from("campaign_prospects")
+    .select("variant_id")
+    .eq("campaign_id", input.campaignId);
+  const assignedSoFar = new Map<string, number>();
+  for (const row of alreadyAssigned ?? []) {
+    if (row.variant_id) assignedSoFar.set(row.variant_id, (assignedSoFar.get(row.variant_id) ?? 0) + 1);
+  }
+
+  // Fixed here, at list-build time, and never reassigned. A human reviews this
+  // list before it launches and has to be able to see which person is getting
+  // which angle; and reassigning after a send would attribute an outcome to an
+  // angle that did not produce it, which is the one way a test is worse than
+  // no test.
+  const assignment = assignVariants(variants, insertedProspects.length, assignedSoFar);
+  const variantByProspectId = new Map<string, (typeof variants)[number] | null>();
+  for (const [index, p] of insertedProspects.entries()) {
+    variantByProspectId.set(p.id, assignment[index] ?? null);
+  }
+
   // One note per person, written from that person's own details.
   //
   // Done here rather than at send time for two reasons. A human reviews and
@@ -576,13 +676,26 @@ async function attachProspects(
   let notes = new Map<string, Awaited<ReturnType<typeof personalizeInvites>> extends Map<string, infer V> ? V : never>();
   let writerFailed: string | null = null;
   try {
-    notes = await personalizeInvites(ctx.agentsFor(job.workspaceId), {
-      business: input.business,
-      profile: input.profile,
-      repName: input.repName,
-      campaignAngle: input.campaignAngle,
-      prospects: input.shortlist.map((r) => r.candidate),
-    });
+    // One call per angle rather than one for everybody. The angle is the
+    // variable under test, so a single call covering all of them would have the
+    // writer choosing which to lean on per person — and the group labels would
+    // then describe an assignment nobody made. It also caches better: the angle
+    // is the stable half of the prompt.
+    const providerIdByProspectId = new Map(
+      insertedProspects.map((p, index) => [p.id, input.shortlist[index]?.candidate.providerId ?? ""]),
+    );
+    const groups = groupByAngle(insertedProspects, variantByProspectId, providerIdByProspectId, input);
+
+    for (const group of groups) {
+      const written = await personalizeInvites(ctx.agentsFor(job.workspaceId), {
+        business: input.business,
+        profile: input.profile,
+        repName: input.repName,
+        campaignAngle: group.angle,
+        prospects: group.prospects,
+      });
+      for (const [providerId, note] of written) notes.set(providerId, note);
+    }
   } catch (err) {
     // Degraded, and said out loud. Silently sending everyone the template is
     // the other way this goes wrong: the review screen would show a campaign
@@ -607,6 +720,7 @@ async function attachProspects(
         workspace_id: job.workspaceId,
         campaign_id: input.campaignId,
         prospect_id: p.id,
+        variant_id: variantByProspectId.get(p.id)?.id ?? null,
         status: "queued" as const,
         // Absent is not an error: the send falls back to the campaign
         // template, which is exactly what happened before any of this.

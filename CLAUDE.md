@@ -448,6 +448,38 @@ tests that were verified by deliberately breaking the code.
     way this goes wrong, because the review screen then shows a campaign that
     reads as personalised and is not.
 
+28. **A campaign tests angles, not wording, and never declares a winner it
+    cannot see.** Every prospect receives a note written from their own
+    headline, title and company, so no two people get the same words — an A/B
+    test of literal message text would be comparing one-off sentences and
+    measuring the writer's mood. What a campaign can hold constant and vary is
+    the **angle**: the pain named, the reason for reaching out. That is the one
+    input `personalizeInvites` takes, and it is what `campaign_variants`
+    (migration 0017) holds. Each angle carries its own fallback note, because
+    falling back to the campaign's generic line moves that person into an
+    unnamed fourth angle while the results table still counts them under the
+    one they were assigned.
+
+    Assignment is round-robin over the counts the campaign **already has**
+    (`assignVariants` in `packages/shared/src/variants.ts`), never random:
+    fifty prospects split randomly across two angles lands 32/18 often enough
+    to matter, and the gap it invents is then read as a result. Carrying the
+    running counts is what makes `Find more` sound — a second batch continues
+    the rotation instead of handing the first angle another even split.
+    Assignment is fixed when the list is built and **never** reassigned:
+    reassignment attributes an outcome to an angle that did not produce it,
+    which is the one way a test is worse than no test.
+
+    The comparison is deliberately reluctant. Rates use a **Wilson interval**,
+    not rate ± 1.96·√(p(1−p)/n), which at 0 of 8 claims perfect certainty from
+    no evidence and at small n runs outside [0, 1] — precisely the range an
+    early campaign lives in. An angle is called behind only when another's
+    whole interval sits above its own, and only once both have cleared
+    `MIN_SENDS_TO_COMPARE`. Several angles leading at once is the correct
+    reading of a young test, not a bug. A rep who kills the better angle
+    because it read 40% against 60% on eleven invitations has lost more than
+    the test could ever have won.
+
 ## Conventions
 
 - Agent output is validated against a zod schema before it touches the

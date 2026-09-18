@@ -27,7 +27,9 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
   const { db } = ctx;
   const { data: cp } = await db
     .from("campaign_prospects")
-    .select("id, workspace_id, campaign_id, prospect_id, status, last_step_sent, invitation_id, invite_note")
+    .select(
+      "id, workspace_id, campaign_id, prospect_id, status, last_step_sent, invitation_id, invite_note, variant_id",
+    )
     .eq("id", job.campaignProspectId)
     .single();
   if (!cp) return;
@@ -106,6 +108,19 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
 
   if (job.kind === "invite") {
     if (!canTransition(cp.status as CampaignProspectStatus, "invited")) return;
+
+    // The fallback belonging to this person's angle, read only when there is no
+    // written note to send — one row, and only on the path that can use it.
+    let variantNote: string | null = null;
+    if (!cp.invite_note?.trim() && cp.variant_id) {
+      const { data: variant } = await db
+        .from("campaign_variants")
+        .select("connection_note")
+        .eq("id", cp.variant_id)
+        .maybeSingle();
+      variantNote = variant?.connection_note ?? null;
+    }
+
     if (!prospect.provider_id) {
       await failProspect(ctx, cp.id, "no provider id for prospect");
       return;
@@ -118,7 +133,7 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
       // prospect the writer did not answer for, and for every campaign created
       // before notes existed — so this is additive, and a workspace that has
       // never seen a personalised note keeps working exactly as it did.
-      note: inviteNote(cp.invite_note, campaign.connection_note, prospect.first_name),
+      note: inviteNote(cp.invite_note, campaign.connection_note, prospect.first_name, variantNote),
     });
     if (result.health) await applyHealth(db, accountRow, result.health, { email: ctx.email, appUrl: ctx.env.APP_URL });
     if (!result.ok) {
@@ -382,10 +397,22 @@ export function inviteNote(
   personalized: string | null,
   template: string,
   firstName: string | null,
+  /**
+   * The note belonging to the angle this person was assigned, when they were
+   * assigned one.
+   *
+   * Preferred over the campaign's own note, because the campaign's is written
+   * for no particular angle: falling back to it would move this person into an
+   * unnamed fourth variant while the results table still counts them under the
+   * one they were assigned. The measurement would then be of a group that
+   * partly received something else.
+   */
+  variantTemplate?: string | null,
 ): string {
   const note = personalized?.trim();
   if (note) return note;
-  return renderTemplate(template, firstName);
+  const fallback = variantTemplate?.trim() || template;
+  return renderTemplate(fallback, firstName);
 }
 
 export function addDays(date: Date, days: number): Date {

@@ -137,6 +137,20 @@ beforeEach(() => {
     ],
     stopConditions: ["prospect replies", "prospect opts out", "meeting booked"],
     dailyInviteCap: 20,
+    variants: [
+      {
+        name: "Referral leakage",
+        angle: "Lean on referrals that arrive and are never followed up.",
+        painPoint: "Warm introductions going cold in an inbox",
+        connectionNote: "Hi {{first_name}}, most referrals we see never get a second touch.",
+      },
+      {
+        name: "Chasing invoices",
+        angle: "Lean on the admin time a small team loses to chasing.",
+        painPoint: "Hours a week spent chasing",
+        connectionNote: "Hi {{first_name}}, curious how your team handles the chasing.",
+      },
+    ],
   });
   notesMock.mockReset();
   // The default: the writer answered for nobody, so every prospect falls back
@@ -769,6 +783,164 @@ describe("prospects whose profile cannot be opened", () => {
  * list, invisible. Forty-nine real people went that way on the live
  * deployment, over two runs, and nothing said a word.
  */
+/**
+ * Two angles, tested against each other on one list.
+ *
+ * The variable is the angle, not the words: every prospect gets a note written
+ * from their own details, so a group of them shares only the pain named and
+ * the reason for reaching out. That is the one thing a campaign can hold
+ * constant and vary, and it is what these assertions are about.
+ */
+describe("testing angles against each other", () => {
+  function twoProspects() {
+    return {
+      items: [
+        candidate("p1", "https://www.linkedin.com/in/jane-one"),
+        candidate("p2", "https://www.linkedin.com/in/jane-two"),
+      ],
+      cursor: null,
+      droppedFilters: [],
+    };
+  }
+  const bothRanked = [
+    ranked("https://www.linkedin.com/in/jane-one", "p1", 90),
+    ranked("https://www.linkedin.com/in/jane-two", "p2", 88),
+  ];
+
+  /**
+   * Three, deliberately odd.
+   *
+   * With even batches a rotation that restarts from zero lands on the same
+   * totals as one that continues, and a test built on them passes whether or
+   * not the code carries the running counts — which is a test that proves
+   * nothing. An odd first batch is what makes the two behaviours diverge.
+   */
+  function threeProspects(ids: Array<{ id: string; slug: string }>) {
+    return {
+      items: ids.map((m) => candidate(m.id, `https://www.linkedin.com/in/${m.slug}`)),
+      cursor: "page-2",
+      droppedFilters: [],
+    };
+  }
+
+  it("stores the angles the agent wrote", async () => {
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    linkedin.candidates = twoProspects();
+    scoreMock.mockResolvedValue(bothRanked);
+
+    await runTargetingJob(ctx, job);
+
+    const variants = db.rows("campaign_variants");
+    expect(variants.map((v) => v.name)).toEqual(["Referral leakage", "Chasing invoices"]);
+    // The pain is stored separately from the instruction: a business owner's
+    // pain is reusable across campaigns and the angle is not.
+    expect(variants[0]?.pain_point).toMatch(/Warm introductions/);
+  });
+
+  it("splits the list evenly rather than randomly", async () => {
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    linkedin.candidates = twoProspects();
+    scoreMock.mockResolvedValue(bothRanked);
+
+    await runTargetingJob(ctx, job);
+
+    const assigned = db.rows("campaign_prospects").map((r) => r.variant_id);
+    expect(new Set(assigned).size).toBe(2);
+  });
+
+  it("writes each group from its own angle, not from the campaign's", async () => {
+    // A single call covering everybody would have the writer choosing which
+    // angle to lean on per person, and the group labels would then describe an
+    // assignment nobody made.
+    const { ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    linkedin.candidates = twoProspects();
+    scoreMock.mockResolvedValue(bothRanked);
+
+    await runTargetingJob(ctx, job);
+
+    const angles = notesMock.mock.calls.map((c) => (c[1] as { campaignAngle: string }).campaignAngle);
+    expect(angles).toHaveLength(2);
+    expect(angles.some((a) => a.includes("referrals"))).toBe(true);
+    expect(angles.some((a) => a.includes("admin time"))).toBe(true);
+  });
+
+  it("continues the rotation when a later batch is added", async () => {
+    // What makes Find more sound. A second batch must not hand the first angle
+    // another even split on top of the one it already has.
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    const first = [
+      { id: "p1", slug: "jane-one" },
+      { id: "p2", slug: "jane-two" },
+      { id: "p6", slug: "jane-six" },
+    ];
+    linkedin.candidates = threeProspects(first);
+    scoreMock.mockResolvedValue(first.map((m) => ranked(`https://www.linkedin.com/in/${m.slug}`, m.id, 90)));
+    const campaignId = await runTargetingJob(ctx, job);
+
+    // Three more people arrive on the same campaign. The first run ended with
+    // no cursor, so the campaign is correctly marked exhausted — reopened here
+    // because this test is about the rotation, not about that rule.
+    db.rows("campaigns")[0]!.search_cursor = "page-2";
+    db.rows("campaigns")[0]!.search_exhausted = false;
+    // Slugs deliberately unlike the provider ids: a URL whose slug is the
+    // provider id is the fabricated address rule 13 refuses, and every one of
+    // these would be dropped before assignment.
+    const more = [
+      { id: "p3", slug: "jane-three" },
+      { id: "p4", slug: "jane-four" },
+      { id: "p5", slug: "jane-five" },
+    ];
+    linkedin.candidates = {
+      items: more.map((m) => candidate(m.id, `https://www.linkedin.com/in/${m.slug}`)),
+      cursor: "page-3",
+      droppedFilters: [],
+    };
+    scoreMock.mockResolvedValue(
+      more.map((m) => ranked(`https://www.linkedin.com/in/${m.slug}`, m.id, 85)),
+    );
+    await runTargetingJob(ctx, { ...job, campaignId: campaignId! });
+
+    const counts = new Map<string, number>();
+    for (const row of db.rows("campaign_prospects")) {
+      counts.set(String(row.variant_id), (counts.get(String(row.variant_id)) ?? 0) + 1);
+    }
+    // Six across two angles is 3/3. A rotation that restarted from zero on the
+    // second batch would land 4/2 — balanced within each batch and lopsided
+    // across the campaign, which is the split that matters.
+    expect([...counts.values()].sort()).toEqual([3, 3]);
+  });
+
+  it("still builds the campaign when the angles cannot be stored", async () => {
+    // Losing the test is better than losing the list, the copy and the search
+    // position with it.
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    linkedin.candidates = twoProspects();
+    scoreMock.mockResolvedValue(bothRanked);
+    campaignMock.mockResolvedValue({
+      ...(await campaignMock.getMockImplementation()?.()),
+      name: "No angles",
+      connectionNote: "Hi {{first_name}}.",
+      steps: [{ kind: "follow_up", delayDays: 2, message: "Worth a look?" }],
+      stopConditions: ["prospect replies"],
+      dailyInviteCap: 20,
+      variants: [],
+    });
+
+    const campaignId = await runTargetingJob(ctx, job);
+
+    expect(campaignId).toBeTruthy();
+    expect(db.rows("campaign_prospects")).toHaveLength(2);
+    // Unassigned, and the campaign's own note is what they receive — exactly
+    // as every campaign behaved before angles existed.
+    expect(db.rows("campaign_prospects").every((r) => r.variant_id === null)).toBe(true);
+  });
+});
+
 describe("a run that half-finished", () => {
   it("still puts people on the campaign when the note writer fails", async () => {
     const { db, ctx, linkedin } = harness();

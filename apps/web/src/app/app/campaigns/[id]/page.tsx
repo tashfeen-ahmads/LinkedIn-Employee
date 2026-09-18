@@ -9,6 +9,7 @@ import { callWorker, errorQuery, noticeQuery } from "@/lib/worker";
 import { SubmitButton } from "@/components/submit-button";
 import { describeSearch } from "./search-state";
 import { describePacing } from "@/lib/pacing";
+import { MIN_SENDS_TO_COMPARE, comparisonReady, standings } from "@le/shared";
 import { PageNotice, type NoticeParams } from "@/components/page-notice";
 import { CONNECTION_NOTE_MAX, daysToSendAll, launchBlockers } from "@/lib/campaign";
 
@@ -390,7 +391,7 @@ export default async function CampaignPage({
     .maybeSingle();
   if (!campaign) notFound();
 
-  const [{ data: steps }, { data: members }, { data: account }, { data: lastSearch }, { data: heartbeat }, { data: boot }, { data: owner }] =
+  const [{ data: steps }, { data: members }, { data: account }, { data: lastSearch }, { data: heartbeat }, { data: boot }, { data: owner }, { data: variantRows }] =
     await Promise.all([
     supabase
       .from("campaign_steps")
@@ -399,7 +400,7 @@ export default async function CampaignPage({
       .order("step_number"),
     supabase
       .from("campaign_prospects")
-      .select("id, status, status_reason, invited_at, accepted_at, replied_at, invite_note, invite_note_grounding, invite_note_thin, invite_note_edited, prospects (id, first_name, last_name, headline, title, company, location, linkedin_url, fit_score, fit_reasons)")
+      .select("id, status, status_reason, invited_at, accepted_at, replied_at, variant_id, invite_note, invite_note_grounding, invite_note_thin, invite_note_edited, prospects (id, first_name, last_name, headline, title, company, location, linkedin_url, fit_score, fit_reasons)")
       .eq("campaign_id", id)
       .order("created_at"),
     // Every column the rate limiter reads, not only the two the header shows:
@@ -433,6 +434,11 @@ export default async function CampaignPage({
     // Working hours are evaluated in the rep's zone, so the same clock time is
     // inside them for one person and outside for another.
     supabase.from("profiles").select("timezone").eq("id", campaign.owner_user_id).maybeSingle(),
+    supabase
+      .from("campaign_variants")
+      .select("id, name, angle, pain_point, enabled")
+      .eq("campaign_id", id)
+      .order("created_at", { ascending: true }),
   ]);
 
   const rows = members ?? [];
@@ -453,6 +459,27 @@ export default async function CampaignPage({
   const running = campaign.status === "running";
   const reached = FUNNEL_STAGES.filter((stage) => counts[stage.key] > 0);
   const searchNotice = describeSearch(lastSearch);
+  // How each angle is doing, and whether anything can yet be said about it.
+  //
+  // Counted from the rows rather than stored, so the table cannot drift from
+  // the campaign it describes. `sent` is invitations that actually went out —
+  // the denominator has to be sends, not assignments, or an angle looks weak
+  // purely because its half of the list has not been reached yet.
+  const outcomes = (variantRows ?? []).map((v) => {
+    const mine = rows.filter((r) => r.variant_id === v.id);
+    return {
+      id: v.id,
+      name: v.name,
+      enabled: v.enabled,
+      sent: mine.filter((r) => r.invited_at).length,
+      accepted: mine.filter((r) => r.accepted_at).length,
+      replied: mine.filter((r) => r.replied_at).length,
+      meetings: 0,
+    };
+  });
+  const variantStandings = standings(outcomes);
+  const readyToCompare = comparisonReady(outcomes);
+
   const pacing = describePacing({
     status: campaign.status,
     queued: queued.length,
@@ -634,6 +661,81 @@ export default async function CampaignPage({
           </p>
         </section>
       </form>
+
+      {variantStandings.length > 0 ? (
+        <section className="stack-4">
+          <div className="between">
+            <h2>Angles being tested</h2>
+            <p className="tiny subtle">
+              {readyToCompare
+                ? "Enough sent to compare."
+                : `Too early to compare — each angle needs ${MIN_SENDS_TO_COMPARE} invitations.`}
+            </p>
+          </div>
+
+          {/*
+            The variable under test is the angle, not the words. Every prospect
+            already receives a note written from their own headline and company,
+            so a test of literal text would be comparing one-off sentences.
+          */}
+          <div className="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Angle</th>
+                  <th>Pain it names</th>
+                  <th>Sent</th>
+                  <th>Accepted</th>
+                  <th>Replied</th>
+                </tr>
+              </thead>
+              <tbody>
+                {variantStandings.map((standing) => {
+                  const variant = (variantRows ?? []).find((v) => v.id === standing.id);
+                  return (
+                    <tr key={standing.id}>
+                      <td>
+                        <strong>{standing.name}</strong>
+                        {!variant?.enabled ? <span className="pill"> retired</span> : null}
+                        <span className="tiny subtle block">{variant?.angle}</span>
+                      </td>
+                      <td className="small muted">{variant?.pain_point ?? "—"}</td>
+                      <td className="mono">{standing.sent}</td>
+                      <td className="mono">
+                        {standing.accepted}
+                        {/*
+                          The rate is only shown once there is enough behind it
+                          to mean anything. Three acceptances from four
+                          invitations reads as 75% and is worth almost nothing —
+                          and a rep who kills the better angle on that has lost
+                          more than the test could ever have won.
+                        */}
+                        {standing.sent >= MIN_SENDS_TO_COMPARE && standing.acceptanceRate !== null ? (
+                          <span className="tiny subtle block">
+                            {Math.round(standing.acceptanceRate * 100)}% ({Math.round(standing.low * 100)}–
+                            {Math.round(standing.high * 100)}%)
+                          </span>
+                        ) : (
+                          <span className="tiny subtle block">
+                            {standing.sent === 0 ? "not sent yet" : "too few to rate"}
+                          </span>
+                        )}
+                      </td>
+                      <td className="mono">{standing.replied}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          <p className="tiny subtle">
+            {readyToCompare && variantStandings.some((standing) => !standing.leading)
+              ? "The ranges are the spread the true rate plausibly sits in. An angle is only called behind when its whole range sits below another's."
+              : "Every angle here is still level: none of their ranges separate yet, which is the correct reading of a test this young."}
+          </p>
+        </section>
+      ) : null}
 
       <section className="stack-4">
         <div className="between">
