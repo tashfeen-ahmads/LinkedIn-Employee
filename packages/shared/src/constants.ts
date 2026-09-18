@@ -67,6 +67,26 @@ export const BOOT_BEAT = "worker-boot";
  */
 export const PACING_STALE_MS = 15 * 60_000;
 
+/**
+ * The name nightly maintenance stamps when it finishes a run.
+ *
+ * Maintenance is where the promises this product makes outside a campaign are
+ * actually kept: data erased at the retention limit, invitations withdrawn
+ * before they sour an account's acceptance rate, approved replies that were
+ * never dispatched picked back up, accounts repaired. All of it at 3am, none of
+ * it on a screen. A month of it not running looks exactly like a month of it
+ * running and finding nothing to do.
+ */
+export const MAINTENANCE_BEAT = "maintenance";
+
+/**
+ * How long maintenance may go unheard before a screen says so.
+ *
+ * It runs once a night, so two missed nights is the first gap that cannot be a
+ * late start or a restart during the run.
+ */
+export const MAINTENANCE_STALE_MS = 50 * 60 * 60 * 1000;
+
 export const DEFAULT_WORKING_HOURS = { start: 8, end: 18, days: [1, 2, 3, 4, 5] } as const;
 
 /** Phrases that end a sequence immediately. Matched case-insensitively as substrings. */

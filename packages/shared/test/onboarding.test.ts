@@ -14,7 +14,6 @@ const NOTHING: OnboardingState = {
   hasLinkedInAccount: false,
   hasCampaign: false,
   hasLaunchedCampaign: false,
-  hasCalendar: false,
   hasKnowledge: false,
 };
 
@@ -24,7 +23,6 @@ const EVERYTHING_REQUIRED: OnboardingState = {
   hasLinkedInAccount: true,
   hasCampaign: true,
   hasLaunchedCampaign: true,
-  hasCalendar: false,
   hasKnowledge: false,
 };
 
@@ -35,7 +33,7 @@ describe("nextStep", () => {
 
   it("never asks for an optional step while a required one is outstanding", () => {
     // Asking someone to connect a calendar before they have a campaign is noise.
-    const state = { ...NOTHING, hasCalendar: false, hasBusinessProfile: true };
+    const state = { ...NOTHING, hasBusinessProfile: true };
     expect(nextStep(state)?.required).toBe(true);
   });
 
@@ -72,7 +70,7 @@ describe("isReadyToSend", () => {
   it("does not let an optional step block sending", () => {
     // A workspace with no calendar can still run a campaign; the agent just
     // offers to send times instead of proposing them.
-    expect(isReadyToSend({ ...EVERYTHING_REQUIRED, hasCalendar: false, hasKnowledge: false })).toBe(true);
+    expect(isReadyToSend({ ...EVERYTHING_REQUIRED, hasKnowledge: false })).toBe(true);
   });
 });
 

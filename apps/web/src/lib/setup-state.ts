@@ -58,7 +58,6 @@ export async function readSetupState(
     hasLinkedInAccount: any(account),
     hasCampaign: any(campaign),
     hasLaunchedCampaign: any(launched),
-    hasCalendar: false,
     hasKnowledge: any(knowledge),
   };
 

@@ -17,7 +17,12 @@ export interface OnboardingState {
   hasLinkedInAccount: boolean;
   hasCampaign: boolean;
   hasLaunchedCampaign: boolean;
-  hasCalendar: boolean;
+  // `hasCalendar` was here. The calendar step it belonged to was removed from
+  // ONBOARDING_STEPS — its button posted to a worker route that did not exist —
+  // and the field outlived it, still computed by three callers that had drifted
+  // apart: the worker ran a query for it, the dashboard ran a different one,
+  // and the sidebar hardcoded false. Nothing read any of them. A field no rule
+  // consults is a field the next person will consult wrongly.
   hasKnowledge: boolean;
 }
 

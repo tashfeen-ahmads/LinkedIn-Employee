@@ -1,4 +1,4 @@
-import { LINKEDIN_LIMITS, countFunnel } from "@le/shared";
+import { LINKEDIN_LIMITS, MAINTENANCE_BEAT, countFunnel } from "@le/shared";
 import type { WorkerContext } from "../context.js";
 import { pollHealth, recoverAccounts } from "../accounts.js";
 import { recordEvent } from "../context.js";
@@ -7,6 +7,7 @@ import { syncCalendarFeeds } from "./calendar-feed.js";
 import { runLifecycleEmails } from "./lifecycle.js";
 import { runRetentionSweep } from "./retention.js";
 import type { Queues } from "../queues.js";
+import { recordBeat } from "../heartbeat.js";
 
 /**
  * Nightly housekeeping:
@@ -23,6 +24,19 @@ import type { Queues } from "../queues.js";
  *    LinkedIn's attention;
  *  - nudge a workspace stuck on one setup step, and warn a trial that is
  *    nearly up.
+ *
+ * **Every step is independent.** They used to run as a bare sequence after the
+ * first three, so one throw — a 500 from the provider inside acceptance
+ * detection is entirely ordinary — skipped everything below it: approved
+ * replies left undispatched, invitations never withdrawn, nudges never sent,
+ * and the retention sweep, which is a promise about other people's data, not
+ * run at all. Silently, at three in the morning, for as many nights as it kept
+ * throwing.
+ *
+ * And the run stamps a heartbeat carrying **which steps failed**, for the same
+ * reason the pacing loop does (rule 21): a night where maintenance found
+ * nothing to do and a month where it never ran are the same absence of output
+ * from every screen in this product.
  */
 export async function runMaintenance(
   ctx: WorkerContext,
@@ -30,6 +44,24 @@ export async function runMaintenance(
   now: Date = new Date(),
 ): Promise<void> {
   const { db } = ctx;
+  const failures: Record<string, string> = {};
+  const done: Record<string, number> = {};
+
+  /**
+   * One step of the night. A failure is recorded and the night continues.
+   *
+   * The alternative is what this used to do: stop, having half-finished, with
+   * nothing but a log line to say which half.
+   */
+  const step = async (name: string, run: () => Promise<number | void>): Promise<void> => {
+    try {
+      const count = await run();
+      if (typeof count === "number") done[name] = count;
+    } catch (err) {
+      failures[name] = err instanceof Error ? err.message : String(err);
+      console.error(`maintenance step failed: ${name}`, err);
+    }
+  };
 
   const { data: accounts } = await db
     .from("linkedin_accounts")
@@ -39,43 +71,50 @@ export async function runMaintenance(
   // Before polling: repair any account whose stored id the provider has
   // replaced. Polling first asks about an id that is already gone, marks the
   // row dead, and never looks for the live account sitting beside it.
-  try {
-    const recovery = await recoverAccounts(db, ctx.linkedin);
-    if (recovery.repaired > 0) console.log(`recovered ${recovery.repaired} LinkedIn account(s)`);
-  } catch (err) {
-    console.error("account recovery failed", err);
-  }
+  await step("recover-accounts", async () => (await recoverAccounts(db, ctx.linkedin)).repaired);
 
+  // Per account, not per loop: one restricted account must not stop the others
+  // being checked.
   for (const account of accounts ?? []) {
-    try {
-      await pollHealth(db, ctx.linkedin, account, { email: ctx.email, appUrl: ctx.env.APP_URL });
-    } catch (err) {
-      console.error("health poll failed", account.id, err);
-    }
+    await step(`health:${account.id}`, () =>
+      pollHealth(db, ctx.linkedin, account, { email: ctx.email, appUrl: ctx.env.APP_URL }),
+    );
   }
 
   // Re-read every connected calendar feed before anything offers times today.
-  // A failure here marks the feed and keeps yesterday's intervals; it must not
-  // stop the rest of the night's work.
-  try {
-    await syncCalendarFeeds(ctx);
-  } catch (err) {
-    console.error("calendar feed sync failed", err);
+  // A failure here marks the feed and keeps yesterday's intervals.
+  await step("calendar-feeds", () => syncCalendarFeeds(ctx));
+
+  await step("acceptance", () => detectAcceptedInvitations(ctx, now));
+  await step("approved-drafts", () => sweepApprovedDrafts(ctx, queues, now));
+  await step("acceptance-rates", () => flagPoorAcceptanceRates(ctx));
+  await step("withdraw-stale", () => withdrawStaleInvites(ctx, now));
+  await step("close-exhausted", () => closeExhaustedSequences(ctx, now));
+  await step("lifecycle-emails", () => runLifecycleEmails(ctx, now));
+  // Last, and never skipped because something above it threw: this one is a
+  // promise about how long other people's data is kept.
+  await step("retention", () => runRetentionSweep(ctx, now));
+
+  const failed = Object.keys(failures);
+  await recordBeat(
+    db,
+    MAINTENANCE_BEAT,
+    {
+      done,
+      failed,
+      failures,
+      accounts: accounts?.length ?? 0,
+      // Named rather than inferred from an empty `failures`, because "every
+      // step worked" and "the stamp is from an older build that did not record
+      // failures" are not the same claim.
+      ok: failed.length === 0,
+    },
+    now,
+  );
+
+  if (failed.length) {
+    console.error(`maintenance finished with ${failed.length} failed step(s): ${failed.join(", ")}`);
   }
-
-  const accepted = await detectAcceptedInvitations(ctx, now);
-  if (accepted > 0) console.log(`${accepted} invitations accepted since the last check`);
-
-  await sweepApprovedDrafts(ctx, queues, now);
-  await flagPoorAcceptanceRates(ctx);
-  await withdrawStaleInvites(ctx, now);
-  await closeExhaustedSequences(ctx, now);
-
-  const lifecycle = await runLifecycleEmails(ctx, now);
-  if (lifecycle > 0) console.log(`${lifecycle} lifecycle emails sent`);
-
-  const erased = await runRetentionSweep(ctx, now);
-  if (erased > 0) console.log(`retention sweep erased ${erased} prospects`);
 }
 
 async function withdrawStaleInvites(ctx: WorkerContext, now: Date): Promise<void> {

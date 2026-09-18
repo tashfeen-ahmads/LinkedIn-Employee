@@ -1,4 +1,10 @@
-import { BOOT_BEAT, PACING_LOOP, PACING_STALE_MS } from "@le/shared";
+import {
+  BOOT_BEAT,
+  MAINTENANCE_BEAT,
+  MAINTENANCE_STALE_MS,
+  PACING_LOOP,
+  PACING_STALE_MS,
+} from "@le/shared";
 import { isAccountGone } from "@le/linkedin";
 import type { WorkerContext } from "../context.js";
 
@@ -266,7 +272,7 @@ export async function runDiagnostics(
   const { data: beats } = await db
     .from("worker_heartbeats")
     .select("name, beat_at, detail")
-    .in("name", [PACING_LOOP, BOOT_BEAT]);
+    .in("name", [PACING_LOOP, BOOT_BEAT, MAINTENANCE_BEAT]);
   const beat = (beats ?? []).find((b) => b.name === PACING_LOOP);
   const boot = (beats ?? []).find((b) => b.name === BOOT_BEAT);
   const bootDetail =
@@ -310,6 +316,52 @@ export async function runDiagnostics(
         : "It has never reported in. Nothing queued is being sent, whatever the campaign screens say.",
     // The row above names the cause when it can. This one says what it costs.
     fix: beating ? undefined : "Read the row above — it says whether the worker is down or cannot reach its queue.",
+  });
+
+  // Nightly maintenance, which is where every promise that is not a campaign
+  // gets kept: data erased at the retention limit, invitations withdrawn before
+  // they sour an account's acceptance rate, approved replies that were never
+  // dispatched picked back up, accounts repaired.
+  //
+  // None of it has any output on a screen, so a month of it not running looks
+  // exactly like a month of it running and finding nothing to do — and one of
+  // those is a promise about other people's data quietly not being kept.
+  const nightly = (beats ?? []).find((b) => b.name === MAINTENANCE_BEAT);
+  const nightlyDetail =
+    nightly?.detail && typeof nightly.detail === "object"
+      ? (nightly.detail as { ok?: boolean; failed?: unknown })
+      : {};
+  const nightlyFailed = Array.isArray(nightlyDetail.failed) ? (nightlyDetail.failed as string[]) : [];
+  const nightlyAge = nightly?.beat_at ? Date.now() - new Date(nightly.beat_at).getTime() : null;
+  const nightlyFresh = nightlyAge !== null && nightlyAge <= MAINTENANCE_STALE_MS;
+
+  add({
+    key: "maintenance",
+    stage: STAGES.campaign,
+    label: "Nightly housekeeping ran",
+    // A run that finished with failed steps is not `ok`, and a deployment that
+    // has never run it reports `unknown` rather than `blocked`: that is also
+    // what a worker looks like on its first day, and sending somebody to
+    // investigate a healthy new deployment is its own wasted hour.
+    // A night with failed steps reports `blocked`, not `ok`: the promises those
+    // particular steps keep are not being kept, and the detail names which. The
+    // rule on this page is that nothing reports as working because part of it
+    // did — the same reason a skipped check says `waiting` rather than `ok`.
+    state: !nightly ? "unknown" : !nightlyFresh || nightlyFailed.length ? "blocked" : "ok",
+    detail: !nightly
+      ? "It has not reported yet. It runs at 3am, so a deployment younger than a day has simply not reached its first run."
+      : !nightlyFresh
+        ? `It last finished ${new Date(nightly.beat_at).toISOString()} and runs nightly. Invitations are not being withdrawn and data past its retention limit is not being erased.`
+        : nightlyFailed.length
+          ? `Ran, with ${nightlyFailed.length} step(s) failing: ${nightlyFailed.join(", ")}. The rest of the night still finished.`
+          : `Ran cleanly ${new Date(nightly.beat_at).toISOString()}.`,
+    fix: !nightly
+      ? undefined
+      : !nightlyFresh
+        ? "Check the worker is running and its schedule is registered."
+        : nightlyFailed.length
+          ? "Read the worker log for those steps; the rest of the night finished."
+          : undefined,
   });
 
   // ---- Replies ----------------------------------------------------------

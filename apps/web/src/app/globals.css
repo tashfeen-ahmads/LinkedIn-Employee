@@ -243,6 +243,39 @@ p  { margin: 0; }
 .grid-3  { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
 .grid-4  { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
 .grid-5  { grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); }
+
+/* The tutorial's numbered stages. A rail down the left connects them, so the
+   list reads as one sequence rather than nine cards; the number, the pill and
+   the rail all say the same thing, because the rail alone is colour. */
+.tour { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-4); }
+.tour-stage {
+  display: grid;
+  grid-template-columns: 2rem 1fr;
+  gap: var(--space-3);
+  padding-left: var(--space-1);
+  border-left: 2px solid var(--border);
+}
+.tour-stage.is-done { border-left-color: var(--positive); }
+.tour-stage.is-current { border-left-color: var(--accent); }
+.tour-stage.is-ahead { opacity: 0.72; }
+.tour-mark {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+}
+.tour-stage.is-done .tour-mark { border-color: var(--positive); color: var(--positive); }
+.tour-stage.is-current .tour-mark { border-color: var(--accent); color: var(--accent); }
+.tour-stage h2 { font-size: 1.0625rem; margin: 0; }
+
+/* A change that went the right way. Paired with a sign and a word in the
+   markup, so the direction never rests on the colour alone. */
+.positive-text { color: var(--positive); }
 /* Tiles that are one number each sit closer together than cards do. */
 .grid.tight { gap: var(--space-3); }
 

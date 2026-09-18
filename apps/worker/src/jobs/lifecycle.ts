@@ -91,7 +91,7 @@ export async function loadOnboardingState(ctx: WorkerContext, workspaceId: strin
   // Written out one query at a time. A generic counter would need each filter
   // passed as a callback, and the typed builder narrows its columns to whatever
   // was selected — so the clever version is more casts than code.
-  const [business, approved, account, campaign, launched, calendar, knowledge] = await Promise.all([
+  const [business, approved, account, campaign, launched, knowledge] = await Promise.all([
     db.from("business_profiles").select("id", head).eq("workspace_id", workspaceId),
     db
       .from("customer_profiles")
@@ -109,11 +109,6 @@ export async function loadOnboardingState(ctx: WorkerContext, workspaceId: strin
       .select("id, launched_at", head)
       .eq("workspace_id", workspaceId)
       .not("launched_at", "is", null),
-    db
-      .from("integrations")
-      .select("id, kind", head)
-      .eq("workspace_id", workspaceId)
-      .in("kind", ["google_calendar", "microsoft_calendar"]),
     db.from("knowledge_documents").select("id", head).eq("workspace_id", workspaceId),
   ]);
 
@@ -125,7 +120,6 @@ export async function loadOnboardingState(ctx: WorkerContext, workspaceId: strin
     hasLinkedInAccount: any(account),
     hasCampaign: any(campaign),
     hasLaunchedCampaign: any(launched),
-    hasCalendar: any(calendar),
     hasKnowledge: any(knowledge),
   };
 }

@@ -47,10 +47,11 @@ function navGroups(waiting: number, marks: NavMarks): NavGroup[] {
         { href: "/app/team", label: "Team", ...next("/app/team", "Team") },
         { href: "/app/system", label: "System check" },
         { href: "/app/billing", label: "Billing" },
-        // Last, and always there. Somebody who cannot make the product work is
-        // the one person who will not go looking for a link, so the way to say
-        // so sits in the same place on every screen rather than at the bottom
-        // of a settings page.
+        // Read before asking, and asked after reading. Both live at the end of
+        // the sidebar, in the same place on every screen: somebody who cannot
+        // make the product work is the one person who will not go hunting for
+        // a link to say so.
+        { href: "/app/tutorial", label: "How it works" },
         { href: "/app/support", label: "Support" },
       ],
     },
