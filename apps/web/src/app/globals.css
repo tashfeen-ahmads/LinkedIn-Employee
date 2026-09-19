@@ -37,6 +37,27 @@
      wordmark, one hero wash. Never for a third kind of button. */
   --accent-2:        #12A5A0;
 
+  /*
+   * Chart colours, and they are not the interface's.
+   *
+   * A series colour has one job — telling two lines apart — and the checks it
+   * has to pass are different from a button's: a lightness band so no series
+   * disappears into the surface, a chroma floor so none reads as grey, and a
+   * colour-blind separation between every adjacent pair. These four were run
+   * through the validator in both modes rather than chosen by eye, which is the
+   * only way to know. Light and dark are separate steps of the same four hues,
+   * picked for their own surface, never an automatic flip.
+   *
+   * Fixed order, never cycled. A fifth series is not a generated hue: it folds
+   * into "Other", or the chart becomes small multiples.
+   */
+  --viz-1: #3730E8;
+  --viz-2: #00918B;
+  --viz-3: #B8590B;
+  --viz-4: #8B31C9;
+  /* The grid and axis, which must stay behind the data. */
+  --viz-grid: var(--border);
+
   /* Semantic colour is separate from the accent and never reused for decoration. */
   --positive:        #0B7A4B;
   --positive-soft:   #E3F5EC;
@@ -64,9 +85,14 @@
   --shadow-sm: 0 1px 2px rgba(15, 17, 23, .05);
   --shadow:    0 1px 2px rgba(15, 17, 23, .05), 0 8px 24px -8px rgba(15, 17, 23, .12);
 
+  /* The marketing site's voice. Character, read once. */
   --font-sans:    var(--font-instrument, ui-sans-serif), system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-display: var(--font-bricolage, var(--font-instrument, ui-sans-serif)), system-ui, sans-serif;
-  --font-mono:    var(--font-jetbrains, ui-monospace), "SF Mono", Menlo, monospace;
+  /* The application's. A tool face, worked in daily, meant to disappear — with
+     real tabular figures so a column of numbers lines up without being set in
+     a monospace, which is what made the tables look like code. */
+  --font-ui:      var(--font-geist, ui-sans-serif), system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono:    var(--font-geist-mono, ui-monospace), "SF Mono", Menlo, monospace;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -86,6 +112,10 @@
     --text-inverse:   #0B0D12;
 
     --accent:         #A5A0FF;
+    --viz-1: #6F68E8;
+    --viz-2: #0E9F98;
+    --viz-3: #B0742A;
+    --viz-4: #A05FD0;
     --accent-hover:   #BEBAFF;
     --accent-soft:    #1C1B3A;
     --accent-border:  #322F63;
@@ -116,6 +146,10 @@
   --text-subtle:    #79808F;
   --text-inverse:   #0B0D12;
   --accent:         #A5A0FF;
+  --viz-1: #6F68E8;
+  --viz-2: #0E9F98;
+  --viz-3: #B0742A;
+  --viz-4: #A05FD0;
   --accent-hover:   #BEBAFF;
   --accent-soft:    #1C1B3A;
   --accent-border:  #322F63;
@@ -323,6 +357,62 @@ p  { margin: 0; }
 /* The heading block every page and section opens with. */
 .page-head { display: flex; flex-direction: column; gap: var(--space-2); }
 .section-head { display: flex; flex-direction: column; gap: var(--space-1); }
+
+/*
+ * The application's page and section frames (components/page.tsx).
+ *
+ * One rhythm, set here once. Every screen used to space itself: some sections
+ * sat 2rem apart and some touched, some cards had padding and some had none,
+ * and two headings could end up close enough that their lines ran into each
+ * other. That is not a series of small mistakes, it is the absence of a rule.
+ *
+ * The rule: a page is a column of sections, one gap between them. A section is
+ * a header and its content, a smaller gap between those. Nothing sets its own
+ * margins.
+ */
+.app-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  /* The page title carries a rule beneath it, so where the heading ends and
+     the work begins is a line rather than a guess about spacing. */
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+.page-header-text { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.page-header-actions { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+
+.section { display: flex; flex-direction: column; gap: var(--space-4); }
+.section-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+.section-header-text { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.section-header-action { display: flex; align-items: center; gap: var(--space-2); }
+
+/* An empty list says why, and what to do. Never the word "None". */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-6) var(--space-5);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.empty-title { font-weight: 600; }
 
 /* --------------------------------------------------------------- buttons */
 
@@ -650,18 +740,6 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .notice.warning { border-left-color: var(--warning);  background: var(--warning-soft);  color: var(--text); }
 .notice.danger  { border-left-color: var(--danger);   background: var(--danger-soft);   color: var(--text); }
 
-/* An empty state says what would fill it and how to start. */
-.empty {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  align-items: flex-start;
-  padding: var(--space-6);
-  border: 1px dashed var(--border-strong);
-  border-radius: var(--radius);
-  background: var(--surface);
-  color: var(--text-muted);
-}
 
 /* ------------------------------------------------------------ app shell */
 
@@ -677,13 +755,37 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .app-main { min-width: 0; display: flex; flex-direction: column; }
 .app-body { padding: var(--space-6) var(--space-5) var(--space-8); width: min(1100px, 100%); }
 
-/* The global heading scale is set for the marketing pages, where an h1 opens a
- * wide screen and is meant to carry it. Inside the app an h1 is a page title
- * sitting above a table, and at the marketing size it shouts. Every app page
- * was overriding it inline — eighteen at 1.6rem and four at 1.7rem, which is
- * how a scale stops being a scale. */
-.app-body h1 { font-size: 1.6rem; }
-.app-body h2 { font-size: 1.15rem; }
+/*
+ * The application's type scale — its own, not the marketing one turned down.
+ *
+ * A landing page h1 opens a wide screen and is meant to carry it. An app h1 is
+ * a page title sitting above a table. Sharing one scale and patching the
+ * difference is what produced the thing this was rebuilt to fix: a title, a
+ * mini-title and a sub-title stacked on one screen, each a slightly different
+ * size, none of them clearly the heading.
+ *
+ * Three steps and no more. A page title, a section label, a card title. If
+ * something needs a fourth level it is really a new section, or a caption.
+ */
+.app, .app-body { font-family: var(--font-ui); }
+.app h1, .app h2, .app h3 {
+  font-family: var(--font-ui);
+  letter-spacing: -0.014em;
+  line-height: 1.25;
+  font-weight: 600;
+}
+/* The page. One per screen. */
+.app h1 { font-size: 1.375rem; }
+/* A section of it. Deliberately close to body size: a section heading is a
+   label on a group, not an announcement. */
+.app h2 { font-size: 1rem; letter-spacing: -0.008em; }
+/* A card inside a section. */
+.app h3 { font-size: 0.9375rem; letter-spacing: -0.004em; }
+.app h4 { font-size: 0.875rem; font-weight: 600; letter-spacing: 0; }
+
+/* Numbers everywhere in the app line up in their column without being set in a
+   monospace — Geist has real tabular figures, which is most of why it is here. */
+.app { font-variant-numeric: tabular-nums; }
 
 .nav { display: flex; flex-direction: column; gap: 1px; }
 .nav a {
@@ -712,15 +814,52 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .app-brand a { font-weight: 600; }
 
 .nav-group { display: flex; flex-direction: column; gap: 1px; }
-.nav-group + .nav-group { margin-top: var(--space-4); }
+.nav-group + .nav-group { margin-top: var(--space-3); }
+.nav-items { display: flex; flex-direction: column; gap: 1px; }
+
+/*
+ * A group heading is the strongest thing in the sidebar.
+ *
+ * It was a faint uppercase whisper above twelve links of equal weight, which
+ * made the sidebar one long list with decorations. The heading is what turns
+ * it into a map: read the four headings, then the links under the one you
+ * want. So it takes the text colour and the weight, and the links beneath it
+ * recede.
+ */
 .nav-group-label {
-  font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-subtle);
-  padding: 0 0.6rem var(--space-1);
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  color: var(--text);
 }
+.nav-group-toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: 0.35rem 0.6rem;
+  margin-bottom: var(--space-1);
+  background: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+.nav-group-toggle:hover { background: var(--surface-raised); }
+/* The chevron is pushed right by the label taking the slack, so the count sits
+   beside it rather than floating in the middle of the row. */
+.nav-group-toggle .nav-group-label { flex: 1; min-width: 0; }
+.nav-chevron { color: var(--text-subtle); transition: transform 140ms ease; flex: none; }
+.nav-chevron.is-open { transform: rotate(90deg); }
+@media (prefers-reduced-motion: reduce) {
+  .nav-chevron { transition: none; }
+}
+
+/* A group that is open still reads as a group: its links are indented under
+   the heading, the way a list sits under its own title. */
+.nav-items a { padding-left: 1.1rem; }
 
 /* Pushed to the bottom of the column: it is the last thing you reach for, and
    it must be reachable from every page. */
@@ -1368,3 +1507,67 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
   /* Still visibly different from the resting state, without spinning. */
   .spinner { animation: none; opacity: 0.6; }
 }
+
+/* ----------------------------------------------------------------- charts */
+
+/*
+ * Marks are thin, gridlines recede, and every value is written beside its own
+ * mark — so a chart here is a faster way to read numbers that are also on the
+ * page, never the only way to read them.
+ */
+.chart { margin: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.chart-svg { width: 100%; height: auto; display: block; overflow: visible; }
+.chart-caption { display: flex; justify-content: space-between; gap: var(--space-3); }
+.chart-peak { font-variant-numeric: tabular-nums; }
+
+.funnel-chart { display: flex; flex-direction: column; gap: var(--space-4); }
+.funnel-row { display: flex; flex-direction: column; gap: var(--space-1); }
+.funnel-row-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
+.funnel-label { font-size: 0.875rem; font-weight: 550; }
+.funnel-value { font-size: 1.0625rem; font-weight: 600; }
+.funnel-track {
+  height: 10px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+/* Anchored to the baseline with a rounded data-end, so the bar reads as a
+   quantity growing from zero rather than a floating pill. */
+.funnel-bar { display: block; height: 100%; border-radius: 0 4px 4px 0; }
+.funnel-rate { align-self: flex-start; }
+
+.ranked { display: flex; flex-direction: column; gap: var(--space-3); }
+.ranked-row { display: flex; flex-direction: column; gap: 0.2rem; }
+.ranked-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
+.ranked-label { font-size: 0.875rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ranked-track { height: 8px; border-radius: var(--radius-pill); background: var(--surface-sunken); overflow: hidden; }
+.ranked-bar { display: block; height: 100%; border-radius: 0 4px 4px 0; background: var(--viz-1); }
+
+/* A KPI tile. The number is the point, so it is the largest thing in the tile
+   and everything else is a caption to it. */
+.kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: var(--space-4);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  min-width: 0;
+}
+.kpi-label { font-size: 0.8125rem; color: var(--text-muted); }
+.kpi-value {
+  font-size: 1.625rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+}
+.kpi-value.is-positive { color: var(--positive); }
+.kpi-value.is-warning { color: var(--warning); }
+.kpi-note { line-height: 1.4; }
+.sparkline { width: 100%; height: 26px; display: block; margin: var(--space-1) 0; }
+
+/* A row of KPI tiles. Auto-fit rather than a fixed column count, so four
+   tiles never leave one stranded alone on a second row. */
+.kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-3); }

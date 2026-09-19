@@ -1,110 +1,31 @@
+import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
+import Link from "next/link";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
-import { callWorker, errorQuery, noticeQuery } from "@/lib/worker";
-import { checkCtaUrl } from "@le/shared";
-import { cannotSend, describeRepair, type RefreshResult, type RepairNotice } from "./repair";
-import { redirect } from "next/navigation";
-import { LINKEDIN_LIMITS } from "@le/shared";
+import { errorQuery, noticeQuery } from "@/lib/worker";
+import { callWorker } from "@/lib/worker";
 import { PLAN_SEATS } from "@le/billing";
-import { revalidatePath } from "next/cache";
 import { createInviteToken, inviteExpiry, INVITE_TTL_DAYS } from "@/lib/invitations";
 import { PageNotice } from "@/components/page-notice";
+import { PageHeader, Section, Empty } from "@/components/page";
+import { cannotSend } from "./repair";
 
 /**
- * Starts LinkedIn's hosted consent flow.
+ * The workspace: who is in it, and who is waiting to be.
  *
- * There were five of these — Google Calendar, Microsoft, HubSpot, Salesforce —
- * pointed at worker routes that do not exist and never did. The worker answered
- * 404, `callWorker` swallowed it and returned null, and the button did nothing
- * at all: no error, no navigation, no change on the page. The four have been
- * removed rather than left looking available.
+ * It used to be four unrelated things on one page — your bio, your LinkedIn
+ * connection, the invite form and the member list. Two of those are about a
+ * person and two about a company, and a rep looking for "where do I reconnect
+ * LinkedIn" had to scroll past an invite form to find it. Yours now lives on
+ * Your profile; this is everyone else.
  */
-async function connectLinkedIn() {
-  "use server";
-  const session = await requireSession();
-  const result = await callWorker<{ url?: string }>("/auth/linkedin/link", {
-    workspaceId: session.workspaceId,
-    userId: session.userId,
-  });
-  if (!result.ok) redirect(errorQuery("/app/team", result.error));
-  if (!result.data?.url) {
-    redirect(errorQuery("/app/team", "LinkedIn did not return a sign-in link. Please try again."));
-  }
-  redirect(result.data.url);
-}
 
-/**
- * Team and connection management. Each rep connects their own LinkedIn account
- * through the provider's hosted flow, so no password ever reaches us and no
- * login is ever shared.
- */
 /**
  * Invites a teammate. Seat limits are enforced here rather than at acceptance:
- * telling someone their invitation is invalid after they clicked it is a worse
- * experience than telling the admin they need another seat.
+ * telling somebody their invitation is invalid after they clicked it is a
+ * worse experience than telling the admin they need another seat.
  */
-/**
- * Asks the provider whether this rep's account is connected, instead of waiting
- * to be told.
- *
- * The hosted flow reports success by calling a webhook once. If that delivery
- * is rejected — a signature mismatch, a restart, a webhook registered after the
- * account already connected — the account works perfectly at the provider and
- * sits here as "connecting" forever, with a Start again button that runs the
- * same flow to the same end. This is the way out of that, and it costs one
- * request.
- */
-async function refreshLinkedIn() {
-  "use server";
-  const session = await requireSession();
-  const result = await callWorker<{
-    bound?: number;
-    mine?: number;
-    found?: number;
-    referenceShape?: string[];
-    changed?: boolean;
-    lost?: boolean;
-  }>("/jobs/linkedin-refresh", { workspaceId: session.workspaceId, userId: session.userId });
-  if (!result.ok) redirect(errorQuery("/app/team", result.error));
-
-  // The account this row claimed to hold is gone from the provider. Said out
-  // loud because the row looked healthy while every campaign silently failed
-  // against it, and because pressing Connect is all it takes.
-  if (result.data?.lost) {
-    redirect(
-      errorQuery(
-        "/app/team",
-        "LinkedIn's provider no longer has the account this was connected to. Connect LinkedIn again to start sending.",
-      ),
-    );
-  }
-
-  if (result.data?.changed) {
-    redirect(
-      noticeQuery(
-        "/app/team",
-        "Reconnected: LinkedIn's provider had a different account for you, and this is now pointed at it.",
-      ),
-    );
-  }
-
-  if (!result.data?.mine) {
-    // "No account yet" and "an account that is not labelled with your id" look
-    // identical from here and need completely different things done about them,
-    // so they are said differently.
-    const found = result.data?.found ?? 0;
-    redirect(
-      errorQuery(
-        "/app/team",
-        found === 0
-          ? "LinkedIn's provider has no account for you yet. If you just finished signing in, give it a few seconds and check again."
-          : `LinkedIn's provider has ${found} account${found === 1 ? "" : "s"}, but none of them is labelled with your account here (${result.data?.referenceShape?.join(", ") ?? "unknown"}). This needs an administrator.`,
-      ),
-    );
-  }
-  revalidatePath("/app/team");
-}
-
 async function inviteMember(formData: FormData) {
   "use server";
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
@@ -170,6 +91,7 @@ async function inviteMember(formData: FormData) {
   revalidatePath("/app/team");
 }
 
+
 async function revokeInvitation(formData: FormData) {
   "use server";
   const id = String(formData.get("invitationId"));
@@ -192,174 +114,25 @@ async function revokeInvitation(formData: FormData) {
  * hours" means — a rep left on the default UTC gets their invitations sent at
  * the wrong hour of their own day.
  */
-async function saveMyDetails(formData: FormData) {
-  "use server";
-  const bio = String(formData.get("bio") ?? "").trim();
-  const timezone = String(formData.get("timezone") ?? "").trim();
-
-  // Your own scheduling link, if you use one.
-  //
-  // The product owns a booking page and it works, but a rep who has used
-  // Calendly for three years keeps their availability, buffers and reminders
-  // there — asking them to maintain a second calendar so a LinkedIn reply can
-  // offer a time is asking them to maintain two. Google Calendar is the option
-  // that cannot be built: its scopes need brand verification, a verified domain
-  // and weeks of review. One pasted URL works the day somebody signs up.
-  const raw = String(formData.get("bookingUrl") ?? "").trim();
-  let bookingUrl: string | null = null;
-  if (raw) {
-    // Checked before it is stored, because the agent will send it to a stranger
-    // under this person's own name. The reason is shown rather than a generic
-    // refusal — somebody who pasted "cal.com/sam" needs telling it is missing
-    // the https://, not that it is invalid.
-    const checked = checkCtaUrl(raw);
-    if (!checked.ok) redirect(errorQuery("/app/team", checked.reason));
-    bookingUrl = checked.url;
-  }
-
-  const session = await requireSession();
-  const supabase = await createClient();
-  await supabase
-    .from("profiles")
-    .update({
-      bio: bio || null,
-      booking_url: bookingUrl,
-      ...(isKnownTimezone(timezone) ? { timezone } : {}),
-    })
-    .eq("id", session.userId);
-
-  revalidatePath("/app/team");
-}
-
-/**
- * When this account is allowed to act. Read by the rate limiter before every
- * send and never settable until now, so every rep was on the same 8am-to-6pm
- * weekday default whatever their day actually looks like.
- */
-async function saveWorkingHours(formData: FormData) {
-  "use server";
-  const start = Number(formData.get("start"));
-  const end = Number(formData.get("end"));
-  const days = [1, 2, 3, 4, 5, 6, 0].filter((day) => formData.get(`day-${day}`) === "on");
-
-  // A window that is empty or inverted would either send nothing or send at
-  // three in the morning; neither is a setting anyone means to choose.
-  if (!Number.isInteger(start) || !Number.isInteger(end)) return;
-  if (start < 0 || end > 24 || start >= end || days.length === 0) return;
-
-  const session = await requireSession();
-  const supabase = await createClient();
-  await supabase
-    .from("linkedin_accounts")
-    .update({ working_hours: { start, end, days } as never })
-    .eq("workspace_id", session.workspaceId)
-    .eq("user_id", session.userId);
-
-  revalidatePath("/app/team");
-}
-
-/**
- * Whether this rep has a Sales Navigator seat.
- *
- * It decides which search the Targeting Agent runs, and getting it wrong is
- * silent in both directions: claim a seat you do not have and the search
- * returns nothing, which reads as "your customer profile matched nobody";
- * leave it off when you do have one and every campaign is built from classic
- * search with half the profile ignored.
- */
-async function saveSalesNavigator(formData: FormData) {
-  "use server";
-  const has = formData.get("hasSalesNavigator") === "on";
-
-  const session = await requireSession();
-  const supabase = await createClient();
-  await supabase
-    .from("linkedin_accounts")
-    .update({ has_sales_navigator: has })
-    .eq("workspace_id", session.workspaceId)
-    .eq("user_id", session.userId);
-
-  revalidatePath("/app/team");
-}
-
-/** Validated against the runtime's own list rather than a hand-kept one. */
-function isKnownTimezone(value: string): boolean {
-  try {
-    new Intl.DateTimeFormat("en", { timeZone: value });
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 export default async function TeamPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; notice?: string; connected?: string }>;
+  searchParams: Promise<{ error?: string; notice?: string }>;
 }) {
   const params = await searchParams;
   const session = await requireSession();
   const supabase = await createClient();
 
-  // Coming back from the provider's hosted login.
-  //
-  // The connection is finished at the provider by the time this redirect fires
-  // — it even hands back an account_id in the query — but the row here is bound
-  // by a webhook, and a webhook that does not arrive left the rep looking at
-  // "sending is paused" one second after being told they had succeeded.
-  //
-  // So the return itself confirms it. The account_id in the URL is deliberately
-  // ignored: binding whatever id a query string names would let anyone attach
-  // someone else's provider account to their own row. This asks the provider
-  // instead, which answers with the rep's own user id attached, and binds only
-  // a row already waiting.
-  //
-  // Asked on arrival whenever this rep's account is not working, not only on
-  // the way back from the provider.
-  //
-  // The failure this exists for: a rep reconnects, the provider issues a new
-  // account with a new id, and our row still holds the old one. Their provider
-  // dashboard then shows a healthy green connection while this page shows
-  // "reauth required" — two screens disagreeing, with the right answer on the
-  // one we are not reading. Recovery existed but only behind a button, so
-  // whoever did not find it stayed stuck.
-  //
-  // Bounded on purpose: this only runs while the account is already broken, so
-  // a working deployment makes no provider call here at all.
-  const { data: current } = await supabase
-    .from("linkedin_accounts")
-    .select("status")
-    .eq("workspace_id", session.workspaceId)
-    .eq("user_id", session.userId)
-    .maybeSingle();
-
-  //
-  // What it learned is rendered, not discarded. The first version of this
-  // called the worker and threw the answer away: it asked the provider, was
-  // told "there are accounts here but none of them is yours", and showed an
-  // unchanged page. Repairing silently and failing silently look identical
-  // from the outside, which is the whole disease this product keeps catching
-  // itself with.
-  let repair: RepairNotice | null = null;
-  if (params.connected === "1" || (current && current.status !== "active")) {
-    const result = await callWorker<RefreshResult>("/jobs/linkedin-refresh", {
-      workspaceId: session.workspaceId,
-      userId: session.userId,
-    });
-    repair = describeRepair(result);
-  }
-
-  // Four independent reads on a page people open often; sequential awaits cost
-  // four round trips where one batch does.
-  const [{ data: members }, { data: accounts }, { data: invitations }, { data: me }] =
+  const [{ data: members }, { data: accounts }, { data: invitations }, { data: workspace }] =
     await Promise.all([
       supabase
         .from("memberships")
-        .select("id, role, user_id, profiles(full_name, email, timezone)")
+        .select("id, role, user_id")
         .eq("workspace_id", session.workspaceId),
       supabase
         .from("linkedin_accounts")
-        .select("user_id, status, status_detail, display_name, invites_today, invites_this_week, messages_today, has_sales_navigator, working_hours")
+        .select("user_id, status, invites_today, invites_this_week")
         .eq("workspace_id", session.workspaceId),
       supabase
         .from("invitations")
@@ -368,254 +141,133 @@ export default async function TeamPage({
         .is("accepted_at", null)
         .is("revoked_at", null)
         .order("created_at", { ascending: false }),
-      supabase.from("profiles").select("bio, timezone, booking_url").eq("id", session.userId).maybeSingle(),
+      supabase.from("workspaces").select("plan, seats").eq("id", session.workspaceId).maybeSingle(),
     ]);
+
+  // Selected as a foreign key and fetched separately rather than as an embedded
+  // join: PostgREST returns the related row and the worker's fake database
+  // cannot, and a shape that differs between the two is how a test passes while
+  // being wrong.
+  const userIds = (members ?? []).map((m) => m.user_id);
+  const { data: people } = userIds.length
+    ? await supabase.from("profiles").select("id, full_name, email, timezone").in("id", userIds)
+    : { data: [] };
+  const personById = new Map((people ?? []).map((p) => [p.id, p]));
+  const accountByUser = new Map((accounts ?? []).map((a) => [a.user_id, a]));
 
   const canManage = ["owner", "admin", "manager"].includes(session.role);
   const appUrl = process.env.APP_URL ?? "http://localhost:3000";
-  const accountByUser = new Map((accounts ?? []).map((a) => [a.user_id, a]));
-  const found = accountByUser.get(session.userId);
-  // A row that is still `connecting` has no provider id, so nothing can send
-  // from it. Treating it as connected showed usage bars for an account that
-  // does not work yet, and took away the only button that could fix it.
-  const mine = found?.status === "connecting" ? undefined : found;
-  const awaitingProvider = found?.status === "connecting";
-  // An account that cannot send needs a way to be reconnected, on the page the
-  // "Reconnect" banner sends people to. See cannotSend for why it did not.
-  const needsReconnect = cannotSend(found?.status);
-  const hours = readWorkingHours(mine?.working_hours);
+  const seats = workspace?.seats ?? 1;
+  const used = (members ?? []).length + (invitations ?? []).length;
 
   return (
     <>
-      <h1>Team</h1>
+      <PageHeader
+        eyebrow="Settings"
+        title="Team"
+        lede="Everyone who can sign in to this workspace. Each rep connects their own LinkedIn account on their own profile — no login is ever shared."
+        actions={
+          <span className="pill">
+            {used} of {seats} seat{seats === 1 ? "" : "s"}
+          </span>
+        }
+      />
 
       <PageNotice error={params.error} notice={params.notice} />
-      {repair ? (
-        <div className={`notice ${repair.tone}`} role="status">
-          <p>
-            <strong>{repair.title}</strong> {repair.body}
-          </p>
-          {repair.fix ? <p className="small">{repair.fix}</p> : null}
+
+      <Section
+        id="members"
+        title="Members"
+        description="A rep whose LinkedIn is not connected can be given campaigns, but nothing will leave their account."
+      >
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Member</th>
+                <th>Role</th>
+                <th>LinkedIn</th>
+                <th className="num">Invites today</th>
+                <th className="num">This week</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(members ?? []).map((member) => {
+                const person = personById.get(member.user_id);
+                const account = accountByUser.get(member.user_id);
+                const broken = !account || cannotSend(account.status) || account.status !== "active";
+                return (
+                  <tr key={member.id}>
+                    <td>
+                      {person?.full_name ?? person?.email ?? "Unknown"}
+                      {member.user_id === session.userId ? (
+                        <span className="small subtle"> · you</span>
+                      ) : null}
+                      <p className="small muted">{person?.email}</p>
+                    </td>
+                    <td className="small">{member.role}</td>
+                    <td>
+                      {!account ? (
+                        <span className="pill tiny">not connected</span>
+                      ) : (
+                        <span className={`pill tiny ${broken ? "warning" : "positive"}`}>
+                          {account.status.replaceAll("_", " ")}
+                        </span>
+                      )}
+                      {member.user_id === session.userId && broken ? (
+                        <>
+                          {" "}
+                          <Link className="small" href="/app/profile">
+                            Fix
+                          </Link>
+                        </>
+                      ) : null}
+                    </td>
+                    <td className="num mono">{account?.invites_today ?? "—"}</td>
+                    <td className="num mono">{account?.invites_this_week ?? "—"}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
-      ) : null}
-
-      <section className="card">
-        <h3>You</h3>
-        <p className="small muted">
-          The agent writes in your voice and sends inside your working day, so both of these change
-          what a prospect receives.
-        </p>
-        <form action={saveMyDetails}>
-          <label className="field">
-            <span>How you would describe yourself to a prospect</span>
-            <textarea
-              name="bio"
-              rows={3}
-              defaultValue={me?.bio ?? ""}
-              placeholder="Twelve years in logistics ops before this. I care about the boring parts."
-            />
-          </label>
-          {/*
-            The link the agent sends when a campaign is asking for a meeting.
-            Optional: without one the product offers times from its own
-            calendar, which it can see and protect from double-booking.
-          */}
-          <label className="field medium">
-            <span>Your scheduling link · optional</span>
-            <input
-              type="url"
-              name="bookingUrl"
-              placeholder="https://cal.com/you/intro"
-              defaultValue={me?.booking_url ?? ""}
-            />
-            <span className="tiny subtle">
-              Calendly, Cal.com, SavvyCal — whatever you already use. The agent sends this instead of
-              offering times from here. A booking made there is invisible to this product, so meetings
-              booked through your own link will not appear in the funnel; everything up to the reply
-              still does.
-            </span>
-          </label>
-          <label className="field medium">
-            <span>Your timezone</span>
-            <input name="timezone" defaultValue={me?.timezone ?? "UTC"} placeholder="Europe/London" />
-          </label>
-          <button className="btn secondary" type="submit">
-            Save
-          </button>
-        </form>
-      </section>
-
-      <section className="card">
-        <h3>Your LinkedIn account</h3>
-        {mine ? (
-          <>
-            <p className="small muted">
-              {mine.display_name ?? "Connected"} · {mine.status}
-              {mine.has_sales_navigator ? " · Sales Navigator" : ""}
-            </p>
-
-            {needsReconnect ? (
-              <div className="notice danger">
-                <p>
-                  <strong>This account cannot send.</strong>{" "}
-                  {mine.status_detail ?? "It needs to be connected again."}
-                </p>
-                <p className="small">
-                  Sign in through this flow rather than in the provider&rsquo;s own dashboard — that
-                  is what attaches the account to you here.
-                </p>
-                <form action={connectLinkedIn}>
-                  <button className="btn" type="submit">
-                    Connect LinkedIn again
-                  </button>
-                </form>
-              </div>
-            ) : (
-              /* Hidden while the account cannot send. Three bars reading 0/35
-                 next to "reauth required" describe an allowance that does not
-                 exist, and read as a working account to anyone skimming. */
-              <div className="meter-group">
-                <Usage label="Invites today" used={mine.invites_today} cap={LINKEDIN_LIMITS.invitesPerDayMax} />
-                <Usage label="Invites this week" used={mine.invites_this_week} cap={LINKEDIN_LIMITS.invitesPerWeek} />
-                <Usage label="Messages today" used={mine.messages_today} cap={LINKEDIN_LIMITS.messagesPerDay} />
-              </div>
-            )}
-
-            <form action={saveSalesNavigator}>
-              <label className="small check">
-                <input
-                  type="checkbox"
-                  name="hasSalesNavigator"
-                  defaultChecked={mine.has_sales_navigator}
-                 
-                />
-                <span>
-                  This account has Sales Navigator
-                  <span className="tiny subtle hint">
-                    Without it, prospect search cannot filter on seniority or company size, and
-                    campaigns say so before you launch them. With it, the full customer profile is
-                    used.
-                  </span>
-                </span>
-              </label>
-              <button className="btn small" type="submit">
-                Save
-              </button>
-            </form>
-
-            <form action={saveWorkingHours}>
-              <p className="small muted">
-                Nothing is sent from this account outside these hours, read in your timezone above.
-              </p>
-              <div className="form-row">
-                <label className="field compact">
-                  <span>From</span>
-                  <input type="number" name="start" min={0} max={23} defaultValue={hours.start} />
-                </label>
-                <label className="field compact">
-                  <span>To</span>
-                  <input type="number" name="end" min={1} max={24} defaultValue={hours.end} />
-                </label>
-                <div className="cluster-3">
-                  {DAYS.map((day) => (
-                    <label key={day.value} className="small check">
-                      <input
-                        type="checkbox"
-                        name={`day-${day.value}`}
-                        defaultChecked={hours.days.includes(day.value)}
-                      />
-                      {day.label}
-                    </label>
-                  ))}
-                </div>
-                <button className="btn secondary small" type="submit">
-                  Save hours
-                </button>
-              </div>
-            </form>
-
-            {/* Connected is a claim this page makes, not one it has checked.
-                The row keeps whatever provider id it was bound with, and when
-                the provider drops that account nothing here notices until the
-                nightly health poll — so every campaign fails against an
-                account the screen calls healthy, and the only control that
-                could correct it used to live in the branch below, where a
-                connected account never sees it. */}
-            <div className="cluster">
-              <form action={refreshLinkedIn}>
-                <button className="btn secondary small" type="submit">
-                  Check connection
-                </button>
-              </form>
-              <span className="tiny subtle">
-                Asks LinkedIn&rsquo;s provider whether this account is still there. Worth doing if
-                campaigns are not finding anyone.
-              </span>
-            </div>
-          </>
-        ) : (
-          <>
-            <p className="small muted">
-              {awaitingProvider
-                ? "Waiting for LinkedIn to confirm the connection. If you have already finished signing in, check again — the confirmation sometimes does not arrive, and checking asks directly."
-                : "Not connected yet. You will sign in to LinkedIn on their hosted page; we never see your password."}
-            </p>
-            <div className="cluster">
-              {/* While waiting, checking is the likelier fix and goes first:
-                  the account is usually already connected at the provider and
-                  only the notification went missing. */}
-              {awaitingProvider ? (
-                <form action={refreshLinkedIn}>
-                  <button className="btn" type="submit">
-                    Check again
-                  </button>
-                </form>
-              ) : null}
-              <form action={connectLinkedIn}>
-                <button className={awaitingProvider ? "btn secondary" : "btn"} type="submit">
-                  {awaitingProvider ? "Start again" : "Connect LinkedIn"}
-                </button>
-              </form>
-            </div>
-          </>
-        )}
-      </section>
+      </Section>
 
       {canManage ? (
-        <section className="card">
-          <h3>Invite a teammate</h3>
-          <p className="small muted">
-            Each rep connects their own LinkedIn account. Nobody shares a login, and no two reps will
-            ever message the same person. We email the invitation; the link is also below in case it
-            does not arrive.
-          </p>
-          <form action={inviteMember} className="form-row">
-            <label className="field">
-              <span>Work email</span>
-              <input type="email" name="email" required placeholder="teammate@company.com" />
-            </label>
-            <label className="field compact">
-              <span>Role</span>
-              <select name="role" defaultValue="rep">
-                <option value="rep">Rep</option>
-                <option value="manager">Manager</option>
-                <option value="admin">Admin</option>
-              </select>
-            </label>
-            <button className="btn" type="submit">
-              Send invite
-            </button>
-          </form>
+        <Section
+          id="invites"
+          title="Invitations"
+          description={`A link is valid for ${INVITE_TTL_DAYS} days. Anyone holding it can join this workspace, so send it the way you would send a password.`}
+        >
+          <div className="card">
+            <form action={inviteMember} className="row">
+              <label className="field grow">
+                <span>Email address</span>
+                <input type="email" name="email" placeholder="colleague@company.com" required />
+              </label>
+              <label className="field">
+                <span>Role</span>
+                <select name="role" defaultValue="rep">
+                  <option value="rep">Rep</option>
+                  <option value="manager">Manager</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </label>
+              <button className="btn" type="submit">
+                Send invitation
+              </button>
+            </form>
+          </div>
 
           {invitations?.length ? (
             <div className="table-scroll">
               <table>
                 <thead>
                   <tr>
-                    <th>Pending invitation</th>
+                    <th>Email</th>
                     <th>Role</th>
-                    <th>Link to send them</th>
                     <th>Expires</th>
+                    <th>Link</th>
                     <th />
                   </tr>
                 </thead>
@@ -623,24 +275,17 @@ export default async function TeamPage({
                   {invitations.map((invitation) => (
                     <tr key={invitation.id}>
                       <td>{invitation.email}</td>
-                      <td>
-                        <span className="pill">{invitation.role}</span>
-                      </td>
-                      <td>
-                        <input
-                          readOnly
-                          className="link-field"
-                          aria-label={`Invitation link for ${invitation.email}`}
-                          value={`${appUrl}/invite/${invitation.token}`}
-                        />
-                      </td>
-                      <td className="small muted">
+                      <td className="small">{invitation.role}</td>
+                      <td className="small subtle">
                         {new Date(invitation.expires_at).toLocaleDateString()}
+                      </td>
+                      <td className="small mono breakable">
+                        {appUrl}/invite/{invitation.token}
                       </td>
                       <td>
                         <form action={revokeInvitation}>
-                          <input type="hidden" name="invitationId" value={invitation.id} />
-                          <button className="btn secondary small" type="submit">
+                          <input type="hidden" name="id" value={invitation.id} />
+                          <button className="btn ghost small" type="submit">
                             Revoke
                           </button>
                         </form>
@@ -651,95 +296,12 @@ export default async function TeamPage({
               </table>
             </div>
           ) : (
-            <p className="small muted">
-              No pending invitations. Links stay valid for {INVITE_TTL_DAYS} days.
-            </p>
+            <Empty title="Nobody is waiting to join.">
+              An invitation sent here appears in this list until it is accepted or revoked.
+            </Empty>
           )}
-        </section>
+        </Section>
       ) : null}
-
-      <section>
-        <h2>Members</h2>
-        <div className="table-scroll">
-          <table>
-            <thead>
-              <tr>
-                <th>Member</th>
-                <th>Role</th>
-                <th>LinkedIn</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(members ?? []).map((member) => {
-                const profile = member.profiles as unknown as
-                  | { full_name: string | null; email: string }
-                  | null;
-                const account = accountByUser.get(member.user_id);
-                return (
-                  <tr key={member.id}>
-                    <td>
-                      {profile?.full_name ?? profile?.email ?? "—"}
-                      <p className="small muted">
-                        {profile?.email}
-                      </p>
-                    </td>
-                    <td>
-                      <span className="pill">{member.role}</span>
-                    </td>
-                    <td>
-                      {account ? (
-                        <span className={`pill ${account.status === "active" ? "positive" : "warning"}`}>
-                          {account.status}
-                        </span>
-                      ) : (
-                        <span className="pill">Not connected</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </section>
     </>
-  );
-}
-
-const DAYS = [
-  { value: 1, label: "Mon" },
-  { value: 2, label: "Tue" },
-  { value: 3, label: "Wed" },
-  { value: 4, label: "Thu" },
-  { value: 5, label: "Fri" },
-  { value: 6, label: "Sat" },
-  { value: 0, label: "Sun" },
-] as const;
-
-/** The same shape and fallback the worker's limiter applies to this column. */
-function readWorkingHours(value: unknown): { start: number; end: number; days: number[] } {
-  const fallback = { start: 8, end: 18, days: [1, 2, 3, 4, 5] };
-  if (!value || typeof value !== "object") return fallback;
-  const hours = value as Partial<{ start: number; end: number; days: number[] }>;
-  if (typeof hours.start === "number" && typeof hours.end === "number" && Array.isArray(hours.days)) {
-    return { start: hours.start, end: hours.end, days: hours.days };
-  }
-  return fallback;
-}
-
-function Usage({ label, used, cap }: { label: string; used: number; cap: number }) {
-  const ratio = Math.min(1, cap === 0 ? 0 : used / cap);
-  return (
-    <div className="meter-item">
-      <span className="stat-label">{label}</span>
-      <span className="mono small">
-        {used} / {cap}
-      </span>
-      {/* The width is the only genuinely dynamic value here; the colour it
-          turns near the cap is a state, so it is a class. */}
-      <div className={`meter${ratio > 0.85 ? " is-near" : ""}`}>
-        <span style={{ width: `${ratio * 100}%` }} />
-      </div>
-    </div>
   );
 }

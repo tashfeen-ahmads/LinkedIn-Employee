@@ -3,6 +3,7 @@ import {
   FUNNEL_STAGES,
   MIN_FOR_RATE,
   WEEK_MS,
+  dailySends,
   funnelReport,
   momentum,
   rate,
@@ -153,5 +154,40 @@ describe("funnelReport", () => {
     // is below the floor, so there is no reply rate yet.
     expect(report.reply.verdict).toBe("too-early");
     expect(report.momentum.current).toBe(12);
+  });
+});
+
+describe("dailySends", () => {
+  const at = (daysAgo: number): DatedFunnelRow => ({
+    status: "invited",
+    invited_at: new Date(NOW - daysAgo * 24 * 60 * 60 * 1000).toISOString(),
+  });
+
+  it("includes the days nothing went out", () => {
+    // The zero days are the point. Dropping them joins Friday to Monday with a
+    // straight line and draws a weekend that looks like steady sending, on the
+    // one chart that exists to answer "did anything leave yesterday".
+    const series = dailySends([at(1), at(1), at(4)], NOW, 7);
+    expect(series).toHaveLength(7);
+    expect(series.filter((d) => d.value === 0)).toHaveLength(5);
+    expect(series.reduce((sum, d) => sum + d.value, 0)).toBe(3);
+  });
+
+  it("ends on today and starts a window ago", () => {
+    const series = dailySends([], NOW, 30);
+    expect(series).toHaveLength(30);
+    expect(series[29]!.date).toBe(new Date(NOW).toISOString().slice(0, 10));
+  });
+
+  it("leaves anything older than the window out entirely", () => {
+    // Not clamped into the first bucket: a prospect invited last year must not
+    // appear as a spike on the oldest day in view.
+    const series = dailySends([at(400)], NOW, 30);
+    expect(series.every((d) => d.value === 0)).toBe(true);
+  });
+
+  it("ignores a row that was never invited", () => {
+    const series = dailySends([{ status: "queued", invited_at: null }], NOW, 7);
+    expect(series.every((d) => d.value === 0)).toBe(true);
   });
 });

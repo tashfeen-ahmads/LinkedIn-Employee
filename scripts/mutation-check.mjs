@@ -1831,6 +1831,22 @@ const MUTATIONS = [
     to: "as $$",
     pkg: "@le/db",
   },
+  {
+    id: "trend/quiet-days-are-drawn",
+    rule: "A day that sent nobody is a point on the line, not a gap in it",
+    file: "packages/shared/src/kpi.ts",
+    from: "    if (byDay.has(key)) byDay.set(key, (byDay.get(key) ?? 0) + 1);",
+    to: "    byDay.set(key, (byDay.get(key) ?? 0) + 1);",
+    pkg: "@le/shared",
+  },
+  {
+    id: "trend/window-has-every-day",
+    rule: "The trend covers the whole window, including the days before any sending",
+    file: "packages/shared/src/kpi.ts",
+    from: "    byDay.set(new Date(now - i * 86_400_000).toISOString().slice(0, 10), 0);",
+    to: "    if (i === 0) byDay.set(new Date(now).toISOString().slice(0, 10), 0);",
+    pkg: "@le/shared",
+  },
 ];
 
 const filter = process.argv[2];

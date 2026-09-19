@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Bricolage_Grotesque, Instrument_Sans, JetBrains_Mono } from "next/font/google";
+import { Bricolage_Grotesque, Geist, Geist_Mono, Instrument_Sans } from "next/font/google";
 import "./globals.css";
 import { SITE } from "@/lib/site";
 import { OrganizationSchema } from "@/components/schema";
@@ -27,11 +27,30 @@ const instrument = Instrument_Sans({
   display: "swap",
 });
 
-/** Numbers, labels and anything that has to line up in a column. */
-const jetbrains = JetBrains_Mono({
+/*
+ * The application wears a different face from the marketing site, on purpose.
+ *
+ * A landing page is read once and wants character; a dashboard is worked in
+ * every day and wants to disappear. Instrument Sans and Bricolage were chosen
+ * for the first job and were doing the second badly — the app inherited a
+ * headline scale it then had to patch back down, which is where the "titles
+ * under titles" came from.
+ *
+ * Geist is a tool face: narrow enough to fit a dense table, with real tabular
+ * figures so a column of numbers lines up without being set in a monospace.
+ * Its mono companion carries ids, tokens and anything that has to be read
+ * character by character.
+ */
+const geist = Geist({
+  subsets: ["latin"],
+  variable: "--font-geist",
+  display: "swap",
+});
+
+const geistMono = Geist_Mono({
   subsets: ["latin"],
   weight: ["400", "500"],
-  variable: "--font-jetbrains",
+  variable: "--font-geist-mono",
   display: "swap",
 });
 
@@ -65,7 +84,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html
       lang="en"
       data-theme="light"
-      className={`${bricolage.variable} ${instrument.variable} ${jetbrains.variable}`}
+      className={`${bricolage.variable} ${instrument.variable} ${geist.variable} ${geistMono.variable}`}
     >
       <body>
         <OrganizationSchema />

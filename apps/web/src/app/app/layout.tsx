@@ -17,9 +17,21 @@ function navGroups(waiting: number, marks: NavMarks): NavGroup[] {
   // than a convention three call sites happen to keep.
   const next = (href: string, label: string) => markFor(href, label, marks);
 
+  /*
+   * Grouped by what a person is doing, not by what the tables are called.
+   *
+   * Twelve flat links meant every screen had the same weight: the inbox a rep
+   * opens hourly sat beside the billing page they touch twice a year. The
+   * groups are the map now — four headings to read instead of twelve links,
+   * and everything but the daily loop folds away.
+   *
+   * Work is `alwaysOpen`: a remembered collapse that hides the Inbox is a rep
+   * who stops opening the Inbox.
+   */
   return [
     {
-      label: "Daily",
+      label: "Work",
+      alwaysOpen: true,
       items: [
         { href: "/app", label: "Overview" },
         { href: "/app/inbox", label: "Inbox", count: waiting },
@@ -27,31 +39,44 @@ function navGroups(waiting: number, marks: NavMarks): NavGroup[] {
       ],
     },
     {
-      label: "Outreach",
+      // The pipeline, in the order it happens: a strategy finds prospects, and
+      // prospects go into a campaign. Three screens that were three lists.
+      label: "Pipeline",
       items: [
-        { href: "/app/strategy", label: "Strategy", ...next("/app/strategy", "Strategy") },
+        { href: "/app/strategy", label: "Strategies", ...next("/app/strategy", "Strategies") },
         { href: "/app/prospects", label: "Prospects" },
         { href: "/app/campaigns", label: "Campaigns", ...next("/app/campaigns", "Campaigns") },
-        { href: "/app/knowledge", label: "Knowledge", ...next("/app/knowledge", "Knowledge") },
-        { href: "/app/exclusions", label: "Exclusions" },
       ],
     },
     {
-      label: "Account",
+      // One analytics destination. Reporting and the dashboard's KPI block were
+      // two readings of the same numbers, and two readings drift.
+      label: "Analytics",
       items: [
-        { href: "/app/reporting", label: "Reporting" },
-        { href: "/app/usage", label: "Usage" },
-        // Named rather than left to be discovered. Nothing this product does
-        // reaches anybody until LinkedIn is connected, and "Team" is not a word
-        // that tells a newcomer that is where it happens.
-        { href: "/app/team", label: "Team", ...next("/app/team", "Team") },
-        { href: "/app/system", label: "System check" },
+        { href: "/app/analytics", label: "Results" },
+        { href: "/app/usage", label: "Agent spend" },
+      ],
+    },
+    {
+      label: "Settings",
+      items: [
+        { href: "/app/profile", label: "Your profile", ...next("/app/profile", "Your profile") },
+        {
+          href: "/app/team",
+          label: "Team",
+          ...next("/app/team", "Team"),
+        },
+        { href: "/app/cta", label: "Calls to action" },
+        { href: "/app/exclusions", label: "Do not contact" },
+        { href: "/app/knowledge", label: "Product facts", ...next("/app/knowledge", "Product facts") },
         { href: "/app/billing", label: "Billing" },
-        // Read before asking, and asked after reading. Both live at the end of
-        // the sidebar, in the same place on every screen: somebody who cannot
-        // make the product work is the one person who will not go hunting for
-        // a link to say so.
+      ],
+    },
+    {
+      label: "Help",
+      items: [
         { href: "/app/tutorial", label: "How it works" },
+        { href: "/app/system", label: "System check" },
         { href: "/app/support", label: "Support" },
       ],
     },

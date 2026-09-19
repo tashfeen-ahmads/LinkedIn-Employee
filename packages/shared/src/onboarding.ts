@@ -70,7 +70,7 @@ export const ONBOARDING_STEPS: readonly OnboardingStep[] = [
     label: "Connect your LinkedIn account",
     done: "your LinkedIn account",
     why: "You sign in on LinkedIn's own page; we never see your password.",
-    href: "/app/team",
+    href: "/app/profile",
     nudge:
       "You sign in on LinkedIn's own hosted page and we never see the password. Until it is connected, campaigns can be built but nothing can leave.",
     required: true,

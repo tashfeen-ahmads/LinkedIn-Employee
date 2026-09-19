@@ -21,7 +21,7 @@ export interface NavMarks {
  * a diagnostics check that reports `ok` because it could not look.
  */
 export function markFor(href: string, label: string, marks: NavMarks): Pick<NavItem, "state" | "stateLabel"> {
-  if (href === "/app/team" && marks.linkedInNeedsYou) {
+  if (href === "/app/profile" && marks.linkedInNeedsYou) {
     return { state: "attention", stateLabel: "LinkedIn is not connected" };
   }
   if (marks.linkedInNeedsYou) return {};

@@ -190,6 +190,8 @@ export type CustomerProfileRow = {
   approved_at: string | null;
   created_at: string;
   updated_at: string;
+  /** The workspace CTA this strategy's campaigns inherit. */
+  cta_id: string | null;
 };
 
 export type ProspectRow = {
@@ -242,6 +244,13 @@ export type CampaignRow = {
   cta_label: string | null;
   /** The destination for a link campaign. Stored plainly and never rewritten to count clicks. */
   cta_url: string | null;
+  /**
+   * The workspace CTA this campaign points at, when it uses one. Read through
+   * at send time, so correcting a URL fixes every campaign using it without
+   * rewriting copy a human already approved. Null falls back to the columns
+   * above, which is what a campaign built before the library carries.
+   */
+  cta_id: string | null;
   daily_invite_cap: number;
   reply_mode: ReplyModeDb;
   rules: Json;
@@ -524,6 +533,27 @@ export type WorkerHeartbeatRow = {
  * never was, and the person raising the ticket does not know which of those
  * facts matters and should not have to.
  */
+/**
+ * A destination a workspace keeps and a campaign picks.
+ *
+ * The goal used to be three loose columns on the campaign, which works for a
+ * business with one ask. Nobody has one ask — a URL changed in one place
+ * stayed wrong in four, and no screen could say which campaigns pointed where.
+ */
+export type CtaRow = {
+  id: string;
+  workspace_id: string;
+  name: string;
+  kind: "meeting" | "link" | "reply";
+  label: string | null;
+  url: string | null;
+  /** Out of the picker, still readable by the campaigns that used it. */
+  archived_at: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type SupportTicketRow = {
   id: string;
   workspace_id: string;
@@ -588,6 +618,7 @@ export type Database = {
       knowledge_documents: Table<KnowledgeDocumentRow>;
       events: Table<EventRow>;
       llm_calls: Table<LlmCallRow>;
+      ctas: Table<CtaRow>;
       support_tickets: Table<SupportTicketRow>;
       worker_heartbeats: Table<WorkerHeartbeatRow>;
     };

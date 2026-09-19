@@ -14,6 +14,7 @@ describe("markFor", () => {
     ["/app/strategy", "Strategy"],
     ["/app/campaigns", "Campaigns"],
     ["/app/knowledge", "Knowledge"],
+    ["/app/profile", "Your profile"],
     ["/app/team", "Team"],
     ["/app/support", "Support"],
   ];
@@ -35,20 +36,20 @@ describe("markFor", () => {
     expect(marked({ nextHref: null, linkedInNeedsYou: false })).toHaveLength(0);
   });
 
-  it("points at Team, and only at Team, while LinkedIn is disconnected", () => {
+  it("points at your profile, and only there, while LinkedIn is disconnected", () => {
     // A next-step dot on Knowledge while the account cannot send points at the
     // wrong stage — and two dots point at neither.
     const marks = marked({ nextHref: "/app/knowledge", linkedInNeedsYou: true });
     expect(marks).toHaveLength(1);
-    expect(marks[0][0]).toBe("/app/team");
+    expect(marks[0][0]).toBe("/app/profile");
     expect(marks[0][1].state).toBe("attention");
     expect(marks[0][1].stateLabel).toBe("LinkedIn is not connected");
   });
 
-  it("does not put a next-step dot on a broken Team link", () => {
+  it("does not put a next-step dot on a broken profile link", () => {
     // Both rules fire on the same href; the broken one wins, because "connect
     // this" and "you are up to this" are not the same sentence.
-    const mark = markFor("/app/team", "Team", { nextHref: "/app/team", linkedInNeedsYou: true });
+    const mark = markFor("/app/profile", "Your profile", { nextHref: "/app/profile", linkedInNeedsYou: true });
     expect(mark.state).toBe("attention");
   });
 

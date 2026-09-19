@@ -3,7 +3,8 @@ import { funnelReport, isReadyToSend } from "@le/shared";
 import { requireSession } from "@/lib/workspace";
 import { SetupChecklist } from "@/components/setup-checklist";
 import { NextStep } from "@/components/next-step";
-import { FunnelPanel } from "@/components/funnel-panel";
+import { Kpi } from "@/components/charts";
+import { PageHeader, Section, Empty } from "@/components/page";
 import { createClient } from "@/lib/supabase-server";
 import { PageNotice, type NoticeParams } from "@/components/page-notice";
 import { readStrategyState } from "@/lib/strategy-state";
@@ -39,6 +40,13 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
   // "which step is this workspace on" and has its own panel.
   const strategy = await readStrategyState(supabase, session.workspaceId, setup.hasBusinessProfile);
 
+  const { count: waitingCount } = await supabase
+    .from("reply_drafts")
+    .select("id", { count: "exact", head: true })
+    .eq("workspace_id", session.workspaceId)
+    .eq("status", "pending");
+  const waiting = waitingCount ?? 0;
+
   const report = funnelReport(funnel.rows, funnel.goals);
   const byProfile = new Map<string, number>();
   for (const campaign of funnel.campaigns) {
@@ -50,10 +58,15 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
   return (
     <>
       <PageNotice error={params.error} notice={params.notice} />
-      <header className="page-head">
-        <p className="eyebrow">Overview</p>
-        <h1>{session.fullName ? `Morning, ${session.fullName.split(" ")[0]}.` : "Overview"}</h1>
-      </header>
+      <PageHeader
+        title={session.fullName ? `Morning, ${session.fullName.split(" ")[0]}.` : "Overview"}
+        lede="What needs you, and whether yesterday's sending worked."
+        actions={
+          <Link className="btn ghost small" href="/app/analytics">
+            All results
+          </Link>
+        }
+      />
 
       {/*
         One action first, and the whole width of the page. The checklist below
@@ -66,22 +79,54 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
 
       <SetupChecklist state={setup} />
 
-      <FunnelPanel report={report} goals={funnel.goals} truncated={funnel.truncated} />
+      {/*
+        A summary, and a link — not a second analytics page.
+        The dashboard and Reporting each used to compute the same five numbers
+        from their own query, which is two readings of one set of facts, and
+        two readings drift. Four figures here answer "is it working"; every
+        other number lives on Results.
+      */}
+      <Section
+        id="results"
+        title="How it is going"
+        description="The whole picture, including what each strategy produced and what it cost, is on Results."
+        action={
+          <Link className="btn ghost small" href="/app/analytics">
+            Open Results
+          </Link>
+        }
+      >
+        <div className="kpi-row">
+          <Kpi
+            label="Invited (7 days)"
+            value={report.momentum.current.toLocaleString()}
+            note={
+              report.momentum.change === null
+                ? "No week before this one to compare."
+                : `${report.momentum.change >= 0 ? "+" : ""}${Math.round(report.momentum.change * 100)}% on the week before`
+            }
+          />
+          <Kpi label="Accepted" value={report.counts.accepted.toLocaleString()} />
+          <Kpi label="Replied" value={report.counts.replied.toLocaleString()} />
+          <Kpi
+            label="Waiting on you"
+            value={waiting.toLocaleString()}
+            tone={waiting > 0 ? "warning" : "neutral"}
+            note={waiting > 0 ? "In the Inbox." : "Nothing held for a human."}
+          />
+        </div>
+      </Section>
 
-      <section className="stack-3">
-        <div className="between">
-          <div className="section-head">
-            <h2>Strategies</h2>
-            <p className="small subtle">
-              Nothing is searched for until one is approved. A fit score only means something
-              against the strategy that produced it.
-            </p>
-          </div>
+      <Section
+        id="strategies"
+        title="Strategies"
+        description="Nothing is searched for until one is approved. A fit score only means something against the strategy that produced it."
+        action={
           <Link href="/app/strategy" className="btn secondary small">
             Review and approve
           </Link>
-        </div>
-
+        }
+      >
         {profiles?.length ? (
           <div className="table-scroll">
             <table>
@@ -119,14 +164,12 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
             </table>
           </div>
         ) : (
-          <div className="empty">
-            <p className="small">
-              The Strategy Agent has not finished yet, or has not been run. Your business profile and
-              three to five customer profiles appear here when it does.
-            </p>
-          </div>
+          <Empty title="No strategies yet." action="Start the Strategy Agent" href="/app/strategy">
+            The Strategy Agent reads your site and writes who to go after. Your business profile and
+            its first customer profiles appear here when it finishes.
+          </Empty>
         )}
-      </section>
+      </Section>
     </>
   );
 }

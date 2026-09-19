@@ -138,3 +138,41 @@ export function funnelReport(
     momentum: momentum(rows, now, WEEK_MS),
   };
 }
+
+
+/** One day's sending, for the trend line. */
+export interface DailyPoint {
+  date: string;
+  value: number;
+}
+
+/**
+ * Invitations per day over a window, including the days nothing went out.
+ *
+ * The zero days are the point. Dropping them would join Friday to Monday with
+ * a straight line and draw a weekend that looks like steady sending — and the
+ * question this chart exists to answer is exactly "did anything leave
+ * yesterday".
+ */
+export function dailySends(
+  rows: readonly DatedFunnelRow[],
+  now: number,
+  days = 30,
+): DailyPoint[] {
+  const byDay = new Map<string, number>();
+  for (let i = days - 1; i >= 0; i -= 1) {
+    byDay.set(new Date(now - i * 86_400_000).toISOString().slice(0, 10), 0);
+  }
+
+  for (const row of rows) {
+    if (!row.invited_at) continue;
+    const at = new Date(row.invited_at).getTime();
+    if (!Number.isFinite(at)) continue;
+    const key = new Date(at).toISOString().slice(0, 10);
+    // Only days inside the window: a prospect invited last year must not
+    // create a bucket outside it.
+    if (byDay.has(key)) byDay.set(key, (byDay.get(key) ?? 0) + 1);
+  }
+
+  return [...byDay.entries()].map(([date, value]) => ({ date, value }));
+}
