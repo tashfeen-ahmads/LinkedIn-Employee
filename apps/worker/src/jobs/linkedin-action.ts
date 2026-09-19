@@ -8,6 +8,7 @@ import {
   type CampaignProspectStatus,
 } from "@le/shared";
 import type { Db } from "@le/db";
+import { readCampaignCta } from "../cta.js";
 import type { WorkerContext } from "../context.js";
 import { recordEvent } from "../context.js";
 import { applyHealth, recordAction, toUsage, type AccountRecord, ACCOUNT_USAGE_COLUMNS } from "../accounts.js";
@@ -44,7 +45,9 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
 
   const { data: campaign } = await db
     .from("campaigns")
-    .select("id, status, connection_note, linkedin_account_id, owner_user_id, cta_kind, cta_url, cta_label")
+    .select(
+      "id, status, connection_note, linkedin_account_id, owner_user_id, cta_id, cta_kind, cta_url, cta_label",
+    )
     .eq("id", cp.campaign_id)
     .single();
   if (!campaign || campaign.status !== "running") return;
@@ -187,7 +190,10 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
   // changing where a campaign points does not mean rewriting three messages and
   // re-reviewing them — and a rep who edits one and forgets another does not
   // end up sending two different destinations.
-  const body = renderCta(renderTemplate(step.message, prospect.first_name), campaign.cta_url);
+  // Read through the pointer, so a URL corrected in the library reaches every
+  // campaign using it without anybody rewriting a message.
+  const cta = await readCampaignCta(db, campaign, job.workspaceId);
+  const body = renderCta(renderTemplate(step.message, prospect.first_name), cta.url);
 
   const conversation = await ensureConversation(ctx, {
     workspaceId: cp.workspace_id,

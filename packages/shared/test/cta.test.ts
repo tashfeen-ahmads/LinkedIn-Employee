@@ -6,6 +6,7 @@ import {
   containsLink,
   finalStage,
   renderCta,
+  effectiveCta,
 } from "../src/cta.js";
 import { stagesFor } from "../src/funnel.js";
 
@@ -150,5 +151,44 @@ describe("the definitions", () => {
     for (const definition of Object.values(CTA_DEFINITIONS)) {
       expect(definition.conversion).not.toMatch(/click/i);
     }
+  });
+});
+
+describe("effectiveCta", () => {
+  const own = { kind: "meeting" as const, label: "a quick call", url: null };
+  const linked = { kind: "link" as const, label: "the teardown", url: "https://acme.test/t" };
+
+  it("lets the library win, which is the whole reason it exists", () => {
+    // Correcting a URL in one place has to change every campaign using it,
+    // without rewriting a message or re-reviewing approved copy.
+    const cta = effectiveCta(linked, own);
+    expect(cta.kind).toBe("link");
+    expect(cta.url).toBe("https://acme.test/t");
+    expect(cta.fromLibrary).toBe(true);
+  });
+
+  it("falls back to the campaign's own columns when there is no link", () => {
+    // What a campaign built before the library carries, and what one whose CTA
+    // was deleted falls back to — `cta_id` is `set null` on delete, because
+    // losing a destination must never take the campaign with it.
+    const cta = effectiveCta(null, own);
+    expect(cta.kind).toBe("meeting");
+    expect(cta.label).toBe("a quick call");
+    expect(cta.fromLibrary).toBe(false);
+  });
+
+  it("does not let an incomplete library row win by existing", () => {
+    // A row with no kind is not a usable answer. Taking it anyway would leave
+    // a campaign with no goal at all, which decides its funnel's last stage.
+    const cta = effectiveCta({ kind: null, label: null, url: "https://x.test" }, own);
+    expect(cta.kind).toBe("meeting");
+    expect(cta.url).toBeNull();
+  });
+
+  it("defaults to asking for a meeting when there is nothing either side", () => {
+    // Every campaign built before CTAs existed was asking for a meeting.
+    // Reading those as link campaigns would drop the meetings stage off their
+    // funnel overnight — rule 29 in reverse.
+    expect(effectiveCta(null, null).kind).toBe("meeting");
   });
 });

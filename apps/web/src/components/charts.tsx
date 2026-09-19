@@ -126,13 +126,13 @@ export function TrendChart({
   const last = points[points.length - 1]!;
 
   return (
-    <figure className="chart">
+    <figure className="viz">
       <svg
         viewBox={`0 0 ${width} ${height}`}
         role="img"
         aria-label={`${label}: ${total} over ${points.length} days, ${last.value} on ${last.date}`}
         preserveAspectRatio="none"
-        className="chart-svg"
+        className="viz-svg"
       >
         {/* Two gridlines, not a ruled page: the peak and the halfway mark are
             enough to read a magnitude against. */}
@@ -167,9 +167,9 @@ export function TrendChart({
           strokeWidth="2"
         />
       </svg>
-      <figcaption className="chart-caption tiny subtle">
+      <figcaption className="viz-caption tiny subtle">
         <span>{points[0]!.date}</span>
-        <span className="chart-peak">peak {peak.toLocaleString()}</span>
+        <span className="viz-peak">peak {peak.toLocaleString()}</span>
         <span>{last.date}</span>
       </figcaption>
     </figure>

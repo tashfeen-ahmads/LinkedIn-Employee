@@ -22,6 +22,7 @@ import { ensureConversation } from "./linkedin-action.js";
 import { offerSlots, resolveCalendar } from "../calendar.js";
 import { syncConversationToCrm, syncMeetingToCrm } from "../crm.js";
 import { tryBookMeeting } from "./booking.js";
+import { readCampaignCta } from "../cta.js";
 
 /**
  * Agent 3 end to end: a prospect replies, we classify it, decide whether a
@@ -107,7 +108,9 @@ export async function handleInboundMessage(
   const { data: campaign } = campaignId
     ? await db
         .from("campaigns")
-        .select("id, customer_profile_id, rules, reply_mode, owner_user_id, cta_kind, cta_url, cta_label")
+        .select(
+          "id, customer_profile_id, rules, reply_mode, owner_user_id, cta_id, cta_kind, cta_url, cta_label",
+        )
         .eq("id", campaignId)
         .single()
     : { data: null };
@@ -219,9 +222,15 @@ export async function handleInboundMessage(
   // What this campaign is asking for decides which link, if any, belongs in the
   // reply. A campaign wanting sign-ups should not have its agent proposing
   // times, and a campaign wanting a conversation should carry no link at all.
-  const goal = campaign?.cta_kind ?? "meeting";
+  // Read through the campaign's CTA pointer when it has one, so the agent
+  // offers the destination the library currently holds rather than whatever
+  // was copied onto the campaign when it was built.
+  const cta = campaign
+    ? await readCampaignCta(ctx.db, campaign, job.workspaceId)
+    : { kind: "meeting" as const, label: null, url: null, fromLibrary: false };
+  const goal = cta.kind;
   const bookingUrl = rep?.booking_url?.trim() || null;
-  const ctaUrl = campaign?.cta_url?.trim() || null;
+  const ctaUrl = cta.url?.trim() || null;
 
   const offeredLink =
     goal === "link" ? ctaUrl : goal === "meeting" ? bookingUrl : null;

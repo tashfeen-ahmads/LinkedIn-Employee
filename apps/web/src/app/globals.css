@@ -370,13 +370,8 @@ p  { margin: 0; }
  * a header and its content, a smaller gap between those. Nothing sets its own
  * margins.
  */
-.app-body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-6);
-}
 
-.page-header {
+.app .page-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -387,22 +382,34 @@ p  { margin: 0; }
   padding-bottom: var(--space-4);
   border-bottom: 1px solid var(--border);
 }
-.page-header-text { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
-.page-header-actions { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+.app .page-header-text { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.app .page-header-actions { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
 
-.section { display: flex; flex-direction: column; gap: var(--space-4); }
-.section-header {
+/*
+ * Scoped under `.app`, and that scope is load-bearing.
+ *
+ * `.section` already belonged to the marketing pages, where it means "a band
+ * of the landing page" and carries `padding-block: var(--space-8)`. Declared
+ * again unscoped, this rule won on source order and silently took that padding
+ * away from every section of the marketing site — a collision that changes a
+ * page nobody edited and shows up nowhere in a diff of that page.
+ *
+ * `.app` wraps the application shell and nothing else, so the two meanings can
+ * coexist without either knowing about the other.
+ */
+.app .section { display: flex; flex-direction: column; gap: var(--space-4); padding-block: 0; }
+.app .section-header {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: var(--space-4);
   flex-wrap: wrap;
 }
-.section-header-text { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
-.section-header-action { display: flex; align-items: center; gap: var(--space-2); }
+.app .section-header-text { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.app .section-header-action { display: flex; align-items: center; gap: var(--space-2); }
 
 /* An empty list says why, and what to do. Never the word "None". */
-.empty {
+.app .empty {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -412,7 +419,7 @@ p  { margin: 0; }
   border-radius: var(--radius);
   background: var(--surface);
 }
-.empty-title { font-weight: 600; }
+.app .empty-title { font-weight: 600; }
 
 /* --------------------------------------------------------------- buttons */
 
@@ -743,7 +750,14 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 
 /* ------------------------------------------------------------ app shell */
 
-.app { display: grid; grid-template-columns: 240px minmax(0, 1fr); min-height: 100vh; }
+.app {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  min-height: 100vh;
+  /* Geist has real tabular figures, which is most of why it is here: a column
+     of numbers lines up without being set in a monospace. */
+  font-variant-numeric: tabular-nums;
+}
 .app-aside {
   border-right: 1px solid var(--border);
   background: var(--surface);
@@ -753,7 +767,13 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   gap: var(--space-5);
 }
 .app-main { min-width: 0; display: flex; flex-direction: column; }
-.app-body { padding: var(--space-6) var(--space-5) var(--space-8); width: min(1100px, 100%); }
+.app-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  padding: var(--space-6) var(--space-5) var(--space-8);
+  width: min(1100px, 100%);
+}
 
 /*
  * The application's type scale — its own, not the marketing one turned down.
@@ -775,7 +795,12 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   font-weight: 600;
 }
 /* The page. One per screen. */
-.app h1 { font-size: 1.375rem; }
+.app h1 {
+  font-size: 1.375rem;
+  /* Never the landing page's 18ch measure: a page title here is a label above
+     a table, and that measure wraps it for no reason anybody can see. */
+  max-width: none;
+}
 /* A section of it. Deliberately close to body size: a section heading is a
    label on a group, not an announcement. */
 .app h2 { font-size: 1rem; letter-spacing: -0.008em; }
@@ -783,9 +808,6 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .app h3 { font-size: 0.9375rem; letter-spacing: -0.004em; }
 .app h4 { font-size: 0.875rem; font-weight: 600; letter-spacing: 0; }
 
-/* Numbers everywhere in the app line up in their column without being set in a
-   monospace — Geist has real tabular figures, which is most of why it is here. */
-.app { font-variant-numeric: tabular-nums; }
 
 .nav { display: flex; flex-direction: column; gap: 1px; }
 .nav a {
@@ -938,12 +960,10 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   background: color-mix(in srgb, var(--bg) 88%, transparent);
   backdrop-filter: saturate(140%) blur(10px);
 }
-.site-nav-link:hover { color: var(--text); }
 @media (max-width: 640px) {
   .site-nav-link { display: none; }
 }
 
-.site-footer { border-top: 1px solid var(--border); padding-block: var(--space-6); }
 
 /* A band of alternate ground, so sections read as separate without borders. */
 .band { background: var(--surface); border-block: 1px solid var(--border); }
@@ -960,7 +980,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   .hero-grid { grid-template-columns: minmax(0, 1fr); gap: var(--space-6); }
 }
 
-.hero-panel { border-radius: var(--radius-lg); }
+
 .hero-panel .thread {
   background: var(--surface);
   border: 1px solid var(--border);
@@ -1020,19 +1040,11 @@ ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: none; }
 }
 .skip-link:focus { top: var(--space-3); text-decoration: none; }
 
-.wordmark { display: inline-flex; align-items: center; gap: 0.5rem; font-weight: 600; letter-spacing: -0.02em; }
-.wordmark:hover { text-decoration: none; }
 .wordmark-dot {
   width: 10px; height: 10px; border-radius: 3px; flex: none;
   background: linear-gradient(140deg, var(--accent), var(--accent-2));
 }
 
-.footer-grid {
-  display: grid;
-  gap: var(--space-6);
-  grid-template-columns: minmax(0, 1.6fr) repeat(2, minmax(0, 1fr));
-}
-@media (max-width: 720px) { .footer-grid { grid-template-columns: minmax(0, 1fr); } }
 
 /* The four-agent list on /how-it-works: a numbered rail down the left so the
    sequence is visible without reading the numbers. */
@@ -1066,7 +1078,7 @@ ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: none; }
 }
 
 /* The panel's own quiet lift off the wash. */
-.hero-panel { position: relative; }
+.hero-panel { position: relative; border-radius: var(--radius-lg); }
 .hero-panel::after {
   content: "";
   position: absolute;
@@ -1096,8 +1108,9 @@ ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: none; }
 /* A display headline is capped in its own right — capping the header block
    caps the paragraph too, and a 40-character measure turns a three-word line
    into four. */
-h1 { max-width: 18ch; }
+.section h1 { max-width: 18ch; }
 .narrow h1, .prose h1 { max-width: none; }
+
 
 /* ------------------------------------------------------------- diagrams */
 
@@ -1112,7 +1125,7 @@ figure { margin: 0; }
   padding: var(--space-5);
 }
 
-.chart-svg { width: 100%; height: auto; overflow: visible; }
+.chart-svg { width: 100%; height: auto; display: block; overflow: visible; }
 /* Chart ink takes theme tokens, so it reads on either ground. */
 .chart-svg .grid   { stroke: var(--border); stroke-width: 1; }
 .chart-svg .axis   { fill: var(--text-subtle); font-size: 11px; font-family: var(--font-mono); }
@@ -1300,7 +1313,13 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
 .logo-bar.is-mid { opacity: .75; }
 .logo-bar.is-outcome { fill: var(--accent-2); opacity: 1; }
 
-.wordmark { display: inline-flex; align-items: center; gap: 0.55rem; }
+.wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
 .wordmark:hover { text-decoration: none; }
 .wordmark-text {
   font-family: var(--font-display);
@@ -1363,6 +1382,7 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
   gap: var(--space-6);
   grid-template-columns: minmax(0, 1.7fr) repeat(2, minmax(0, 1fr));
 }
+@media (max-width: 720px) { .footer-grid { grid-template-columns: minmax(0, 1fr); } }
 .footer-column { display: flex; flex-direction: column; gap: var(--space-2); align-items: flex-start; }
 .footer-link { font-size: 0.9rem; color: var(--text-muted); }
 .footer-link:hover { color: var(--text); }
@@ -1515,10 +1535,14 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
  * mark — so a chart here is a faster way to read numbers that are also on the
  * page, never the only way to read them.
  */
-.chart { margin: 0; display: flex; flex-direction: column; gap: var(--space-2); }
-.chart-svg { width: 100%; height: auto; display: block; overflow: visible; }
-.chart-caption { display: flex; justify-content: space-between; gap: var(--space-3); }
-.chart-peak { font-variant-numeric: tabular-nums; }
+/* Named `viz`, not `chart`: `.chart` already means a bordered, padded card on
+   the marketing pages, so a figure wearing it inside a `.card` renders a box
+   inside a box. Two meanings for one class is the collision that produced the
+   uneven padding this file was rebuilt to fix. */
+.viz { margin: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.viz-svg { width: 100%; height: auto; display: block; overflow: visible; }
+.viz-caption { display: flex; justify-content: space-between; gap: var(--space-3); }
+.viz-peak { font-variant-numeric: tabular-nums; }
 
 .funnel-chart { display: flex; flex-direction: column; gap: var(--space-4); }
 .funnel-row { display: flex; flex-direction: column; gap: var(--space-1); }

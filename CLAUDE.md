@@ -9,7 +9,7 @@ plan. This file is for whoever works on the code next.
 pnpm install
 pnpm build          # packages compile to dist/; apps typecheck against those
 pnpm typecheck
-pnpm test           # 838 tests, no network, no API key needed
+pnpm test           # 849 tests, no network, no API key needed
 node scripts/mutation-check.mjs   # proves the safety tests actually bite
 node scripts/preflight.mjs        # is a deployment actually able to send?
 pnpm --filter @le/web dev
@@ -696,6 +696,30 @@ tests that were verified by deliberately breaking the code.
     nouns — and the event records how many were kept against how many repeated,
     because "asked for four and stored one" needs looking into and "stored
     four" does not.
+
+38. **One stylesheet, one definition per class.** A class declared twice is
+    not a duplicate, it is a silent override: the later rule wins on source
+    order, the earlier one stops mattering, and it happens on a page nobody
+    edited and shows up nowhere in a diff of that page. Four were live at once
+    — `.section` meant "a band of the landing page with 4.5rem of padding"
+    until the application redeclared it as a flex column and took that padding
+    off the whole marketing site; `.chart` meant "a bordered, padded card"
+    until a figure redeclared it and started rendering a box inside a box;
+    `.site-footer`, `.wordmark`, `.footer-grid` and `.hero-panel` each had a
+    definition that had never applied to anything.
+
+    That is precisely what somebody sees as "some have a lot of padding, some
+    have none". It is not a series of small mistakes, it is the absence of a
+    check — so `apps/web/test/stylesheet.test.ts` is the check. Grouped
+    selectors are exempt, because `h1, h2, h3 { line-height }` followed by
+    `h1 { font-size }` is a scale being built rather than a collision.
+
+    The marketing pages and the application share this file and several names,
+    so **the application's frame is scoped under `.app`** — `.app .section`,
+    `.app .page-header`, `.app .empty`. Unscoped, the app's meaning of a word
+    wins on every page in the product. And colour never appears as a literal
+    outside the token block: a hex in a component rule is a colour that only
+    works on one ground.
 
 ## Conventions
 

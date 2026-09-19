@@ -6,6 +6,7 @@ import {
   BOOT_BEAT,
   CLICKS_ARE_INVISIBLE,
   CTA_DEFINITIONS,
+  effectiveCta,
   LINKEDIN_LIMITS,
   PACING_LOOP,
   countFunnel,
@@ -147,6 +148,45 @@ async function saveInviteNote(formData: FormData) {
     .eq("status", "queued");
 
   revalidatePath(`/app/campaigns/${campaignId}`);
+}
+
+/**
+ * Points a campaign at one of the workspace's calls to action.
+ *
+ * The CTA library was shipped without this and was therefore a page that did
+ * nothing: destinations could be named and no campaign could use one. The
+ * pointer is read at send time, so changing it here changes where every
+ * message in this campaign points — including the ones already reviewed,
+ * which is the point. The copy says "{{cta_link}}"; only the destination
+ * moves.
+ */
+async function setCampaignCta(formData: FormData) {
+  "use server";
+  const campaignId = String(formData.get("campaignId"));
+  const ctaId = String(formData.get("ctaId") ?? "");
+
+  const session = await requireSession();
+  const supabase = await createClient();
+
+  // Empty means "use this campaign's own destination", which is what a
+  // campaign built before the library has. Never a lookup for "".
+  const { error } = await supabase
+    .from("campaigns")
+    .update({ cta_id: ctaId || null })
+    .eq("id", campaignId)
+    .eq("workspace_id", session.workspaceId);
+
+  if (error) redirect(errorQuery(`/app/campaigns/${campaignId}`, `That did not save: ${error.message}`));
+
+  revalidatePath(`/app/campaigns/${campaignId}`);
+  redirect(
+    noticeQuery(
+      `/app/campaigns/${campaignId}`,
+      ctaId
+        ? "Pointed at that call to action. Every message in this campaign now sends its destination."
+        : "Back to this campaign's own destination.",
+    ),
+  );
 }
 
 async function setStatus(formData: FormData) {
@@ -394,7 +434,9 @@ export default async function CampaignPage({
 
   const { data: campaign } = await supabase
     .from("campaigns")
-    .select("id, name, status, connection_note, daily_invite_cap, reply_mode, launched_at, linkedin_account_id, rules, customer_profile_id, search_exhausted, searched_at, owner_user_id, cta_kind, cta_label, cta_url")
+    .select(
+      "id, name, status, connection_note, daily_invite_cap, reply_mode, launched_at, linkedin_account_id, rules, customer_profile_id, search_exhausted, searched_at, owner_user_id, cta_id, cta_kind, cta_label, cta_url",
+    )
     .eq("id", id)
     .eq("workspace_id", session.workspaceId)
     .maybeSingle();
@@ -469,7 +511,24 @@ export default async function CampaignPage({
   // Judged on what this campaign was asking for. A link campaign has no
   // meetings and never will; ending its funnel in a permanent zero reports a
   // working campaign as a failed one.
-  const reached = stagesFor(campaign.cta_kind).filter((stage) => counts[stage.key] > 0);
+  // The library, and what this campaign is actually sending. One resolver, the
+  // same one the worker uses at send time — a screen that read the columns
+  // directly would show a destination the send path does not use.
+  const { data: ctaLibrary } = await supabase
+    .from("ctas")
+    .select("id, name, kind, label, url")
+    .eq("workspace_id", session.workspaceId)
+    .is("archived_at", null)
+    .order("name", { ascending: true });
+
+  const linked = (ctaLibrary ?? []).find((c) => c.id === campaign.cta_id) ?? null;
+  const cta = effectiveCta(linked, {
+    kind: campaign.cta_kind,
+    label: campaign.cta_label,
+    url: campaign.cta_url,
+  });
+
+  const reached = stagesFor(cta.kind).filter((stage) => counts[stage.key] > 0);
   const searchNotice = describeSearch(lastSearch);
   // How each angle is doing, and whether anything can yet be said about it.
   //
@@ -595,24 +654,53 @@ export default async function CampaignPage({
         </div>
       ) : null}
 
-      <section className="card">
+      <section className="card stack-3">
         <p className="small">
-          <strong>This campaign asks for: {CTA_DEFINITIONS[campaign.cta_kind].label}</strong>
-          {campaign.cta_label ? ` — “${campaign.cta_label}”` : ""}
+          <strong>This campaign asks for: {CTA_DEFINITIONS[cta.kind].label}</strong>
+          {cta.label ? ` — “${cta.label}”` : ""}
         </p>
         <p className="tiny subtle">
-          Judged on {CTA_DEFINITIONS[campaign.cta_kind].conversion}.
-          {campaign.cta_kind === "link" ? ` ${CLICKS_ARE_INVISIBLE}` : ""}
+          Judged on {CTA_DEFINITIONS[cta.kind].conversion}.
+          {cta.kind === "link" ? ` ${CLICKS_ARE_INVISIBLE}` : ""}
         </p>
-        {campaign.cta_url ? (
+        {cta.url ? (
           <p className="tiny subtle">
             Sends to{" "}
-            <a href={campaign.cta_url} target="_blank" rel="noreferrer noopener">
-              {campaign.cta_url}
+            <a href={cta.url} target="_blank" rel="noreferrer noopener">
+              {cta.url}
             </a>
-            . Set on the strategy, because the copy is written toward the ask.
+            {cta.fromLibrary
+              ? ". Changing it on the Calls to action page changes it here."
+              : ". Carried on this campaign, set when it was built."}
           </p>
         ) : null}
+
+        {/* The picker. Without it the library was a page that did nothing:
+            destinations could be named and no campaign could use one. */}
+        {ctaLibrary?.length ? (
+          <form action={setCampaignCta} className="row">
+            <input type="hidden" name="campaignId" value={campaign.id} />
+            <label className="field grow">
+              <span className="tiny">Use a saved call to action</span>
+              <select name="ctaId" defaultValue={campaign.cta_id ?? ""}>
+                <option value="">This campaign&rsquo;s own destination</option>
+                {ctaLibrary.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.name} — {CTA_DEFINITIONS[option.kind].label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <SubmitButton className="btn secondary small" pendingLabel="Saving…">
+              Use this
+            </SubmitButton>
+          </form>
+        ) : (
+          <p className="tiny subtle">
+            <Link href="/app/cta">Save a call to action</Link> and every campaign can point at it,
+            so correcting a URL once corrects it everywhere.
+          </p>
+        )}
       </section>
 
       {reached.length > 0 ? (

@@ -155,3 +155,56 @@ export function renderCta(message: string, url: string | null | undefined): stri
 export function finalStage(kind: CtaKind): "meetings" | "positive" {
   return kind === "meeting" ? "meetings" : "positive";
 }
+
+/**
+ * What a campaign is actually asking for, given a library entry and its own
+ * columns.
+ *
+ * A campaign carries `cta_kind`, `cta_label` and `cta_url` of its own, and may
+ * also point at a workspace CTA (`cta_id`, migration 0024). The pointer wins
+ * when it resolves — that is the whole reason the library exists: correcting a
+ * URL in one place has to change every campaign using it, without rewriting a
+ * message or re-reviewing copy a human already approved.
+ *
+ * The campaign's own columns are not a leftover. They are what a campaign
+ * built before the library carries, and what one whose CTA was deleted falls
+ * back to — `cta_id` is `set null` on delete, because losing a destination
+ * must never take the campaign or its record of who was contacted with it.
+ *
+ * Resolved in one function because three call sites read it: the invitation
+ * body, the follow-up body, and the Reply Agent's goal. Three readings of
+ * which link to send is three chances to send a different one.
+ */
+export interface CtaSource {
+  kind: CtaKind | null;
+  label: string | null;
+  url: string | null;
+}
+
+export interface EffectiveCta {
+  kind: CtaKind;
+  label: string | null;
+  url: string | null;
+  /** True when a library entry supplied it, for screens that say which. */
+  fromLibrary: boolean;
+}
+
+export function effectiveCta(
+  linked: CtaSource | null | undefined,
+  own: CtaSource | null | undefined,
+): EffectiveCta {
+  // A linked row with no kind is not a usable answer, so it does not win by
+  // existing — it wins by being complete.
+  if (linked?.kind) {
+    return { kind: linked.kind, label: linked.label, url: linked.url, fromLibrary: true };
+  }
+  return {
+    // "Book a meeting" is the default because it is what every campaign built
+    // before CTAs existed was asking for, and reading those as a link campaign
+    // would drop the meetings stage off their funnel overnight.
+    kind: own?.kind ?? "meeting",
+    label: own?.label ?? null,
+    url: own?.url ?? null,
+    fromLibrary: false,
+  };
+}
