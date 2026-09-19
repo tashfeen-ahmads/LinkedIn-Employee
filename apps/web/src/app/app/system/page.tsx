@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PageHeader } from "@/components/page";
 import { requireSession } from "@/lib/workspace";
 import { callWorker } from "@/lib/worker";
 
@@ -45,10 +46,7 @@ export default async function SystemPage() {
   if (!result.ok) {
     return (
       <>
-        <header className="page-head">
-          <p className="eyebrow">System check</p>
-          <h1>System check</h1>
-        </header>
+        <PageHeader eyebrow="Help" title="System check" />
         <div className="notice danger">
           <p>
             <strong>The background service could not be reached.</strong> {result.error}
@@ -73,16 +71,18 @@ export default async function SystemPage() {
 
   return (
     <>
-      <header className="page-head">
-        <p className="eyebrow">System check</p>
-        <h1>What is standing in the way</h1>
-        <p className="small muted prose">
+      <PageHeader
+        eyebrow="Help"
+        title="What is standing in the way"
+        lede={
+          <>
           Every precondition between signing up and a booked meeting, checked against what is true
           right now. Two of these ask LinkedIn&rsquo;s provider directly rather than trusting what is
           stored here — which is the difference between an account that says it is connected and one
           that is.
-        </p>
-      </header>
+          </>
+        }
+      />
 
       {next ? (
         <div className={`notice ${next.state === "blocked" ? "danger" : "accent"}`}>

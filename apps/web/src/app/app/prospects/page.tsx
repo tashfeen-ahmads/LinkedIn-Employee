@@ -1,4 +1,5 @@
 import { revalidatePath } from "next/cache";
+import { Empty, PageHeader } from "@/components/page";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { callWorker, errorQuery } from "@/lib/worker";
@@ -139,12 +140,15 @@ export default async function ProspectsPage({
   if (!prospects?.length && showing === "all") {
     return (
       <>
-        <div className="page-head">
-          <h1>Prospects</h1>
-          <p className="muted">
-            None yet. Approve a customer profile and run the Targeting Agent to build your first list.
-          </p>
-        </div>
+        <PageHeader
+          eyebrow="Pipeline"
+          title="Prospects"
+          lede="Everyone this workspace has found, and who has been reached out to."
+        />
+        <Empty title="No prospects yet." action="Approve a strategy" href="/app/strategy">
+          A strategy produces a search, and a search produces this list. Nobody is contacted until
+          you have read the names and the copy.
+        </Empty>
       </>
     );
   }
@@ -152,16 +156,20 @@ export default async function ProspectsPage({
   return (
     <>
       <PageNotice error={params.error} notice={params.notice} />
-      <div className="page-head">
-        <h1>Prospects</h1>
-        <p className="muted">
-          {totalCount ?? 0} {strategy ? `found by "${strategy.name}"` : "in this workspace"},{" "}
-          {contactedCount ?? 0} of whom have been contacted. Once
-          somebody has been reached out to they are never added to another campaign — checked again in
-          the moment before every send, not only when a list is built. Erasing someone removes
-          everything we hold about them and keeps only a do-not-contact record, so a later campaign
-          cannot re-import them.
-        </p>
+      <PageHeader
+        eyebrow="Pipeline"
+        title="Prospects"
+        lede={
+          <>
+            {totalCount ?? 0} {strategy ? `found by "${strategy.name}"` : "in this workspace"},{" "}
+            {contactedCount ?? 0} of whom have been contacted. Once somebody has been reached out to
+            they are never added to another campaign — checked again in the moment before every
+            send, not only when a list is built.
+          </>
+        }
+      />
+      {/* The filters, which are the whole reason this page is usable at all. */}
+      <div className="stack-3">
         {/*
           The history, as a place to stand rather than a column to squint at.
           Ranked by fit, somebody messaged last week sat wherever their score

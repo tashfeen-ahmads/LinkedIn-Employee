@@ -1,4 +1,5 @@
 import { revalidatePath } from "next/cache";
+import { PageHeader } from "@/components/page";
 import { KNOWLEDGE_BUDGET_CHARS, selectKnowledge } from "@le/agents";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
@@ -77,14 +78,11 @@ export default async function KnowledgePage() {
 
   return (
     <>
-      <div className="page-head">
-        <h1>Knowledge</h1>
-        <p className="small muted prose">
-          The only product facts the agent may state. Anything a prospect asks that is not answered here
-          is handed to you instead of guessed at — so this page is the difference between autopilot
-          answering a question and forwarding it.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Settings"
+        title="Product facts"
+        lede="The only things the agent may state. Anything a prospect asks that is not answered here is handed to you rather than guessed at — so this page is the difference between autopilot answering a question and forwarding it."
+      />
 
       {omitted.length ? (
         <div className="notice warning">

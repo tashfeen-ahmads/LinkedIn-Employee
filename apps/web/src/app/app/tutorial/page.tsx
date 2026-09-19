@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PageHeader } from "@/components/page";
 import { TOUR_STAGES, stageStatus } from "@le/shared";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
@@ -28,15 +29,17 @@ export default async function TutorialPage() {
 
   return (
     <>
-      <div className="page-head">
-        <p className="eyebrow">Tutorial</p>
-        <h1>How this works, start to finish</h1>
-        <p className="muted">
+      <PageHeader
+        eyebrow="Help"
+        title="How this works"
+        lede={
+          <>
           Nine stages. You do five of them; the product does the rest and asks before anything
           reaches a real person. Each one says what it cannot do as well as what it does — you are
           going to meet those edges either way, and meeting them here is cheaper.
-        </p>
-      </div>
+          </>
+        }
+      />
 
       <ol className="tour">
         {TOUR_STAGES.map((stage, index) => {

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Empty, PageHeader } from "@/components/page";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { fetchAllRows } from "@/lib/rows";
@@ -45,13 +46,15 @@ export default async function CampaignsPage() {
   if (!campaigns?.length) {
     return (
       <>
-        <div className="page-head">
-          <h1>Campaigns</h1>
-          <p className="muted">
-            None yet. The Targeting Agent creates one as a draft; you review the list and the copy before
-            anything is sent.
-          </p>
-        </div>
+        <PageHeader
+          eyebrow="Pipeline"
+          title="Campaigns"
+          lede="Built as drafts. You read every name and every message before anything sends."
+        />
+        <Empty title="No campaigns yet." action="Open strategies" href="/app/strategy">
+          The Targeting Agent builds one from an approved strategy — the list, the copy, and a note
+          written for each person. It arrives as a draft.
+        </Empty>
       </>
     );
   }
@@ -84,7 +87,16 @@ export default async function CampaignsPage() {
 
   return (
     <>
-      <h1>Campaigns</h1>
+      <PageHeader
+        eyebrow="Pipeline"
+        title="Campaigns"
+        lede="Grouped by the strategy each came from, in the strategies' own priority order."
+        actions={
+          <Link className="btn ghost small" href="/app/analytics">
+            Results
+          </Link>
+        }
+      />
       {grouped.map((group) => (
         <section key={group.id ?? "none"} className="stack-4">
           <div className="between">

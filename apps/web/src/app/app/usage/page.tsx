@@ -1,4 +1,5 @@
 import { formatUsd } from "@le/shared";
+import { PageHeader } from "@/components/page";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { costPerMeeting, groupBy, type UsageGroup, type UsageRow } from "@/lib/usage";
@@ -18,10 +19,11 @@ export default async function UsagePage() {
   if (!["owner", "admin"].includes(session.role)) {
     return (
       <>
-        <div className="page-head">
-          <h1>Usage</h1>
-          <p className="muted">Spend is visible to the workspace owner and admins.</p>
-        </div>
+        <PageHeader
+          eyebrow="Analytics"
+          title="Agent spend"
+          lede="What the agents cost to run. Visible to the workspace owner and admins."
+        />
       </>
     );
   }
@@ -49,12 +51,11 @@ export default async function UsagePage() {
   if (rows.length === 0) {
     return (
       <>
-        <div className="page-head">
-          <h1>Usage</h1>
-          <p className="muted">
-            No model calls in the last {DAYS} days. This page fills in once a campaign runs.
-          </p>
-        </div>
+        <PageHeader
+          eyebrow="Analytics"
+          title="Agent spend"
+          lede={`No model calls in the last ${DAYS} days. This page fills in once a campaign runs.`}
+        />
       </>
     );
   }
@@ -67,13 +68,11 @@ export default async function UsagePage() {
 
   return (
     <>
-      <div className="page-head">
-        <h1>Usage</h1>
-        <p className="small muted prose">
-          The last {DAYS} days, priced at the published list rates. Costs are an estimate from recorded
-          tokens, not an invoice.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Analytics"
+        title="Agent spend"
+        lede={`The last ${DAYS} days, priced at the published list rates. Costs are an estimate from recorded tokens, not an invoice.`}
+      />
 
       <section className="grid tight grid-4">
         <Stat label={`Spend, ${DAYS} days`} value={formatUsd(total.costUsd)} />

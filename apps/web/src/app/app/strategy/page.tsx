@@ -245,9 +245,7 @@ export default async function StrategyPage({
     const strategy = await readStrategyState(supabase, session.workspaceId, false);
     return (
       <>
-        <div className="page-head">
-          <h1>Strategy</h1>
-        </div>
+        <PageHeader eyebrow="Pipeline" title="Strategies" />
         <StrategyStatus state={strategy} />
         {strategy.phase === "absent" ? (
           <div className="notice">

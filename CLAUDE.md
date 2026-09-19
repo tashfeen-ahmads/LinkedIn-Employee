@@ -9,7 +9,7 @@ plan. This file is for whoever works on the code next.
 pnpm install
 pnpm build          # packages compile to dist/; apps typecheck against those
 pnpm typecheck
-pnpm test           # 833 tests, no network, no API key needed
+pnpm test           # 838 tests, no network, no API key needed
 node scripts/mutation-check.mjs   # proves the safety tests actually bite
 node scripts/preflight.mjs        # is a deployment actually able to send?
 pnpm --filter @le/web dev
@@ -615,6 +615,87 @@ tests that were verified by deliberately breaking the code.
     moved the chat window, not removed it — repair must never depend on
     somebody finding a terminal, for the same reason rule 8 says it must never
     depend on somebody finding a button.
+
+34. **The application has its own type scale, and one heading per level.**
+    It used to wear the marketing site's: `h1` clamps up to 3.25rem for a
+    landing hero, and the app patched it back down with `.app-body h1`. A scale
+    plus an override is not a scale — seven screens carried two or three
+    `<h1>`s and nine of sixteen wrapped their title in `page-head` while the
+    rest did something else, which is what a person reads as "a title, a mini
+    title and a title under the title". A page with three h1s has no heading,
+    because nothing is above anything else.
+
+    `PageHeader` and `Section` (`apps/web/src/components/page.tsx`) are the only
+    places an `<h1>` and an `<h2>` may appear, and they set their own spacing,
+    so two screens cannot drift apart. Three levels — page, section, card — and
+    a fourth is really a new section. `apps/web/test/page-structure.test.ts`
+    enforces it over every page, because a convention nothing checks drifts
+    back within a month.
+
+    The app's face is its own too. A landing page is read once and wants
+    character; a dashboard is worked in daily and wants to disappear. Geist has
+    real tabular figures, which is why a column of numbers no longer has to be
+    set in a monospace to line up — and why the tables stopped looking like
+    code.
+
+35. **A chart is drawn from a scale this repo owns, and its colours are
+    computed.** `apps/web/src/components/charts.tsx` is inline SVG and no
+    library: four shapes is less code than a dependency's configuration, and a
+    chart built on our own scale cannot draw a bar whose length disagrees with
+    the number printed beside it.
+
+    The funnel is **bars on a shared scale, never a trapezoid**. A trapezoid
+    encodes its numbers as area, so a stage holding half as many people looks a
+    quarter as big — it misrepresents the one thing it exists to show. Every
+    value is written next to its own mark, so nothing depends on reading a
+    length against an axis, and one axis only: two y-scales on one chart is the
+    most common way to imply a relationship that is not in the data.
+
+    Series colours live in `--viz-1..4` and were **run through the validator**
+    in both modes, not chosen by eye — a lightness band so no series vanishes
+    into the surface, a chroma floor so none reads as grey, and a colour-blind
+    separation between every adjacent pair. Light and dark are separate steps
+    of the same hues picked for their own surface, never an automatic flip.
+    Fixed order, never cycled: a fifth series folds into "Other" rather than
+    inventing a hue.
+
+36. **A workspace keeps several calls to action, and a campaign picks one.**
+    The goal arrived as three loose columns on the strategy and the campaign
+    (`cta_kind`, `cta_label`, `cta_url`), which works for a business with one
+    ask. Nobody has one ask — the same company runs a free-audit link, a
+    sign-up, a book-a-call and a product page, and each campaign retyped its
+    destination, so a URL corrected in one place stayed wrong in four with no
+    screen able to say which campaigns pointed where.
+
+    `ctas` (migration 0024) is the row somebody names once; `campaigns.cta_id`
+    points at it and rule 29's `{{cta_link}}` reads through the pointer at send
+    time, so fixing a typo fixes every campaign using it without rewriting a
+    message or re-reviewing copy a human approved. The link is `set null` and
+    **never** cascades: deleting a destination must not delete the campaign
+    that used it, and a CTA is archived rather than deleted, because a campaign
+    that used one still has to be able to say what it pointed at.
+
+37. **Three strategies is where a workspace starts, not where it stops.**
+    The Strategy Agent writes three to five — the right number to read and
+    approve in one sitting, and the wrong number to run a business on, which
+    works fifteen or twenty segments. `expand` on `StrategyJob` asks the same
+    agent for more.
+
+    Three things make that worth having. It **extends the existing business
+    profile** rather than inserting a second, because every strategy hangs off
+    that row and a workspace with two has its list split across both — which is
+    what a plain re-run did. A returned strategy whose name repeats one already
+    here is **dropped, not stored**: two strategies covering the same people
+    put one person on two lists, and rule 24 then means the second finds
+    nobody, so it is a strategy that can only ever report zero. And priorities
+    **continue from the end of the list**, or four new strategies each claim to
+    be the one to pursue first.
+
+    The agent is handed the names that already exist. Asked for more without
+    being told what is there, a model returns the same three with different
+    nouns — and the event records how many were kept against how many repeated,
+    because "asked for four and stored one" needs looking into and "stored
+    four" does not.
 
 ## Conventions
 

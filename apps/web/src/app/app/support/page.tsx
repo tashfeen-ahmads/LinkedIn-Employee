@@ -1,4 +1,5 @@
 import { revalidatePath } from "next/cache";
+import { PageHeader } from "@/components/page";
 import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
@@ -90,14 +91,17 @@ export default async function SupportPage({ searchParams }: { searchParams: Noti
   return (
     <>
       <PageNotice error={params.error} notice={params.notice} />
-      <div className="page-head">
-        <h1>Support</h1>
-        <p className="muted">
+      <PageHeader
+        eyebrow="Help"
+        title="Support"
+        lede={
+          <>
           Tell us what is not working. Every ticket carries what the product believed at the moment you
           raised it — which step you are on, whether LinkedIn is connected, whether the sending loop is
           running — so you do not have to go and check any of that first.
-        </p>
-      </div>
+          </>
+        }
+      />
 
       <section className="card">
         <form action={raiseTicket}>

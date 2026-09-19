@@ -1,4 +1,5 @@
 import { entitlementFor, entitlementMessage } from "@le/billing";
+import { PageHeader } from "@/components/page";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { callWorker, errorQuery } from "@/lib/worker";
@@ -53,7 +54,11 @@ export default async function BillingPage({ searchParams }: { searchParams: Noti
   return (
     <>
       <PageNotice error={params.error} notice={params.notice} />
-      <h1>Billing</h1>
+      <PageHeader
+        eyebrow="Settings"
+        title="Billing"
+        lede="Your plan, your seats, and everything this workspace holds if you want it back."
+      />
 
       {message ? (
         <div className={`notice ${entitlement.canSend ? "warning" : "danger"}`}>

@@ -1,4 +1,5 @@
 import { revalidatePath } from "next/cache";
+import { PageHeader } from "@/components/page";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import {
@@ -503,21 +504,19 @@ export default async function CampaignPage({
   return (
     <>
       <PageNotice error={notice.error} notice={notice.notice} />
-      <p className="small muted">
-        <Link href="/app/campaigns">← Campaigns</Link>
-      </p>
-      <div className="between top"
-      >
-        <div>
-          <h1>{campaign.name}</h1>
-          <p className="small muted">
+      <PageHeader
+        eyebrow="Campaign"
+        title={campaign.name}
+        lede={
+          <>
             <span className={`pill ${running ? "positive" : ""}`}>{campaign.status}</span>{" "}
             {queued.length} still to invite of {rows.length}
             {days ? ` · about ${days} working ${days === 1 ? "day" : "days"} at ${campaign.daily_invite_cap} a day` : ""}
             {account?.display_name ? ` · sending as ${account.display_name}` : ""}
-          </p>
-        </div>
-        <div className="row">
+          </>
+        }
+        actions={
+          <>
           {/*
             Proof, on demand. A campaign that has sent nothing is otherwise
             indistinguishable from one that cannot, and the difference took
@@ -538,8 +537,9 @@ export default async function CampaignPage({
               {running ? "Pause" : "Launch campaign"}
             </SubmitButton>
           </form>
-        </div>
-      </div>
+          </>
+        }
+      />
 
       {/*
         What the sending loop is doing, first on the page and above every other

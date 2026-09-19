@@ -1,4 +1,5 @@
 import { revalidatePath } from "next/cache";
+import { Empty, PageHeader } from "@/components/page";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { callWorker, errorQuery } from "@/lib/worker";
@@ -163,10 +164,14 @@ export default async function InboxPage({ searchParams }: { searchParams: Notice
   if (conversationIds.length === 0) {
     return (
       <>
-        <div className="page-head">
-          <h1>Inbox</h1>
-          <p className="muted">Nothing waiting. Anything needing a human decision appears here.</p>
-        </div>
+        <PageHeader
+          title="Inbox"
+          lede="Conversations waiting on a person. A reply the agent will not send alone appears here with its draft."
+        />
+        <Empty title="Nothing is waiting for you.">
+          Anything the Reply Agent will not answer on its own — a price, a legal question, anything
+          negative, or simply low confidence — is held here rather than guessed at.
+        </Empty>
       </>
     );
   }
@@ -194,13 +199,15 @@ export default async function InboxPage({ searchParams }: { searchParams: Notice
   return (
     <>
       <PageNotice error={params.error} notice={params.notice} />
-      <div className="page-head">
-        <h1>Inbox</h1>
-        <p className="muted">
+      <PageHeader
+        title="Inbox"
+        lede={
+          <>
           {conversationIds.length}{" "}
           {conversationIds.length === 1 ? "conversation needs" : "conversations need"} your decision.
-        </p>
-      </div>
+          </>
+        }
+      />
 
       <div className="grid">
         {conversationIds.map((conversationId) => {

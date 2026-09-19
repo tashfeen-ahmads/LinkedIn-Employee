@@ -1,4 +1,5 @@
 import { requireSession } from "@/lib/workspace";
+import { PageHeader } from "@/components/page";
 import { createClient } from "@/lib/supabase-server";
 import { normalizeExclusionValue, type ExclusionKind } from "@le/shared";
 import { revalidatePath } from "next/cache";
@@ -80,14 +81,12 @@ export default async function ExclusionsPage() {
 
   return (
     <>
-      <div className="page-head">
-        <h1>Exclusions</h1>
-        <p className="small muted prose">
-          Accounts and people nobody in this workspace contacts. Checked when a campaign is built and
-          again immediately before every send, so adding a company here stops the invitations already
-          queued against it.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Settings"
+        title="Do not contact"
+        lede="Accounts and people nobody in this workspace contacts. Checked when a campaign is built and again immediately before every send, so adding a company here stops the invitations already queued against it."
+      />
+
 
       {manage ? (
         <section className="card">
