@@ -8,6 +8,10 @@ export interface StrategyInput {
   description?: string;
   websiteText?: string;
   existingCustomers?: string[];
+  /** Strategies already in the workspace, when asking for more. */
+  existingProfiles?: { name: string; summary?: string }[];
+  /** How many more to write. Only read alongside `existingProfiles`. */
+  want?: number;
 }
 
 /**
@@ -16,7 +20,17 @@ export interface StrategyInput {
  * Targeting Agent will execute.
  */
 export async function runStrategyAgent(ctx: AgentContext, input: StrategyInput): Promise<StrategyOutput> {
-  if (!input.websiteUrl && !input.linkedinCompanyUrl && !input.description && !input.websiteText) {
+  // A run that is adding to an existing set works from the business profile and
+  // the strategies already written, which is more material than a first run
+  // ever has. Requiring the website again would make "write me four more" fail
+  // for every workspace that onboarded with a description.
+  const hasMaterial =
+    input.websiteUrl ||
+    input.linkedinCompanyUrl ||
+    input.description ||
+    input.websiteText ||
+    input.existingProfiles?.length;
+  if (!hasMaterial) {
     throw new Error("Strategy Agent needs at least a website, a LinkedIn page, or a description");
   }
 

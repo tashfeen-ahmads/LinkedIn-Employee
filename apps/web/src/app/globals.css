@@ -1571,3 +1571,19 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
 /* A row of KPI tiles. Auto-fit rather than a fixed column count, so four
    tiles never leave one stranded alone on a second row. */
 .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-3); }
+
+/* A meeting row: time, who, what you can do. Scanned down the left edge
+   rather than read across, so the time is a column of its own. */
+.meeting-row {
+  display: grid;
+  grid-template-columns: 5rem minmax(0, 1fr) auto;
+  gap: var(--space-4);
+  align-items: center;
+}
+.meeting-when { display: flex; flex-direction: column; }
+.meeting-time { font-weight: 600; font-variant-numeric: tabular-nums; }
+.meeting-who { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
+.meeting-actions { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+@media (max-width: 640px) {
+  .meeting-row { grid-template-columns: 1fr; gap: var(--space-2); }
+}

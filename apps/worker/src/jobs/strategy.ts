@@ -40,51 +40,136 @@ async function strategy(ctx: WorkerContext, job: StrategyJob): Promise<string> {
   // and it is. Waiting until the profiles exist would make it a lie by a
   // minute — and if the agent fails, the one email explaining what is
   // happening is exactly the one that should already have arrived.
-  await sendWelcome(ctx, job);
+  if (!job.expand) await sendWelcome(ctx, job);
+
+  /*
+   * Adding to a workspace, rather than starting one.
+   *
+   * A first run writes three to five strategies: enough to read and approve in
+   * one sitting, and nowhere near enough to run a business on — a company
+   * works fifteen or twenty segments. So the same agent is asked for more,
+   * handed the names it has already produced so it does not rewrite them with
+   * different nouns, and writes into the business profile that already exists.
+   *
+   * Creating a second business profile instead is what this used to do, and it
+   * is worse than it sounds: the profile is the thing every strategy hangs
+   * off, so a workspace ended up with two of them and a strategy list split
+   * across both.
+   */
+  const existing = job.expand ? await readExistingStrategies(ctx, job.workspaceId) : null;
+  if (job.expand && !existing) {
+    throw new Error("nothing to add to: this workspace has no business profile yet");
+  }
 
   const websiteText = job.websiteUrl ? await fetchSite(job.websiteUrl) : undefined;
 
   const output = await runStrategyAgent(ctx.agentsFor(job.workspaceId), {
     websiteUrl: job.websiteUrl,
     linkedinCompanyUrl: job.linkedinCompanyUrl,
-    description: job.description,
+    description:
+      job.description ??
+      // What this company is, for a run that was given nothing but "more
+      // please".
+      (existing ? JSON.stringify(existing.spec) : undefined),
     websiteText,
     existingCustomers: job.existingCustomers,
+    existingProfiles: existing?.profiles.map((p) => ({ name: p.name })),
+    want: 4,
   });
 
-  const { data: businessProfile, error } = await ctx.db
-    .from("business_profiles")
-    .insert({
-      workspace_id: job.workspaceId,
-      website_url: job.websiteUrl ?? null,
-      linkedin_company_url: job.linkedinCompanyUrl ?? null,
-      spec: output.businessProfile as never,
-      created_by: job.userId,
-    })
-    .select("id")
-    .single();
-  if (error || !businessProfile) throw new Error(`could not store business profile: ${error?.message}`);
+  let businessProfileId: string;
 
-  await ctx.db.from("customer_profiles").insert(
-    output.customerProfiles.map((profile) => ({
-      workspace_id: job.workspaceId,
-      business_profile_id: businessProfile.id,
-      name: profile.name,
-      spec: profile as never,
-      priority: profile.priority,
-    })),
-  );
+  if (existing) {
+    businessProfileId = existing.id;
+  } else {
+    const { data: created, error } = await ctx.db
+      .from("business_profiles")
+      .insert({
+        workspace_id: job.workspaceId,
+        website_url: job.websiteUrl ?? null,
+        linkedin_company_url: job.linkedinCompanyUrl ?? null,
+        spec: output.businessProfile as never,
+        created_by: job.userId,
+      })
+      .select("id")
+      .single();
+    if (error || !created) throw new Error(`could not store business profile: ${error?.message}`);
+    businessProfileId = created.id;
+  }
+
+  // Anything the agent produced that names a strategy already here is dropped
+  // rather than stored. Two strategies covering the same people put one person
+  // on two lists, and the never-twice rule then means the second list finds
+  // nobody — a strategy that can only ever report zero.
+  const taken = new Set((existing?.profiles ?? []).map((p) => p.name.trim().toLowerCase()));
+  const fresh = output.customerProfiles.filter((p) => !taken.has(p.name.trim().toLowerCase()));
+
+  if (fresh.length) {
+    // Priorities continue from the end of the list rather than restarting at
+    // 1, or four new strategies would each claim to be the one to pursue first.
+    const after = existing?.highestPriority ?? 0;
+    await ctx.db.from("customer_profiles").insert(
+      fresh.map((profile, i) => ({
+        workspace_id: job.workspaceId,
+        business_profile_id: businessProfileId,
+        name: profile.name,
+        spec: profile as never,
+        priority: existing ? after + i + 1 : profile.priority,
+      })),
+    );
+  }
 
   await recordEvent(ctx.db, {
     workspaceId: job.workspaceId,
     name: "strategy.profile.created",
     actorUserId: job.userId,
     subjectType: "business_profile",
-    subjectId: businessProfile.id,
-    payload: { profiles: output.customerProfiles.length },
+    subjectId: businessProfileId,
+    // Both numbers, because "asked for four and stored one" is a different
+    // thing to look into from "asked for four and stored four".
+    payload: {
+      profiles: fresh.length,
+      duplicatesDropped: output.customerProfiles.length - fresh.length,
+      expanded: Boolean(job.expand),
+    },
   });
 
-  return businessProfile.id;
+  return businessProfileId;
+}
+
+/** The business profile to add to, and the strategies already hanging off it. */
+async function readExistingStrategies(
+  ctx: WorkerContext,
+  workspaceId: string,
+): Promise<{
+  id: string;
+  spec: unknown;
+  profiles: { name: string }[];
+  highestPriority: number;
+} | null> {
+  const { data: business } = await ctx.db
+    .from("business_profiles")
+    .select("id, spec")
+    .eq("workspace_id", workspaceId)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (!business) return null;
+
+  const { data: profiles } = await ctx.db
+    .from("customer_profiles")
+    .select("name, priority")
+    .eq("workspace_id", workspaceId);
+
+  return {
+    id: business.id,
+    // The company's own profile, handed back as the material for the new
+    // strategies. Without it an expanding run has only a list of names to work
+    // from and writes segments for a company it can no longer describe.
+    spec: business.spec,
+    profiles: (profiles ?? []).map((p) => ({ name: p.name })),
+    highestPriority: Math.max(0, ...(profiles ?? []).map((p) => p.priority ?? 0)),
+  };
 }
 
 /**

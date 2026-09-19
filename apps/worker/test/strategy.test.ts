@@ -226,3 +226,121 @@ describe("runStrategyJob", () => {
     expect(db.rows("customer_profiles")).toHaveLength(3);
   });
 });
+
+describe("runStrategyJob, adding to a workspace", () => {
+  /** A workspace that has already been through its first run. */
+  async function started() {
+    const { db, ctx } = harness();
+    const { runStrategyJob } = await import("../src/jobs/strategy.js");
+    await runStrategyJob(ctx, { workspaceId: WORKSPACE, userId: USER, websiteUrl: "https://acme.test" });
+    return { db, ctx, runStrategyJob };
+  }
+
+  it("adds to the business profile that exists rather than creating a second", async () => {
+    // A workspace with two business profiles has its strategy list split
+    // across both, and the profile is the thing every strategy hangs off.
+    const { db, ctx, runStrategyJob } = await started();
+    strategyMock.mockResolvedValue({
+      ...OUTPUT,
+      customerProfiles: [profile("Chamber leaders", 1), profile("Franchise owners", 2)],
+    });
+
+    await runStrategyJob(ctx, { workspaceId: WORKSPACE, userId: USER, expand: true });
+
+    expect(db.rows("business_profiles")).toHaveLength(1);
+    expect(db.rows("customer_profiles")).toHaveLength(5);
+  });
+
+  it("tells the agent what already exists, so it does not rewrite it", async () => {
+    const { ctx, runStrategyJob } = await started();
+    strategyMock.mockResolvedValue({ ...OUTPUT, customerProfiles: [profile("New angle", 1)] });
+
+    await runStrategyJob(ctx, { workspaceId: WORKSPACE, userId: USER, expand: true });
+
+    const input = strategyMock.mock.calls.at(-1)![1] as {
+      existingProfiles?: { name: string }[];
+      want?: number;
+    };
+    expect(input.existingProfiles?.map((p) => p.name).sort()).toEqual([
+      "Agency owners",
+      "Founders",
+      "Ops leaders",
+    ]);
+    expect(input.want).toBeGreaterThan(0);
+  });
+
+  it("drops a strategy that repeats one already here", async () => {
+    // Two strategies covering the same people put one person on two lists, and
+    // the never-twice rule then means the second finds nobody — a strategy
+    // that can only ever report zero.
+    const { db, ctx, runStrategyJob } = await started();
+    strategyMock.mockResolvedValue({
+      ...OUTPUT,
+      customerProfiles: [profile("ops leaders", 1), profile("Chamber leaders", 2)],
+    });
+
+    await runStrategyJob(ctx, { workspaceId: WORKSPACE, userId: USER, expand: true });
+
+    expect(db.rows("customer_profiles")).toHaveLength(4);
+    const names = db.rows("customer_profiles").map((r) => r.name);
+    expect(names).toContain("Chamber leaders");
+    // Matched without regard to case, because "Ops leaders" and "ops leaders"
+    // are the same segment and a list with both in it reads as a bug.
+    expect(names.filter((n) => String(n).toLowerCase() === "ops leaders")).toHaveLength(1);
+  });
+
+  it("continues the priority order instead of restarting at one", async () => {
+    // Four new strategies each claiming to be the one to pursue first is a
+    // ranking that has stopped meaning anything.
+    const { db, ctx, runStrategyJob } = await started();
+    strategyMock.mockResolvedValue({
+      ...OUTPUT,
+      customerProfiles: [profile("Chamber leaders", 1), profile("Franchise owners", 2)],
+    });
+
+    await runStrategyJob(ctx, { workspaceId: WORKSPACE, userId: USER, expand: true });
+
+    const priorities = db.rows("customer_profiles").map((r) => r.priority).sort((a, b) => Number(a) - Number(b));
+    expect(priorities).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it("records how many were kept and how many repeated", async () => {
+    // "Asked for four and stored one" is a different thing to look into from
+    // "asked for four and stored four".
+    const { db, ctx, runStrategyJob } = await started();
+    strategyMock.mockResolvedValue({
+      ...OUTPUT,
+      customerProfiles: [profile("Ops leaders", 1), profile("Chamber leaders", 2)],
+    });
+
+    await runStrategyJob(ctx, { workspaceId: WORKSPACE, userId: USER, expand: true });
+
+    const event = db.rows("events").filter((e) => e.name === "strategy.profile.created").at(-1)!;
+    const payload = event.payload as { profiles: number; duplicatesDropped: number; expanded: boolean };
+    expect(payload.profiles).toBe(1);
+    expect(payload.duplicatesDropped).toBe(1);
+    expect(payload.expanded).toBe(true);
+  });
+
+  it("does not welcome somebody who has been here since day one", async () => {
+    const { ctx, runStrategyJob } = await started();
+    const withEmail = harness({ email: true });
+    strategyMock.mockResolvedValue({ ...OUTPUT, customerProfiles: [profile("New angle", 1)] });
+
+    await runStrategyJob(ctx, { workspaceId: WORKSPACE, userId: USER, expand: true });
+
+    expect(withEmail.email!.sent).toHaveLength(0);
+  });
+
+  it("refuses to add to a workspace that has never run", async () => {
+    // Rather than quietly creating the first business profile from a request
+    // that asked to extend one: the caller believes it has strategies, and
+    // finding out it does not is the useful answer.
+    const { ctx } = harness();
+    const { runStrategyJob } = await import("../src/jobs/strategy.js");
+
+    await expect(
+      runStrategyJob(ctx, { workspaceId: WORKSPACE, userId: USER, expand: true }),
+    ).rejects.toThrow(/no business profile/i);
+  });
+});

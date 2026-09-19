@@ -16,6 +16,17 @@ export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
 export interface StrategyJob {
   workspaceId: string;
   userId: string;
+  /**
+   * Add more strategies to the ones this workspace already has, rather than
+   * writing its first set.
+   *
+   * A first run produces three to five — the right number to read and approve
+   * in one sitting, and the wrong number to run a business on. This is the
+   * same agent asked for more, told what already exists so it does not rewrite
+   * it, and writing into the business profile that is already there instead of
+   * creating a second one.
+   */
+  expand?: boolean;
   websiteUrl?: string;
   linkedinCompanyUrl?: string;
   description?: string;

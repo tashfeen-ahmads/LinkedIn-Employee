@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { BusinessProfileSchema, CustomerProfileSchema } from "@le/shared";
 import { PageNotice } from "@/components/page-notice";
+import { PageHeader } from "@/components/page";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { callWorker, errorQuery, noticeQuery } from "@/lib/worker";
@@ -120,6 +121,34 @@ async function saveProfile(formData: FormData) {
  * LinkedIn account rather than queueing a job that would fail silently in the
  * worker — the person is standing right here and can fix it.
  */
+/**
+ * Asks the Strategy Agent for more strategies.
+ *
+ * The first run writes three to five, which is the right number to read and
+ * approve on a first afternoon and the wrong number to run a business on — a
+ * company works fifteen or twenty segments, and this product had no way to get
+ * past the first handful. Pressing this adds four more, written against what
+ * already exists so it does not hand back the same three with different nouns.
+ */
+async function writeMoreStrategies() {
+  "use server";
+  const session = await requireSession();
+  const queued = await callWorker("/jobs/strategy", {
+    workspaceId: session.workspaceId,
+    userId: session.userId,
+    expand: true,
+  });
+  if (!queued.ok) redirect(errorQuery("/app/strategy", queued.error));
+
+  revalidatePath("/app/strategy");
+  redirect(
+    noticeQuery(
+      "/app/strategy",
+      "Writing four more. They arrive on this page in a minute or two, unapproved like the others — nothing is searched for until you read one.",
+    ),
+  );
+}
+
 async function findProspects(formData: FormData) {
   "use server";
   const profileId = String(formData.get("profileId"));
@@ -286,14 +315,18 @@ export default async function StrategyPage({
 
   return (
     <>
-      <div className="page-head">
-        <h1>Strategy</h1>
-        <p className="small muted prose">
-          Written by the Strategy Agent from what you publish. Nothing is searched for until you approve
-          a profile, and every message the writer sends is grounded in what is on this page — so it is
-          worth reading properly once.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Pipeline"
+        title="Strategies"
+        lede="Written by the Strategy Agent from what you publish. Nothing is searched for until you approve one, and every message the writer sends is grounded in what is on this page — so it is worth reading properly once."
+        actions={
+          <form action={writeMoreStrategies}>
+            <SubmitButton pendingLabel="Writing…" className="btn secondary small">
+              Write more strategies
+            </SubmitButton>
+          </form>
+        }
+      />
 
       <PageNotice error={params.error} notice={params.notice} />
 

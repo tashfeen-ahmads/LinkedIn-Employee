@@ -35,12 +35,20 @@ const StrategyRequest = z
     linkedinCompanyUrl: z.string().optional(),
     description: z.string().optional(),
     existingCustomers: z.array(z.string()).optional(),
+    /** Add to the strategies this workspace has rather than writing its first. */
+    expand: z.boolean().optional(),
   })
   // The agent refuses to invent an ICP from nothing, so a request carrying
   // nothing would enqueue a job that fails three times and dies unseen. Reject
   // it here, where the caller can still be told.
+  //
+  // An expanding run is exempt: it works from the business profile and the
+  // strategies already stored, which is more material than a first run ever
+  // has, and requiring the website again would make "write me four more" fail
+  // for anybody who onboarded with a description.
   .refine(
-    (input) => Boolean(input.websiteUrl || input.linkedinCompanyUrl || input.description),
+    (input) =>
+      Boolean(input.expand || input.websiteUrl || input.linkedinCompanyUrl || input.description),
     { message: "need a website, a LinkedIn page, or a description to work from" },
   );
 
