@@ -22,18 +22,21 @@ export function SetupChecklist({ state }: { state: OnboardingState }) {
 
   return (
     <section className="card raised stack-4" aria-labelledby="setup-heading">
-      <div className="between">
-        <div className="stack-1">
-          <h2 id="setup-heading">Finish setting up</h2>
-          <p className="small muted">
-            {done} of {total} done. Nothing sends until the required steps are.
-          </p>
-        </div>
-        {next ? (
-          <Link href={next.href} className="btn small">
-            {next.label}
-          </Link>
-        ) : null}
+      {/*
+        No button here, and that is the point.
+
+        `NextStep` sits directly above this on the overview and its whole job is
+        naming the one thing to do, as a full-width card with that action on it.
+        Repeating the same label as a second button six lines below it gave the
+        screen two identical calls to action stacked on top of each other —
+        which does not read as emphasis, it reads as a page that has lost track
+        of itself. This is the reference list; the instruction is above.
+      */}
+      <div className="stack-1">
+        <h2 id="setup-heading">Finish setting up</h2>
+        <p className="small muted">
+          {done} of {total} done. Nothing sends until the required steps are.
+        </p>
       </div>
 
       <div className="step-meter" role="presentation">
@@ -71,7 +74,7 @@ export function SetupChecklist({ state }: { state: OnboardingState }) {
                   control never said which part to click. */}
               {complete ? null : (
                 <Link href={step.href} className="btn ghost small checklist-go">
-                  {step.key === next?.key ? "Start" : "Open"}
+                  Open
                 </Link>
               )}
             </li>

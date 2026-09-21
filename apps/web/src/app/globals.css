@@ -686,7 +686,12 @@ form { display: flex; flex-direction: column; gap: var(--space-4); }
 
 /* The single next action. Given the width of the page on purpose: a person on
    their first day needs one instruction, not a checklist of seven. */
-.next-step h2 { margin: 0.25rem 0 0.5rem; }
+/* No margin: `.card` already supplies the gap between its children, and a
+   margin on top of that gap is the two of them stacking — which is why this
+   card read as loose and over-padded next to everything around it. Spacing
+   belongs to the container here, the same rule as everywhere else in the app. */
+.next-step h2 { margin: 0; }
+.next-step { gap: var(--space-3); }
 .next-step.done { border-color: var(--positive); }
 
 /* A span that needs its own line, e.g. a label under a number. */
