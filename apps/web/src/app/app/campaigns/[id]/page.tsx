@@ -876,8 +876,17 @@ export default async function CampaignPage({
           Everyone already on it is excluded from the next read, so the list
           only ever gets longer and nobody appears on it twice.
         */}
-        <form action={findMore} className="between card">
-          <div>
+        {/*
+          `className="between card"` here was the invitation form's bug again.
+          `.card` declares `flex-direction: column` and `.between` declares
+          `row`; both are one class, so source order decides and `.card` is
+          written later — the row never happened and the button sat under the
+          text instead of opposite it. A card is the surface and `between` is
+          the arrangement inside it, so they go on different elements.
+        */}
+        <form action={findMore} className="card">
+          <div className="between">
+            <div>
             <p className="small">
               <strong>Need more people?</strong>
               {campaign.searched_at && !searchNotice ? (
@@ -893,15 +902,16 @@ export default async function CampaignPage({
                   ? "The customer profile this list was built from has been deleted, so there is nothing left to search for."
                   : `Reads the next ${FIND_MORE_BATCH} profiles from where this search stopped and adds whoever is new. Everyone already on your prospect list is skipped, so nobody is contacted twice.`}
             </p>
+            </div>
+            <input type="hidden" name="campaignId" value={campaign.id} />
+            <SubmitButton
+              className="btn ghost"
+              pendingLabel="Searching…"
+              disabled={campaign.search_exhausted || !campaign.customer_profile_id}
+            >
+              Find {FIND_MORE_BATCH} more
+            </SubmitButton>
           </div>
-          <input type="hidden" name="campaignId" value={campaign.id} />
-          <SubmitButton
-            className="btn ghost"
-            pendingLabel="Searching…"
-            disabled={campaign.search_exhausted || !campaign.customer_profile_id}
-          >
-            Find {FIND_MORE_BATCH} more
-          </SubmitButton>
         </form>
 
         {rows.length === 0 ? (

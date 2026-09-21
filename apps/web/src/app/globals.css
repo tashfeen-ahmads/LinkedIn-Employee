@@ -414,22 +414,24 @@ p  { margin: 0; }
    in this sheet, so a bare section put its title flush against the table
    beneath it. The rhythm belongs to the container, not to each heading. */
 /*
- * `:not(.card)` is load-bearing, and its absence cost the whole app its
- * vertical padding.
+ * `:where()` here, and it is load-bearing.
  *
- * `.app-body > section` is (0,1,1) — a class and a type — and `.card` is
- * (0,1,0). So this rule outranked the card's own `padding`, and every card
- * written as a `<section>` directly under the body lost its top and bottom
- * inset while keeping its sides: `padding: 0px 24px`. The heading sat one
- * pixel under the border and the button one pixel above it, on the overview,
- * Profile, Billing, Meetings, System, Strategy and Campaigns alike. Nothing
- * looked wrong in either rule; they only collide.
+ * Written as `.app-body > section` this rule is (0,1,1) — one class, one
+ * element — so it outranked every component class a `<section>` could carry,
+ * and the component had no way to know. `.card` lost its vertical padding on
+ * every screen: `padding: 0px 24px`, heading one pixel under the border and
+ * button one pixel above it, on the overview, Profile, Billing, Meetings,
+ * System, Strategy and Campaigns alike. `.grid` lost its `display`, so
+ * `<section class="grid grid-2">` on Billing and `grid-4` on Agent spend were
+ * flex columns with a column template that applied to nothing.
  *
- * A card brings its own padding, gap and direction, so excluding it here loses
- * nothing and restores all three.
+ * Patching each one with `:not(.card)`, `:not(.grid)` is a list that the next
+ * component is left off. `:where(.app-body)` contributes zero specificity, so
+ * the rule is (0,0,1) — a bare `<section>` still gets the frame's rhythm, and
+ * any section that says what it is beats it automatically, for ever.
  */
 .app .section,
-.app-body > section:not(.card) { display: flex; flex-direction: column; gap: var(--space-4); padding-block: 0; }
+:where(.app-body) > section { display: flex; flex-direction: column; gap: var(--space-4); padding-block: 0; }
 .app .section-header {
   display: flex;
   align-items: baseline;
@@ -486,7 +488,11 @@ p  { margin: 0; }
 
 .btn.small { padding: 0.375rem 0.7rem; font-size: 0.8125rem; border-radius: var(--radius-sm); }
 .btn.large { padding: 0.8rem 1.5rem; font-size: 1rem; }
-.btn.block { width: 100%; }
+/* `display` as well as width, because `.block { display: block }` is also on
+   these buttons and wins on source order — which silently dropped the button's
+   `align-items`, `justify-content` and `gap`. Invisible while the label is one
+   word, and a misaligned icon the day somebody adds one. */
+.btn.block { display: flex; width: 100%; }
 
 /* ------------------------------------------------------------- auth pages */
 
@@ -875,14 +881,14 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
  * something needs a fourth level it is really a new section, or a caption.
  */
 .app, .app-body { font-family: var(--font-ui); }
-.app h1, .app h2, .app h3 {
+:where(.app) h1, :where(.app) h2, :where(.app) h3 {
   font-family: var(--font-ui);
   letter-spacing: -0.014em;
   line-height: 1.25;
   font-weight: 600;
 }
 /* The page. One per screen. */
-.app h1 {
+:where(.app) h1 {
   font-size: 1.375rem;
   /* Never the landing page's 18ch measure: a page title here is a label above
      a table, and that measure wraps it for no reason anybody can see. */
@@ -890,10 +896,10 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 }
 /* A section of it. Deliberately close to body size: a section heading is a
    label on a group, not an announcement. */
-.app h2 { font-size: 1rem; letter-spacing: -0.008em; }
+:where(.app) h2 { font-size: 1rem; letter-spacing: -0.008em; }
 /* A card inside a section. */
-.app h3 { font-size: 0.9375rem; letter-spacing: -0.004em; }
-.app h4 { font-size: 0.875rem; font-weight: 600; letter-spacing: 0; }
+:where(.app) h3 { font-size: 0.9375rem; letter-spacing: -0.004em; }
+:where(.app) h4 { font-size: 0.875rem; font-weight: 600; letter-spacing: 0; }
 
 
 .nav { display: flex; flex-direction: column; gap: 1px; }

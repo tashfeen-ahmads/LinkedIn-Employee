@@ -140,27 +140,57 @@ describe("globals.css", () => {
     ).toEqual([]);
   });
 
-  it("never lets the page frame strip a card's padding", () => {
+  it("never lets the page frame outrank a component", () => {
     /*
-     * The bug this catches, and it had every card in the app.
+     * The bug this catches, and it had every card and two grids in the app.
      *
-     * `.app-body > section` is (0,1,1) — one class, one type — and `.card` is
-     * (0,1,0). So the frame's `padding-block: 0` outranked the card's own
-     * `padding`, and every card written as `<section className="card">`
-     * directly under the body rendered as `padding: 0 24px`: sides intact, top
-     * and bottom gone. The heading sat one pixel below the border and the
-     * button one pixel above it — on the overview, Profile, Billing, Meetings,
-     * System, Strategy and Campaigns alike. Neither rule looks wrong on its
-     * own; they only collide, which is why reading the stylesheet never found
-     * it and rendering the page did in one measurement.
+     * `.app-body > section` is (0,1,1) — one class, one element — and `.card`
+     * is (0,1,0). So the frame's `padding-block: 0` beat the card's own
+     * `padding` on every card written as a `<section>`: sides intact, top and
+     * bottom gone, heading a pixel under the border and button a pixel above
+     * it. The same rule's `display: flex` beat `.grid`, so
+     * `<section class="grid grid-2">` on Billing and `grid tight grid-4` on
+     * Agent spend were flex columns with a column template applying to
+     * nothing. Neither rule looks wrong alone; they only collide, which is why
+     * reading the stylesheet found nothing and measuring found it at once.
+     *
+     * Patching each victim with `:not(.card)`, `:not(.grid)` is a list the
+     * next component gets left off. So the rule is: when the frame styles a
+     * bare element, it wraps its own ancestor in `:where()` and contributes no
+     * specificity, and any component that says what it is wins automatically.
      */
-    const body = CSS.replace(/\/\*[\s\S]*?\*\//g, "");
-    const rule = body.match(/\.app-body > section([^{]*)\{/);
-    expect(rule, ".app-body > section is expected to exist").not.toBeNull();
+    const frame = ["app", "app-body", "app-main", "app-aside"];
+    const offenders: string[] = [];
+
+    for (const selector of topLevelSelectors(CSS).flatMap((s) => s.split(","))) {
+      const sel = selector.trim();
+      if (!sel) continue;
+      const compounds = sel.split(/\s*[>+~]\s*|\s+/).filter(Boolean);
+      if (compounds.length < 2) continue;
+
+      // Only the rightmost compound decides what the rule lands on. A rule
+      // ending in a class is a component styling itself, not the frame
+      // reaching in, so it is none of this test's business.
+      const key = compounds[compounds.length - 1]!;
+      if (!/^[a-zA-Z][\w-]*$/.test(key)) continue;
+
+      const ancestors = compounds.slice(0, -1);
+      const isFrame = ancestors.every((c) => {
+        const inner = c.replace(/^:where\(([^)]*)\)$/, "$1");
+        const classes = (inner.match(/\.[\w-]+/g) ?? []).map((x) => x.slice(1));
+        return classes.length > 0 && classes.every((x) => frame.includes(x));
+      });
+      if (!isFrame) continue;
+
+      // Anything outside `:where()` still counts towards specificity.
+      const counted = sel.replace(/:where\([^)]*\)/g, "");
+      if ((counted.match(/\.[\w-]+/g) ?? []).length > 0) offenders.push(sel);
+    }
+
     expect(
-      rule![1],
-      "this rule outranks .card, so it must exclude cards or it removes their padding",
-    ).toContain(":not(.card)");
+      offenders,
+      "the frame styles a bare element and outranks every class on it — wrap the ancestor in :where()",
+    ).toEqual([]);
   });
 
   it("gives a scrolling table a width to scroll to", () => {
