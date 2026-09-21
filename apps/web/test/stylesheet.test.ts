@@ -140,6 +140,44 @@ describe("globals.css", () => {
     ).toEqual([]);
   });
 
+  it("gives a scrolling table a width to scroll to", () => {
+    /*
+     * `.table-scroll` sets `overflow-x: auto` and `table` sets `width: 100%`,
+     * and those two together are a scroll container that never scrolls. The
+     * table fits itself to the phone instead: the first column wraps to three
+     * lines while `white-space: nowrap` on the headings pushes the last column
+     * off the edge anyway. Crushed and clipped at once, which is worse than
+     * either. Only a width floor makes the container do its job.
+     */
+    const body = CSS.replace(/\/\*[\s\S]*?\*\//g, "");
+    expect(body, "table { width: 100% } is assumed by this check").toMatch(
+      /(^|\n)table\s*\{[^}]*width:\s*100%/,
+    );
+    expect(
+      body,
+      "a table inside .table-scroll needs a min-width, or the container only clips",
+    ).toMatch(/\.table-scroll table\s*\{[^}]*min-width:/);
+  });
+
+  it("hides every group heading in the mobile nav, or none", () => {
+    /*
+     * The sidebar's groups are headed two ways: the always-open group by a
+     * plain `<p class="nav-group-label">`, the collapsible ones by a button
+     * that wraps the same class. The mobile bar hid the button — and so hid
+     * four headings out of five, opening the scrolling row with the word
+     * "Work" and then listing twelve links under nothing at all. A heading on
+     * one group out of five is not a heading, it is a stray word.
+     */
+    const mobile = CSS.slice(CSS.indexOf("@media (max-width: 820px)"));
+    const block = mobile.slice(0, mobile.indexOf("\n}\n"));
+    const hidesToggle = /\.nav-group-toggle\s*\{[^}]*display:\s*none/.test(block);
+    const hidesLabel = /\.nav-group-label\s*\{[^}]*display:\s*none/.test(block);
+    expect(hidesToggle, "the 820px block is expected to flatten the groups").toBe(true);
+    expect(hidesLabel, "hiding the toggle leaves the always-open group's heading behind").toBe(
+      true,
+    );
+  });
+
   it("never sets a colour outside a token", () => {
     // Every colour has to be swappable for dark mode in one place. A literal
     // in a component rule is a colour that only works on one ground.

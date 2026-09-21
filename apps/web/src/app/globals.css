@@ -229,7 +229,9 @@ p  { margin: 0; }
 }
 
 /* Running prose is capped near 65 characters wherever it appears. */
-.prose { max-width: 65ch; }
+/* A measure, and no single word left alone on the last line. Every section
+   description on the overview ended `...is on` / `Results.` */
+.prose { max-width: 65ch; text-wrap: pretty; }
 /* A shorter measure for a caption or a stat's note, where 65ch would run wider
    than the tile it sits in. */
 .measure-short { max-width: 32ch; }
@@ -383,7 +385,18 @@ p  { margin: 0; }
   border-bottom: 1px solid var(--border);
 }
 .app .page-header-text { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
-.app .page-header-actions { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+/* `justify-content: space-between` puts the action right while the header is
+   one line, and abandons it the moment the row wraps — which is every screen
+   under about 1100px. It then sits under the lede at the left margin, reading
+   as a stray link in the middle of the page rather than as the thing you do to
+   this page. `margin-left: auto` holds it to the right edge on both lines. */
+.app .page-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-left: auto;
+}
 
 /*
  * Scoped under `.app`, and that scope is load-bearing.
@@ -410,7 +423,7 @@ p  { margin: 0; }
   flex-wrap: wrap;
 }
 .app .section-header-text { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
-.app .section-header-action { display: flex; align-items: center; gap: var(--space-2); }
+.app .section-header-action { display: flex; align-items: center; gap: var(--space-2); margin-left: auto; }
 
 /* An empty list says why, and what to do. Never the word "None". */
 .app .empty {
@@ -730,6 +743,16 @@ form { display: flex; flex-direction: column; gap: var(--space-4); }
 
 .table-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-raised); }
 table { width: 100%; border-collapse: collapse; font-size: 0.9375rem; }
+/*
+ * `width: 100%` inside a scrolling container is a table that never scrolls.
+ *
+ * It fits itself to the phone instead, so the first column wraps to three
+ * lines while `white-space: nowrap` on the headings pushes the last column off
+ * the edge anyway — crushed and clipped at the same time, which is the one
+ * combination worse than either. A floor makes the container do its job: the
+ * columns keep a width somebody can read and the row scrolls sideways.
+ */
+.table-scroll table { min-width: 34rem; }
 thead th {
   font-family: var(--font-mono);
   font-size: 0.6875rem;
@@ -796,6 +819,11 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
            clamp(var(--space-3), 4vw, var(--space-5))
            var(--space-8);
   width: min(1100px, 100%);
+  /* Centred in the space beside the sidebar, not pinned to its edge. A fixed
+     column left-aligned inside a wider area puts every screen against the nav
+     with a band of empty page to the right of it, which reads as a layout that
+     did not finish rather than as a measure somebody chose. */
+  margin-inline: auto;
 }
 
 /*
@@ -961,6 +989,11 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   .nav-group { flex-direction: row; gap: var(--space-1); }
   .nav-group + .nav-group { margin-top: 0; }
   .nav-group-toggle { display: none; }
+  /* Hiding the toggle hid four of the five headings. The fifth is a plain `<p>`
+     — the always-open group's — so the scrolling bar opened with the word
+     "Work" and then listed twelve links under no heading at all. A heading that
+     labels one group out of five labels nothing. */
+  .nav-group-label { display: none; }
   .nav-items { flex-direction: row; gap: var(--space-1); }
   .nav a { white-space: nowrap; padding-left: 0.6rem; }
 
