@@ -413,8 +413,23 @@ p  { margin: 0; }
 /* Both the component and a hand-written `<section>`: headings carry no margin
    in this sheet, so a bare section put its title flush against the table
    beneath it. The rhythm belongs to the container, not to each heading. */
+/*
+ * `:not(.card)` is load-bearing, and its absence cost the whole app its
+ * vertical padding.
+ *
+ * `.app-body > section` is (0,1,1) — a class and a type — and `.card` is
+ * (0,1,0). So this rule outranked the card's own `padding`, and every card
+ * written as a `<section>` directly under the body lost its top and bottom
+ * inset while keeping its sides: `padding: 0px 24px`. The heading sat one
+ * pixel under the border and the button one pixel above it, on the overview,
+ * Profile, Billing, Meetings, System, Strategy and Campaigns alike. Nothing
+ * looked wrong in either rule; they only collide.
+ *
+ * A card brings its own padding, gap and direction, so excluding it here loses
+ * nothing and restores all three.
+ */
 .app .section,
-.app-body > section { display: flex; flex-direction: column; gap: var(--space-4); padding-block: 0; }
+.app-body > section:not(.card) { display: flex; flex-direction: column; gap: var(--space-4); padding-block: 0; }
 .app .section-header {
   display: flex;
   align-items: baseline;
@@ -741,7 +756,28 @@ form { display: flex; flex-direction: column; gap: var(--space-4); }
 
 /* ---------------------------------------------------------------- tables */
 
-.table-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-raised); }
+/*
+ * The edges are what say the row scrolls.
+ *
+ * On a phone the last columns of every table sit outside this container, and
+ * nothing on screen said so: a Status column cut in half reads as a broken
+ * page rather than as a row you can push sideways. These four layers are the
+ * standard way to say it in CSS alone — two covers pinned to the content
+ * (`local`) and two shadows pinned to the box (`scroll`), so a shadow appears
+ * only on a side that still has something behind it, and neither shows at all
+ * on a screen where the table already fits.
+ */
+.table-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background:
+    linear-gradient(to right, var(--surface-raised) 60%, transparent) left center / 2.5rem 100% no-repeat local,
+    linear-gradient(to left, var(--surface-raised) 60%, transparent) right center / 2.5rem 100% no-repeat local,
+    radial-gradient(farthest-side at 0 50%, var(--border-strong), transparent) left center / 0.75rem 100% no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, var(--border-strong), transparent) right center / 0.75rem 100% no-repeat scroll;
+  background-color: var(--surface-raised);
+}
 table { width: 100%; border-collapse: collapse; font-size: 0.9375rem; }
 /*
  * `width: 100%` inside a scrolling container is a table that never scrolls.

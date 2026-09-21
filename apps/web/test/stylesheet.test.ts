@@ -140,6 +140,29 @@ describe("globals.css", () => {
     ).toEqual([]);
   });
 
+  it("never lets the page frame strip a card's padding", () => {
+    /*
+     * The bug this catches, and it had every card in the app.
+     *
+     * `.app-body > section` is (0,1,1) — one class, one type — and `.card` is
+     * (0,1,0). So the frame's `padding-block: 0` outranked the card's own
+     * `padding`, and every card written as `<section className="card">`
+     * directly under the body rendered as `padding: 0 24px`: sides intact, top
+     * and bottom gone. The heading sat one pixel below the border and the
+     * button one pixel above it — on the overview, Profile, Billing, Meetings,
+     * System, Strategy and Campaigns alike. Neither rule looks wrong on its
+     * own; they only collide, which is why reading the stylesheet never found
+     * it and rendering the page did in one measurement.
+     */
+    const body = CSS.replace(/\/\*[\s\S]*?\*\//g, "");
+    const rule = body.match(/\.app-body > section([^{]*)\{/);
+    expect(rule, ".app-body > section is expected to exist").not.toBeNull();
+    expect(
+      rule![1],
+      "this rule outranks .card, so it must exclude cards or it removes their padding",
+    ).toContain(":not(.card)");
+  });
+
   it("gives a scrolling table a width to scroll to", () => {
     /*
      * `.table-scroll` sets `overflow-x: auto` and `table` sets `width: 100%`,
