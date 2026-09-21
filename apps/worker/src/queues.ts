@@ -13,6 +13,28 @@ export const QUEUE_NAMES = {
 
 export type QueueName = (typeof QUEUE_NAMES)[keyof typeof QUEUE_NAMES];
 
+/**
+ * Builds a BullMQ custom job id.
+ *
+ * **BullMQ rejects a custom id containing `:`** — it reserves the colon for its
+ * own key namespacing — and it rejects it by throwing from `add()`, not by
+ * falling back to a generated id. Every job id in this worker was written as
+ * `invite:<uuid>`, so every `add()` that carried one threw: invitations,
+ * follow-ups, replies, launches, inbound messages. Nothing with a custom id
+ * had ever been queued, which is the whole reason this deployment had sent
+ * nobody. The pacing loop's own heartbeat is what finally reported it, in
+ * words, on the screen — `failed: "Custom Id cannot contain :"`.
+ *
+ * The id still has to be *stable and unique per unit of work*: it is what
+ * stops a second tick queueing an invitation the first tick already queued
+ * (rule 21). So the parts are joined with a separator BullMQ accepts, and any
+ * colon inside a part is replaced rather than dropped — dropping it could map
+ * two different ids onto one, which would silently skip a real send.
+ */
+export function jobId(...parts: (string | number)[]): string {
+  return parts.map((part) => String(part).replaceAll(":", "-")).join("--");
+}
+
 export interface StrategyJob {
   workspaceId: string;
   userId: string;

@@ -2,6 +2,7 @@ import { canTransition, LINKEDIN_LIMITS, PACING_LOOP, type CampaignProspectStatu
 import { entitlementFor } from "@le/billing";
 import { checkAction, dailyInviteCap, nextGapMs } from "@le/linkedin";
 import type { Db } from "@le/db";
+import { jobId } from "../queues.js";
 import type { Queues } from "../queues.js";
 import { resetCountersIfNeeded, toUsage, type AccountRecord, ACCOUNT_USAGE_COLUMNS } from "../accounts.js";
 import { recordBeat } from "../heartbeat.js";
@@ -199,7 +200,7 @@ async function enqueueInvites(
       // The id is what stops a second tick queueing the same invitation five
       // minutes later. It also means a job already holding it is never
       // replaced, which is why the queue counts go into the heartbeat.
-      { delay, jobId: `invite:${row.id}` },
+      { delay, jobId: jobId("invite", row.id) },
     );
   }
   return { enqueued: queued.length, reason: `queued ${queued.length} invitation(s)` };
@@ -242,7 +243,7 @@ async function enqueueFollowUps(
         campaignProspectId: row.id,
         stepNumber: nextStep,
       },
-      { delay, jobId: `follow_up:${row.id}:${nextStep}` },
+      { delay, jobId: jobId("follow_up", row.id, nextStep) },
     );
     count++;
   }

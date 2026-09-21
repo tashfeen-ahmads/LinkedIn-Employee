@@ -17,6 +17,7 @@ import {
 import type { WorkerContext } from "../context.js";
 import { recordEvent } from "../context.js";
 import { flagForHuman } from "../holds.js";
+import { jobId } from "../queues.js";
 import type { InboundMessageJob, Queues } from "../queues.js";
 import { ensureConversation } from "./linkedin-action.js";
 import { offerSlots, resolveCalendar } from "../calendar.js";
@@ -333,7 +334,7 @@ export async function handleInboundMessage(
     await queues.linkedinAction.add(
       "reply",
       { kind: "reply", workspaceId: job.workspaceId, conversationId: conversation.id, draftId: saved.id },
-      { jobId: `reply:${saved.id}` },
+      { jobId: jobId("reply", saved.id) },
     );
   }
 }

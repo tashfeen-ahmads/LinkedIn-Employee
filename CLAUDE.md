@@ -9,7 +9,7 @@ plan. This file is for whoever works on the code next.
 pnpm install
 pnpm build          # packages compile to dist/; apps typecheck against those
 pnpm typecheck
-pnpm test           # 850 tests, no network, no API key needed
+pnpm test           # 857 tests, no network, no API key needed
 node scripts/mutation-check.mjs   # proves the safety tests actually bite
 node scripts/preflight.mjs        # is a deployment actually able to send?
 pnpm --filter @le/web dev
@@ -299,9 +299,9 @@ tests that were verified by deliberately breaking the code.
     loop says at two in the morning and also what it says when the account is
     disconnected, the trial has lapsed, or there is nobody left to invite —
     four different things to do about it, reported identically. It carries the
-    queue counts too, because `jobId: invite:<id>` is what stops a second tick
-    queueing the same invitation, and BullMQ accepts an add whose id is already
-    taken without replacing the job: one failed action keeps its slot for the
+    queue counts too, because a stable job id per prospect is what stops a
+    second tick queueing the same invitation, and BullMQ accepts an add whose
+    id is already taken without replacing the job: one failed action keeps its slot for the
     whole `removeOnFail` window, so that person is never re-queued while every
     screen reports a healthy loop. The counts are the only place that shows.
 
@@ -720,6 +720,32 @@ tests that were verified by deliberately breaking the code.
     wins on every page in the product. And colour never appears as a literal
     outside the token block: a hex in a component rule is a colour that only
     works on one ground.
+
+39. **A job id is built by `jobId()`, never written by hand.** BullMQ reserves
+    `:` for its own key namespacing and **rejects a custom id containing one**
+    — by throwing from `add()`, not by generating a fallback. Every id in this
+    worker was written as a template literal, `invite:<uuid>`, so every enqueue
+    carrying one threw: invitations, follow-ups, replies, launches, inbound
+    messages. Nothing with a custom id had ever been queued. That is the whole
+    reason this deployment had sent nobody, through eight days, two live
+    campaigns and a full audit that checked the routes rather than the ids.
+
+    Two things made it invisible. `enqueueInvites` throwing looks identical
+    from every screen to a campaign correctly waiting out its gap — which is
+    rule 21's disease, and rule 21 is also what caught it: the pacing loop
+    stamps its heartbeat *even when the run throws*, and the detail read
+    `failed: "Custom Id cannot contain :"` in plain words on `/app/system`. It
+    would otherwise still be undiagnosed.
+
+    The id has to stay stable and unique per unit of work, because it is what
+    stops a second tick re-queueing an invitation. So a colon inside a part is
+    **replaced, never dropped**: dropping could map two different ids onto one,
+    and two units of work sharing an id means the second is silently skipped —
+    a real invitation that never sends.
+
+    `apps/worker/test/job-id.test.ts` checks the helper *and* greps every
+    enqueue in the worker, because the bug was in the call sites rather than in
+    any function. A unit test of the helper alone would have passed throughout.
 
 ## Conventions
 

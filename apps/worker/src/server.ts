@@ -13,6 +13,7 @@ import type { ConnectedAccount } from "@le/linkedin";
 import { decryptJson, encryptJson } from "./crypto.js";
 import type { MiddlewareHandler } from "hono";
 import type { IntegrationKind } from "@le/db";
+import { jobId } from "./queues.js";
 import type { Queues } from "./queues.js";
 import { queueReachable } from "./queues.js";
 import { sendOneNow } from "./jobs/send-one.js";
@@ -364,7 +365,7 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
     await queues.campaignTick.add(
       "tick",
       { workspaceId: parsed.data.workspaceId, campaignId: parsed.data.campaignId },
-      { jobId: `launch:${parsed.data.campaignId}:${Math.floor(Date.now() / 60_000)}` },
+      { jobId: jobId("launch", parsed.data.campaignId, Math.floor(Date.now() / 60_000)) },
     );
     return c.json({ queued: true });
   });
@@ -417,7 +418,7 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
         conversationId: draft.conversation_id,
         draftId: draft.id,
       },
-      { jobId: `reply:${draft.id}` },
+      { jobId: jobId("reply", draft.id) },
     );
     return c.json({ queued: true });
   });
@@ -500,7 +501,7 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
           receivedAt: message.receivedAt,
         },
         // Provider redelivery is normal; the job id makes it a no-op.
-        { jobId: `inbound:${message.providerMessageId}` },
+        { jobId: jobId("inbound", message.providerMessageId) },
       );
     }
 

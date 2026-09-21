@@ -1911,6 +1911,22 @@ const MUTATIONS = [
     to: '    kind: own?.kind ?? "link",',
     pkg: "@le/shared",
   },
+  {
+    id: "queue/job-ids-are-acceptable",
+    rule: "A job id BullMQ rejects means the work is never queued at all",
+    file: "apps/worker/src/queues.ts",
+    from: '  return parts.map((part) => String(part).replaceAll(":", "-")).join("--");',
+    to: '  return parts.join(":");',
+    pkg: "@le/worker",
+  },
+  {
+    id: "queue/job-ids-stay-distinct",
+    rule: "Two units of work never share an id, or the second is silently skipped",
+    file: "apps/worker/src/queues.ts",
+    from: '  return parts.map((part) => String(part).replaceAll(":", "-")).join("--");',
+    to: '  return parts.map((part) => String(part).replaceAll(":", "")).join("--");',
+    pkg: "@le/worker",
+  },
 ];
 
 const filter = process.argv[2];

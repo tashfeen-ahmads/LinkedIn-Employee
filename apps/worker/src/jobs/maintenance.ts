@@ -6,6 +6,7 @@ import { detectAcceptedInvitations } from "./acceptance.js";
 import { syncCalendarFeeds } from "./calendar-feed.js";
 import { runLifecycleEmails } from "./lifecycle.js";
 import { runRetentionSweep } from "./retention.js";
+import { jobId } from "../queues.js";
 import type { Queues } from "../queues.js";
 import { recordBeat } from "../heartbeat.js";
 
@@ -214,7 +215,7 @@ async function sweepApprovedDrafts(ctx: WorkerContext, queues: Queues, now: Date
         conversationId: draft.conversation_id,
         draftId: draft.id,
       },
-      { jobId: `reply:${draft.id}` },
+      { jobId: jobId("reply", draft.id) },
     );
   }
 }
