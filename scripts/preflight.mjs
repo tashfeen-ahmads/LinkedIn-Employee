@@ -178,6 +178,81 @@ if (workerUrl && !workerUrl.startsWith("http://localhost")) {
   await probe("worker /health", `${workerUrl.replace(/\/$/, "")}/health`, '"ok"');
 }
 
+/*
+ * Are the Unipile credentials the ones this tenant actually has?
+ *
+ * Everything above this point checks that a variable is present and shaped
+ * right, and a dead trial passes every one of those: the DSN is a URL, the
+ * token is a string, nothing is missing. The first thing that disagreed was a
+ * real invitation — after a campaign had been built, reviewed and queued —
+ * which came back `401: Invalid credentials` against five real people and
+ * reported on screen as five failed sends.
+ *
+ * So this asks. `GET /api/v1/accounts` is authenticated, read-only, costs
+ * nothing and answers three questions at once: whether the key works, whether
+ * the DSN belongs to the same tenant as the key, and which LinkedIn accounts
+ * this tenant holds — which on a fresh subscription is none, and that is worth
+ * saying out loud rather than leaving somebody to wonder.
+ */
+const dsn = process.env.UNIPILE_DSN?.replace(/\/$/, "");
+const unipileToken = process.env.UNIPILE_ACCESS_TOKEN;
+if (!mock && dsn && unipileToken) {
+  try {
+    const response = await fetch(`${dsn}/api/v1/accounts`, {
+      headers: { "X-API-KEY": unipileToken, accept: "application/json" },
+      signal: AbortSignal.timeout(8000),
+    });
+    const body = await response.text();
+
+    if (response.status === 401 || response.status === 403) {
+      fail(
+        "unipile credentials",
+        `rejected — HTTP ${response.status}${body ? `: ${body.slice(0, 160)}` : ""}`,
+        "The key is wrong, or its subscription has lapsed. Unipile dashboard → API → copy BOTH the access token and the DSN; a new account issues a new DSN and keeping the old one fails exactly like a bad key.",
+      );
+    } else if (response.status === 404) {
+      fail(
+        "unipile credentials",
+        "the DSN answered 404 for /api/v1/accounts",
+        "The DSN is probably from a different Unipile account than the token. Copy both from the same dashboard.",
+      );
+    } else if (!response.ok) {
+      fail("unipile credentials", `HTTP ${response.status}${body ? `: ${body.slice(0, 160)}` : ""}`);
+    } else {
+      // The count is the point: a working key with no accounts is a deployment
+      // that will refuse every send, and it looks identical to a broken key
+      // from every screen in the product.
+      let count = null;
+      try {
+        count = JSON.parse(body)?.items?.length ?? null;
+      } catch {
+        count = null;
+      }
+      ok(
+        "unipile credentials",
+        count === null
+          ? "accepted"
+          : count === 0
+            ? "accepted — no LinkedIn account connected to this tenant yet"
+            : `accepted — ${count} LinkedIn account${count === 1 ? "" : "s"} connected`,
+      );
+      if (count === 0) {
+        warn(
+          "linkedin account",
+          "the credentials work but this Unipile tenant holds no LinkedIn account",
+          "Connect one from /app/team in the app — the hosted login link comes from Unipile, so nothing sends until a rep has completed it.",
+        );
+      }
+    }
+  } catch (error) {
+    fail(
+      "unipile credentials",
+      `${error instanceof Error ? error.message : error}`,
+      `Is ${dsn} right? It is a full https URL including the port, e.g. https://api8.unipile.com:13843 — no trailing slash.`,
+    );
+  }
+}
+
 /** Kept in step with DB_SCHEMA in packages/db/src/client.ts. */
 const DB_SCHEMA = "le";
 

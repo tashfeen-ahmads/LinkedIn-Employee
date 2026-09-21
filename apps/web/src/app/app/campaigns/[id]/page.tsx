@@ -326,6 +326,61 @@ async function findMore(formData: FormData) {
 }
 
 /**
+ * Puts failed prospects back in the queue.
+ *
+ * `failProspect` writes `status: "failed"` and `next_action_at: null`, and the
+ * pacing loop reads `status = "queued"` and nothing else — so a failed row is
+ * not waiting for anything. It is finished, for ever, and nothing in this
+ * product moved one back. An expired Unipile subscription answered `401` to
+ * five invitations one morning and stranded five real people permanently: a
+ * campaign somebody had reviewed, with a list they had approved, that could
+ * never send to them again whatever was fixed afterwards.
+ *
+ * Retrying is safe because a failure is not a contact. `runLinkedInAction`
+ * returns on a provider error *before* `recordAction` and before stamping
+ * `last_contacted_at`, so no daily allowance was spent and the prospect was
+ * never written down as reached. Everything that refuses — the limiter, the
+ * exclusion list, do-not-contact, the never-twice rule — is re-checked on the
+ * way out, so this queues an attempt rather than forcing a send.
+ *
+ * It is a button and not a retry loop on purpose. "Cannot send invitation to
+ * this member" is LinkedIn refusing that person and will fail identically for
+ * ever; a lapsed key is a deployment problem that a human has just fixed.
+ * Nothing here can reliably tell those apart, and the one that must not be
+ * automatic is hammering a provider that is refusing us.
+ */
+async function retryFailed(formData: FormData) {
+  "use server";
+  const campaignId = String(formData.get("campaignId"));
+  const session = await requireSession();
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("campaign_prospects")
+    .update({ status: "queued", status_reason: null, next_action_at: null })
+    .eq("campaign_id", campaignId)
+    .eq("workspace_id", session.workspaceId)
+    .eq("status", "failed")
+    .select("id");
+
+  revalidatePath(`/app/campaigns/${campaignId}`);
+  if (error) {
+    redirect(errorQuery(`/app/campaigns/${campaignId}`, `Could not requeue those: ${error.message}`));
+  }
+  const count = data?.length ?? 0;
+  redirect(
+    noticeQuery(
+      `/app/campaigns/${campaignId}`,
+      count === 0
+        ? "Nothing to retry — no prospect on this campaign is in a failed state."
+        : `${count} prospect${count === 1 ? "" : "s"} back in the queue. ${
+            count === 1 ? "It goes" : "They go"
+          } out at the campaign's normal pace; press Send one now to watch the first.`,
+    ),
+  );
+}
+
+/**
  * Sends the next queued invitation now, and puts the answer on the screen.
  *
  * Every other way of finding out whether a real invitation can leave this
@@ -494,6 +549,9 @@ export default async function CampaignPage({
 
   const rows = members ?? [];
   const queued = rows.filter((row) => row.status === "queued");
+  // A failed row is finished as far as the pacing loop is concerned — it reads
+  // `queued` and nothing else — so these need a way back or they are stranded.
+  const failed = rows.filter((row) => row.status === "failed");
   const counts = countFunnel(rows);
   const blockers = launchBlockers({
     connectionNote: campaign.connection_note,
@@ -586,6 +644,20 @@ export default async function CampaignPage({
               <input type="hidden" name="campaignId" value={campaign.id} />
               <SubmitButton className="btn secondary" pendingLabel="Sending…">
                 Send one now
+              </SubmitButton>
+            </form>
+          ) : null}
+          {/*
+            A failed row is not waiting for anything — the loop reads `queued`
+            and nothing else — so without this the only way back is rebuilding
+            the campaign, which spends the invitation allowance again on people
+            who were never actually reached.
+          */}
+          {failed.length > 0 ? (
+            <form action={retryFailed}>
+              <input type="hidden" name="campaignId" value={campaign.id} />
+              <SubmitButton className="btn secondary" pendingLabel="Requeueing…">
+                Retry {failed.length} failed
               </SubmitButton>
             </form>
           ) : null}
