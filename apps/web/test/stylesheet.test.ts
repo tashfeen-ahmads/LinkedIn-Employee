@@ -51,6 +51,17 @@ function topLevelSelectors(css: string): string[] {
   return selectors.filter((s) => s && !s.startsWith("@"));
 }
 
+/** Every .tsx under a directory, so the check cannot miss a screen. */
+function pages(dir: string): string[] {
+  const found: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) found.push(...pages(path));
+    else if (entry.name.endsWith(".tsx")) found.push(path);
+  }
+  return found;
+}
+
 const CSS = readFileSync(cssPath, "utf8");
 
 describe("globals.css", () => {
@@ -76,8 +87,57 @@ describe("globals.css", () => {
     // The marketing pages and the application share one stylesheet and two of
     // these names. Unscoped, the app's meaning wins everywhere.
     for (const rule of [".section", ".page-header", ".empty"]) {
-      expect(CSS, `${rule} must be scoped under .app`).toContain(`.app ${rule} `);
+      // `.app .section` may be part of a grouped selector — it shares its body
+      // with `.app-body > section`, so a bare `<section>` gets the same rhythm
+      // as one from the component. The scope is what matters, not the comma.
+      expect(CSS, `${rule} must be scoped under .app`).toMatch(
+        new RegExp(`\\.app ${rule.replace(".", "\\.")}[\\s,{]`),
+      );
     }
+  });
+
+  it("makes every class used on a form declare its flex direction", () => {
+    /*
+     * The bug this catches, precisely.
+     *
+     * `form { flex-direction: column }` is set globally in this sheet, and a
+     * class that only says `display: flex` does not override a direction it
+     * never declares. So `<form className="row">` stayed a column, and
+     * `align-items: center` then meant horizontally centred — which is how the
+     * invitation form became a narrow stack floating in the middle of a very
+     * wide card, with no rule anywhere looking wrong.
+     *
+     * Everywhere else an undeclared direction is fine: `row` is the default.
+     * It is only a trap on a `<form>`, so that is what this checks. It has
+     * caught two classes now — `.form-row`, then `.row`.
+     */
+    const body = CSS.replace(/\/\*[\s\S]*?\*\//g, "");
+
+    // Every class actually put on a <form> anywhere in the app.
+    const used = new Set<string>();
+    for (const file of pages(join(dirname(fileURLToPath(import.meta.url)), "../src"))) {
+      const source = readFileSync(file, "utf8");
+      for (const form of source.matchAll(/<form[^>]*className="([^"]+)"/g)) {
+        for (const cls of form[1]!.split(/\s+/)) if (cls) used.add(cls);
+      }
+    }
+    expect(used.size, "no forms found — this test would pass vacuously").toBeGreaterThan(0);
+
+    const offenders: string[] = [];
+    for (const cls of used) {
+      // A rule declaring this class on its own, at the top level.
+      const rule = new RegExp(`(^|\\n)\\.${cls}(\\s*,[^{]*)?\\s*\\{([^{}]*)\\}`);
+      const match = body.match(rule);
+      if (!match) continue;
+      const rules = match[3]!;
+      if (!/display:\s*flex/.test(rules)) continue;
+      if (!/flex-direction/.test(rules)) offenders.push(`.${cls}`);
+    }
+
+    expect(
+      offenders,
+      "used on a <form>, sets display:flex, never says which direction — so it inherits column",
+    ).toEqual([]);
   });
 
   it("never sets a colour outside a token", () => {

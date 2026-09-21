@@ -240,7 +240,7 @@ export default async function TeamPage({
           description={`A link is valid for ${INVITE_TTL_DAYS} days. Anyone holding it can join this workspace, so send it the way you would send a password.`}
         >
           <div className="card">
-            <form action={inviteMember} className="row">
+            <form action={inviteMember} className="form-row">
               <label className="field grow">
                 <span>Email address</span>
                 <input type="email" name="email" placeholder="colleague@company.com" required />

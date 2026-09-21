@@ -397,7 +397,11 @@ p  { margin: 0; }
  * `.app` wraps the application shell and nothing else, so the two meanings can
  * coexist without either knowing about the other.
  */
-.app .section { display: flex; flex-direction: column; gap: var(--space-4); padding-block: 0; }
+/* Both the component and a hand-written `<section>`: headings carry no margin
+   in this sheet, so a bare section put its title flush against the table
+   beneath it. The rhythm belongs to the container, not to each heading. */
+.app .section,
+.app-body > section { display: flex; flex-direction: column; gap: var(--space-4); padding-block: 0; }
 .app .section-header {
   display: flex;
   align-items: baseline;
@@ -503,7 +507,9 @@ p  { margin: 0; }
   background: var(--surface-raised);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: var(--space-5);
+  /* A fixed 1.5rem inset leaves a phone-width card with more padding than
+     content. It shrinks with the screen and stops there. */
+  padding: clamp(var(--space-4), 3.5vw, var(--space-5));
 }
 /* Elevation is spent on the one thing that needs lifting, not on every block. */
 .card.raised { box-shadow: var(--shadow); }
@@ -687,7 +693,14 @@ form { display: flex; flex-direction: column; gap: var(--space-4); }
 .block { display: block; }
 
 /* Two or three controls side by side, keeping their own widths. */
-.row { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+/* `flex-direction: row` is not redundant, for exactly the reason written above
+   `.form-row`: `form` sets `column`, and a class that only says `display: flex`
+   does not override a direction it never declares. `<form className="row">`
+   therefore stayed a column, and `align-items: center` then meant "centred" —
+   which is how the invitation form became a narrow stack floating in the
+   middle of a very wide card. Every row primitive in this sheet states its
+   direction. */
+.row { display: flex; flex-direction: row; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
 
 /* Facts read together rather than scanned down a column — the four things a
    support ticket captured, which mean something as a set and nothing apart. */
@@ -770,8 +783,13 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .app-body {
   display: flex;
   flex-direction: column;
-  gap: var(--space-6);
-  padding: var(--space-6) var(--space-5) var(--space-8);
+  /* Gap and padding both scale with the viewport rather than stepping once at
+     820px. On a phone the old fixed 1.5rem gutter spent a tenth of the screen
+     on empty margin; on a wide monitor the same value left sections touching. */
+  gap: clamp(var(--space-5), 3vw, var(--space-6));
+  padding: clamp(var(--space-4), 3vw, var(--space-6))
+           clamp(var(--space-3), 4vw, var(--space-5))
+           var(--space-8);
   width: min(1100px, 100%);
 }
 
@@ -931,12 +949,19 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     padding-inline: var(--space-4);
   }
   .nav::-webkit-scrollbar { display: none; }
+  /* Collapsible groups are a sidebar idea. In a one-line scrolling bar there is
+     nowhere for a group to collapse to, and a toggle that hides three links
+     behind a chevron on the screen with the least room is the opposite of
+     helpful — so the groups flatten and every link is simply there. */
   .nav-group { flex-direction: row; gap: var(--space-1); }
   .nav-group + .nav-group { margin-top: 0; }
-  .nav-group-label { display: none; }
-  .nav a { white-space: nowrap; }
+  .nav-group-toggle { display: none; }
+  .nav-items { flex-direction: row; gap: var(--space-1); }
+  .nav a { white-space: nowrap; padding-left: 0.6rem; }
 
-  .app-body { padding: var(--space-5) var(--space-4) var(--space-7); }
+  /* A tap target, not a mouse target. 44px is the floor every platform's
+     guidance agrees on, and these were 30. */
+  .nav a, .btn.small { min-height: 2.75rem; }
 }
 
 /* --------------------------------------------------------------- motion */

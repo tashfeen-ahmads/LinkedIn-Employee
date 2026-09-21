@@ -134,7 +134,7 @@ export default async function CtaPage({ searchParams }: { searchParams: NoticePa
       >
         <div className="card">
           <form action={saveCta} className="stack-3">
-            <div className="row">
+            <div className="form-row">
               <label className="field grow">
                 <span>Name it</span>
                 <input type="text" name="name" placeholder="Free teardown" maxLength={80} required />
@@ -151,7 +151,7 @@ export default async function CtaPage({ searchParams }: { searchParams: NoticePa
                 </select>
               </label>
             </div>
-            <div className="row">
+            <div className="form-row">
               <label className="field grow">
                 <span>Destination</span>
                 <input type="url" name="url" placeholder="https://example.com/teardown" />
@@ -180,7 +180,7 @@ export default async function CtaPage({ searchParams }: { searchParams: NoticePa
                 <article key={cta.id} className="card">
                   <form action={saveCta} className="stack-3">
                     <input type="hidden" name="id" value={cta.id} />
-                    <div className="row">
+                    <div className="form-row">
                       <label className="field grow">
                         <span className="sr-only">Name</span>
                         <input type="text" name="name" defaultValue={cta.name} maxLength={80} required />
@@ -196,7 +196,7 @@ export default async function CtaPage({ searchParams }: { searchParams: NoticePa
                         </select>
                       </label>
                     </div>
-                    <div className="row">
+                    <div className="form-row">
                       <label className="field grow">
                         <span className="sr-only">Destination</span>
                         <input type="url" name="url" defaultValue={cta.url ?? ""} placeholder="No destination" />
@@ -206,7 +206,7 @@ export default async function CtaPage({ searchParams }: { searchParams: NoticePa
                         <input type="text" name="label" defaultValue={cta.label ?? ""} maxLength={80} />
                       </label>
                     </div>
-                    <div className="row">
+                    <div className="form-row">
                       <SubmitButton pendingLabel="Saving…">Save</SubmitButton>
                       <span className="tiny subtle">
                         {used.length === 0

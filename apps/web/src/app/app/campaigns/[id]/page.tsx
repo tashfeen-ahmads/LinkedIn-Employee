@@ -678,7 +678,7 @@ export default async function CampaignPage({
         {/* The picker. Without it the library was a page that did nothing:
             destinations could be named and no campaign could use one. */}
         {ctaLibrary?.length ? (
-          <form action={setCampaignCta} className="row">
+          <form action={setCampaignCta} className="form-row">
             <input type="hidden" name="campaignId" value={campaign.id} />
             <label className="field grow">
               <span className="tiny">Use a saved call to action</span>
