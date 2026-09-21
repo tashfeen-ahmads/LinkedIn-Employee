@@ -93,3 +93,38 @@ describe("remainingSteps and progress", () => {
     }
   });
 });
+
+describe("step wording", () => {
+  it("never puts the heading's words on its own button", () => {
+    /*
+     * The card naming the next step renders `label` as its heading and used to
+     * render `label` again on its button, six lines below — and the checklist
+     * beneath it made a third. "Add a page of product facts" appeared three
+     * times on one screen, which does not read as emphasis; it reads as a page
+     * that has lost track of itself.
+     */
+    for (const step of ONBOARDING_STEPS) {
+      expect(step.action.toLowerCase(), `${step.key} repeats its heading`).not.toBe(
+        step.label.toLowerCase(),
+      );
+    }
+  });
+
+  it("gives every step a button label short enough to be one", () => {
+    // A button carrying a sentence is a heading that happens to be clickable.
+    for (const step of ONBOARDING_STEPS) {
+      expect(step.action.trim(), `${step.key} has no action`).not.toBe("");
+      expect(step.action.length, `${step.key}: "${step.action}" is too long for a button`)
+        .toBeLessThanOrEqual(24);
+    }
+  });
+
+  it("keeps the heading a task and the nudge a sentence", () => {
+    // Three fields, three jobs: what the step is, why it matters, and what the
+    // button says. Collapsing any two of them is how the duplication started.
+    for (const step of ONBOARDING_STEPS) {
+      expect(step.label).not.toBe(step.why);
+      expect(step.action).not.toBe(step.why);
+    }
+  });
+});

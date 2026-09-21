@@ -1672,6 +1672,22 @@ const MUTATIONS = [
     pkg: "@le/web",
   },
   {
+    id: "onboarding/the-button-is-not-the-heading",
+    rule: "A step's button never repeats the words already in the heading above it",
+    file: "packages/shared/src/onboarding.ts",
+    from: '    action: "Add product facts",',
+    to: '    action: "Add a page of product facts",',
+    pkg: "@le/shared",
+  },
+  {
+    id: "onboarding/a-button-is-not-a-sentence",
+    rule: "A button carries two or three words, not the instruction itself",
+    file: "packages/shared/src/onboarding.ts",
+    from: '    action: "Start",',
+    to: '    action: "Tell us what you sell first",',
+    pkg: "@le/shared",
+  },
+  {
     id: "kpi/no-stage-nobody-can-reach",
     rule: "A workspace that only sends links never reports a permanent Meetings 0",
     file: "packages/shared/src/kpi.ts",

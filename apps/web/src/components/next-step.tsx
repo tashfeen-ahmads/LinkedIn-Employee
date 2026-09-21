@@ -36,7 +36,7 @@ export function NextStep({ step, ready }: { step: OnboardingStep | null; ready: 
       <p className="small muted">{step.why}</p>
       <p>
         <Link className="btn" href={step.href}>
-          {step.label}
+          {step.action}
         </Link>
       </p>
       {!ready ? (

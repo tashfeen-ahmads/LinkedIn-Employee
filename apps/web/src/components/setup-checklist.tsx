@@ -1,5 +1,11 @@
 import Link from "next/link";
-import { ONBOARDING_STEPS, nextStep, onboardingProgress, type OnboardingState } from "@le/shared";
+import {
+  ONBOARDING_STEPS,
+  isReadyToSend,
+  nextStep,
+  onboardingProgress,
+  type OnboardingState,
+} from "@le/shared";
 
 /**
  * What is left to set up.
@@ -15,6 +21,27 @@ import { ONBOARDING_STEPS, nextStep, onboardingProgress, type OnboardingState } 
 export function SetupChecklist({ state }: { state: OnboardingState }) {
   const { done, total } = onboardingProgress(state);
   if (done === total) return null;
+
+  /*
+   * Once everything required is finished, this stops being a checklist.
+   *
+   * A workspace at five of six with one optional step left was shown a
+   * full-width card naming that step, and directly beneath it a second
+   * full-width card with a progress meter and six rows — to say the same one
+   * thing. Two heavy blocks for one small suggestion reads as a product that
+   * cannot tell what matters.
+   *
+   * So it steps back to a line. The remaining step is already named above; all
+   * this has to add is that nothing is blocked.
+   */
+  if (isReadyToSend(state)) {
+    return (
+      <p className="small subtle">
+        {done} of {total} steps done — everything required is finished, so campaigns can send. The
+        rest is worth doing when you have a minute.
+      </p>
+    );
+  }
 
   // nextStep, not "the first unticked row": required steps come first, so the
   // button here and the subject line of the nudge email name the same thing.

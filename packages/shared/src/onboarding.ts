@@ -39,6 +39,16 @@ export interface OnboardingStep {
    */
   done: string;
   href: string;
+  /**
+   * The words on the button, which are never the words in the heading.
+   *
+   * The card naming the next step put `label` in its `<h2>` and `label` again
+   * on its button — the same sentence twice, six lines apart, and a third time
+   * on the checklist below it. Three identical calls to action on one screen do
+   * not read as emphasis; they read as a page that has lost track of itself.
+   * The heading says what the step is; this says where the button goes.
+   */
+  action: string;
   /** The line a nudge email leads with when this is the step they are stuck on. */
   nudge: string;
   /** False for steps that improve the product rather than unblock it. */
@@ -48,6 +58,7 @@ export interface OnboardingStep {
 export const ONBOARDING_STEPS: readonly OnboardingStep[] = [
   {
     key: "hasBusinessProfile",
+    action: "Start",
     label: "Tell us what you sell",
     done: "your business profile",
     why: "The Strategy Agent reads your site and writes your customer profiles from it.",
@@ -57,6 +68,7 @@ export const ONBOARDING_STEPS: readonly OnboardingStep[] = [
   },
   {
     key: "hasApprovedProfile",
+    action: "Review strategies",
     label: "Approve a customer profile",
     done: "an approved customer profile",
     why: "Nothing is searched for until you have read one and said yes.",
@@ -67,6 +79,7 @@ export const ONBOARDING_STEPS: readonly OnboardingStep[] = [
   },
   {
     key: "hasLinkedInAccount",
+    action: "Connect LinkedIn",
     label: "Connect your LinkedIn account",
     done: "your LinkedIn account",
     why: "You sign in on LinkedIn's own page; we never see your password.",
@@ -77,6 +90,7 @@ export const ONBOARDING_STEPS: readonly OnboardingStep[] = [
   },
   {
     key: "hasCampaign",
+    action: "Open strategies",
     label: "Build your first campaign",
     done: "your first campaign",
     why: "The Targeting Agent finds the people and writes the messages.",
@@ -86,6 +100,7 @@ export const ONBOARDING_STEPS: readonly OnboardingStep[] = [
   },
   {
     key: "hasLaunchedCampaign",
+    action: "Open campaigns",
     label: "Review it, then launch",
     done: "a launched campaign",
     why: "Read every message and every name before anything sends. Ten invitations on day one.",
@@ -102,6 +117,7 @@ export const ONBOARDING_STEPS: readonly OnboardingStep[] = [
   // by offering to send times rather than inventing one.
   {
     key: "hasKnowledge",
+    action: "Add product facts",
     label: "Add a page of product facts",
     done: "a page of product facts",
     why: "The only things the agent may state. Without it, every product question comes to you.",
