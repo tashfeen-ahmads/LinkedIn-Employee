@@ -182,13 +182,13 @@ export function HowItWorks() {
         <Stagger className="grid grid-2">
           {STEPS.map((step) => (
             <StaggerItem key={step.n}>
-              <article className="card interactive stack-3" style={{ height: "100%" }}>
+              <article className="card interactive" style={{ height: "100%" }}>
                 <div className="cluster" style={{ alignItems: "baseline" }}>
                   <span className="eyebrow">{step.n}</span>
                   <h3>{step.agent}</h3>
                 </div>
                 <p className="strongish">{step.lead}</p>
-                <ul className="muted small stack-2 bullets">
+                <ul className="muted small bullets">
                   {step.points.map((point) => (
                     <li key={point}>{point}</li>
                   ))}
@@ -407,7 +407,7 @@ export function Extras() {
         <Stagger className="grid grid-2">
           {EXTRAS.map((extra) => (
             <StaggerItem key={extra.title}>
-              <article className="card interactive stack-2" style={{ height: "100%" }}>
+              <article className="card interactive" style={{ height: "100%" }}>
                 <h3>{extra.title}</h3>
                 <p className="muted small">{extra.body}</p>
               </article>
@@ -473,7 +473,7 @@ export function Pricing() {
                 <span className="small muted"> / seat / mo</span>
               </p>
 
-              <ul className="small muted stack-2 bullets">
+              <ul className="small muted bullets">
                 {plan.features.map((feature) => (
                   <li key={feature}>{feature}</li>
                 ))}

@@ -111,7 +111,7 @@ export default async function SystemPage() {
       )}
 
       {stages.map((stage) => (
-        <section className="card stack-3" key={stage}>
+        <section className="card" key={stage}>
           <h3>{stage}</h3>
           <ul className="checklist">
             {checks

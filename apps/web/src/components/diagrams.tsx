@@ -200,7 +200,7 @@ export function Pipeline() {
       <ol className="pipeline-row">
         {STAGES.map((stage, index) => (
           <li key={stage.name} className="pipeline-stage">
-            <div className="card tight stack-2 pipeline-card">
+            <div className="card tight pipeline-card">
               <span className="eyebrow">Agent {index + 1}</span>
               <strong>{stage.name}</strong>
               <span className="small muted">{stage.does}</span>
@@ -211,7 +211,7 @@ export function Pipeline() {
           </li>
         ))}
         <li className="pipeline-stage">
-          <div className="card tight stack-2 pipeline-card pipeline-end">
+          <div className="card tight pipeline-card pipeline-end">
             <span className="eyebrow">Outcome</span>
             <strong>A meeting</strong>
             <span className="small muted">In your calendar, with the conversation attached</span>

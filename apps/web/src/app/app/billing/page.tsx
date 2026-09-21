@@ -109,7 +109,7 @@ export default async function BillingPage({ searchParams }: { searchParams: Noti
         ))}
       </section>
 
-      <section className="card stack-2">
+      <section className="card">
         <h2>Export everything</h2>
         <p className="small muted">
           Every prospect, conversation, message, meeting and campaign in this workspace, as one JSON

@@ -193,6 +193,71 @@ describe("globals.css", () => {
     ).toEqual([]);
   });
 
+  it("never writes a stack utility that does nothing", () => {
+    /*
+     * `.stack-2` and `.card` are both one class, so source order decides and
+     * `.card` is written later. `<li className="card stack-2">` therefore asks
+     * for an 8px gap and renders the card's 16px, with the class sitting in
+     * the markup reading as though it applied. Seventeen elements were written
+     * that way across the app and the marketing site.
+     *
+     * A utility that silently loses is worse than no utility: it tells the
+     * next person the spacing on that element is settled and explains a
+     * measurement that is not what they see. So either it applies or it is not
+     * written, and that is what this checks. Where the two agree — `.card
+     * stack-4`, both `--space-4` — nothing is wrong and nothing is reported.
+     *
+     * Component against component (`.forecast` over `.card`) is deliberate
+     * composition and is not this test's business; scripts/css-collisions.mjs
+     * reports those for a human to read.
+     */
+    const body = CSS.replace(/\/\*[\s\S]*?\*\//g, "");
+
+    // Every rule that is only class names and sets a gap, in source order.
+    const gapRules: { classes: string[]; value: string; order: number }[] = [];
+    for (const m of body.matchAll(/(^|\n)((?:\.[\w-]+)+)\s*\{([^{}]*)\}/g)) {
+      const gap = m[3]!.match(/(?:^|;)\s*(?:row-)?gap:\s*([^;]+)/);
+      if (!gap) continue;
+      gapRules.push({
+        classes: m[2]!.split(".").filter(Boolean),
+        value: gap[1]!.trim(),
+        order: gapRules.length,
+      });
+    }
+    expect(gapRules.length, "no gap rules found — this test would pass vacuously").toBeGreaterThan(
+      3,
+    );
+
+    const offenders: string[] = [];
+    for (const file of pages(join(dirname(fileURLToPath(import.meta.url)), "../src"))) {
+      const source = readFileSync(file, "utf8");
+      for (const m of source.matchAll(/className="([^"]+)"/g)) {
+        const classes = m[1]!.split(/\s+/).filter(Boolean);
+        const stack = classes.find((c) => /^stack-\d$/.test(c));
+        if (!stack) continue;
+
+        const applies = gapRules.filter((r) => r.classes.every((c) => classes.includes(c)));
+        // More classes is more specific; a tie goes to whichever is written last.
+        const winner = applies.reduce<(typeof applies)[number] | null>(
+          (a, b) =>
+            !a || b.classes.length > a.classes.length ||
+            (b.classes.length === a.classes.length && b.order > a.order)
+              ? b
+              : a,
+          null,
+        );
+        const mine = applies.find((r) => r.classes.length === 1 && r.classes[0] === stack);
+        if (!winner || !mine || winner === mine) continue;
+        if (winner.value === mine.value) continue; // they agree; nothing is lost
+        offenders.push(`${file.split("/src/")[1]}: "${m[1]}" — ${stack} loses to .${winner.classes.join(".")}`);
+      }
+    }
+
+    expect(offenders, "a stack utility that loses is a measurement the markup does not have").toEqual(
+      [],
+    );
+  });
+
   it("gives a scrolling table a width to scroll to", () => {
     /*
      * `.table-scroll` sets `overflow-x: auto` and `table` sets `width: 100%`,

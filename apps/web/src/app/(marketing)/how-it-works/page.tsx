@@ -129,7 +129,7 @@ export default function HowItWorksPage() {
 
               <ol className="stack-4 steps">
                 {TOUR_STAGES.map((stage, index) => (
-                  <li key={stage.id} className="card stack-2">
+                  <li key={stage.id} className="card">
                     <div className="cluster">
                       <span className="eyebrow">{String(index + 1).padStart(2, "0")}</span>
                       <h3>{stage.title}</h3>

@@ -128,7 +128,7 @@ export default async function BookingPageView({
       ) : (
         <div className="stack-3">
           {page.slots.map((slot) => (
-            <form action={confirm} className="card stack-3" key={slot.iso}>
+            <form action={confirm} className="card" key={slot.iso}>
               <input type="hidden" name="token" value={token} />
               <input type="hidden" name="startsAt" value={slot.iso} />
               <strong>{slot.readable}</strong>

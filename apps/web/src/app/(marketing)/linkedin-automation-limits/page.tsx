@@ -166,7 +166,7 @@ export default function LimitsPage() {
             </p>
             <div className="grid grid-2">
               {SIGNS.map((item) => (
-                <div key={item.sign} className="card stack-2">
+                <div key={item.sign} className="card">
                   <h3>{item.sign}</h3>
                   <p className="small muted">{item.why}</p>
                 </div>

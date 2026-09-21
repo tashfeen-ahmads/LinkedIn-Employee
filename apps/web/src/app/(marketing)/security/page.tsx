@@ -60,7 +60,7 @@ export default function SecurityPage() {
 
           <div className="grid grid-2">
             {POINTS.map((point) => (
-              <article key={point.title} className="card stack-2">
+              <article key={point.title} className="card">
                 <h2>{point.title}</h2>
                 <p className="muted small">{point.body}</p>
               </article>

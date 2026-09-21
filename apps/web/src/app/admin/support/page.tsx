@@ -116,7 +116,7 @@ export default async function AdminSupportPage({ searchParams }: { searchParams:
             question an operator would ask is already answered.
           </p>
           {open.map((ticket) => (
-            <article key={ticket.id} className="card stack-3">
+            <article key={ticket.id} className="card">
               <div className="between">
                 <strong>{ticket.subject}</strong>
                 <Link className="small" href={`/admin/workspaces/${ticket.workspace_id}`}>

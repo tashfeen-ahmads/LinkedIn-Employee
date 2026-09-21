@@ -654,7 +654,7 @@ export default async function CampaignPage({
         </div>
       ) : null}
 
-      <section className="card stack-3">
+      <section className="card">
         <p className="small">
           <strong>This campaign asks for: {CTA_DEFINITIONS[cta.kind].label}</strong>
           {cta.label ? ` — “${cta.label}”` : ""}

@@ -97,7 +97,7 @@ export function AgentTimeline() {
   const beat = BEATS[active]!;
 
   return (
-    <div className="timeline card raised stack-5">
+    <div className="timeline card raised">
       <div className="between">
         <div className="stack-1">
           <span className="eyebrow">One campaign, {LAST_DAY} days</span>

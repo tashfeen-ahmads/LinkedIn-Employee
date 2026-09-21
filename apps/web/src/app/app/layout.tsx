@@ -186,7 +186,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </div>
         ) : null}
 
-        <main className="app-body stack-6">{children}</main>
+        <main className="app-body">{children}</main>
       </div>
     </div>
   );

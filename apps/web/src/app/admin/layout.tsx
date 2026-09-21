@@ -46,7 +46,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       </aside>
 
       <div className="app-main">
-        <main className="app-body stack-6">{children}</main>
+        <main className="app-body">{children}</main>
       </div>
     </div>
   );
