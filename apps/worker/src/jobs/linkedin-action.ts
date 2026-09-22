@@ -494,9 +494,26 @@ export function inviteNote(
   // the limit was corrected are caught by this on the way out.
   if (note && !containsLink(note) && note.length <= INVITE_NOTE_MAX_CHARS) return note;
 
+  /*
+   * The fallback is checked too, and leaving it unchecked was half a fix.
+   *
+   * A personalised note over the limit correctly fell back to the campaign
+   * template — and the template was 222 characters, so it failed identically
+   * and the send looked exactly as broken as before. Every guard on this path
+   * has to cover the value that is actually sent, not the one that was
+   * rejected first.
+   *
+   * No note at all is the last resort and it always succeeds: an invitation
+   * without a note is ordinary on LinkedIn and costs a little acceptance,
+   * where a refused invitation costs the whole contact and a day's allowance
+   * slot. Nothing is truncated here for the reason it is never truncated
+   * anywhere on this path: a sentence cut at 200 characters reaches a real
+   * person mid-word under a real rep's name.
+   */
   const fallback = variantTemplate?.trim() || template;
   const rendered = renderTemplate(fallback, firstName);
-  return containsLink(rendered) ? "" : rendered;
+  if (containsLink(rendered)) return "";
+  return rendered.length <= INVITE_NOTE_MAX_CHARS ? rendered : "";
 }
 
 export function addDays(date: Date, days: number): Date {

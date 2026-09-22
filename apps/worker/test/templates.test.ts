@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { INVITE_NOTE_MAX_CHARS } from "@le/shared";
 import { addDays, inviteNote, renderTemplate } from "../src/jobs/linkedin-action.js";
 
 describe("renderTemplate", () => {
@@ -108,5 +109,38 @@ describe("inviteNote", () => {
     // bare connection request nobody chose to send.
     expect(inviteNote("   ", TEMPLATE, "Jane")).toBe("Hi Jane, we work with heads of ops.");
     expect(inviteNote("", TEMPLATE, null)).toBe("Hi there, we work with heads of ops.");
+  });
+});
+
+describe("the note that is actually sent", () => {
+  const LONG = "x".repeat(INVITE_NOTE_MAX_CHARS + 1);
+  const OK = "Hi {{first_name}}, a short and legitimate note.";
+
+  it("falls back when the personalised note is too long", () => {
+    expect(inviteNote(LONG, OK, "Sam")).toBe("Hi Sam, a short and legitimate note.");
+  });
+
+  it("sends no note rather than a template that is also too long", () => {
+    /*
+     * The bug this catches, and it shipped as half a fix.
+     *
+     * A 240-character personalised note correctly fell back to the campaign's
+     * template — which was 222 characters — so the invitation was refused for
+     * exactly the same reason and the screen said exactly the same thing. A
+     * guard has to cover the value that is sent, not the one rejected first.
+     *
+     * An invitation with no note always succeeds and costs a little
+     * acceptance. A refused one costs the contact and a slot off a capped
+     * daily allowance.
+     */
+    expect(inviteNote(LONG, LONG, "Sam")).toBe("");
+  });
+
+  it("never truncates, at either step", () => {
+    // A sentence cut at the limit reaches a real person mid-word under a real
+    // rep's name, which is worse than the template and worse than no note.
+    const out = inviteNote(LONG, LONG, "Sam");
+    expect(out).not.toMatch(/^x+$/);
+    expect(out.length === 0 || out.length <= INVITE_NOTE_MAX_CHARS).toBe(true);
   });
 });
