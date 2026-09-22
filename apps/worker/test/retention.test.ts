@@ -230,15 +230,34 @@ describe("exportWorkspace", () => {
     expect(dump.complete).toBe(true);
   });
 
-  it("says so when it gave up rather than handing over a partial file", async () => {
-    const { db, ctx } = harness();
-    db.seed(
-      "conversations",
-      Array.from({ length: PAGE_SIZE * MAX_PAGES + 1 }, () => ({ workspace_id: WORKSPACE })),
-    );
+  /*
+   * The slowest test in this repo, on purpose, and with its own timeout.
+   *
+   * Proving the safety stop means going past it, and the stop is fifty pages of
+   * a thousand — so there is no honest way to assert this with fewer than
+   * 50,001 rows. The cost is not in `fetchAllRows`; it is `fake-db` filtering
+   * and re-sorting the whole seeded array once per page, fifty times, which is
+   * the harness being simple rather than fast.
+   *
+   * It ran in 4896ms against vitest's 5000ms default, so it had about a tenth
+   * of a second of headroom and had been a coin flip on a loaded CI box for
+   * some time; the vitest 4 upgrade tipped it over rather than caused it. The
+   * timeout is explicit here and not raised globally, because a global one
+   * would also buy that rope for a test that is genuinely hung.
+   */
+  it(
+    "says so when it gave up rather than handing over a partial file",
+    async () => {
+      const { db, ctx } = harness();
+      db.seed(
+        "conversations",
+        Array.from({ length: PAGE_SIZE * MAX_PAGES + 1 }, () => ({ workspace_id: WORKSPACE })),
+      );
 
-    const dump = await exportWorkspace(ctx, WORKSPACE);
+      const dump = await exportWorkspace(ctx, WORKSPACE);
 
-    expect(dump.complete).toBe(false);
-  });
+      expect(dump.complete).toBe(false);
+    },
+    20_000,
+  );
 });
