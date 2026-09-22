@@ -652,8 +652,21 @@ function toConnectedAccounts(items: RawUnipileAccount[]): ConnectedAccount[] {
   return items
     .map((item) => ({
       providerAccountId: String(item.account_id ?? item.id ?? ""),
-      // `name` is what we passed into the hosted flow.
-      reference: String(item.name ?? item.reference ?? ""),
+      /*
+       * `reference` first, and the order is the whole bug.
+       *
+       * The hosted flow sends the rep's user id as `name`, and the notify
+       * webhook echoes it back there — so reading `name` first is right on the
+       * push path and was written for it. It is wrong on the pull path:
+       * `GET /api/v1/accounts` returns `name` as the *LinkedIn profile's*
+       * display name, so every account this workspace holds read back as
+       * "Tashfeen Ahmad" and the id we actually sent was never looked at.
+       *
+       * One function serves both shapes, so it has to prefer the field that
+       * only ever means one thing. `reference` wins where it exists; `name`
+       * stays as the fallback the webhook still needs.
+       */
+      reference: String(item.reference ?? item.name ?? ""),
       displayName: typeof item.account_name === "string" ? item.account_name : undefined,
       status: mapAccountStatus(String(item.status ?? "OK")),
     }))

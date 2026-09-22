@@ -582,11 +582,26 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
         wanted: parsed.data.userId,
         references: accounts.map((a) => a.reference),
       });
+      /*
+       * The shape of what the provider actually sent, field by field.
+       *
+       * `referenceShape` alone said "text with spaces" and that was true of
+       * every account while being useless: it could not distinguish "the
+       * provider returned a name because somebody connected in its dashboard"
+       * from "the provider returned an id and we read the wrong field". Those
+       * need opposite things done about them, and telling them apart cost an
+       * afternoon of guessing at a screen that had the answer and would not
+       * print it.
+       *
+       * Still shapes and never values — a reference is one workspace's label
+       * and does not belong in another's browser.
+       */
       return c.json({
         found: accounts.length,
         mine: 0,
         bound: 0,
         referenceShape: accounts.map((a) => shapeOf(a.reference)),
+        expected: shapeOf(parsed.data.userId),
       });
     }
 
