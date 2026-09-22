@@ -99,7 +99,15 @@ async function refreshLinkedIn() {
         "/app/profile",
         found === 0
           ? "LinkedIn's provider has no account for you yet. If you just finished signing in, give it a few seconds and check again."
-          : `LinkedIn's provider has ${found} account${found === 1 ? "" : "s"}, but none of them is labelled with your account here (${result.data?.referenceShape?.join(", ") ?? "unknown"}). This needs an administrator.`,
+          : // "This needs an administrator" was the wrong sentence and the wrong
+            // person. The rep reading it usually *is* the administrator, and no
+            // amount of admin fixes this: an account labelled with a person's
+            // name was connected inside the provider's own dashboard, and the
+            // only thing that writes this rep's id onto one is this flow. The
+            // panel on the same page already said so, so the screen gave two
+            // instructions for one state and the wrong one was the actionable-
+            // sounding one.
+            `LinkedIn's provider has ${found} account${found === 1 ? "" : "s"}, but ${found === 1 ? "it is" : "none is"} labelled with a name rather than your account here (${result.data?.referenceShape?.join(", ") ?? "unknown"}) — which is what connecting inside the provider's own dashboard looks like from here. Delete that one in the provider, then press Connect LinkedIn below: signing in through this flow is what writes your id onto the account.`,
       ),
     );
   }
