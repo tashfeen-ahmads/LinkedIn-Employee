@@ -179,7 +179,17 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 <p>
                   <strong>LinkedIn account {account.status.replaceAll("_", " ")}.</strong>{" "}
                   {account.status_detail ?? "Sending is paused until this is resolved."}{" "}
-                  <Link href="/app/team">Reconnect</Link>
+                  {/*
+                    Profile, not Team, and the difference is the whole bug.
+                    `connectLinkedIn` lives on `/app/profile` and nowhere else;
+                    `/app/team` is who can sign in to the workspace and has no
+                    connect control on it at all — its own lede says "each rep
+                    connects their own LinkedIn account on their own profile".
+                    So the one banner telling somebody their account cannot send
+                    sent them to a page with nothing to press, every time, and
+                    the product looked like it had no way to reconnect.
+                  */}
+                  <Link href="/app/profile">Reconnect on your profile</Link>
                 </p>
               </div>
             ) : null}
