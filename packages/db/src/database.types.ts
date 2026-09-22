@@ -297,6 +297,10 @@ export type CampaignVariantRow = {
   connection_note: string;
   /** Retired angles stop being assigned; they are never deleted while they hold results. */
   enabled: boolean;
+  /** This angle's own pitch, so the opener and the offer are one voice. */
+  pitch_id: string | null;
+  /** The opening line this angle leans on, from the strategy's approved hooks. */
+  hook: string | null;
   created_at: string;
 };
 
@@ -565,7 +569,13 @@ export type CtaRow = {
 export type PitchRow = {
   id: string;
   workspace_id: string;
+  /** What a rep calls it in a picker: "Referral leakage", not "pitch 3". */
+  name: string;
   body: string;
+  /** What a prospect assigned no angle hears. At most one per workspace. */
+  is_default: boolean;
+  /** Which bet this line places, written to the rep rather than the prospect. */
+  angle: string | null;
   written_by: "agent" | "human";
   /** Each claim the pitch makes, quoted from the material it was given. */
   facts_used: string[] | null;

@@ -151,3 +151,21 @@ export type LlmProvider = keyof typeof MODELS;
  * failure anybody sees.
  */
 export const INVITE_NOTE_MAX_CHARS = 200;
+
+/**
+ * How long a pitch may be.
+ *
+ * A pitch is spoken into a chat window, not read on a landing page. Ninety
+ * characters is what somebody actually takes in on a phone two seconds after
+ * asking "what is this?" — one line, one idea. A paragraph there is skimmed and
+ * then ignored, and a skimmed pitch looks exactly like one that was never sent.
+ *
+ * It is a hard limit rather than guidance for the same reason the invite note's
+ * is: the model will happily write 400 characters of excellent prose, and the
+ * only place that gets noticed is in front of a prospect.
+ */
+export const PITCH_MAX_CHARS = 90;
+
+/** How many the agent writes in one go: enough to compare, few enough to read. */
+export const PITCH_VARIANTS_MIN = 4;
+export const PITCH_VARIANTS_MAX = 5;

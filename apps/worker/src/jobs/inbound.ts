@@ -15,6 +15,7 @@ import {
   type CampaignProspectStatus,
 } from "@le/shared";
 import type { WorkerContext } from "../context.js";
+import { pitchFor } from "../pitch.js";
 import { recordEvent } from "../context.js";
 import { flagForHuman } from "../holds.js";
 import { jobId } from "../queues.js";
@@ -124,7 +125,11 @@ export async function handleInboundMessage(
   const history = await loadHistory(ctx, conversation.id, inbound?.id);
   const [knowledge, pitch] = await Promise.all([
     loadKnowledge(ctx, job.workspaceId),
-    loadPitch(ctx, job.workspaceId),
+    // This prospect's angle decides which pitch they hear. They accepted
+    // because of one pain being named; hearing an offer that argues a
+    // different one is the two halves of the funnel measuring different
+    // things, which is the whole of rule 28.
+    pitchFor(ctx.db, job.workspaceId, campaignProspect?.variant_id ?? null),
   ]);
   const agents = ctx.agentsFor(job.workspaceId);
 
@@ -380,10 +385,13 @@ export async function handleInboundMessage(
 async function stopSequence(
   ctx: WorkerContext,
   prospectId: string,
-): Promise<{ id: string; campaign_id: string } | null> {
+): Promise<{ id: string; campaign_id: string; variant_id: string | null } | null> {
   const { data: cp } = await ctx.db
     .from("campaign_prospects")
-    .select("id, campaign_id, status")
+    // `variant_id` is which angle this person was written for. It decides
+    // which pitch they hear, so the offer sounds like whoever sent the
+    // invitation they accepted.
+    .select("id, campaign_id, status, variant_id")
     .eq("prospect_id", prospectId)
     .not("status", "in", "(closed,opted_out,failed)")
     .order("created_at", { ascending: false })
@@ -399,7 +407,7 @@ async function stopSequence(
   } else {
     await ctx.db.from("campaign_prospects").update({ next_action_at: null }).eq("id", cp.id);
   }
-  return { id: cp.id, campaign_id: cp.campaign_id };
+  return { id: cp.id, campaign_id: cp.campaign_id, variant_id: cp.variant_id ?? null };
 }
 
 async function loadHistory(
@@ -429,24 +437,6 @@ async function loadKnowledge(ctx: WorkerContext, workspaceId: string) {
     .eq("workspace_id", workspaceId)
     .limit(20);
   return data ?? [];
-}
-
-/**
- * The offer this workspace makes, if a person has approved one.
- *
- * Approved or nothing. An unapproved pitch is a draft the agent wrote and
- * nobody read, and handing that to the Reply Agent would make the approval
- * screen decorative — the same shape as rule 9, where the Strategy Agent
- * writes customer profiles and targeting refuses the ones nobody said yes to.
- */
-async function loadPitch(ctx: WorkerContext, workspaceId: string): Promise<string | null> {
-  const { data } = await ctx.db
-    .from("pitches")
-    .select("body, approved_at")
-    .eq("workspace_id", workspaceId)
-    .maybeSingle();
-  if (!data?.approved_at) return null;
-  return data.body?.trim() || null;
 }
 
 async function loadBusinessProfile(ctx: WorkerContext, workspaceId: string) {

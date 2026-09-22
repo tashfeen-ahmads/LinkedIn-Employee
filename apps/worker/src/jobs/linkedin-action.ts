@@ -19,6 +19,7 @@ import { applyHealth, recordAction, toUsage, type AccountRecord, ACCOUNT_USAGE_C
 import { syncConversationToCrm } from "../crm.js";
 import { loadExclusions } from "../exclusions.js";
 import { clearHold, flagForHuman } from "../holds.js";
+import { pitchFor } from "../pitch.js";
 import { createBookingLink } from "./book.js";
 import type { LinkedInActionJob } from "../queues.js";
 
@@ -250,7 +251,10 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
    */
   const withPitch = renderPitch(
     step.message,
-    usesPitch(step.message) ? await loadApprovedPitch(db, cp.workspace_id) : null,
+    // This person's own angle picks the line, falling back to the workspace
+    // default. An angle owns its prospect end to end (rule 28), so the
+    // follow-up argues the pain their invitation named.
+    usesPitch(step.message) ? await pitchFor(db, cp.workspace_id, cp.variant_id) : null,
   );
   if (!withPitch.ok) {
     /*
@@ -449,24 +453,6 @@ export async function ensureConversation(
     .single();
   if (error || !created) throw new Error(`could not create conversation: ${error?.message}`);
   return created;
-}
-
-/**
- * The offer, if a person has approved one.
- *
- * Approved or nothing, exactly as the Reply Agent reads it. An unapproved
- * pitch is a draft the agent wrote and nobody read, and sending it from a
- * campaign step would be a way around the review screen — which is the one
- * thing the review screen cannot survive.
- */
-async function loadApprovedPitch(db: Db, workspaceId: string): Promise<string | null> {
-  const { data } = await db
-    .from("pitches")
-    .select("body, approved_at")
-    .eq("workspace_id", workspaceId)
-    .maybeSingle();
-  if (!data?.approved_at) return null;
-  return data.body?.trim() || null;
 }
 
 async function closeProspect(ctx: WorkerContext, campaignProspectId: string, reason: string): Promise<void> {

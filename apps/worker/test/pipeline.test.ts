@@ -533,6 +533,7 @@ describe("campaign pipeline", () => {
         written_by: "agent",
         facts_used: [],
         approved_at: NOW.toISOString(),
+        is_default: true,
       },
     ]);
     db.rows("campaign_steps")[0]!.message = "Hi {{first_name}} — {{pitch}}";
@@ -541,6 +542,114 @@ describe("campaign pipeline", () => {
     await runLinkedInAction(ctx, { kind: "follow_up", workspaceId: WORKSPACE, campaignProspectId: CP, stepNumber: 1 });
 
     expect(linkedin.sentMessages[0]?.text).toBe("Hi Jane — Most referrals never get followed up.");
+  });
+
+  it("gives a prospect the pitch belonging to the angle they were written for", async () => {
+    /*
+     * Rule 28, carried to the offer. Somebody accepts because one pain was
+     * named; hearing a pitch that argues a different one leaves the acceptance
+     * and the reply measuring different things, which is the whole reason the
+     * angle owns its prospect end to end.
+     */
+    const { db, ctx, linkedin } = harness();
+    db.seed("pitches", [
+      {
+        id: "pitch-default",
+        workspace_id: WORKSPACE,
+        name: "Default",
+        body: "The generic line nobody chose.",
+        written_by: "agent",
+        facts_used: [],
+        approved_at: NOW.toISOString(),
+        is_default: true,
+      },
+      {
+        id: "pitch-angle",
+        workspace_id: WORKSPACE,
+        name: "Referral leakage",
+        body: "Most of your referrals never happen.",
+        written_by: "agent",
+        facts_used: [],
+        approved_at: NOW.toISOString(),
+        is_default: false,
+      },
+    ]);
+    db.seed("campaign_variants", [
+      {
+        id: "variant-1",
+        workspace_id: WORKSPACE,
+        campaign_id: CAMPAIGN,
+        name: "Referral leakage",
+        angle: "referrals that never happen",
+        pain_point: null,
+        connection_note: "n",
+        enabled: true,
+        pitch_id: "pitch-angle",
+        hook: null,
+      },
+    ]);
+    db.rows("campaign_steps")[0]!.message = "{{pitch}}";
+    const cp = db.find("campaign_prospects", { id: CP })!;
+    cp.status = "accepted";
+    cp.variant_id = "variant-1";
+
+    await runLinkedInAction(ctx, { kind: "follow_up", workspaceId: WORKSPACE, campaignProspectId: CP, stepNumber: 1 });
+
+    expect(linkedin.sentMessages[0]?.text).toBe("Most of your referrals never happen.");
+  });
+
+  it("falls back to the default when an angle's own pitch is not approved", async () => {
+    /*
+     * The alternative is silence from a campaign that is otherwise ready, and
+     * the default is copy a person approved for exactly this case — the same
+     * shape as the campaign-wide steps that are the whole sequence for anybody
+     * assigned no angle.
+     */
+    const { db, ctx, linkedin } = harness();
+    db.seed("pitches", [
+      {
+        id: "pitch-default",
+        workspace_id: WORKSPACE,
+        name: "Default",
+        body: "The line everyone else hears.",
+        written_by: "agent",
+        facts_used: [],
+        approved_at: NOW.toISOString(),
+        is_default: true,
+      },
+      {
+        id: "pitch-angle",
+        workspace_id: WORKSPACE,
+        name: "Referral leakage",
+        body: "Nobody has read this one yet.",
+        written_by: "agent",
+        facts_used: [],
+        approved_at: null,
+        is_default: false,
+      },
+    ]);
+    db.seed("campaign_variants", [
+      {
+        id: "variant-1",
+        workspace_id: WORKSPACE,
+        campaign_id: CAMPAIGN,
+        name: "Referral leakage",
+        angle: "referrals that never happen",
+        pain_point: null,
+        connection_note: "n",
+        enabled: true,
+        pitch_id: "pitch-angle",
+        hook: null,
+      },
+    ]);
+    db.rows("campaign_steps")[0]!.message = "{{pitch}}";
+    const cp = db.find("campaign_prospects", { id: CP })!;
+    cp.status = "accepted";
+    cp.variant_id = "variant-1";
+
+    await runLinkedInAction(ctx, { kind: "follow_up", workspaceId: WORKSPACE, campaignProspectId: CP, stepNumber: 1 });
+
+    expect(linkedin.sentMessages[0]?.text).toBe("The line everyone else hears.");
   });
 
   it("sends nothing at all when the message needs a pitch and none is approved", async () => {
@@ -564,6 +673,7 @@ describe("campaign pipeline", () => {
         written_by: "agent",
         facts_used: [],
         approved_at: null,
+        is_default: true,
       },
     ]);
     db.rows("campaign_steps")[0]!.message = "Hi {{first_name}} — {{pitch}}";
@@ -829,6 +939,7 @@ describe("campaign pipeline", () => {
         written_by: "agent",
         facts_used: [],
         approved_at: NOW.toISOString(),
+        is_default: true,
       },
     ]);
 
@@ -854,6 +965,7 @@ describe("campaign pipeline", () => {
         written_by: "agent",
         facts_used: [],
         approved_at: null,
+        is_default: true,
       },
     ]);
 

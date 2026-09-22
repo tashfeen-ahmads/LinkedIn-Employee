@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PITCH_MAX_CHARS, PITCH_VARIANTS_MAX, PITCH_VARIANTS_MIN } from "./constants.js";
 
 // ---------- Strategy Agent artifacts ----------
 
@@ -38,7 +39,13 @@ export const CustomerProfileSchema = z.object({
   pains: z.array(z.string()),
   valueProposition: z.string(),
   salesNavFilters: SalesNavFiltersSchema,
-  hooks: z.array(z.string()).length(3).describe("Three opening angles for a connection note."),
+  hooks: z
+    .array(z.string())
+    .min(3)
+    .max(5)
+    .describe(
+      "Opening angles for a connection note — the line the invite writer leans on. Three to five, each naming a different pain.",
+    ),
   connectionNote: z.string().max(300).describe("Under 300 characters, no links, no pitch."),
   followUps: z
     .array(z.object({ delayDays: z.number().int().min(1).max(14), message: z.string().max(1200) }))
@@ -65,10 +72,19 @@ export type StrategyOutput = z.infer<typeof StrategyOutputSchema>;
  * scrolling is a pitch that gets skimmed and then ignored.
  */
 export const PitchSchema = z.object({
+  /** Short enough to head a column on a results table. "Referral leakage". */
+  name: z.string().max(40),
   body: z
     .string()
-    .max(600)
-    .describe("The offer in three to five sentences, in the company's own voice, no links."),
+    .max(PITCH_MAX_CHARS)
+    .describe(
+      `The offer in one line, ${PITCH_MAX_CHARS} characters at the absolute most, in the company's own voice, no links.`,
+    ),
+  /**
+   * Which pain this line names, so the four are visibly four different bets
+   * rather than one sentence written four ways.
+   */
+  angle: z.string().max(200),
   factsUsed: z
     .array(z.string())
     .describe(
@@ -76,6 +92,19 @@ export const PitchSchema = z.object({
     ),
 });
 export type Pitch = z.infer<typeof PitchSchema>;
+
+/**
+ * What the agent returns: several pitches, not one.
+ *
+ * One pitch is an opinion nobody can check. Four are a test — and because an
+ * angle owns its prospect end to end (rule 28), the pitch a person hears is the
+ * one belonging to the angle their invitation was written for, so the acceptance
+ * and the reply are finally measuring the same thing.
+ */
+export const PitchSetSchema = z.object({
+  variants: z.array(PitchSchema).min(PITCH_VARIANTS_MIN).max(PITCH_VARIANTS_MAX),
+});
+export type PitchSet = z.infer<typeof PitchSetSchema>;
 
 // ---------- Targeting Agent ----------
 

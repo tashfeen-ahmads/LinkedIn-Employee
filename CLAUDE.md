@@ -761,11 +761,29 @@ tests that were verified by deliberately breaking the code.
     different proposition, and the one piece of copy in the product that
     actually sells the thing was the only piece nobody had read.
 
-    `pitches` (migration 0026) is one row per workspace, because a pitch is
-    universal **by construction**: a campaign varies the angle it opens with
-    (rule 28) and the person the note is addressed to, never what is being
-    offered. Two offers into one market and the reply rate can no longer be
-    read, because the two halves were never answering the same question.
+    **A pitch is a line, and a workspace keeps several** (migrations 0026 and
+    0027). One pitch is an opinion nobody can check; several are a test. And
+    because an angle owns its prospect end to end (rule 28), the line somebody
+    hears is the one on `campaign_variants.pitch_id` — the angle their
+    invitation was written for. A prospect accepted because one pain was named,
+    and an offer arguing a different one leaves the acceptance and the reply
+    measuring different things. A prospect assigned no angle hears the
+    workspace default, exactly as the campaign-wide steps are already the whole
+    sequence for that person; `pitches_one_default` is a unique index, because
+    "which pitch" answered by row order is answered differently on different
+    days.
+
+    **`PITCH_MAX_CHARS` is 90, and it is enforced in code.** A pitch is spoken
+    into a chat window on a phone, two seconds after somebody asked what this
+    is; a paragraph there is skimmed and then ignored, which looks exactly like
+    one that was never sent. The zod `.max()` is documentation for the model and
+    nothing else — `callStructured` **casts** its result rather than parsing it,
+    and a provider's structured-output subset enforces the shape of the JSON,
+    not `maxLength` on a string. That is the same hole that sent a 222-character
+    connection note to LinkedIn and had the invitation refused, which is why
+    `personalizeInvites` carries the identical second check. Over-length lines
+    are **dropped, never truncated**: cutting one mid-clause reaches a prospect
+    as a broken message under a real rep's name.
 
     `writePitch` writes it and **does not approve it**, exactly as the Strategy
     Agent writes customer profiles and does not approve those (rule 9).
@@ -787,6 +805,17 @@ tests that were verified by deliberately breaking the code.
     opinion, and an empty one is **reported on the screen**, exactly as rule 16
     reports empty grounding. A pitch that cites nothing looks precisely like one
     that cites everything.
+
+    **The hooks are the opener, and for a year they were decoration.** Every
+    strategy has carried three of them since the first week (`spec.hooks`,
+    rendered on `/app/strategy` under "Opening angles"), written by the agent
+    and approved by a person — and nothing ever read one. Written, stored,
+    approved, displayed, then dropped at the single moment they mattered, which
+    is precisely what rule 16 says happened to the prospect research before
+    `personalizeInvites` existed. They are now handed to the invite writer and
+    to `writePitch`, as **shapes to lean on and never text to paste**: a note
+    reproducing one word for word is the template they were meant to replace,
+    and every person in the batch would receive the same sentence.
 
     A campaign step carries `{{pitch}}` rather than a copy of the words, for
     rule 36's reason: a business that retyped its offer into each campaign would

@@ -2,7 +2,14 @@ import { describe, expect, it } from "vitest";
 import { draftReply } from "../src/reply.js";
 import { writePitch } from "../src/pitch.js";
 import type { AgentContext } from "../src/client.js";
-import type { BusinessProfile, ReplyClassification, RulesOfEngagement } from "@le/shared";
+import {
+  PITCH_MAX_CHARS,
+  PITCH_VARIANTS_MAX,
+  PITCH_VARIANTS_MIN,
+  type BusinessProfile,
+  type ReplyClassification,
+  type RulesOfEngagement,
+} from "@le/shared";
 
 /**
  * The offer is the one piece of copy in this product that argues for the thing
@@ -173,24 +180,96 @@ describe("the pitch reaches the writer", () => {
   });
 });
 
-describe("writing the pitch", () => {
-  it("refuses to put a link in it, and says why in the prompt", async () => {
-    const { ctx, sent } = recordingCtx({ body: "x", factsUsed: [] });
+const SET = {
+  variants: [
+    { name: "Leakage", body: "Most of your referrals never happen.", angle: "lost referrals", factsUsed: ["x"] },
+    { name: "Sheets", body: "Your referral sheet is a week out of date.", angle: "tracking", factsUsed: ["x"] },
+    { name: "Warmth", body: "We make the introduction, so it lands warm.", angle: "friction", factsUsed: ["x"] },
+    { name: "Free", body: "Premium is free for the first 1,000 members.", angle: "price", factsUsed: ["x"] },
+  ],
+};
+
+describe("writing the pitches", () => {
+  it("asks for several, because one is an opinion nobody can check", async () => {
+    const { ctx, sent } = recordingCtx(SET);
     await writePitch(ctx, { business, knowledge: [] });
-    // The destination is per campaign and substituted at send time. A URL baked
-    // into the pitch is the same wrong address in every conversation.
-    expect(sent[0]!.system).toMatch(/No links of any kind/i);
-    expect(sent[0]!.system).toMatch(/substituted\s+at send time/i);
+    expect(sent[0]!.system).toMatch(new RegExp(`Write ${PITCH_VARIANTS_MIN} to ${PITCH_VARIANTS_MAX}`));
+    // Four rewordings test nothing and cost a month to find that out.
+    expect(sent[0]!.system).toMatch(/DIFFERENT BET, NOT A REWORDING/i);
   });
 
-  it("shows the model the pitch it is rewriting", async () => {
-    // Without it, "make it shorter" returns a different pitch that happens to
-    // be short, and the sentence somebody actually liked is gone.
-    const { ctx, sent } = recordingCtx({ body: "x", factsUsed: [] });
+  it("states the character limit as a hard number the model must count", async () => {
+    /*
+     * A pitch is read in a chat window on a phone. The model will happily
+     * write 400 characters of excellent prose, and the only place that gets
+     * noticed is in front of a prospect.
+     */
+    const { ctx, sent } = recordingCtx(SET);
+    await writePitch(ctx, { business, knowledge: [] });
+    expect(sent[0]!.system).toContain(`${PITCH_MAX_CHARS} characters`);
+    expect(sent[0]!.system).toMatch(/Count them/i);
+  });
+
+  it("drops a line over the limit rather than letting it reach anybody", async () => {
+    /*
+     * `callStructured` casts its result, it does not parse it, and a provider's
+     * structured-output subset enforces the shape of the JSON and not
+     * `maxLength` on a string. So the schema is documentation for the model,
+     * and this check is the enforcement.
+     *
+     * The same hole sent a 222-character connection note to LinkedIn and had
+     * the invitation refused outright. A long pitch fails more quietly: it is
+     * delivered, skimmed, and ignored.
+     */
+    const tooLong = "x".repeat(PITCH_MAX_CHARS + 1);
+    const over = { variants: SET.variants.map((v, i) => (i === 0 ? { ...v, body: tooLong } : v)) };
+    const { ctx } = recordingCtx(over);
+    const result = await writePitch(ctx, { business, knowledge: [] });
+    expect(result.variants).toHaveLength(SET.variants.length - 1);
+    expect(result.variants.every((v) => v.body.length <= PITCH_MAX_CHARS)).toBe(true);
+  });
+
+  it("refuses outright when every line came back too long", async () => {
+    // Nothing safe to offer is a failure the caller has to hear about, not an
+    // empty set that reads on screen as "the agent wrote you nothing".
+    const tooLong = "x".repeat(PITCH_MAX_CHARS + 1);
+    const { ctx } = recordingCtx({ variants: SET.variants.map((v) => ({ ...v, body: tooLong })) });
+    await expect(writePitch(ctx, { business, knowledge: [] })).rejects.toThrow(/over 90 characters/);
+  });
+
+  it("refuses to put a link in them, and says why in the prompt", async () => {
+    // The destination is per campaign and substituted at send time. A URL baked
+    // into a pitch is the same wrong address in every conversation for a year.
+    const { ctx, sent } = recordingCtx(SET);
+    await writePitch(ctx, { business, knowledge: [] });
+    expect(sent[0]!.system).toMatch(/no link of any kind/i);
+    expect(sent[0]!.system).toMatch(/substituted at send time/i);
+  });
+
+  it("hands over the opening angles a person already approved", async () => {
+    /*
+     * The hooks were written, stored, approved and rendered on /app/strategy
+     * since the first week, and nothing ever read one. A pitch written without
+     * them is a bet nobody placed: the prospect accepted because of one pain
+     * and hears an offer arguing another.
+     */
+    const { ctx, sent } = recordingCtx(SET);
     await writePitch(ctx, {
       business,
       knowledge: [],
-      current: PITCH,
+      hooks: ["How does your chapter measure which introductions convert?"],
+    });
+    expect(sent[0]!.user).toContain("How does your chapter measure which introductions convert?");
+  });
+
+  it("shows the model the lines it is rewriting", async () => {
+    // Without it, "make them shorter" returns a different set that happens to
+    // be short, and the line somebody actually liked is gone.
+    const { ctx, sent } = recordingCtx(SET);
+    await writePitch(ctx, {
+      business,
+      knowledge: [],
+      current: [PITCH],
       instruction: "shorter",
     });
     expect(sent[0]!.user).toContain(PITCH);
@@ -200,7 +279,7 @@ describe("writing the pitch", () => {
   it("does not claim a fact the knowledge base does not hold", async () => {
     // The knowledge renderer is what makes this checkable: an empty base says
     // so in as many words rather than leaving the model to fill the silence.
-    const { ctx, sent } = recordingCtx({ body: "x", factsUsed: [] });
+    const { ctx, sent } = recordingCtx(SET);
     await writePitch(ctx, { business, knowledge: [] });
     expect(sent[0]!.user).toMatch(/you may not state any product fact/i);
   });

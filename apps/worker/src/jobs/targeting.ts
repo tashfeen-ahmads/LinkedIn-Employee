@@ -725,6 +725,9 @@ async function attachProspects(
         profile: input.profile,
         repName: input.repName,
         campaignAngle: group.angle,
+        // The opening angles from the strategy a human approved. Until now
+        // these were written, stored, displayed and never read by anything.
+        hooks: input.profile.hooks,
         prospects: group.prospects,
       });
       for (const [providerId, note] of written) notes.set(providerId, note);

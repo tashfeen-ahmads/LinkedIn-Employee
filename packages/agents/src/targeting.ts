@@ -237,6 +237,17 @@ export async function personalizeInvites(
     profile: CustomerProfile;
     repName: string;
     campaignAngle: string;
+    /**
+     * The opening lines a person approved on /app/strategy.
+     *
+     * The Strategy Agent has written these since the first week and nothing
+     * ever consumed one: written, stored, approved, rendered under "Opening
+     * angles", and then dropped at the single moment they mattered — exactly
+     * what rule 16 says happened to the prospect research before this function
+     * existed. They are shapes to lean on, never text to copy: the note is
+     * still written for the person receiving it.
+     */
+    hooks?: string[];
     prospects: ProspectCandidate[];
   },
 ): Promise<Map<string, PersonalizedInvite>> {
@@ -256,6 +267,9 @@ export async function personalizeInvites(
       toneOfVoice: input.business.toneOfVoice,
       pursuing: { name: input.profile.name, summary: input.profile.summary, pains: input.profile.pains },
       angle: input.campaignAngle,
+      // Named `openingAngles` rather than `hooks` because the model is being
+      // told what they are for: shapes the note may take, not lines to paste.
+      openingAngles: input.hooks?.length ? input.hooks : undefined,
     },
     null,
     2,

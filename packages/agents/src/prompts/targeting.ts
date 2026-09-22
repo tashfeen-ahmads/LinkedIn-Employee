@@ -1,6 +1,6 @@
 export const FIT_SCORE_PROMPT_VERSION = "targeting.fit/2026-09-08";
 export const CAMPAIGN_PROMPT_VERSION = "targeting.campaign/2026-09-22";
-export const INVITE_NOTE_PROMPT_VERSION = "targeting.invite-note/2026-09-22";
+export const INVITE_NOTE_PROMPT_VERSION = "targeting.invite-note/2026-09-22-hooks";
 
 export const FIT_SCORE_SYSTEM = `You score how well each LinkedIn prospect matches an ideal customer profile. You are the filter that decides who a real salesperson contacts, so a wrong "high fit" wastes both people's time and burns a LinkedIn account's reputation.
 
@@ -106,6 +106,11 @@ Rules, in order of importance:
    looking like a promise.
 7. Use their first name once, naturally, or not at all. Never use their full
    name, and never use a name you were not given.
+8. When "openingAngles" are supplied, they are the openings this business has
+   approved. Pick the one that fits this person and write the note in its
+   shape. They are shapes, never text to paste: a note that reproduces one word
+   for word is the template you were asked to replace, and every person in the
+   batch would receive the same sentence.
 
 Return "providerId" exactly as supplied so each note can be matched back to its
 person.`;

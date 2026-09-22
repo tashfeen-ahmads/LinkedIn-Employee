@@ -40,10 +40,26 @@ const MUTATIONS = [
   {
     id: "pitch/approved-only",
     rule: "The agent only ever makes an offer a person approved",
-    file: "apps/worker/src/jobs/inbound.ts",
+    file: "apps/worker/src/pitch.ts",
     from: "  if (!data?.approved_at) return null;",
     to: "  if (false) return null;",
     pkg: "@le/worker",
+  },
+  {
+    id: "pitch/angle-owns-its-offer",
+    rule: "A prospect hears the pitch belonging to the angle they were written for",
+    file: "apps/worker/src/pitch.ts",
+    from: "      if (data?.approved_at && data.body?.trim()) return data.body.trim();",
+    to: "      if (false) return data.body.trim();",
+    pkg: "@le/worker",
+  },
+  {
+    id: "pitch/length-enforced-in-code",
+    rule: "A pitch over the character limit never reaches anybody",
+    file: "packages/agents/src/pitch.ts",
+    from: "  const variants = set.variants.filter((pitch) => pitch.body.trim().length <= PITCH_MAX_CHARS);",
+    to: "  const variants = set.variants;",
+    pkg: "@le/agents",
   },
   {
     id: "pitch/reaches-the-writer",
