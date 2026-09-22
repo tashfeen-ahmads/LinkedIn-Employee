@@ -299,8 +299,8 @@ export type CampaignVariantRow = {
   enabled: boolean;
   /** This angle's own pitch, so the opener and the offer are one voice. */
   pitch_id: string | null;
-  /** The opening line this angle leans on, from the strategy's approved hooks. */
-  hook: string | null;
+  /** This angle's own opener, so the first line and the offer are one voice. */
+  hook_id: string | null;
   created_at: string;
 };
 
@@ -586,6 +586,30 @@ export type PitchRow = {
   updated_at: string;
 };
 
+/**
+ * One approved opening line.
+ *
+ * The same row a pitch gets, for the same reason: a line that reaches real
+ * people has to be approvable, retirable and attachable on its own, rather
+ * than living inside a strategy's jsonb where none of those are possible.
+ */
+export type HookRow = {
+  id: string;
+  workspace_id: string;
+  name: string;
+  body: string;
+  /** Which bet it places, written to the rep rather than the prospect. */
+  angle: string | null;
+  written_by: "agent" | "human";
+  /** Null until a person has read these exact words. Editing clears it. */
+  approved_at: string | null;
+  approved_by: string | null;
+  /** What an angle with no opener of its own leans on. One per workspace. */
+  is_default: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
 export type SupportTicketRow = {
   id: string;
   workspace_id: string;
@@ -652,6 +676,7 @@ export type Database = {
       llm_calls: Table<LlmCallRow>;
       ctas: Table<CtaRow>;
       pitches: Table<PitchRow>;
+      hooks: Table<HookRow>;
       support_tickets: Table<SupportTicketRow>;
       worker_heartbeats: Table<WorkerHeartbeatRow>;
     };

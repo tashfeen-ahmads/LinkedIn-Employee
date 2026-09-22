@@ -519,21 +519,70 @@ function nothingNewYet(continuing: CampaignPosition | null, page: { cursor: stri
  * when the variant insert failed. That group keeps the campaign's own note as
  * its angle, so a campaign without variants writes exactly as it always did.
  */
+/**
+ * The approved openers, and which angle each belongs to.
+ *
+ * Approved or nothing. An unapproved opener is a line the agent wrote and
+ * nobody read, and it would be the first thing a stranger ever saw from this
+ * workspace — which is the one place a review screen cannot be decorative.
+ */
+async function loadHooks(
+  ctx: WorkerContext,
+  workspaceId: string,
+): Promise<{ byVariantId: Map<string, string>; all: string[] }> {
+  const [{ data: hooks }, { data: variants }] = await Promise.all([
+    ctx.db
+      .from("hooks")
+      .select("id, body")
+      .eq("workspace_id", workspaceId)
+      .not("approved_at", "is", null)
+      .limit(12),
+    ctx.db.from("campaign_variants").select("id, hook_id").eq("workspace_id", workspaceId),
+  ]);
+
+  const bodyById = new Map(
+    (hooks ?? [])
+      .map((row) => [row.id, row.body?.trim() ?? ""] as const)
+      .filter(([, body]) => body.length > 0),
+  );
+  const byVariantId = new Map<string, string>();
+  for (const variant of variants ?? []) {
+    const body = variant.hook_id ? bodyById.get(variant.hook_id) : undefined;
+    if (body) byVariantId.set(variant.id, body);
+  }
+  return { byVariantId, all: [...bodyById.values()] };
+}
+
 function groupByAngle(
   insertedProspects: Array<{ id: string }>,
   variantByProspectId: Map<string, { id: string; angle: string } | null>,
   providerIdByProspectId: Map<string, string>,
   input: { campaignAngle: string; shortlist: Array<{ candidate: ProspectCandidate }> },
-): Array<{ angle: string; prospects: ProspectCandidate[] }> {
+  /**
+   * The approved openers, and which angle owns which.
+   *
+   * The angle's own leads, then the rest of the approved set: the writer picks
+   * whichever fits the person in front of it, and being handed one line only
+   * would make it a template again.
+   */
+  hooks: { byVariantId: Map<string, string>; all: string[] } = { byVariantId: new Map(), all: [] },
+): Array<{ angle: string; hooks: string[]; prospects: ProspectCandidate[] }> {
   const candidateByProviderId = new Map(input.shortlist.map((r) => [r.candidate.providerId, r.candidate]));
-  const groups = new Map<string, { angle: string; prospects: ProspectCandidate[] }>();
+  const groups = new Map<string, { angle: string; hooks: string[]; prospects: ProspectCandidate[] }>();
 
   for (const p of insertedProspects) {
     const candidate = candidateByProviderId.get(providerIdByProspectId.get(p.id) ?? "");
     if (!candidate) continue;
     const variant = variantByProspectId.get(p.id) ?? null;
     const key = variant?.id ?? "none";
-    const group = groups.get(key) ?? { angle: variant?.angle ?? input.campaignAngle, prospects: [] };
+    const own = variant ? hooks.byVariantId.get(variant.id) : undefined;
+    const group =
+      groups.get(key) ??
+      {
+        angle: variant?.angle ?? input.campaignAngle,
+        hooks: own ? [own, ...hooks.all.filter((line) => line !== own)] : hooks.all,
+        prospects: [],
+      };
     group.prospects.push(candidate);
     groups.set(key, group);
   }
@@ -717,7 +766,13 @@ async function attachProspects(
     const providerIdByProspectId = new Map(
       insertedProspects.map((p, index) => [p.id, input.shortlist[index]?.candidate.providerId ?? ""]),
     );
-    const groups = groupByAngle(insertedProspects, variantByProspectId, providerIdByProspectId, input);
+    const groups = groupByAngle(
+      insertedProspects,
+      variantByProspectId,
+      providerIdByProspectId,
+      input,
+      await loadHooks(ctx, job.workspaceId),
+    );
 
     for (const group of groups) {
       const written = await personalizeInvites(ctx.agentsFor(job.workspaceId), {
@@ -725,9 +780,14 @@ async function attachProspects(
         profile: input.profile,
         repName: input.repName,
         campaignAngle: group.angle,
-        // The opening angles from the strategy a human approved. Until now
-        // these were written, stored, displayed and never read by anything.
-        hooks: input.profile.hooks,
+        // The openers a person approved, with this angle's own leading.
+        //
+        // Read from `hooks` rather than from the strategy's jsonb: a line that
+        // reaches real people has to be approvable, retirable and attachable
+        // on its own, and inside a spec none of those are possible. The
+        // strategy's own hooks are the fallback, so a workspace that has not
+        // written openers yet keeps exactly the behaviour it had.
+        hooks: group.hooks.length ? group.hooks : input.profile.hooks,
         prospects: group.prospects,
       });
       for (const [providerId, note] of written) notes.set(providerId, note);

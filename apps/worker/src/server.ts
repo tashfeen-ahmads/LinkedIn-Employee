@@ -19,6 +19,7 @@ import type { Queues } from "./queues.js";
 import { queueReachable } from "./queues.js";
 import { sendOneNow } from "./jobs/send-one.js";
 import { writeWorkspacePitch } from "./jobs/write-pitch.js";
+import { writeWorkspaceHooks } from "./jobs/write-hooks.js";
 import type IORedis from "ioredis";
 import type { WorkerContext } from "./context.js";
 import { bookFromLink, readBookingPage } from "./jobs/book.js";
@@ -419,6 +420,18 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
     // 200 either way, as /jobs/send-one does: "you have not told us what you
     // sell yet" is a correct answer to the question, and the caller renders
     // the sentence rather than translating a status code into a shrug.
+    return c.json(result);
+  });
+
+  // The openers. Same shape as /jobs/write-pitch, and same reason for being
+  // synchronous: its output is the entire point of the click.
+  app.post("/jobs/write-hooks", async (c) => {
+    const parsed = WritePitchRequest.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "invalid request" }, 400);
+    if (!(await assertMembership(ctx.db, parsed.data.workspaceId, parsed.data.userId))) {
+      return c.json({ error: "not a member of that workspace" }, 403);
+    }
+    const result = await writeWorkspaceHooks(ctx, parsed.data);
     return c.json(result);
   });
 

@@ -1,5 +1,12 @@
 import { z } from "zod";
-import { PITCH_MAX_CHARS, PITCH_VARIANTS_MAX, PITCH_VARIANTS_MIN } from "./constants.js";
+import {
+  HOOK_MAX_CHARS,
+  HOOK_VARIANTS_MAX,
+  HOOK_VARIANTS_MIN,
+  PITCH_MAX_CHARS,
+  PITCH_VARIANTS_MAX,
+  PITCH_VARIANTS_MIN,
+} from "./constants.js";
 
 // ---------- Strategy Agent artifacts ----------
 
@@ -105,6 +112,35 @@ export const PitchSetSchema = z.object({
   variants: z.array(PitchSchema).min(PITCH_VARIANTS_MIN).max(PITCH_VARIANTS_MAX),
 });
 export type PitchSet = z.infer<typeof PitchSetSchema>;
+
+// ---------- The opener ----------
+
+/**
+ * One opening line, and the bet it places.
+ *
+ * Not a note. The note is written for the person receiving it (rule 16); this
+ * is the shape it takes, and the question it leads with. A hook reproduced word
+ * for word is the template it was meant to replace, and everybody in the batch
+ * gets the same sentence.
+ */
+export const HookSchema = z.object({
+  /** Short enough to head a column on a results table. "Measurement". */
+  name: z.string().max(40),
+  body: z
+    .string()
+    .max(HOOK_MAX_CHARS)
+    .describe(
+      `The opening line, ${HOOK_MAX_CHARS} characters at the absolute most. A question they can answer in one line, no pitch, no link.`,
+    ),
+  /** Which bet it places, written to the salesperson and not to the prospect. */
+  angle: z.string().max(200),
+});
+export type Hook = z.infer<typeof HookSchema>;
+
+export const HookSetSchema = z.object({
+  variants: z.array(HookSchema).min(HOOK_VARIANTS_MIN).max(HOOK_VARIANTS_MAX),
+});
+export type HookSet = z.infer<typeof HookSetSchema>;
 
 // ---------- Targeting Agent ----------
 

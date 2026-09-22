@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { draftReply } from "../src/reply.js";
 import { writePitch } from "../src/pitch.js";
+import { writeHooks } from "../src/hook.js";
 import type { AgentContext } from "../src/client.js";
 import {
+  HOOK_MAX_CHARS,
+  HOOK_VARIANTS_MAX,
+  HOOK_VARIANTS_MIN,
   PITCH_MAX_CHARS,
   PITCH_VARIANTS_MAX,
   PITCH_VARIANTS_MIN,
+  INVITE_NOTE_MAX_CHARS,
   type BusinessProfile,
   type ReplyClassification,
   type RulesOfEngagement,
@@ -282,5 +287,72 @@ describe("writing the pitches", () => {
     const { ctx, sent } = recordingCtx(SET);
     await writePitch(ctx, { business, knowledge: [] });
     expect(sent[0]!.user).toMatch(/you may not state any product fact/i);
+  });
+});
+
+
+const HOOK_SET = {
+  variants: [
+    { name: "Measurement", body: "How does your chapter measure which introductions convert?", angle: "proof" },
+    { name: "Admin", body: "Is your referral tracking still a spreadsheet?", angle: "friction" },
+    { name: "Partners", body: "How do you find partners who actually send you clients?", angle: "supply" },
+    { name: "Value", body: "What do members say they get out of the group?", angle: "retention" },
+  ],
+};
+
+describe("writing the openers", () => {
+  it("asks for several, and says they must be different bets", async () => {
+    const { ctx, sent } = recordingCtx(HOOK_SET);
+    await writeHooks(ctx, { business, profiles: [{ name: "Chapters", summary: "s", pains: ["p"] }] });
+    expect(sent[0]!.system).toMatch(new RegExp(`Write ${HOOK_VARIANTS_MIN} to ${HOOK_VARIANTS_MAX}`));
+    expect(sent[0]!.system).toMatch(/DIFFERENT BET, NOT A REWORDING/i);
+  });
+
+  it("forbids a pitch, a claim and a link in the first thing a stranger reads", async () => {
+    /*
+     * A connection request is a request to connect. LinkedIn penalises links in
+     * invitations and they measurably cut acceptance, and a product claim in a
+     * first message reaches a stranger looking like a promise.
+     */
+    const { ctx, sent } = recordingCtx(HOOK_SET);
+    await writeHooks(ctx, { business, profiles: [{ name: "Chapters", summary: "s", pains: ["p"] }] });
+    expect(sent[0]!.system).toMatch(/No pitch\./);
+    expect(sent[0]!.system).toMatch(/No claim about the product/i);
+    expect(sent[0]!.system).toMatch(/No link of any kind/i);
+  });
+
+  it("drops an opener over the limit rather than letting it reach anybody", async () => {
+    // Same hole as the pitch: `callStructured` casts rather than parses, and a
+    // provider's structured-output subset does not enforce `maxLength`.
+    const tooLong = "x".repeat(HOOK_MAX_CHARS + 1);
+    const over = { variants: HOOK_SET.variants.map((v, i) => (i === 0 ? { ...v, body: tooLong } : v)) };
+    const { ctx } = recordingCtx(over);
+    const result = await writeHooks(ctx, {
+      business,
+      profiles: [{ name: "Chapters", summary: "s", pains: ["p"] }],
+    });
+    expect(result.variants).toHaveLength(HOOK_SET.variants.length - 1);
+    expect(result.variants.every((v) => v.body.length <= HOOK_MAX_CHARS)).toBe(true);
+  });
+
+  it("leaves room inside the invitation for the person it is addressed to", async () => {
+    /*
+     * LinkedIn refuses an entire invitation past 200 characters, and rule 16
+     * says the note has to say one specific thing about this person. An opener
+     * that fills the note leaves nothing for them, which is the template it
+     * was meant to replace.
+     */
+    expect(HOOK_MAX_CHARS).toBeLessThan(INVITE_NOTE_MAX_CHARS);
+  });
+
+  it("is written for somebody in particular", async () => {
+    // An opener written for nobody is the generic question this replaces.
+    const { ctx, sent } = recordingCtx(HOOK_SET);
+    await writeHooks(ctx, {
+      business,
+      profiles: [{ name: "Chapter leaders", summary: "run a BNI chapter", pains: ["no tracking"] }],
+    });
+    expect(sent[0]!.user).toContain("Chapter leaders");
+    expect(sent[0]!.user).toContain("no tracking");
   });
 });

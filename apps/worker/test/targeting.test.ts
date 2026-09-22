@@ -453,6 +453,55 @@ describe("personalised connection notes", () => {
     expect(row.invite_note_prompt_version).toBe("targeting.invite-note/2026-09-15");
   });
 
+  it("opens with lines a person approved, and never with one they have not", async () => {
+    /*
+     * The opener is the first thing a stranger ever reads from this workspace,
+     * so an unapproved one is the single place a review screen cannot be
+     * decorative. Rule 9's division, applied to the invitation.
+     *
+     * The whole approved set goes over rather than one line: handed a single
+     * opener, the writer has a template again, and everybody in the batch
+     * receives the same sentence.
+     */
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    db.seed("hooks", [
+      {
+        id: "hook-yes",
+        workspace_id: WORKSPACE,
+        name: "Measurement",
+        body: "How does your chapter measure which introductions convert?",
+        angle: "proof",
+        written_by: "agent",
+        approved_at: "2026-09-01T00:00:00.000Z",
+        is_default: true,
+      },
+      {
+        id: "hook-no",
+        workspace_id: WORKSPACE,
+        name: "Unread draft",
+        body: "Nobody has read this one yet.",
+        angle: "none",
+        written_by: "agent",
+        approved_at: null,
+        is_default: false,
+      },
+    ]);
+    linkedin.candidates = {
+      items: [candidate("p1", "https://www.linkedin.com/in/jane-one")],
+      cursor: null,
+      droppedFilters: [],
+    };
+    scoreMock.mockResolvedValue([ranked("https://www.linkedin.com/in/jane-one", "p1", 90)]);
+    notesMock.mockResolvedValue(new Map());
+
+    await runTargetingJob(ctx, job);
+
+    const handed = (notesMock.mock.calls[0]?.[1] ?? {}) as { hooks?: string[] };
+    expect(handed.hooks).toContain("How does your chapter measure which introductions convert?");
+    expect(handed.hooks).not.toContain("Nobody has read this one yet.");
+  });
+
   it("leaves the note null when the writer did not answer for that prospect", async () => {
     // Not an error. The send falls back to the campaign template, which is the
     // behaviour that existed before any of this — so a writer outage degrades

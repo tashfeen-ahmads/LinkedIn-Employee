@@ -169,3 +169,19 @@ export const PITCH_MAX_CHARS = 90;
 /** How many the agent writes in one go: enough to compare, few enough to read. */
 export const PITCH_VARIANTS_MIN = 4;
 export const PITCH_VARIANTS_MAX = 5;
+
+/**
+ * How long an opener may be.
+ *
+ * It is the shape of a connection note, and LinkedIn refuses the whole
+ * invitation at 200 characters (`INVITE_NOTE_MAX_CHARS`). A hundred and twenty
+ * leaves the writer room to say the one specific thing about the person that
+ * makes the note theirs rather than a template — which is the entire job of
+ * rule 16. An opener that fills the note leaves nothing for the person it is
+ * addressed to.
+ */
+export const HOOK_MAX_CHARS = 120;
+
+/** Same as the pitch: enough to compare, few enough to read in one sitting. */
+export const HOOK_VARIANTS_MIN = 4;
+export const HOOK_VARIANTS_MAX = 5;

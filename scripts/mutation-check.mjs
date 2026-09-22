@@ -22,6 +22,22 @@ import { readFileSync, writeFileSync } from "node:fs";
  */
 const MUTATIONS = [
   {
+    id: "hook/approved-only",
+    rule: "Only an approved opener ever opens a conversation",
+    file: "apps/worker/src/jobs/targeting.ts",
+    from: '      .not("approved_at", "is", null)\n      .limit(12),',
+    to: "      .limit(12),",
+    pkg: "@le/worker",
+  },
+  {
+    id: "hook/length-enforced-in-code",
+    rule: "An opener over the character limit never reaches anybody",
+    file: "packages/agents/src/hook.ts",
+    from: "  const variants = set.variants.filter((hook) => hook.body.trim().length <= HOOK_MAX_CHARS);",
+    to: "  const variants = set.variants;",
+    pkg: "@le/agents",
+  },
+  {
     id: "pitch/never-half-written",
     rule: "A message built from the pitch never sends without one",
     file: "packages/shared/src/pitch.ts",

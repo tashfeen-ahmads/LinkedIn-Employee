@@ -44,13 +44,4 @@ alter table campaign_variants
   -- This angle's offer. `set null`, never cascade: retiring a pitch must not
   -- delete the angle that used it, because the angle still holds the results
   -- that were the reason for running the test.
-  add column pitch_id uuid references pitches (id) on delete set null,
-  -- The opening line this angle leans on.
-  --
-  -- The Strategy Agent has written three of these per strategy since the first
-  -- week — `spec.hooks`, rendered on /app/strategy under "Opening angles" —
-  -- and nothing has ever consumed one. They were written, stored, approved by
-  -- a person, displayed, and then dropped at the single moment they mattered,
-  -- which is exactly what rule 16 says happened to the prospect research
-  -- before `personalizeInvites` existed.
-  add column hook text;
+  add column pitch_id uuid references pitches (id) on delete set null;

@@ -6,6 +6,7 @@ export * from "./reply.js";
 export * from "./scoring.js";
 export * from "./knowledge.js";
 export * from "./pitch.js";
+export * from "./hook.js";
 export {
   STRATEGY_PROMPT_VERSION,
 } from "./prompts/strategy.js";
@@ -18,3 +19,4 @@ export {
   DRAFT_PROMPT_VERSION,
 } from "./prompts/reply.js";
 export { PITCH_PROMPT_VERSION } from "./prompts/pitch.js";
+export { HOOK_PROMPT_VERSION } from "./prompts/hook.js";

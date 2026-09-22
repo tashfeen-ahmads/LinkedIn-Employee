@@ -806,16 +806,34 @@ tests that were verified by deliberately breaking the code.
     reports empty grounding. A pitch that cites nothing looks precisely like one
     that cites everything.
 
-    **The hooks are the opener, and for a year they were decoration.** Every
-    strategy has carried three of them since the first week (`spec.hooks`,
-    rendered on `/app/strategy` under "Opening angles"), written by the agent
-    and approved by a person — and nothing ever read one. Written, stored,
+    **The opener gets exactly the same treatment** (`hooks`, migration 0028),
+    because it is the same object with different words in it: written by an
+    agent, approved one line at a time, retired without deleting, attached to an
+    angle through `campaign_variants.hook_id`, one default per workspace. The
+    two are resolved by identical rules on purpose — the opener and the offer
+    are two halves of one bet, and resolving them differently is how they come
+    apart. `HOOK_MAX_CHARS` is 120 rather than 90 and must stay below
+    `INVITE_NOTE_MAX_CHARS`: LinkedIn refuses the whole invitation at 200, and
+    rule 16 says the note still has to say one specific thing about the person,
+    so an opener that fills the note leaves nothing for them. An opener carries
+    **no pitch, no product claim and no link** — checked in the prompt and, for
+    length, in code.
+
+    Every strategy had carried three since the first week (`spec.hooks`,
+    rendered on `/app/strategy` under "Opening angles"), written by the agent,
+    approved by a person — and nothing ever read one. Written, stored,
     approved, displayed, then dropped at the single moment they mattered, which
     is precisely what rule 16 says happened to the prospect research before
-    `personalizeInvites` existed. They are now handed to the invite writer and
-    to `writePitch`, as **shapes to lean on and never text to paste**: a note
-    reproducing one word for word is the template they were meant to replace,
-    and every person in the batch would receive the same sentence.
+    `personalizeInvites` existed. Living in a strategy's jsonb they could not be
+    approved, retired or attached individually either. They are now rows, and
+    the strategy's own remain the fallback so a workspace that has written none
+    keeps the behaviour it had.
+
+    The invite writer is handed **the whole approved set, the angle's own
+    first** — never a single line. Given one, it has a template again and
+    everybody in the batch receives the same sentence. They are **shapes to lean
+    on and never text to paste**, which is what the prompt says and what rule 16
+    already required of every note.
 
     A campaign step carries `{{pitch}}` rather than a copy of the words, for
     rule 36's reason: a business that retyped its offer into each campaign would
