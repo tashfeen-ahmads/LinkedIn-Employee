@@ -18,6 +18,7 @@ import { jobId } from "./queues.js";
 import type { Queues } from "./queues.js";
 import { queueReachable } from "./queues.js";
 import { sendOneNow } from "./jobs/send-one.js";
+import { writeWorkspacePitch } from "./jobs/write-pitch.js";
 import type IORedis from "ioredis";
 import type { WorkerContext } from "./context.js";
 import { bookFromLink, readBookingPage } from "./jobs/book.js";
@@ -28,6 +29,14 @@ import { eraseProspect, exportWorkspace } from "./jobs/retention.js";
 import { inviteEmail } from "@le/email";
 import { trySend } from "./email.js";
 import { recordEvent } from "./context.js";
+
+const WritePitchRequest = z.object({
+  workspaceId: z.string().uuid(),
+  userId: z.string().uuid(),
+  // What the person asked to change. Capped because it is typed into a box and
+  // goes straight into a prompt.
+  instruction: z.string().max(2000).optional(),
+});
 
 const StrategyRequest = z
   .object({
@@ -391,6 +400,25 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
     });
     // 200 either way: "the limiter is holding this" is a successful answer to
     // the question asked, and the caller renders `detail` regardless.
+    return c.json(result);
+  });
+
+  // The pitch, written on the request thread and handed back.
+  //
+  // Not queued: a queued run leaves whoever pressed the button looking at an
+  // unchanged page, which is what a button that does nothing also looks like.
+  // The model takes a few seconds and its output is the entire point of the
+  // click.
+  app.post("/jobs/write-pitch", async (c) => {
+    const parsed = WritePitchRequest.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "invalid request" }, 400);
+    if (!(await assertMembership(ctx.db, parsed.data.workspaceId, parsed.data.userId))) {
+      return c.json({ error: "not a member of that workspace" }, 403);
+    }
+    const result = await writeWorkspacePitch(ctx, parsed.data);
+    // 200 either way, as /jobs/send-one does: "you have not told us what you
+    // sell yet" is a correct answer to the question, and the caller renders
+    // the sentence rather than translating a status code into a shrug.
     return c.json(result);
   });
 

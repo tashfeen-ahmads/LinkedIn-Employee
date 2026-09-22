@@ -554,6 +554,28 @@ export type CtaRow = {
   updated_at: string;
 };
 
+/**
+ * The offer, written once and made to everybody.
+ *
+ * One row per workspace. A campaign varies the angle it opens with and the
+ * person the note is addressed to; what is being sold is the same in all of
+ * them, and a business making two offers to one market cannot read its own
+ * reply rate afterwards.
+ */
+export type PitchRow = {
+  id: string;
+  workspace_id: string;
+  body: string;
+  written_by: "agent" | "human";
+  /** Each claim the pitch makes, quoted from the material it was given. */
+  facts_used: string[] | null;
+  /** Null until a person has read these exact words. Editing clears it. */
+  approved_at: string | null;
+  approved_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type SupportTicketRow = {
   id: string;
   workspace_id: string;
@@ -619,6 +641,7 @@ export type Database = {
       events: Table<EventRow>;
       llm_calls: Table<LlmCallRow>;
       ctas: Table<CtaRow>;
+      pitches: Table<PitchRow>;
       support_tickets: Table<SupportTicketRow>;
       worker_heartbeats: Table<WorkerHeartbeatRow>;
     };

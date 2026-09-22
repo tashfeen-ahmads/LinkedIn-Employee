@@ -8,6 +8,8 @@ import {
   type CampaignProspectStatus,
   INVITE_NOTE_MAX_CHARS,
   CTA_PLACEHOLDER,
+  renderPitch,
+  usesPitch,
 } from "@le/shared";
 import type { Db } from "@le/db";
 import { readCampaignCta } from "../cta.js";
@@ -16,7 +18,7 @@ import { recordEvent } from "../context.js";
 import { applyHealth, recordAction, toUsage, type AccountRecord, ACCOUNT_USAGE_COLUMNS } from "../accounts.js";
 import { syncConversationToCrm } from "../crm.js";
 import { loadExclusions } from "../exclusions.js";
-import { clearHold } from "../holds.js";
+import { clearHold, flagForHuman } from "../holds.js";
 import { createBookingLink } from "./book.js";
 import type { LinkedInActionJob } from "../queues.js";
 
@@ -233,7 +235,39 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
       conversationId: conversation.id,
     });
   }
-  const body = renderCta(renderTemplate(step.message, prospect.first_name), ctaUrl);
+  /*
+   * The offer comes from the one approved pitch, not from the campaign's copy.
+   *
+   * Rule 40. A step written as `{{pitch}}` is a pointer, exactly as
+   * `{{cta_link}}` is: improving the pitch improves every campaign that uses it
+   * without rewriting a message or re-reviewing copy a human already approved.
+   *
+   * Unlike the CTA, an unresolved pitch is never left visible and sent anyway.
+   * A missing destination costs a link; a missing pitch is the entire body of
+   * the message, and what goes out is the literal characters `{{pitch}}` or a
+   * greeting with nothing after it. Both reach a real person under the rep's
+   * own name, so this refuses instead.
+   */
+  const withPitch = renderPitch(
+    step.message,
+    usesPitch(step.message) ? await loadApprovedPitch(db, cp.workspace_id) : null,
+  );
+  if (!withPitch.ok) {
+    /*
+     * Held, not failed, and the schedule is left alone: this step sends itself
+     * the moment somebody approves a pitch. Closing the prospect would spend a
+     * real person on a piece of copy that had not been written yet, and there
+     * is no second chance at a first follow-up.
+     */
+    await flagForHuman(db, conversation.id, withPitch.reason);
+    console.error("a follow-up is waiting for an approved pitch", {
+      campaignProspectId: cp.id,
+      workspaceId: cp.workspace_id,
+    });
+    return;
+  }
+
+  const body = renderCta(renderTemplate(withPitch.message, prospect.first_name), ctaUrl);
 
   const result = await ctx.linkedin.sendMessage({
     accountId: accountRow.provider_account_id,
@@ -415,6 +449,24 @@ export async function ensureConversation(
     .single();
   if (error || !created) throw new Error(`could not create conversation: ${error?.message}`);
   return created;
+}
+
+/**
+ * The offer, if a person has approved one.
+ *
+ * Approved or nothing, exactly as the Reply Agent reads it. An unapproved
+ * pitch is a draft the agent wrote and nobody read, and sending it from a
+ * campaign step would be a way around the review screen — which is the one
+ * thing the review screen cannot survive.
+ */
+async function loadApprovedPitch(db: Db, workspaceId: string): Promise<string | null> {
+  const { data } = await db
+    .from("pitches")
+    .select("body, approved_at")
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
+  if (!data?.approved_at) return null;
+  return data.body?.trim() || null;
 }
 
 async function closeProspect(ctx: WorkerContext, campaignProspectId: string, reason: string): Promise<void> {

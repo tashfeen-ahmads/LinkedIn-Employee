@@ -747,6 +747,59 @@ tests that were verified by deliberately breaking the code.
     enqueue in the worker, because the bug was in the call sites rather than in
     any function. A unit test of the helper alone would have passed throughout.
 
+40. **The offer is written once, approved by a person, and made to everybody.**
+    The invitation may not pitch and the first message after an acceptance may
+    not either — both are enforced in the Targeting Agent's prompt, and both are
+    right: a paragraph arriving seconds after somebody accepts reads as a
+    sequence, and the reply rate of a sequence is the reply rate of an advert.
+    So the product already said, in as many words, that the pitch is sent when
+    they reply and not before.
+
+    The pitch itself was nowhere. `draftReply` was handed the business profile
+    and left to argue for the product from it, which it did slightly differently
+    every time — so every prospect who ever asked "what is this?" received a
+    different proposition, and the one piece of copy in the product that
+    actually sells the thing was the only piece nobody had read.
+
+    `pitches` (migration 0026) is one row per workspace, because a pitch is
+    universal **by construction**: a campaign varies the angle it opens with
+    (rule 28) and the person the note is addressed to, never what is being
+    offered. Two offers into one market and the reply rate can no longer be
+    read, because the two halves were never answering the same question.
+
+    `writePitch` writes it and **does not approve it**, exactly as the Strategy
+    Agent writes customer profiles and does not approve those (rule 9).
+    `loadPitch` returns nothing at all for a row whose `approved_at` is null, so
+    an unapproved draft is never sent and the approval screen is not decorative.
+    Editing the words clears the approval in a **trigger**, not in the action
+    that happened to save them: an approval is a statement about particular
+    text, and without that one approval in September authorises every rewrite
+    after it.
+
+    It is handed over as text to **adapt, never to recite** — the prospect asked
+    a specific question, and a pitch pasted underneath it answers a different
+    one — but the substance is fixed. It rides in the cached half of the prompt,
+    because it is identical for every conversation in the workspace. And a link
+    inside it is an **allowed** link (rule 30): it is copy a person approved, and
+    without that the agent is held for quoting the text it was told to use.
+
+    `factsUsed` is what makes "is this true" checkable rather than a matter of
+    opinion, and an empty one is **reported on the screen**, exactly as rule 16
+    reports empty grounding. A pitch that cites nothing looks precisely like one
+    that cites everything.
+
+    A campaign step carries `{{pitch}}` rather than a copy of the words, for
+    rule 36's reason: a business that retyped its offer into each campaign would
+    have four versions of it inside a month and no screen able to say which
+    prospect got which. But `renderPitch` **refuses** where `renderCta` shrugs,
+    and the asymmetry is the point. A missing destination costs a link, and a
+    visible `{{cta_link}}` is caught on the review screen. A missing pitch is the
+    entire body of the message: what goes out is the literal characters
+    `{{pitch}}`, or a greeting with nothing after it, to a real person under a
+    real rep's name. So the follow-up is **held, not failed**, and its schedule
+    is untouched — approving a pitch is the whole of what it takes to send it,
+    and there is no second chance at a first follow-up.
+
 ## Conventions
 
 - Agent output is validated against a zod schema before it touches the

@@ -22,6 +22,38 @@ import { readFileSync, writeFileSync } from "node:fs";
  */
 const MUTATIONS = [
   {
+    id: "pitch/never-half-written",
+    rule: "A message built from the pitch never sends without one",
+    file: "packages/shared/src/pitch.ts",
+    from: "  if (!body) {",
+    to: "  if (false) {",
+    pkg: "@le/shared",
+  },
+  {
+    id: "pitch/step-refuses",
+    rule: "A follow-up needing a pitch is held rather than sent raw",
+    file: "apps/worker/src/jobs/linkedin-action.ts",
+    from: "  if (!withPitch.ok) {",
+    to: "  if (false) {",
+    pkg: "@le/worker",
+  },
+  {
+    id: "pitch/approved-only",
+    rule: "The agent only ever makes an offer a person approved",
+    file: "apps/worker/src/jobs/inbound.ts",
+    from: "  if (!data?.approved_at) return null;",
+    to: "  if (false) return null;",
+    pkg: "@le/worker",
+  },
+  {
+    id: "pitch/reaches-the-writer",
+    rule: "The approved pitch is handed to the writer as the offer to make",
+    file: "packages/agents/src/reply.ts",
+    from: "    input.pitch\n      ? `",
+    to: "    false\n      ? `",
+    pkg: "@le/agents",
+  },
+  {
     id: "limiter/daily-invite-cap",
     rule: "An account past its daily invite cap must not send",
     file: "packages/linkedin/src/rate-limit.ts",

@@ -518,6 +518,67 @@ describe("campaign pipeline", () => {
     expect(db.rows("booking_links")).toHaveLength(1);
   });
 
+  it("sends the one approved pitch rather than a copy of it in the campaign", async () => {
+    /*
+     * Rule 40. `{{pitch}}` is a pointer, exactly as `{{cta_link}}` is:
+     * improving the offer improves every campaign using it, without rewriting
+     * a message or re-reviewing copy a human already approved.
+     */
+    const { db, ctx, linkedin } = harness();
+    db.seed("pitches", [
+      {
+        id: "pitch-1",
+        workspace_id: WORKSPACE,
+        body: "Most referrals never get followed up.",
+        written_by: "agent",
+        facts_used: [],
+        approved_at: NOW.toISOString(),
+      },
+    ]);
+    db.rows("campaign_steps")[0]!.message = "Hi {{first_name}} — {{pitch}}";
+    db.find("campaign_prospects", { id: CP })!.status = "accepted";
+
+    await runLinkedInAction(ctx, { kind: "follow_up", workspaceId: WORKSPACE, campaignProspectId: CP, stepNumber: 1 });
+
+    expect(linkedin.sentMessages[0]?.text).toBe("Hi Jane — Most referrals never get followed up.");
+  });
+
+  it("sends nothing at all when the message needs a pitch and none is approved", async () => {
+    /*
+     * The difference from the CTA placeholder, and the reason it is a
+     * different function. A missing destination costs a link and a visible
+     * {{cta_link}} is caught on the review screen. A missing pitch is the
+     * entire body of the message: what would go out is "Hi Jane — {{pitch}}",
+     * to a real person, under a real rep's name.
+     *
+     * Held rather than failed, and the schedule is untouched, so the step
+     * sends itself the moment somebody approves a pitch. There is no second
+     * chance at a first follow-up.
+     */
+    const { db, ctx, linkedin } = harness();
+    db.seed("pitches", [
+      {
+        id: "pitch-1",
+        workspace_id: WORKSPACE,
+        body: "Most referrals never get followed up.",
+        written_by: "agent",
+        facts_used: [],
+        approved_at: null,
+      },
+    ]);
+    db.rows("campaign_steps")[0]!.message = "Hi {{first_name}} — {{pitch}}";
+    const cp = db.find("campaign_prospects", { id: CP })!;
+    cp.status = "accepted";
+
+    await runLinkedInAction(ctx, { kind: "follow_up", workspaceId: WORKSPACE, campaignProspectId: CP, stepNumber: 1 });
+
+    expect(linkedin.sentMessages).toHaveLength(0);
+    // Visible, per rule 10: nothing held for a human is invisible.
+    expect(db.rows("conversations")[0]?.needs_human).toBe(true);
+    // And still due, so approving a pitch is all it takes.
+    expect(db.find("campaign_prospects", { id: CP })?.status).toBe("accepted");
+  });
+
   it("mints no booking link for a message that never asks for one", async () => {
     // A bearer credential and a row, spent on a message that does not mention
     // booking. The placeholder is the only thing that should trigger it.
@@ -750,6 +811,56 @@ describe("campaign pipeline", () => {
     const after = db.find("campaign_prospects", { id: CP })!;
     expect(after.status).toBe("replied");
     expect(after.next_action_at).toBeNull();
+  });
+
+  it("makes the offer somebody approved, not one the agent improvised", async () => {
+    /*
+     * Rule 40. The pitch is the one piece of copy that argues for the product,
+     * and before it was written down the Reply Agent assembled a different one
+     * from the business profile in every conversation — so no two prospects
+     * were ever made the same offer, and nobody had read any of them.
+     */
+    const { db, ctx, queues } = harness();
+    db.seed("pitches", [
+      {
+        id: "pitch-1",
+        workspace_id: WORKSPACE,
+        body: "Most referrals never get followed up. We match you and make the intro.",
+        written_by: "agent",
+        facts_used: [],
+        approved_at: NOW.toISOString(),
+      },
+    ]);
+
+    await handleInboundMessage(ctx, queues, inboundJob("Sounds interesting, tell me more"));
+
+    const input = draftMock.mock.calls[0]?.[1] as { pitch?: string };
+    expect(input.pitch).toContain("never get followed up");
+  });
+
+  it("never hands the agent a pitch nobody has approved", async () => {
+    /*
+     * The half that matters. An unapproved pitch is a draft the agent wrote
+     * and nobody read; sending it would make the approval screen decorative —
+     * the same division rule 9 draws for customer profiles, where the Strategy
+     * Agent writes them and targeting refuses the ones nobody said yes to.
+     */
+    const { db, ctx, queues } = harness();
+    db.seed("pitches", [
+      {
+        id: "pitch-1",
+        workspace_id: WORKSPACE,
+        body: "Most referrals never get followed up. We match you and make the intro.",
+        written_by: "agent",
+        facts_used: [],
+        approved_at: null,
+      },
+    ]);
+
+    await handleInboundMessage(ctx, queues, inboundJob("Sounds interesting, tell me more"));
+
+    const input = draftMock.mock.calls[0]?.[1] as { pitch?: string };
+    expect(input.pitch).toBeUndefined();
   });
 
   it("holds the reply for a human in approval mode rather than sending it", async () => {

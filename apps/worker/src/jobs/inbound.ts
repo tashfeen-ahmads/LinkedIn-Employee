@@ -122,7 +122,10 @@ export async function handleInboundMessage(
   });
 
   const history = await loadHistory(ctx, conversation.id, inbound?.id);
-  const knowledge = await loadKnowledge(ctx, job.workspaceId);
+  const [knowledge, pitch] = await Promise.all([
+    loadKnowledge(ctx, job.workspaceId),
+    loadPitch(ctx, job.workspaceId),
+  ]);
   const agents = ctx.agentsFor(job.workspaceId);
 
   const classification = await classifyReply(agents, {
@@ -242,6 +245,11 @@ export async function handleInboundMessage(
   const allowedLinks = [
     offeredLink,
     ...knowledge.flatMap((doc) => extractLinks(doc.content ?? "")),
+    // The pitch is copy a person approved, so an address inside it is an
+    // address they approved. Left out, a pitch that names the company's own
+    // site would hold every draft that repeated it — the agent punished for
+    // quoting the text it was told to use.
+    ...extractLinks(pitch ?? ""),
   ].filter((link): link is string => Boolean(link));
 
   let draft;
@@ -258,6 +266,10 @@ export async function handleInboundMessage(
       // Lead with the pitch when they have just said yes. The writer decides
       // the words; this decides that the link is in them.
       intent: classification.intent,
+      // What to offer, rather than leaving the agent to argue for the product
+      // from the business profile and reach a different conclusion in every
+      // conversation.
+      pitch: pitch ?? undefined,
       rules: {
         ...rules,
         // The one link it may send, decided by what the campaign is asking
@@ -417,6 +429,24 @@ async function loadKnowledge(ctx: WorkerContext, workspaceId: string) {
     .eq("workspace_id", workspaceId)
     .limit(20);
   return data ?? [];
+}
+
+/**
+ * The offer this workspace makes, if a person has approved one.
+ *
+ * Approved or nothing. An unapproved pitch is a draft the agent wrote and
+ * nobody read, and handing that to the Reply Agent would make the approval
+ * screen decorative — the same shape as rule 9, where the Strategy Agent
+ * writes customer profiles and targeting refuses the ones nobody said yes to.
+ */
+async function loadPitch(ctx: WorkerContext, workspaceId: string): Promise<string | null> {
+  const { data } = await ctx.db
+    .from("pitches")
+    .select("body, approved_at")
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
+  if (!data?.approved_at) return null;
+  return data.body?.trim() || null;
 }
 
 async function loadBusinessProfile(ctx: WorkerContext, workspaceId: string) {

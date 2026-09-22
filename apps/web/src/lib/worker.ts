@@ -22,6 +22,14 @@ export type WorkerResult<T> =
 export async function callWorker<T = unknown>(
   path: string,
   body: Record<string, unknown>,
+  /**
+   * How long to wait. Ten seconds suits a route that enqueues and returns,
+   * which is what these all used to be. A route that runs a model on the
+   * request thread — so the person who clicked is told what it produced,
+   * rather than watching an unchanged page — needs longer, and cutting it off
+   * at ten seconds reports a working agent as a broken service.
+   */
+  timeoutMs = 10_000,
 ): Promise<WorkerResult<T>> {
   const base = process.env.WORKER_URL ?? "http://localhost:4000";
   const secret = process.env.INTERNAL_API_SECRET;
@@ -36,7 +44,7 @@ export async function callWorker<T = unknown>(
       method: "POST",
       headers: { "content-type": "application/json", authorization: `Bearer ${secret}` },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(10_000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (error) {
     // A timeout and a refused connection look the same to whoever clicked, and

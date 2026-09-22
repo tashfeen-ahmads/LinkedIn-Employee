@@ -128,10 +128,22 @@ export interface DraftInput {
    * What the classifier made of the message this is answering.
    *
    * Only `interested` changes anything: it is the one moment where the right
-   * reply is the pitch itself rather than another step towards it. Optional so
-   * every existing caller and test keeps working unchanged.
+   * reply is the pitch itself rather than another step towards it. Optional,
+   * and it defaults to the classification's own intent — the classification is
+   * already here, so a second field holding the same fact is a field a caller
+   * can forget, and forgetting it turns the rule off with nothing to show for
+   * it.
    */
   intent?: ReplyIntent;
+  /**
+   * The offer this business makes, written once and approved by a person.
+   *
+   * Absent means there is none approved, and the agent then argues for the
+   * product from the business profile — which is what it did for every
+   * conversation before this existed, and why no two prospects were ever made
+   * the same offer.
+   */
+  pitch?: string;
   /** Human-readable slots genuinely free on the rep's calendar. */
   availableSlots: string[];
   /** True when this reply confirms a meeting we have already put in the diary. */
@@ -140,6 +152,7 @@ export interface DraftInput {
 
 /** Agent 3, step two: write the reply. */
 export async function draftReply(ctx: AgentContext, input: DraftInput): Promise<ReplyDraft> {
+  const intent = input.intent ?? input.classification.intent;
   const stableContext = [
     DRAFT_SYSTEM_HEADER,
     `\nSalesperson: ${input.repName}${input.repTitle ? `, ${input.repTitle}` : ""}`,
@@ -147,6 +160,23 @@ export async function draftReply(ctx: AgentContext, input: DraftInput): Promise<
     `\nBusiness profile:\n${JSON.stringify(input.business, null, 2)}`,
     input.profile ? `\nSegment being targeted:\n${JSON.stringify(input.profile, null, 2)}` : "",
     `\nKnowledge base (the only product facts you may state):\n${renderKnowledge(input.knowledge)}`,
+    /*
+     * The offer, and the instruction that it is the offer.
+     *
+     * Handed to the agent as text it adapts rather than text it recites: the
+     * prospect asked a specific question, and a pitch pasted verbatim under it
+     * answers a different one. But the *substance* is fixed. Before this, the
+     * agent improvised the offer from the business profile every time, so
+     * every prospect who asked "what is this?" received a differently-worded
+     * proposition, none of which anybody had read — the one piece of copy that
+     * actually argues for the product was the only piece nobody approved.
+     *
+     * In the cached half of the prompt: it is identical for every conversation
+     * in the workspace, so it is paid for once rather than per reply.
+     */
+    input.pitch
+      ? `\nTHE PITCH — the offer this business makes, approved by the salesperson:\n"""\n${input.pitch}\n"""\n\nWhen the prospect wants to know what this is, or has shown interest, make THIS offer. Adapt the wording to them and to what they actually asked; never invent a different offer, a different problem, or a benefit that is not in it. It is what your colleagues are telling every other prospect this week.`
+      : "",
     `\nGoal for this conversation: ${input.rules.goal}`,
     // What the campaign is asking for, which is not always a meeting. Without
     // it the agent pursues a call in a conversation whose whole point was to
@@ -170,8 +200,10 @@ export async function draftReply(ctx: AgentContext, input: DraftInput): Promise<
      * `draftLinkCheck` still holds a draft carrying anything else. Rule 30 is
      * untouched.
      */
-    input.intent === "interested" && input.goal !== "reply"
-      ? "\nThis person has just said they are interested. Send the link now, in this message — do not ask a qualifying question first and do not promise to send it later. One short line of context, then the link. If the goal is a meeting, offer the times as well."
+    intent === "interested"
+      ? input.goal === "reply"
+        ? "\nThis person has just said they are interested. Make the pitch now, in this message — do not ask a qualifying question first and do not promise to send details later. Then one question that invites a reply."
+        : "\nThis person has just said they are interested. Make the pitch and send the link now, in this message — do not ask a qualifying question first and do not promise to send it later. Two or three lines of pitch, then the link. If the goal is a meeting, offer the times as well."
       : "",
   ].join("\n");
 

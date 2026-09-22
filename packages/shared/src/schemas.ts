@@ -54,6 +54,29 @@ export const StrategyOutputSchema = z.object({
 });
 export type StrategyOutput = z.infer<typeof StrategyOutputSchema>;
 
+// ---------- The pitch ----------
+
+/**
+ * The offer, written once and made to everybody.
+ *
+ * Under 600 characters because it is spoken into a LinkedIn message, not a
+ * landing page: the pitch is what somebody reads on a phone, in a chat window,
+ * two sentences after they asked what this is. A pitch long enough to need
+ * scrolling is a pitch that gets skimmed and then ignored.
+ */
+export const PitchSchema = z.object({
+  body: z
+    .string()
+    .max(600)
+    .describe("The offer in three to five sentences, in the company's own voice, no links."),
+  factsUsed: z
+    .array(z.string())
+    .describe(
+      "Each claim this pitch makes, quoted from the material supplied. What makes 'is this true' checkable rather than a matter of opinion.",
+    ),
+});
+export type Pitch = z.infer<typeof PitchSchema>;
+
 // ---------- Targeting Agent ----------
 
 export const IntentSignalSchema = z.object({

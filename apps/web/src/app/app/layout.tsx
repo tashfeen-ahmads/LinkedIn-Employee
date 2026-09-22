@@ -52,6 +52,10 @@ function navGroups(waiting: number, marks: NavMarks): NavGroup[] {
         // set — and an empty knowledge base sends every product question to a
         // human, which is most of what a prospect asks.
         { href: "/app/knowledge", label: "Knowledge base", ...next("/app/knowledge", "Knowledge base") },
+        // The offer itself. It sits after the knowledge base because it is
+        // written from it, and before nothing, because the pitch is the last
+        // piece of copy anybody writes and the first one a prospect judges.
+        { href: "/app/pitch", label: "Your pitch" },
       ],
     },
     {
