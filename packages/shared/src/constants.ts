@@ -125,3 +125,29 @@ export const MODELS = {
 } as const;
 
 export type LlmProvider = keyof typeof MODELS;
+
+/**
+ * The most characters LinkedIn accepts in a connection request note.
+ *
+ * 200, not 300. 300 is the Premium number, and it was written into the prompt,
+ * the schema, the second check in `personalizeInvites` and the comment above
+ * that check — four places agreeing with each other and with LinkedIn's
+ * documentation for an account this deployment does not have. A free account
+ * gets 200, and LinkedIn does not truncate what is over it, it refuses the
+ * whole invitation:
+ *
+ *   400: Too many characters — The provided content exceeds the character
+ *   limit. — errors/too_many_characters
+ *
+ * Which is a live campaign's first send failing against a real person, on a
+ * list somebody reviewed, for a reason no screen could explain. Sixteen of the
+ * first twenty-three notes written here were between 200 and 278 characters:
+ * inside the cap that was wrong, outside the one that is real.
+ *
+ * Deliberately not per-account. Detecting Premium reliably is a request we
+ * would have to make and trust, and being wrong costs a refused invitation off
+ * a capped daily allowance. 200 is the number that works for every account,
+ * and a Premium account losing 100 characters it could have used is not a
+ * failure anybody sees.
+ */
+export const INVITE_NOTE_MAX_CHARS = 200;

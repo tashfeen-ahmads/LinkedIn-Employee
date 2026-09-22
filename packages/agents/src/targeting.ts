@@ -10,6 +10,7 @@ import {
   type FitScore,
   type InviteNote,
   type ProspectCandidate,
+  INVITE_NOTE_MAX_CHARS,
 } from "@le/shared";
 import { callStructured, type AgentContext } from "./client.js";
 import {
@@ -290,11 +291,11 @@ export async function personalizeInvites(
 
   for (const batch of results) {
     for (const note of batch.notes) {
-      // The 300-character ceiling is LinkedIn's, and a note over it is not
-      // truncated by them — it is refused. The schema already caps it; this is
-      // the second check, because a note that fails to send is indistinguishable
+      // LinkedIn's ceiling, and a note over it is not truncated by them — the
+      // whole invitation is refused. The schema already caps it; this is the
+      // second check, because a note that fails to send is indistinguishable
       // from a prospect who was never contacted.
-      if (note.note.length > 300) continue;
+      if (note.note.length > INVITE_NOTE_MAX_CHARS) continue;
       byId.set(note.providerId, { ...note, promptVersion: INVITE_NOTE_PROMPT_VERSION });
     }
   }

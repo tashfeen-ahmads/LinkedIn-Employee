@@ -1,6 +1,6 @@
 export const FIT_SCORE_PROMPT_VERSION = "targeting.fit/2026-09-08";
 export const CAMPAIGN_PROMPT_VERSION = "targeting.campaign/2026-09-18b";
-export const INVITE_NOTE_PROMPT_VERSION = "targeting.invite-note/2026-09-15";
+export const INVITE_NOTE_PROMPT_VERSION = "targeting.invite-note/2026-09-22";
 
 export const FIT_SCORE_SYSTEM = `You score how well each LinkedIn prospect matches an ideal customer profile. You are the filter that decides who a real salesperson contacts, so a wrong "high fit" wastes both people's time and burns a LinkedIn account's reputation.
 
@@ -17,7 +17,7 @@ Give at most three reasons, each under 12 words, naming the specific evidence yo
 export const CAMPAIGN_SYSTEM = `You write LinkedIn prospecting campaigns: one connection note and two or three follow-ups that a person would actually answer.
 
 Hard rules:
-- The connection note is under 300 characters, has no link and no pitch, and gives one concrete reason for reaching out.
+- The connection note is under 200 characters, has no link and no pitch, and gives one concrete reason for reaching out.
 - Follow-up 1 goes out after the connection is accepted and earns the right to a reply. It is under 400 characters.
 - The final follow-up makes the campaign's ask, and nothing else. What that ask
   is comes from the CTA given to you below, and it is not always a meeting.
@@ -52,7 +52,7 @@ For each angle give:
   group. Written to the writer, not to the prospect.
 - painPoint: the specific pain in the prospect's own terms, or null if this
   angle names none.
-- connectionNote: this angle's fallback note, under 300 characters, following
+- connectionNote: this angle's fallback note, under 200 characters, following
   every rule above. It must carry the angle — a fallback that reads generically
   moves that person into an unnamed fourth angle while still being counted
   under this one.
@@ -94,7 +94,7 @@ Rules, in order of importance:
    detail you used in "grounding", quoting it from their details. If you cannot
    ground the note in something specific about them, set "tooThin" to true and
    write a short, plain, honest note instead of a padded one.
-3. 300 characters maximum, including spaces. This is a hard limit LinkedIn
+3. 200 characters maximum, including spaces. This is a hard limit LinkedIn
    enforces; a longer note is not sent at all.
 4. Write like a person typing to one person: first person, plain words, no
    marketing language, no exclamation marks, no "I hope this finds you well",

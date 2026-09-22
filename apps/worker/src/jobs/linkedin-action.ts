@@ -6,6 +6,7 @@ import {
   matchExclusion,
   renderCta,
   type CampaignProspectStatus,
+  INVITE_NOTE_MAX_CHARS,
 } from "@le/shared";
 import type { Db } from "@le/db";
 import { readCampaignCta } from "../cta.js";
@@ -483,7 +484,15 @@ export function inviteNote(
   // of the sentence: an invitation with no note is ordinary on LinkedIn and
   // costs a little acceptance, while a sentence with its link surgically
   // removed reads as broken and is worse than either.
-  if (note && !containsLink(note)) return note;
+  //
+  // Length is checked here for the same reason and with the same answer. A
+  // note over LinkedIn's limit is not shortened by them — the whole invitation
+  // is refused, off a capped daily allowance, against a real person on a
+  // reviewed list. And it must not be shortened here either: a paragraph cut
+  // at 200 characters arrives mid-sentence under a real rep's name, which is
+  // worse than the template it falls back to. Notes already stored from before
+  // the limit was corrected are caught by this on the way out.
+  if (note && !containsLink(note) && note.length <= INVITE_NOTE_MAX_CHARS) return note;
 
   const fallback = variantTemplate?.trim() || template;
   const rendered = renderTemplate(fallback, firstName);

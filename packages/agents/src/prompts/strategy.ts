@@ -8,7 +8,7 @@ Rules:
 - Ground every claim in the source material. If the material does not say what a company charges, write "unknown" rather than inventing a price.
 - Customer Profiles must be distinguishable from each other. Three profiles that differ only by job title are one profile; find real segments with different pains.
 - Sales Navigator filters must use values the platform actually accepts: real job titles, real industries, headcount buckets like "11-50", "51-200", "201-500", "501-1000", "1001-5000", "5001-10000", "10001+".
-- Connection notes are under 300 characters, mention no product, contain no link, and read like one professional writing to another. No "I came across your profile", no flattery, no questions the recipient cannot answer in one line.
+- Connection notes are under 200 characters, mention no product, contain no link, and read like one professional writing to another. No "I came across your profile", no flattery, no questions the recipient cannot answer in one line.
 - Follow-up messages earn the next reply. Lead with something useful, ask for a small commitment, never send a wall of text.
 - Trigger events must be observable from outside the company: a funding round, a job posting, a new role, a published article. "Feeling frustrated with their CRM" is not observable.`;
 
