@@ -46,6 +46,12 @@ function navGroups(waiting: number, marks: NavMarks): NavGroup[] {
         { href: "/app/strategy", label: "Strategies", ...next("/app/strategy", "Strategies") },
         { href: "/app/prospects", label: "Prospects" },
         { href: "/app/campaigns", label: "Campaigns", ...next("/app/campaigns", "Campaigns") },
+        // The other half of the pipeline. A prospect who replies is answered
+        // from this page and nothing else, so filed under Settings between
+        // "Do not contact" and "Billing" it read as a preference nobody had to
+        // set — and an empty knowledge base sends every product question to a
+        // human, which is most of what a prospect asks.
+        { href: "/app/knowledge", label: "Knowledge base", ...next("/app/knowledge", "Knowledge base") },
       ],
     },
     {
@@ -68,7 +74,6 @@ function navGroups(waiting: number, marks: NavMarks): NavGroup[] {
         },
         { href: "/app/cta", label: "Calls to action" },
         { href: "/app/exclusions", label: "Do not contact" },
-        { href: "/app/knowledge", label: "Product facts", ...next("/app/knowledge", "Product facts") },
         { href: "/app/billing", label: "Billing" },
       ],
     },

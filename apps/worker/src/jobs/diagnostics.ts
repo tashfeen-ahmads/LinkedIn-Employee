@@ -379,7 +379,7 @@ export async function runDiagnostics(
       (knowledge ?? 0) > 0
         ? `${knowledge} document${knowledge === 1 ? "" : "s"} loaded.`
         : "None. The agent may not invent an answer, so every product question a prospect asks will be held for a human instead.",
-    fix: (knowledge ?? 0) > 0 ? undefined : "Add a page of product facts.",
+    fix: (knowledge ?? 0) > 0 ? undefined : "Add a page to your knowledge base.",
     href: (knowledge ?? 0) > 0 ? undefined : "/app/knowledge",
   });
 

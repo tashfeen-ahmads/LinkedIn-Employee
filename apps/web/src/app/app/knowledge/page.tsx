@@ -79,8 +79,8 @@ export default async function KnowledgePage() {
   return (
     <>
       <PageHeader
-        eyebrow="Settings"
-        title="Product facts"
+        eyebrow="Pipeline"
+        title="Knowledge base"
         lede="The only things the agent may state. Anything a prospect asks that is not answered here is handed to you rather than guessed at — so this page is the difference between autopilot answering a question and forwarding it."
       />
 

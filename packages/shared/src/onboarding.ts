@@ -117,9 +117,9 @@ export const ONBOARDING_STEPS: readonly OnboardingStep[] = [
   // by offering to send times rather than inventing one.
   {
     key: "hasKnowledge",
-    action: "Add product facts",
-    label: "Add a page of product facts",
-    done: "a page of product facts",
+    action: "Add a page",
+    label: "Fill in your knowledge base",
+    done: "a knowledge base",
     why: "The only things the agent may state. Without it, every product question comes to you.",
     href: "/app/knowledge",
     nudge:
