@@ -8,6 +8,14 @@ export interface RefreshResult {
   lost?: boolean;
   unlabelled?: boolean;
   referenceShape?: string[];
+  /** The shape this rep's own id has, so "found" can be compared to "wanted". */
+  expected?: string;
+  /**
+   * The keys the provider actually sent for the first account, with the shape
+   * of each value. Diagnostic: when nothing matches, the reading of the payload
+   * is the thing most likely to be wrong, and this is the payload.
+   */
+  fields?: Array<Record<string, string>> | null;
 }
 
 export interface RepairNotice {

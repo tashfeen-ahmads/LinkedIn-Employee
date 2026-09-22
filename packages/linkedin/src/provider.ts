@@ -134,6 +134,17 @@ export interface LinkedInProvider {
    * otherwise stuck connecting forever.
    */
   listAccounts(): Promise<ConnectedAccount[]>;
+  /**
+   * What the provider actually returned, field by field, as shapes.
+   *
+   * Optional and diagnostic-only. `listAccounts` maps a raw payload into our
+   * shape, and when the mapping is wrong every screen downstream reports the
+   * wrong thing confidently — three rounds of that were spent arguing with an
+   * error message this product wrote itself. This returns the keys the
+   * provider sent and the shape of each value, so "the field is missing" and
+   * "we read the wrong field" stop looking identical. Shapes, never values.
+   */
+  describeAccountFields?(): Promise<Array<Record<string, string>>>;
   getAccountHealth(accountId: string): Promise<AccountHealth>;
   searchProspects(input: {
     accountId: string;

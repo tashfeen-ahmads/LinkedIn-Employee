@@ -602,6 +602,10 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
         bound: 0,
         referenceShape: accounts.map((a) => shapeOf(a.reference)),
         expected: shapeOf(parsed.data.userId),
+        // What the provider actually sent, key by key, when it cannot be
+        // matched. Everything above is our reading of the payload, and three
+        // rounds were spent trusting that reading over the payload itself.
+        fields: (await ctx.linkedin.describeAccountFields?.()) ?? null,
       });
     }
 

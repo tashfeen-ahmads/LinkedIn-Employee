@@ -641,6 +641,21 @@ export class UnipileProvider implements LinkedInProvider {
    * Asking is the recovery path: the answer is the same list the notification
    * carries, and `name` is the rep's user id either way.
    */
+  /** Diagnostic: the raw keys the provider sent, and the shape of each value. */
+  async describeAccountFields(): Promise<Array<Record<string, string>>> {
+    const res = await this.request<{ items?: Record<string, unknown>[] }>(ROUTES.accounts);
+    return (res.items ?? []).map((item) => {
+      const out: Record<string, string> = {};
+      for (const [key, value] of Object.entries(item)) {
+        if (value === null || value === undefined) out[key] = "null";
+        else if (typeof value === "string") out[key] = shapeOfValue(value);
+        else if (Array.isArray(value)) out[key] = `array(${value.length})`;
+        else out[key] = typeof value;
+      }
+      return out;
+    });
+  }
+
   async listAccounts(): Promise<ConnectedAccount[]> {
     const res = await this.request<{ items?: RawUnipileAccount[] }>(ROUTES.accounts);
     return toConnectedAccounts(res.items ?? []);
@@ -1039,4 +1054,19 @@ function hexEquals(expected: string, actual: string): boolean {
   const a = Buffer.from(expected, "utf8");
   const b = Buffer.from(actual.toLowerCase(), "utf8");
   return a.length === b.length && timingSafeEqual(a, b);
+}
+
+
+/**
+ * The shape of a string, never the string.
+ *
+ * A reference is one workspace's label and must not land in another's browser,
+ * but "is there a uuid anywhere in this payload" is the entire question when a
+ * binding will not bind.
+ */
+function shapeOfValue(value: string): string {
+  if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) return "uuid";
+  if (/\s/.test(value)) return "text with spaces";
+  if (value === "") return "empty";
+  return `${value.length} chars, no spaces`;
 }

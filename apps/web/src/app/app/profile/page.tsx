@@ -58,14 +58,14 @@ async function connectLinkedIn() {
 async function refreshLinkedIn() {
   "use server";
   const session = await requireSession();
-  const result = await callWorker<{
-    bound?: number;
-    mine?: number;
-    found?: number;
-    referenceShape?: string[];
-    changed?: boolean;
-    lost?: boolean;
-  }>("/jobs/linkedin-refresh", { workspaceId: session.workspaceId, userId: session.userId });
+  // `RefreshResult`, not a second copy of it written inline. The shape was
+  // declared twice — here and in repair.ts — so the panel and the button read
+  // the same response through two types that had already drifted, and a field
+  // added to one was invisible to the other.
+  const result = await callWorker<RefreshResult>("/jobs/linkedin-refresh", {
+    workspaceId: session.workspaceId,
+    userId: session.userId,
+  });
   if (!result.ok) redirect(errorQuery("/app/profile", result.error));
 
   // The account this row claimed to hold is gone from the provider. Said out
@@ -107,7 +107,7 @@ async function refreshLinkedIn() {
             // panel on the same page already said so, so the screen gave two
             // instructions for one state and the wrong one was the actionable-
             // sounding one.
-            `LinkedIn's provider has ${found} account${found === 1 ? "" : "s"}, but ${found === 1 ? "it is" : "none is"} labelled with a name rather than your account here (${result.data?.referenceShape?.join(", ") ?? "unknown"}) — which is what connecting inside the provider's own dashboard looks like from here. Delete that one in the provider, then press Connect LinkedIn below: signing in through this flow is what writes your id onto the account.`,
+            `LinkedIn's provider has ${found} account${found === 1 ? "" : "s"}, none matching your id here. Expected ${result.data?.expected ?? "uuid"}, found ${result.data?.referenceShape?.join(", ") ?? "unknown"}. Fields the provider sent: ${JSON.stringify(result.data?.fields?.[0] ?? {})}`,
       ),
     );
   }
