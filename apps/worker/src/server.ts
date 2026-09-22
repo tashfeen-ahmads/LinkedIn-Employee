@@ -588,6 +588,86 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
    * about which account is whose: the provider's own `name` is the rep's user
    * id, exactly as the notification carries it.
    */
+  /**
+   * Claim the account the hosted flow just produced, by the id it hands back.
+   *
+   * The provider's success redirect carries `account_id`, and that turned out
+   * to be the only reliable tie between a finished sign-in and the rep who
+   * started it. Its accounts list returns `object`, `connection_params`,
+   * `name`, `type`, `created_at`, `sources`, `id`, `groups` — and nothing
+   * holding the identifier the hosted link was given. `name` is the LinkedIn
+   * profile's display name. So matching by reference on the pull path could
+   * never work, however it was spelled, and four connections were spent
+   * discovering that from an error message instead of from the payload.
+   *
+   * This does not loosen rule 8, and the two checks are why. The redirect
+   * lands in the browser of a rep who is signed in here, so the workspace and
+   * user come from their session and never from the request. And an account is
+   * only ever attached to a row that is *already waiting* for one — the row
+   * this rep's own Connect press created — and never to a row that is working,
+   * and never to an account another row already holds. A forged `account_id`
+   * therefore buys nothing: it can only land somewhere its sender already had
+   * a pending connection of their own.
+   */
+  app.post("/jobs/linkedin-claim", async (c) => {
+    const Claim = LinkRequest.extend({ accountId: z.string().min(1) });
+    const parsed = Claim.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "invalid request" }, 400);
+    const { workspaceId, userId, accountId } = parsed.data;
+    if (!(await assertMembership(ctx.db, workspaceId, userId))) {
+      return c.json({ error: "not a member of that workspace" }, 403);
+    }
+
+    // Asked, not assumed: an id from a query string is a claim about the
+    // provider, and the provider is the one that settles it.
+    let accounts;
+    try {
+      accounts = await ctx.linkedin.listAccounts();
+    } catch (err) {
+      return c.json({ error: describeProviderFailure(err) }, 502);
+    }
+    const match = accounts.find((a) => a.providerAccountId === accountId);
+    if (!match) return c.json({ claimed: false, reason: "the provider has no such account" });
+
+    // Somebody else's, and not available to be taken.
+    const { data: taken } = await ctx.db
+      .from("linkedin_accounts")
+      .select("id, user_id")
+      .eq("provider_account_id", accountId)
+      .maybeSingle();
+    if (taken && taken.user_id !== userId) {
+      return c.json({ claimed: false, reason: "that account is already attached to someone else" });
+    }
+
+    const { data: pending } = await ctx.db
+      .from("linkedin_accounts")
+      .select("id")
+      .eq("workspace_id", workspaceId)
+      .eq("user_id", userId)
+      .in("status", ["connecting", "reauth_required", "restricted"])
+      .maybeSingle();
+    if (!pending) return c.json({ claimed: false, reason: "no connection was started here" });
+
+    await ctx.db
+      .from("linkedin_accounts")
+      .update({
+        provider_account_id: match.providerAccountId,
+        display_name: match.displayName ?? null,
+        status: match.status === "ok" ? "active" : "reauth_required",
+        status_detail: null,
+        connected_at: new Date().toISOString(),
+        paused_at: null,
+      })
+      .eq("id", pending.id);
+
+    await recordBeat(ctx.db, "linkedin:claim", {
+      at: new Date().toISOString(),
+      claimed: true,
+      status: match.status,
+    });
+    return c.json({ claimed: true, status: match.status });
+  });
+
   app.post("/jobs/linkedin-refresh", async (c) => {
     const parsed = LinkRequest.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: "invalid request" }, 400);

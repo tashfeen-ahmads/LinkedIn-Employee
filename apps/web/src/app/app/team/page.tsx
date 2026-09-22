@@ -3,8 +3,7 @@ import { revalidatePath } from "next/cache";
 import Link from "next/link";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
-import { errorQuery, noticeQuery } from "@/lib/worker";
-import { callWorker } from "@/lib/worker";
+import { callWorker, errorQuery, noticeQuery } from "@/lib/worker";
 import { PLAN_SEATS } from "@le/billing";
 import { createInviteToken, inviteExpiry, INVITE_TTL_DAYS } from "@/lib/invitations";
 import { PageNotice } from "@/components/page-notice";
@@ -118,11 +117,34 @@ async function revokeInvitation(formData: FormData) {
 export default async function TeamPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; notice?: string }>;
+  searchParams: Promise<{ error?: string; notice?: string; connected?: string; account_id?: string }>;
 }) {
   const params = await searchParams;
   const session = await requireSession();
   const supabase = await createClient();
+
+  /*
+   * The hosted flow comes back here, and the id it carries is the connection.
+   *
+   * The provider's accounts list returns nothing holding the identifier the
+   * hosted link was given — `name` is the LinkedIn profile's display name —
+   * so an account finished at the provider could not be tied to the rep who
+   * started it by asking. It can by being handed the id on the way back, which
+   * is what `account_id` on this redirect is, and the worker checks it against
+   * the provider and against the rep's own pending row before it binds.
+   *
+   * Done on arrival rather than behind a button: the rep has just finished
+   * signing in and believes they are connected. Anything they have to press
+   * after that is a step nobody told them about.
+   */
+  if (params.connected && params.account_id) {
+    await callWorker("/jobs/linkedin-claim", {
+      workspaceId: session.workspaceId,
+      userId: session.userId,
+      accountId: params.account_id,
+    });
+    redirect("/app/profile?notice=" + encodeURIComponent("LinkedIn is connected."));
+  }
 
   const [{ data: members }, { data: accounts }, { data: invitations }, { data: workspace }] =
     await Promise.all([
