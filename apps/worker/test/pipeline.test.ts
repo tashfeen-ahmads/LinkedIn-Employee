@@ -473,17 +473,64 @@ describe("campaign pipeline", () => {
     expect(linkedin.sentMessages[0]?.text).toBe("Worth a look, Jane: https://acme.test/signup");
   });
 
-  it("leaves the placeholder visible when a campaign has no destination", async () => {
-    // Substituting an empty string would send "Worth a look:" with nothing
-    // after it — a prospect reads that as a broken product. A visible
-    // {{cta_link}} is caught on the review screen instead.
+  it("leaves the placeholder visible when a link campaign has no destination", async () => {
+    /*
+     * Rule 29, and still the right answer for a campaign pointing at somebody
+     * else's page. Substituting an empty string would send "Worth a look:"
+     * with nothing after it, which a prospect reads as a broken product; a
+     * visible {{cta_link}} is caught on the review screen instead. We cannot
+     * invent the customer's signup page, so there is nothing better to send.
+     */
     const { db, ctx, linkedin } = harness();
+    db.rows("campaigns")[0]!.cta_kind = "link";
+    db.rows("campaigns")[0]!.cta_url = null;
     db.rows("campaign_steps")[0]!.message = "Worth a look: {{cta_link}}";
     db.find("campaign_prospects", { id: CP })!.status = "accepted";
 
     await runLinkedInAction(ctx, { kind: "follow_up", workspaceId: WORKSPACE, campaignProspectId: CP, stepNumber: 1 });
 
     expect(linkedin.sentMessages[0]?.text).toContain("{{cta_link}}");
+  });
+
+  it("uses our own booking page when a meeting campaign has no destination", async () => {
+    /*
+     * The one case rule 29 was too broad for. A campaign asking for a meeting
+     * with nowhere to book one is not missing a customer's page — this product
+     * owns a booking page and it works (rule 18), so holding four written
+     * messages hostage to a Calendly account was a configuration step invented
+     * for no reason.
+     *
+     * The link is per-prospect by construction: its token is the whole
+     * authorisation, `bookFromLink` re-derives the free slots and refuses a
+     * time that is not among them.
+     */
+    const { db, ctx, linkedin } = harness();
+    db.rows("campaigns")[0]!.cta_kind = "meeting";
+    db.rows("campaigns")[0]!.cta_url = null;
+    db.rows("campaign_steps")[0]!.message = "Grab a time: {{cta_link}}";
+    db.find("campaign_prospects", { id: CP })!.status = "accepted";
+
+    await runLinkedInAction(ctx, { kind: "follow_up", workspaceId: WORKSPACE, campaignProspectId: CP, stepNumber: 1 });
+
+    const sent = linkedin.sentMessages[0]?.text ?? "";
+    expect(sent).not.toContain("{{cta_link}}");
+    expect(sent).toContain("/book/");
+    expect(db.rows("booking_links")).toHaveLength(1);
+  });
+
+  it("mints no booking link for a message that never asks for one", async () => {
+    // A bearer credential and a row, spent on a message that does not mention
+    // booking. The placeholder is the only thing that should trigger it.
+    const { db, ctx, linkedin } = harness();
+    db.rows("campaigns")[0]!.cta_kind = "meeting";
+    db.rows("campaigns")[0]!.cta_url = null;
+    db.rows("campaign_steps")[0]!.message = "Thanks for connecting, {{first_name}}.";
+    db.find("campaign_prospects", { id: CP })!.status = "accepted";
+
+    await runLinkedInAction(ctx, { kind: "follow_up", workspaceId: WORKSPACE, campaignProspectId: CP, stepNumber: 1 });
+
+    expect(linkedin.sentMessages[0]?.text).toBe("Thanks for connecting, Jane.");
+    expect(db.rows("booking_links")).toHaveLength(0);
   });
 
   it("falls back to the campaign's step when the angle has none", async () => {

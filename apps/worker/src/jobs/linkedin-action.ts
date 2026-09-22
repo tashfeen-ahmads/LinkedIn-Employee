@@ -7,6 +7,7 @@ import {
   renderCta,
   type CampaignProspectStatus,
   INVITE_NOTE_MAX_CHARS,
+  CTA_PLACEHOLDER,
 } from "@le/shared";
 import type { Db } from "@le/db";
 import { readCampaignCta } from "../cta.js";
@@ -16,6 +17,7 @@ import { applyHealth, recordAction, toUsage, type AccountRecord, ACCOUNT_USAGE_C
 import { syncConversationToCrm } from "../crm.js";
 import { loadExclusions } from "../exclusions.js";
 import { clearHold } from "../holds.js";
+import { createBookingLink } from "./book.js";
 import type { LinkedInActionJob } from "../queues.js";
 
 /**
@@ -194,7 +196,6 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
   // Read through the pointer, so a URL corrected in the library reaches every
   // campaign using it without anybody rewriting a message.
   const cta = await readCampaignCta(db, campaign, job.workspaceId);
-  const body = renderCta(renderTemplate(step.message, prospect.first_name), cta.url);
 
   const conversation = await ensureConversation(ctx, {
     workspaceId: cp.workspace_id,
@@ -202,6 +203,37 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
     linkedinAccountId: accountRow.id,
     campaignId: cp.campaign_id,
   });
+
+  /*
+   * A campaign asking for a meeting with nowhere to book one uses ours.
+   *
+   * `{{cta_link}}` with no destination is left visible on purpose (rule 29):
+   * "Book here:" followed by nothing reads as a broken product, and a visible
+   * placeholder gets caught on the review screen. But that was written for a
+   * campaign pointing at somebody else's page, and it made a campaign with no
+   * page at all into a configuration step — four ready messages held up
+   * waiting for a Calendly account, when this product owns a booking page that
+   * works (rule 18).
+   *
+   * So a `meeting` campaign with no URL of its own gets this prospect's own
+   * booking link. It is per-prospect by construction: the token is the whole
+   * authorisation, `bookFromLink` re-derives the free slots and refuses a time
+   * that is not among them, and `meetings_one_per_rep_slot` stops two people
+   * taking the same one.
+   *
+   * Only when the copy actually asks for it. Minting a bearer credential for a
+   * message that never mentions booking spends a token and a row on nothing.
+   */
+  let ctaUrl = cta.url;
+  if (!ctaUrl && cta.kind === "meeting" && step.message.includes(CTA_PLACEHOLDER)) {
+    ctaUrl = await createBookingLink(ctx, {
+      workspaceId: cp.workspace_id,
+      repUserId: accountRow.user_id,
+      prospectId: prospect.id,
+      conversationId: conversation.id,
+    });
+  }
+  const body = renderCta(renderTemplate(step.message, prospect.first_name), ctaUrl);
 
   const result = await ctx.linkedin.sendMessage({
     accountId: accountRow.provider_account_id,
