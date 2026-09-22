@@ -439,9 +439,30 @@ async function stepFor(
   return data ?? null;
 }
 
-/** Only {{first_name}} is supported; anything else stays literal by design. */
+/**
+ * Puts the prospect's name into a template, whichever way the author wrote it.
+ *
+ * `{{first_name}}` was the only supported spelling and "anything else stays
+ * literal by design" was the comment defending it. The design was wrong the
+ * first time somebody typed a placeholder from memory: every campaign and
+ * follow-up in this deployment was written with `[Name]`, so the message that
+ * reached a real prospect opened
+ *
+ *     Thanks for connecting, [Name].
+ *
+ * A literal placeholder in a message signed by a real rep is worse than any
+ * formatting problem this function was protecting against, and "by design" is
+ * not a defence when the design produces that. So the spellings people
+ * actually use are accepted — braces or brackets, one word or two, any case.
+ *
+ * `there` remains the fallback when the provider gave us no first name.
+ * "Thanks for connecting, there" reads slightly oddly and reads as written by
+ * a person; the alternative is a name-shaped hole.
+ */
+const NAME_PLACEHOLDER = /(\{\{|\{|\[)\s*(?:first[\s_-]*name|name|fname)\s*(\}\}|\}|\])/gi;
+
 export function renderTemplate(template: string, firstName: string | null): string {
-  return template.replace(/\{\{\s*first_name\s*\}\}/gi, firstName?.trim() || "there");
+  return template.replace(NAME_PLACEHOLDER, firstName?.trim() || "there");
 }
 
 /**

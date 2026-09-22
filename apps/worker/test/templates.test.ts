@@ -144,3 +144,42 @@ describe("the note that is actually sent", () => {
     expect(out.length === 0 || out.length <= INVITE_NOTE_MAX_CHARS).toBe(true);
   });
 });
+
+describe("placeholders people actually type", () => {
+  /*
+   * Every campaign and follow-up in the first live deployment was written with
+   * `[Name]`, and only `{{first_name}}` was substituted — so the first real
+   * follow-up would have opened "Thanks for connecting, [Name]." under a real
+   * rep's name. The old comment called that "literal by design".
+   */
+  const forms = [
+    "{{first_name}}",
+    "{{ first_name }}",
+    "{{firstName}}",
+    "{first_name}",
+    "[Name]",
+    "[name]",
+    "[First Name]",
+    "[FIRST_NAME]",
+    "[fname]",
+  ];
+
+  for (const form of forms) {
+    it(`substitutes ${form}`, () => {
+      expect(renderTemplate(`Hi ${form}, thanks.`, "Parisa")).toBe("Hi Parisa, thanks.");
+    });
+  }
+
+  it("falls back to a word, never to a hole", () => {
+    expect(renderTemplate("Hi [Name], thanks.", null)).toBe("Hi there, thanks.");
+    expect(renderTemplate("Hi [Name], thanks.", "   ")).toBe("Hi there, thanks.");
+  });
+
+  it("leaves text that only looks like a placeholder alone", () => {
+    // A bracket is not a placeholder. Substituting anything bracketed would
+    // rewrite the author's words.
+    expect(renderTemplate("We ship [beta] in Q1, {{cta_link}}", "Sam")).toBe(
+      "We ship [beta] in Q1, {{cta_link}}",
+    );
+  });
+});
