@@ -11,6 +11,7 @@ import {
 } from "@le/billing";
 import type { ConnectedAccount } from "@le/linkedin";
 import { decryptJson, encryptJson } from "./crypto.js";
+import { recordBeat } from "./heartbeat.js";
 import type { MiddlewareHandler } from "hono";
 import type { IntegrationKind } from "@le/db";
 import { jobId } from "./queues.js";
@@ -477,6 +478,13 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
     try {
       messages = ctx.linkedin.parseWebhook({ body, signature });
     } catch (err) {
+      await recordBeat(ctx.db, "webhook:messages", {
+        at: new Date().toISOString(),
+        ok: false,
+        reason: err instanceof Error ? err.message : String(err),
+        hadSignature: Boolean(signature),
+        bytes: body.length,
+      });
       console.error("rejected webhook", err);
       return c.json({ error: "invalid signature" }, 401);
     }
@@ -527,11 +535,43 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
     try {
       accounts = ctx.linkedin.parseAccountWebhook({ body, signature });
     } catch (err) {
+      /*
+       * A rejected delivery leaves a mark, and the absence of one is the whole
+       * point.
+       *
+       * This handler used to answer 401 and write nothing anywhere. So "the
+       * provider never called us" and "the provider called and we refused it"
+       * were the same observation from every screen in the product — and they
+       * need opposite things done about them: a wrong WORKER_URL in the
+       * provider's webhook config, or a webhook secret that does not match the
+       * one on this host. Four connection attempts were spent guessing between
+       * them, and the answer was never written down.
+       *
+       * The signature itself is never recorded, only whether one arrived: it is
+       * the credential the check is made of.
+       */
+      await recordBeat(ctx.db, "webhook:accounts", {
+        at: new Date().toISOString(),
+        ok: false,
+        reason: err instanceof Error ? err.message : String(err),
+        hadSignature: Boolean(signature),
+        bytes: body.length,
+      });
       console.error("rejected account webhook", err);
       return c.json({ error: "invalid signature" }, 401);
     }
 
     const bound = await bindAccounts(ctx, accounts);
+    // Accepted deliveries are stamped too. `received: 1, bound: 0` is a real
+    // state — the delivery verified and named a rep this workspace does not
+    // have — and it is invisible without this.
+    await recordBeat(ctx.db, "webhook:accounts", {
+      at: new Date().toISOString(),
+      ok: true,
+      received: accounts.length,
+      bound,
+      referenceShape: accounts.map((a) => shapeOf(a.reference)),
+    });
     return c.json({ received: accounts.length, bound });
   });
 
