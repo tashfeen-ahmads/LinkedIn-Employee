@@ -539,3 +539,120 @@ describe("an account the provider holds but does not label", () => {
     expect(db.find("linkedin_accounts", { id: ACCOUNT })!.provider_account_id).toBeNull();
   });
 });
+
+/**
+ * The claim route: the hosted-auth redirect hands back an `account_id`, and
+ * this is what turns that into a bound row.
+ *
+ * It carries rule 8's binding rule on a second path, and it had no tests at
+ * all — which the mutation check found the hard way. `connect/no-rebinding`
+ * SURVIVED because its target string appears in this route *and* in
+ * `bindAccounts`, so the mutation broke this one, where nothing was looking.
+ */
+function claim(app: ReturnType<typeof createServer>, body: unknown, secret = INTERNAL_SECRET) {
+  return app.request("/jobs/linkedin-claim", {
+    method: "POST",
+    body: JSON.stringify(body),
+    headers: { "content-type": "application/json", authorization: `Bearer ${secret}` },
+  });
+}
+
+describe("claiming an account from the hosted-auth redirect", () => {
+  it("binds the account to the row this rep's own Connect press created", async () => {
+    const { db, linkedin, app } = harness();
+    linkedin.connectedAccounts = [
+      { providerAccountId: "prov-1", displayName: "Jane Rep", status: "ok", reference: USER },
+    ];
+
+    const res = await claim(app, { workspaceId: WORKSPACE, userId: USER, accountId: "prov-1" });
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({ claimed: true });
+    const row = db.find("linkedin_accounts", { id: ACCOUNT })!;
+    expect(row.provider_account_id).toBe("prov-1");
+    expect(row.status).toBe("active");
+  });
+
+  it("never re-points a row that is already working", async () => {
+    /*
+     * Rule 8, on the pull path. `account_id` arrives in a query string, so it
+     * is a claim rather than a fact — and a claim that could re-point a
+     * healthy row would send every campaign message from a stranger's
+     * LinkedIn account under this rep's name.
+     */
+    const { db, linkedin, app } = harness({ status: "active", provider_account_id: "prov-old" });
+    linkedin.connectedAccounts = [
+      { providerAccountId: "prov-new", displayName: "Jane Rep", status: "ok", reference: USER },
+    ];
+
+    const res = await claim(app, { workspaceId: WORKSPACE, userId: USER, accountId: "prov-new" });
+
+    expect(await res.json()).toMatchObject({ claimed: false });
+    // Untouched: the working account keeps the id it was working with.
+    expect(db.find("linkedin_accounts", { id: ACCOUNT })?.provider_account_id).toBe("prov-old");
+  });
+
+  it("refuses an account another row already holds", async () => {
+    const { db, linkedin, app } = harness();
+    db.seed("linkedin_accounts", [
+      {
+        id: "other-row",
+        workspace_id: WORKSPACE,
+        user_id: "99999999-9999-4999-8999-999999999999",
+        provider: "mock",
+        provider_account_id: "prov-1",
+        status: "active",
+      },
+    ]);
+    linkedin.connectedAccounts = [
+      { providerAccountId: "prov-1", displayName: "Someone Else", status: "ok", reference: USER },
+    ];
+
+    const res = await claim(app, { workspaceId: WORKSPACE, userId: USER, accountId: "prov-1" });
+
+    expect(await res.json()).toMatchObject({ claimed: false });
+    expect(db.find("linkedin_accounts", { id: ACCOUNT })?.provider_account_id).toBeNull();
+  });
+
+  it("refuses an id the provider has never heard of", async () => {
+    // Asked, not assumed. An id from a query string is a claim about the
+    // provider, and the provider is what settles it.
+    const { db, linkedin, app } = harness();
+    linkedin.connectedAccounts = [];
+
+    const res = await claim(app, { workspaceId: WORKSPACE, userId: USER, accountId: "invented" });
+
+    expect(await res.json()).toMatchObject({ claimed: false });
+    expect(db.find("linkedin_accounts", { id: ACCOUNT })?.provider_account_id).toBeNull();
+  });
+
+  it("refuses a caller without the internal secret", async () => {
+    // Rule 8: the internal API fails closed. This route names a workspace and
+    // a user, so an unauthenticated caller could bind in someone else's tenant.
+    const { db, linkedin, app } = harness();
+    linkedin.connectedAccounts = [
+      { providerAccountId: "prov-1", displayName: "Jane Rep", status: "ok", reference: USER },
+    ];
+
+    const res = await claim(app, { workspaceId: WORKSPACE, userId: USER, accountId: "prov-1" }, "wrong");
+
+    expect(res.status).toBe(401);
+    expect(db.find("linkedin_accounts", { id: ACCOUNT })?.provider_account_id).toBeNull();
+  });
+
+  it("refuses somebody who is not a member of that workspace", async () => {
+    const { db, linkedin, app } = harness();
+    linkedin.connectedAccounts = [
+      { providerAccountId: "prov-1", displayName: "Jane Rep", status: "ok", reference: USER },
+    ];
+
+    const res = await claim(app, {
+      workspaceId: WORKSPACE,
+      userId: "88888888-8888-4888-8888-888888888888",
+      accountId: "prov-1",
+    });
+
+    expect(res.status).toBe(403);
+    expect(db.find("linkedin_accounts", { id: ACCOUNT })?.provider_account_id).toBeNull();
+  });
+});
