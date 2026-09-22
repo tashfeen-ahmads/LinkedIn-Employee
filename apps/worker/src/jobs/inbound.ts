@@ -255,6 +255,9 @@ export async function handleInboundMessage(
       history,
       message: job.text,
       classification,
+      // Lead with the pitch when they have just said yes. The writer decides
+      // the words; this decides that the link is in them.
+      intent: classification.intent,
       rules: {
         ...rules,
         // The one link it may send, decided by what the campaign is asking
@@ -324,6 +327,28 @@ export async function handleInboundMessage(
     subjectId: conversation.id,
     payload: { reason: decision.reason ?? null, proposesMeeting: draft.proposesMeeting },
   });
+
+  /*
+   * Interest is written down, not only acted on.
+   *
+   * `positive` has been in `campaign_prospect_status` since the first
+   * migration and nothing ever set it, so a prospect who replied "yes, send it
+   * over" sat at `replied` next to somebody who answered "who is this?". The
+   * funnel counted them identically and no screen could tell the two apart —
+   * which is the one distinction anybody running a campaign actually wants.
+   *
+   * Set after the draft is written, so it records what the agent acted on
+   * rather than what it intended to.
+   */
+  if (classification.intent === "interested" && campaignProspect) {
+    await db
+      .from("campaign_prospects")
+      .update({ status: "positive", status_reason: "replied with interest" })
+      .eq("id", campaignProspect.id)
+      // Never walks a conversation backwards: somebody already booked stays
+      // booked, and an opt-out is never reopened by a later warm sentence.
+      .in("status", ["invited", "accepted", "messaged_1", "messaged_2", "messaged_3", "replied"]);
+  }
 
   if (decision.action === "hold_for_human") {
     await flagForHuman(db, conversation.id, decision.reason ?? "held for review");

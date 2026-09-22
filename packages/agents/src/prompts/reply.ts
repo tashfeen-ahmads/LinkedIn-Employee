@@ -1,5 +1,5 @@
 export const CLASSIFY_PROMPT_VERSION = "reply.classify/2026-09-08";
-export const DRAFT_PROMPT_VERSION = "reply.draft/2026-09-08";
+export const DRAFT_PROMPT_VERSION = "reply.draft/2026-09-22";
 
 export const CLASSIFY_SYSTEM = `You read one inbound LinkedIn message from a prospect and classify it so the system knows whether an AI may answer or a human must.
 

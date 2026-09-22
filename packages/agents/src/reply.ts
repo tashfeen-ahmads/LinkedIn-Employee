@@ -1,4 +1,5 @@
 import {
+  type ReplyIntent,
   OPT_OUT_PHRASES,
   ReplyClassificationSchema,
   ReplyDraftSchema,
@@ -123,6 +124,14 @@ export interface DraftInput {
    * at a page — the agent chasing a goal nobody set.
    */
   goal?: "meeting" | "link" | "reply";
+  /**
+   * What the classifier made of the message this is answering.
+   *
+   * Only `interested` changes anything: it is the one moment where the right
+   * reply is the pitch itself rather than another step towards it. Optional so
+   * every existing caller and test keeps working unchanged.
+   */
+  intent?: ReplyIntent;
   /** Human-readable slots genuinely free on the rep's calendar. */
   availableSlots: string[];
   /** True when this reply confirms a meeting we have already put in the diary. */
@@ -147,6 +156,23 @@ export async function draftReply(ctx: AgentContext, input: DraftInput): Promise<
       : input.goal === "reply"
         ? "\nThis campaign is NOT asking for a meeting and has no link. The ask is a genuine reply — a conversation, an opinion, an introduction."
         : "",
+    /*
+     * Interest is answered with the thing itself, not with another question.
+     *
+     * A prospect who says "sure, what is it?" has spent the only attention
+     * this conversation gets. Asking them to qualify first trades a warm reply
+     * for a second wait, and the usual outcome of the second wait is silence.
+     * So the page goes out on that message — the page is the pitch, and the
+     * conversation continues underneath it.
+     *
+     * This changes what the agent leads with, never what it is allowed to
+     * send: the link still has to be one it was actually handed, and
+     * `draftLinkCheck` still holds a draft carrying anything else. Rule 30 is
+     * untouched.
+     */
+    input.intent === "interested" && input.goal !== "reply"
+      ? "\nThis person has just said they are interested. Send the link now, in this message — do not ask a qualifying question first and do not promise to send it later. One short line of context, then the link. If the goal is a meeting, offer the times as well."
+      : "",
   ].join("\n");
 
   return callStructured(ctx, {

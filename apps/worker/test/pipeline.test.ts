@@ -674,8 +674,34 @@ describe("campaign pipeline", () => {
     await handleInboundMessage(ctx, queues, inboundJob("Sounds interesting, tell me more"));
 
     const after = db.find("campaign_prospects", { id: CP })!;
-    expect(after.status).toBe("replied");
+    // `positive`, not `replied`. The default classification in this harness is
+    // `interested`, and so is the message — "sounds interesting, tell me more"
+    // is the one reply a campaign exists to produce. Recording it as `replied`
+    // put it in the same bucket as "who is this?", which is the distinction
+    // anybody running a campaign most wants to see.
+    expect(after.status).toBe("positive");
     // A prospect who answered must never receive the next scheduled follow-up.
+    expect(after.next_action_at).toBeNull();
+  });
+
+  it("does not call every reply interested", async () => {
+    /*
+     * The guard on the guard. A rule that promotes a prospect on interest is
+     * only worth having if it declines to on everything else — otherwise
+     * `positive` means "replied" again, with a more flattering name, and the
+     * funnel is wrong in the direction nobody checks.
+     */
+    const { db, ctx, queues } = harness();
+    const cp = db.find("campaign_prospects", { id: CP })!;
+    cp.status = "messaged_1";
+    cp.last_step_sent = 1;
+    cp.next_action_at = NOW.toISOString();
+
+    classifyMock.mockResolvedValue(classification({ intent: "question", sentiment: "neutral" }));
+    await handleInboundMessage(ctx, queues, inboundJob("Sorry, who is this?"));
+
+    const after = db.find("campaign_prospects", { id: CP })!;
+    expect(after.status).toBe("replied");
     expect(after.next_action_at).toBeNull();
   });
 
