@@ -73,8 +73,13 @@ const MUTATIONS = [
     id: "unstick/never-brings-a-schedule-forward",
     rule: "Repair re-arms a stalled prospect, never one still waiting its turn",
     file: "apps/worker/src/jobs/unstick.ts",
-    from: "    if (!stuck) continue;",
-    to: "    if (false) continue;",
+    // Repointed at the test itself rather than the `continue` it used to guard:
+    // the not-stuck branch now also handles a first message left on the old
+    // three-day rule, so `if (!stuck)` is no longer a bare skip. Calling every
+    // live row stuck is still exactly the failure the rule names — every
+    // configured delay collapses to now.
+    from: "    const stuck = due === null || (Number.isFinite(due) && (due as number) < overdueBefore);",
+    to: "    const stuck = true;",
     pkg: "@le/worker",
   },
   {
