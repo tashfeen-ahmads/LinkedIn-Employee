@@ -9,6 +9,8 @@ export * from "./links.js";
 export * from "./html.js";
 export * from "./onboarding.js";
 export * from "./pitch.js";
+export * from "./merge-fields.js";
+export * from "./headline.js";
 export * from "./pricing.js";
 export * from "./tour.js";
 export * from "./time.js";

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { INVITE_NOTE_MAX_CHARS } from "@le/shared";
-import { addDays, inviteNote, renderTemplate } from "../src/jobs/linkedin-action.js";
+import { addDays, inviteNote, mergeValuesFor, renderTemplate } from "../src/jobs/linkedin-action.js";
 
 describe("renderTemplate", () => {
   it("substitutes the first name", () => {
@@ -181,5 +181,52 @@ describe("placeholders people actually type", () => {
     expect(renderTemplate("We ship [beta] in Q1, {{cta_link}}", "Sam")).toBe(
       "We ship [beta] in Q1, {{cta_link}}",
     );
+  });
+});
+
+describe("merge fields on a real prospect", () => {
+  /*
+   * The openers this was built for. Both shapes come from the same template:
+   * one sentence when we know the company, a different sentence when we do not.
+   */
+  const OPENER =
+    "Hi {{first_name}}, {{rep_name}} here{{#company}} regarding {{company}}{{/company}}.{{^company}} Are you the owner of the business?{{/company}}";
+
+  it("names the company it read out of the headline", () => {
+    const values = mergeValuesFor(
+      { first_name: "Kristina", headline: "Servant Leader | Owner of The Wynners Club | Business Broker" },
+      { full_name: "Tashfeen" },
+    );
+    expect(renderTemplate(OPENER, "Kristina", values)).toBe(
+      "Hi Kristina, Tashfeen here regarding The Wynners Club.",
+    );
+  });
+
+  it("asks instead when the headline names no company", () => {
+    // A real prospect whose headline is a list of services. Guessing here
+    // produces "regarding your Photo-realistic Product Animation".
+    const values = mergeValuesFor(
+      { first_name: "Desmond", headline: "Photo-realistic Product Animation | 3D Modeling for Prototypes" },
+      { full_name: "Tashfeen" },
+    );
+    expect(renderTemplate(OPENER, "Desmond", values)).toBe(
+      "Hi Desmond, Tashfeen here. Are you the owner of the business?",
+    );
+  });
+
+  it("prefers the column the provider confirmed over the headline", () => {
+    // A company LinkedIn actually returned outranks anything read out of free
+    // text, whatever the headline happens to say.
+    const values = mergeValuesFor(
+      { first_name: "Jane", company: "Confirmed Co", headline: "CEO at Something Else LLC" },
+      { full_name: "Tashfeen" },
+    );
+    expect(values.company).toBe("Confirmed Co");
+  });
+
+  it("still reads {{name}} and [Name] as the first name", () => {
+    // Both reached real prospects verbatim before this existed.
+    expect(renderTemplate("Hi [Name]", "Jane", {})).toBe("Hi Jane");
+    expect(renderTemplate("Hi {{name}}", "Jane", {})).toBe("Hi Jane");
   });
 });

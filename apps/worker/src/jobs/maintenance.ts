@@ -1,4 +1,5 @@
 import { LINKEDIN_LIMITS, MAINTENANCE_BEAT, countFunnel } from "@le/shared";
+import { backfillProspectFields } from "./backfill-fields.js";
 import type { WorkerContext } from "../context.js";
 import { pollHealth, recoverAccounts } from "../accounts.js";
 import { recordEvent } from "../context.js";
@@ -63,6 +64,10 @@ export async function runMaintenance(
       console.error(`maintenance step failed: ${name}`, err);
     }
   };
+
+  // Company and title, read out of the headline for every row that never got
+  // them. Cheap, local, and it only ever fills a blank.
+  await step("backfillProspectFields", () => backfillProspectFields(db));
 
   const { data: accounts } = await db
     .from("linkedin_accounts")

@@ -8,6 +8,7 @@ import {
   isPublicProfileUrl,
   matchExclusion,
   normalizeLinkedInUrl,
+  parseHeadline,
 } from "@le/shared";
 import { isAccountGone } from "@le/linkedin";
 import { markAccountGone } from "../accounts.js";
@@ -677,8 +678,18 @@ async function attachProspects(
         first_name: r.candidate.firstName,
         last_name: r.candidate.lastName,
         headline: r.candidate.headline ?? null,
-        title: r.candidate.title ?? null,
-        company: r.candidate.company ?? null,
+        /*
+         * Read out of the headline when the search did not supply them, which
+         * is almost always: classic search returns a headline and nothing
+         * structured, and the profile endpoint that does know is spent only on
+         * candidates missing a public URL (rule 13). So these two columns were
+         * null for every person in the database, and a message written from
+         * `{{company}}` had nothing to put there.
+         *
+         * The provider's own answer always wins; this only fills a blank.
+         */
+        title: r.candidate.title ?? parseHeadline(r.candidate.headline).title,
+        company: r.candidate.company ?? parseHeadline(r.candidate.headline).company,
         company_size: r.candidate.companySize ?? null,
         industry: r.candidate.industry ?? null,
         location: r.candidate.location ?? null,

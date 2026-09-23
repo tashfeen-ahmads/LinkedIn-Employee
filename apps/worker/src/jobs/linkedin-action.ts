@@ -10,6 +10,9 @@ import {
   CTA_PLACEHOLDER,
   renderPitch,
   usesPitch,
+  renderMerge,
+  parseHeadline,
+  type MergeValues,
 } from "@le/shared";
 import type { Db } from "@le/db";
 import { readCampaignCta } from "../cta.js";
@@ -60,7 +63,12 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
 
   const { data: prospect } = await db
     .from("prospects")
-    .select("id, provider_id, linkedin_url, first_name, company, do_not_contact, last_contacted_at")
+    // Everything a message may be written from. `headline` is here because it
+    // is the fallback for rows stored before `company` and `title` were ever
+    // populated — which is all of them, up to today.
+    .select(
+      "id, provider_id, linkedin_url, first_name, last_name, company, title, headline, location, do_not_contact, last_contacted_at",
+    )
     .eq("id", cp.prospect_id)
     .single();
   if (!prospect) return;
@@ -271,7 +279,18 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
     return;
   }
 
-  const body = renderCta(renderTemplate(withPitch.message, prospect.first_name), ctaUrl);
+  // Who is sending, so `{{rep_name}}` is the rep's own name rather than a
+  // placeholder reaching a stranger.
+  const { data: sender } = await db
+    .from("profiles")
+    .select("full_name")
+    .eq("id", accountRow.user_id)
+    .maybeSingle();
+
+  const body = renderCta(
+    renderTemplate(withPitch.message, prospect.first_name, mergeValuesFor(prospect, sender)),
+    ctaUrl,
+  );
 
   const result = await ctx.linkedin.sendMessage({
     accountId: accountRow.provider_account_id,
@@ -531,8 +550,50 @@ async function stepFor(
  */
 const NAME_PLACEHOLDER = /(\{\{|\{|\[)\s*(?:first[\s_-]*name|name|fname)\s*(\}\}|\}|\])/gi;
 
-export function renderTemplate(template: string, firstName: string | null): string {
-  return template.replace(NAME_PLACEHOLDER, firstName?.trim() || "there");
+/**
+ * Puts this prospect's own details into a campaign's copy.
+ *
+ * It used to substitute the first name and nothing else, so "regarding
+ * {{company}}" reached a stranger with the placeholder still in it. Every
+ * field now resolves, and a field we do not have changes the sentence rather
+ * than leaving a hole — see `renderMerge`.
+ *
+ * `{{name}}` and `[Name]` are still read as the first name, because that is
+ * what people type and a placeholder sent verbatim is worse than being relaxed
+ * about reading it.
+ */
+export function renderTemplate(
+  template: string,
+  firstName: string | null,
+  values: Partial<MergeValues> = {},
+): string {
+  const named = template.replace(NAME_PLACEHOLDER, "{{first_name}}");
+  return renderMerge(named, { ...values, first_name: firstName ?? values.first_name ?? null });
+}
+
+/** Everything a message may be written from, for one prospect and one rep. */
+export function mergeValuesFor(
+  prospect: {
+    first_name?: string | null;
+    last_name?: string | null;
+    company?: string | null;
+    title?: string | null;
+    headline?: string | null;
+    location?: string | null;
+  },
+  rep: { full_name?: string | null } | null,
+): Partial<MergeValues> {
+  // The stored columns first; the headline is the fallback for rows written
+  // before those columns were ever filled in.
+  const parsed = parseHeadline(prospect.headline);
+  return {
+    first_name: prospect.first_name ?? null,
+    last_name: prospect.last_name ?? null,
+    company: prospect.company?.trim() || parsed.company,
+    title: prospect.title?.trim() || parsed.title,
+    location: prospect.location ?? null,
+    rep_name: rep?.full_name ?? null,
+  };
 }
 
 /**
