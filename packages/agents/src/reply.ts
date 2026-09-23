@@ -78,23 +78,51 @@ export function applyRules(classification: ReplyClassification, rules: RulesOfEn
   if (classification.optOut) {
     return { action: "stop_sequence", reason: "prospect opted out" };
   }
-  if (classification.needsHuman) {
-    return { action: "hold_for_human", reason: classification.needsHumanReason ?? "model flagged for review" };
-  }
-  if (rules.handOffOnPricing && classification.mentionsPricing) {
-    return { action: "hold_for_human", reason: "pricing question" };
-  }
-  if (rules.handOffOnLegal && classification.mentionsLegalOrCompliance) {
-    return { action: "hold_for_human", reason: "legal or compliance question" };
-  }
+  const autonomous = rules.autonomy === "autonomous";
+
+  /*
+   * A prospect who asks to speak to a person is honoured in both modes.
+   *
+   * This is the one hold that is not about our confidence but about theirs.
+   * Answering "can I talk to a human?" with another machine-written message is
+   * the single fastest way to lose somebody, and it is a promise broken under a
+   * real rep's name — so autonomy does not override it. Everything else on this
+   * list is the product being cautious on the customer's behalf; this one is
+   * the customer telling us what they want.
+   */
   if (rules.handOffOnHumanRequest && classification.asksForHuman) {
     return { action: "hold_for_human", reason: "prospect asked for a person" };
   }
-  if (rules.handOffOnNegative && classification.sentiment === "negative") {
-    return { action: "hold_for_human", reason: "negative sentiment" };
-  }
+
+  /*
+   * Below the confidence floor the agent does not know what was said, and that
+   * is true in both modes. Autonomy means finishing the work, not guessing at
+   * it: a reply written from a misread message reaches a real person just as
+   * fast as a good one.
+   */
   if (classification.confidence < rules.minConfidence) {
     return { action: "hold_for_human", reason: `confidence ${classification.confidence.toFixed(2)} below threshold` };
+  }
+
+  /*
+   * Everything from here is a category a workspace can choose to automate.
+   *
+   * `needsHuman` is the model's summary of exactly these same structured
+   * fields, so under autonomy it is read as advice rather than as a veto —
+   * otherwise turning the categories off changes nothing, which is how a
+   * setting comes to exist and do nothing.
+   */
+  if (!autonomous && classification.needsHuman) {
+    return { action: "hold_for_human", reason: classification.needsHumanReason ?? "model flagged for review" };
+  }
+  if (!autonomous && rules.handOffOnPricing && classification.mentionsPricing) {
+    return { action: "hold_for_human", reason: "pricing question" };
+  }
+  if (!autonomous && rules.handOffOnLegal && classification.mentionsLegalOrCompliance) {
+    return { action: "hold_for_human", reason: "legal or compliance question" };
+  }
+  if (!autonomous && rules.handOffOnNegative && classification.sentiment === "negative") {
+    return { action: "hold_for_human", reason: "negative sentiment" };
   }
   if (classification.intent === "not_interested") {
     return { action: "stop_sequence", reason: "prospect is not interested" };

@@ -15,6 +15,7 @@ import { handleInboundMessage } from "./jobs/inbound.js";
 import { runStrategyJob } from "./jobs/strategy.js";
 import { runTargetingJob } from "./jobs/targeting.js";
 import { detectAcceptedInvitations } from "./jobs/acceptance.js";
+import { unstickProspects } from "./jobs/unstick.js";
 import { runMaintenance } from "./jobs/maintenance.js";
 import { runDailyDigest } from "./jobs/digest.js";
 import { createServer } from "./server.js";
@@ -120,7 +121,12 @@ const workers = [
     QUEUE_NAMES.maintenance,
     (job) =>
       job.name === "acceptance"
-        ? detectAcceptedInvitations(ctx).then(() => undefined)
+        ? // Notice who accepted, then put anybody whose next step went missing
+          // back on the rails. Both are hourly because both decide whether a
+          // warm prospect is written to today or never.
+          detectAcceptedInvitations(ctx)
+            .then(() => unstickProspects(ctx.db))
+            .then(() => undefined)
         : runMaintenance(ctx, queues),
     { connection, concurrency: 1 },
   ),

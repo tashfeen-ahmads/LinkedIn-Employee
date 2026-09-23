@@ -6,6 +6,7 @@ import { callWorker, errorQuery, noticeQuery } from "@/lib/worker";
 import { checkCtaUrl, LINKEDIN_LIMITS } from "@le/shared";
 import { cannotSend, describeRepair, type RefreshResult, type RepairNotice } from "../team/repair";
 import { PageNotice } from "@/components/page-notice";
+import { SubmitButton } from "@/components/submit-button";
 import { TeamSection } from "./team-section";
 import { BillingSection } from "./billing-section";
 import { PageHeader, Section } from "@/components/page";
@@ -185,6 +186,55 @@ async function saveWorkingHours(formData: FormData) {
 }
 
 /**
+ * How much the agent finishes on its own.
+ *
+ * Written to every campaign in the workspace rather than one, because the
+ * question a person is answering here is "is anybody watching the inbox?", and
+ * that is true of the whole workspace or of none of it. Per-campaign autonomy
+ * would mean remembering which campaigns you had told and which you had not.
+ */
+async function saveAutonomy(formData: FormData) {
+  "use server";
+  const autonomy = formData.get("autonomy") === "autonomous" ? "autonomous" : "supervised";
+
+  const session = await requireSession();
+  if (!["owner", "admin", "manager"].includes(session.role)) {
+    redirect(errorQuery("/app/profile", "You do not have permission to change this."));
+  }
+
+  const supabase = await createClient();
+  const { data: campaigns } = await supabase
+    .from("campaigns")
+    .select("id, rules")
+    .eq("workspace_id", session.workspaceId);
+
+  for (const campaign of campaigns ?? []) {
+    const rules = (campaign.rules && typeof campaign.rules === "object" ? campaign.rules : {}) as Record<
+      string,
+      unknown
+    >;
+    await supabase
+      .from("campaigns")
+      // Merged, never replaced: `rules` also carries the search notes and the
+      // filters a campaign was built with, and overwriting those would lose
+      // the record of what the list actually is.
+      .update({ rules: { ...rules, autonomy } as never })
+      .eq("id", campaign.id)
+      .eq("workspace_id", session.workspaceId);
+  }
+
+  revalidatePath("/app/profile");
+  redirect(
+    noticeQuery(
+      "/app/profile",
+      autonomy === "autonomous"
+        ? "The agent will now finish conversations on its own."
+        : "The agent will hold anything uncertain for you.",
+    ),
+  );
+}
+
+/**
  * Whether this rep has a Sales Navigator seat.
  *
  * It decides which search the Targeting Agent runs, and getting it wrong is
@@ -228,6 +278,22 @@ export default async function ProfilePage({
   const params = await searchParams;
   const session = await requireSession();
   const supabase = await createClient();
+
+  /*
+   * What the workspace's campaigns actually say, so the control shows the
+   * setting rather than a default. Read from the campaigns themselves because
+   * that is where the agent reads it: a screen showing one value while the
+   * worker obeys another is the drift this codebase keeps finding.
+   */
+  const { data: ruleRows } = await supabase
+    .from("campaigns")
+    .select("rules")
+    .eq("workspace_id", session.workspaceId);
+  const autonomy = (ruleRows ?? []).some(
+    (row) => (row.rules as { autonomy?: string } | null)?.autonomy === "autonomous",
+  )
+    ? "autonomous"
+    : "supervised";
 
   // Coming back from the provider's hosted login, and also on any arrival while
   // this rep's account is not working.
@@ -480,6 +546,41 @@ export default async function ProfilePage({
           </>
         )}
       </section>
+      <section className="section" id="autonomy">
+        <div className="section-header">
+          <div className="section-header-text">
+            <h2>How much the agent finishes on its own</h2>
+            <p className="small muted prose">
+              A hold is not a pause, it is a full stop. A prospect who replies on a Friday and is
+              never answered is a warm lead lost, and nothing on any screen explains why.
+            </p>
+          </div>
+        </div>
+        <div className="card">
+          <form action={saveAutonomy} className="stack-3">
+            <label className="field">
+              <span>When a reply arrives</span>
+              <select name="autonomy" defaultValue={autonomy}>
+                <option value="autonomous">
+                  The agent answers and books, on its own
+                </option>
+                <option value="supervised">
+                  Hold anything uncertain for me to read first
+                </option>
+              </select>
+              <span className="hint">
+                Either way the agent only ever states facts from your knowledge base, never sends a
+                link it was not given, and stops the moment somebody asks not to be contacted. Two
+                things always wait for you: a prospect who asks to speak to a person, and a message
+                the agent did not understand. You can still take over any conversation by hand from
+                the Inbox.
+              </span>
+            </label>
+            <SubmitButton pendingLabel="Saving…">Save</SubmitButton>
+          </form>
+        </div>
+      </section>
+
       {/*
         Team and billing live here rather than on tabs of their own.
         Somebody managing a workspace does all three in one sitting — who is on

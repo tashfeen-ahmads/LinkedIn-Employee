@@ -847,6 +847,54 @@ tests that were verified by deliberately breaking the code.
     is untouched — approving a pitch is the whole of what it takes to send it,
     and there is no second chance at a first follow-up.
 
+41. **A hold is a full stop, so a workspace can choose to have none.** The
+    reply gate held for a person on pricing, legal, negative sentiment and the
+    model's own `needsHuman` — sensible defaults for a team watching an inbox,
+    and a dead end for the ones that are not. A prospect who replies "how much
+    is it?" on a Friday and is never answered is not a conversation being
+    handled carefully; it is a warm lead lost, and the funnel reads 0% for a
+    reason no screen explains.
+
+    `autonomy` on `RulesOfEngagement` is that choice. `autonomous` reads the
+    model's `needsHuman` as advice rather than as a veto — it is a summary of
+    the same structured fields the flags already cover, so leaving it in place
+    would make turning the flags off do nothing, which is how a setting comes
+    to exist and change nothing.
+
+    It changes **who finishes the sentence, never what the sentence may
+    contain**. The knowledge base is still the only source of product facts
+    (rule 11), `draftLinkCheck` still holds an invented URL (rule 30), and
+    `applyRules` stays pure (rule 5) — autonomy is one more field it reads.
+
+    **Two holds survive autonomy, and they are not the same kind of thing.** A
+    message below the confidence floor is held because the agent does not know
+    what was said, and a reply written from a misread message reaches a real
+    person just as fast as a good one. A prospect who asks to speak to a human
+    is held because *they asked*: that one is not our caution, it is their
+    wish, and answering it with another machine-written message is a promise
+    broken under a real rep's name. An opt-out still stops everything (rule 7).
+
+42. **The agent repairs its own queue.** A campaign prospect moves because
+    `next_action_at` says when, and a row can lose it: a job that threw between
+    the send and the reschedule, a delay computed by a version of the code that
+    got it wrong, a step deleted mid-sequence. Nothing noticed. The prospect
+    sat in `accepted` for ever, the campaign reported `running`, and the funnel
+    read zero — which whoever launched it correctly read as the agent doing
+    nothing. The first live acceptance landed in exactly that state.
+
+    `unstickProspects` runs hourly beside the acceptance poll and again in the
+    nightly sweep, because a stall is the one failure invisible from every
+    screen. Repair must never depend on somebody finding a button (rule 8) and
+    it must never depend on somebody writing an UPDATE by hand either.
+
+    Three things it must not do. It never **brings a schedule forward** — only
+    a missing or long-overdue one is re-armed, or every configured delay
+    collapses to now and a fortnight's pacing sends in an afternoon. It never
+    **invents a step**: the end of a sequence is an answer, and inventing one
+    messages somebody twice. And it never touches a `closed`, `failed` or
+    `opted_out` row — those are outcomes, and restarting one writes to a person
+    who has already been dealt with, or who asked us to stop.
+
 ## Conventions
 
 - Agent output is validated against a zod schema before it touches the

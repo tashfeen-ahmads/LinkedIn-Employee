@@ -169,3 +169,60 @@ describe("callStructured usage accounting", () => {
     expect((rows[0] as { error?: string }).error).toContain("network down");
   });
 });
+
+describe("an autonomous workspace", () => {
+  /*
+   * The funnel was reading 0% because a hold is not a pause, it is a full
+   * stop. A prospect who replies "how much is it?" on a Friday and is never
+   * answered is a warm lead lost, and no screen explains why.
+   */
+  const autonomous = RulesOfEngagementSchema.parse({ mode: "autopilot", autonomy: "autonomous" });
+
+  it("answers a pricing question instead of waiting for somebody", () => {
+    const decision = applyRules(
+      classification({ mentionsPricing: true, needsHuman: true, needsHumanReason: "pricing" }),
+      autonomous,
+    );
+    expect(decision.action).toBe("send");
+  });
+
+  it("answers a legal question, and a negative one", () => {
+    expect(
+      applyRules(classification({ mentionsLegalOrCompliance: true, needsHuman: true }), autonomous).action,
+    ).toBe("send");
+    expect(applyRules(classification({ sentiment: "negative", needsHuman: true }), autonomous).action).toBe(
+      "send",
+    );
+  });
+
+  it("still stops dead on an opt-out", () => {
+    // Rule 7. Autonomy is about finishing work, never about who may be written
+    // to after they have asked not to be.
+    expect(applyRules(classification({ optOut: true }), autonomous).action).toBe("stop_sequence");
+  });
+
+  it("still hands over when the prospect asks for a person", () => {
+    /*
+     * The one hold that is about the prospect's wishes rather than our
+     * confidence. Answering "can I talk to a human?" with another
+     * machine-written message is a promise broken under a real rep's name.
+     */
+    expect(applyRules(classification({ asksForHuman: true }), autonomous).action).toBe("hold_for_human");
+  });
+
+  it("still holds a message it did not understand", () => {
+    // Autonomy means finishing the work, not guessing at it: a reply written
+    // from a misread message reaches a real person just as fast as a good one.
+    expect(applyRules(classification({ confidence: 0.4 }), autonomous).action).toBe("hold_for_human");
+  });
+
+  it("changes nothing for a workspace that did not ask for it", () => {
+    // The guard on the guard: if supervised behaved like autonomous, the
+    // setting would be doing nothing and every test above would be vacuous.
+    const decision = applyRules(
+      classification({ mentionsPricing: true, needsHuman: true }),
+      RulesOfEngagementSchema.parse({ mode: "autopilot", autonomy: "supervised" }),
+    );
+    expect(decision.action).toBe("hold_for_human");
+  });
+});

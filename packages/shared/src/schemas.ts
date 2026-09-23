@@ -325,6 +325,24 @@ export type ReplyDraft = z.infer<typeof ReplyDraftSchema>;
 
 export const RulesOfEngagementSchema = z.object({
   mode: z.enum(["approval", "autopilot"]).default("approval"),
+  /**
+   * How much the agent finishes on its own.
+   *
+   * `supervised` is the cautious default and what every campaign had: anything
+   * the classifier felt uncertain about waits for a person.
+   *
+   * `autonomous` is for a workspace where nobody is watching the inbox, which
+   * is most of them. The distinction matters because a hold is not a pause —
+   * it is a full stop. A prospect who replies "how much is it?" on a Friday and
+   * is never answered is not a conversation being handled carefully; it is a
+   * warm lead lost, and the funnel reads 0% for a reason no screen explains.
+   *
+   * It does not loosen what the agent may *say*: the knowledge base is still
+   * the only source of product facts (rule 11), the link check still holds an
+   * invented URL (rule 30), and an opt-out still stops everything (rule 7).
+   * It changes who finishes the sentence, never what the sentence may contain.
+   */
+  autonomy: z.enum(["supervised", "autonomous"]).default("supervised"),
   goal: z.enum(["book_meeting", "qualify_then_book", "nurture"]).default("book_meeting"),
   handOffOnPricing: z.boolean().default(true),
   handOffOnNegative: z.boolean().default(true),
