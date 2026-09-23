@@ -177,6 +177,23 @@ export async function scheduleRepeatables(queues: Queues): Promise<void> {
     { pattern: "0 3 * * *" },
     { name: "maintenance", data: {} },
   );
+  /*
+   * Acceptance, hourly.
+   *
+   * Unipile exposes no acceptance webhook, so noticing one means asking — and
+   * asking once a night meant a prospect who accepted at 09:05 was not written
+   * to until the following morning, with the configured delay stacked on top of
+   * that. The first live acceptance sat for a day for exactly this reason.
+   *
+   * It is the one step of the night that is worth repeating during the day: the
+   * rest sweep, reconcile and report, and none of them decide how long a warm
+   * prospect waits.
+   */
+  await queues.maintenance.upsertJobScheduler(
+    "acceptance-hourly",
+    { every: 60 * 60_000 },
+    { name: "acceptance", data: {} },
+  );
   // Weekday mornings only: a digest on Sunday is an email nobody wants.
   await queues.digest.upsertJobScheduler(
     "weekday-morning",

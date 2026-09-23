@@ -24,6 +24,21 @@ export const LINKEDIN_LIMITS = {
   /** Maximum gap added as random jitter, milliseconds. */
   maxGapMs: 9 * 60_000,
   /**
+   * The soonest a follow-up may go out after somebody accepts, and the widest
+   * that wait may be.
+   *
+   * Zero is wrong in both directions. A message landing in the same second as
+   * the acceptance is a robot announcing itself, and it is the pattern
+   * LinkedIn's own heuristics watch for. A message three days later is a
+   * stranger who has forgotten accepting. Twenty to ninety minutes is a person
+   * who noticed and got round to it.
+   *
+   * The working-hours check still applies on top: somebody accepting at three
+   * in the morning is written to in the morning, not at 03:20.
+   */
+  acceptFollowUpMinMs: 20 * 60_000,
+  acceptFollowUpMaxMs: 90 * 60_000,
+  /**
    * Withdraw pending invites older than this many days. LinkedIn permits one
    * withdrawal pass per week and only on invites at least 14 days old, so the
    * sweep runs weekly and this threshold stays above that floor.

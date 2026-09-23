@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { Empty, PageHeader } from "@/components/page";
 import { requireSession } from "@/lib/workspace";
@@ -132,12 +133,57 @@ async function clearConversationHold(conversationId: string, workspaceId: string
     .eq("needs_human_kind", kind);
 }
 
-export default async function InboxPage({ searchParams }: { searchParams: NoticeParams }) {
+/**
+ * Which slice of the funnel the page is showing.
+ *
+ * "Waiting" is the default because it is the only one that needs a decision,
+ * but it was also the only one that existed — and a rep who has messaged forty
+ * people and been shown none of them cannot tell a quiet week from a broken
+ * product. Every other stage is read-only history.
+ */
+const STAGES = [
+  { key: "waiting", label: "Waiting on you" },
+  { key: "invited", label: "Invited" },
+  { key: "accepted", label: "Accepted" },
+  { key: "messaged", label: "Messaged" },
+  { key: "replied", label: "Replied" },
+  { key: "booked", label: "Meeting booked" },
+] as const;
+type StageKey = (typeof STAGES)[number]["key"];
+
+/** Where one prospect has actually got to. */
+function stageOf(status: string): Exclude<StageKey, "waiting"> | null {
+  if (status === "meeting_booked") return "booked";
+  if (status === "replied" || status === "positive") return "replied";
+  if (status.startsWith("messaged")) return "messaged";
+  if (status === "accepted") return "accepted";
+  if (status === "invited") return "invited";
+  // queued, closed, failed and opted_out are not stages somebody reached.
+  return null;
+}
+
+function nameOf(p: { first_name?: string | null; last_name?: string | null } | undefined): string {
+  return `${p?.first_name ?? ""} ${p?.last_name ?? ""}`.trim() || "Prospect";
+}
+
+function whenOf(row: { invited_at?: string | null; accepted_at?: string | null; replied_at?: string | null }): string | null {
+  return row.replied_at ?? row.accepted_at ?? row.invited_at ?? null;
+}
+
+export default async function InboxPage({
+  searchParams,
+}: {
+  // NoticeParams is itself a Promise, so wrapping it again made `await`
+  // unwrap straight past `stage`. Declared flat instead.
+  searchParams: Promise<{ error?: string; notice?: string; stage?: string }>;
+}) {
   const params = await searchParams;
   const session = await requireSession();
   const supabase = await createClient();
 
-  const [{ data: held }, { data: drafts }] = await Promise.all([
+  const stage: StageKey = (STAGES.find((s) => s.key === params.stage)?.key ?? "waiting") as StageKey;
+
+  const [{ data: held }, { data: drafts }, { data: funnelRows }] = await Promise.all([
     supabase
       .from("conversations")
       .select("id, prospect_id, needs_human_reason, needs_human_kind, last_message_at")
@@ -152,64 +198,100 @@ export default async function InboxPage({ searchParams }: { searchParams: Notice
       .eq("status", "pending")
       .order("created_at", { ascending: true })
       .limit(100),
+    // Everyone this workspace has actually contacted. `campaign_prospects` is
+    // the record rather than `conversations`, because an invitation that has
+    // not been accepted has no conversation at all — and those are most of the
+    // people a rep wants to see.
+    supabase
+      .from("campaign_prospects")
+      .select("id, prospect_id, campaign_id, status, invited_at, accepted_at, replied_at")
+      .eq("workspace_id", session.workspaceId)
+      .not("invited_at", "is", null)
+      .order("invited_at", { ascending: false })
+      .limit(300),
   ]);
 
-  // A pending draft on a conversation nobody flagged still needs a decision, so
-  // the list is the union rather than either one alone.
   const draftByConversation = new Map((drafts ?? []).map((d) => [d.conversation_id, d]));
   const conversationIds = [
     ...new Set([...(held ?? []).map((c) => c.id), ...(drafts ?? []).map((d) => d.conversation_id)]),
   ];
 
-  if (conversationIds.length === 0) {
-    return (
-      <>
-        <PageHeader
-          title="Inbox"
-          lede="Conversations waiting on a person. A reply the agent will not send alone appears here with its draft."
-        />
-        <Empty title="Nothing is waiting for you.">
-          Anything the Reply Agent will not answer on its own — a price, a legal question, anything
-          negative, or simply low confidence — is held here rather than guessed at.
-        </Empty>
-      </>
-    );
-  }
-
   const heldById = new Map((held ?? []).map((c) => [c.id, c]));
-  const { data: conversations } = await supabase
-    .from("conversations")
-    .select("id, prospect_id")
-    .in("id", conversationIds);
-  const { data: prospects } = await supabase
-    .from("prospects")
-    .select("id, first_name, last_name, title, company, linkedin_url")
-    .in("id", (conversations ?? []).map((c) => c.prospect_id));
-  const { data: messages } = await supabase
-    .from("messages")
-    .select("conversation_id, direction, body, created_at")
-    .in("conversation_id", conversationIds)
-    .order("created_at", { ascending: true });
+  const [{ data: conversations }, { data: messages }] = await Promise.all([
+    conversationIds.length
+      ? supabase.from("conversations").select("id, prospect_id").in("id", conversationIds)
+      : Promise.resolve({ data: [] as Array<{ id: string; prospect_id: string }> }),
+    conversationIds.length
+      ? supabase
+          .from("messages")
+          .select("conversation_id, direction, body, created_at")
+          .in("conversation_id", conversationIds)
+          .order("created_at", { ascending: true })
+      : Promise.resolve({ data: [] as Array<{ conversation_id: string; direction: string; body: string; created_at: string }> }),
+  ]);
 
-  const prospectById = new Map((prospects ?? []).map((p) => [p.id, p]));
+  // One fetch for every person named anywhere on the page.
+  const prospectIds = [
+    ...new Set([
+      ...(conversations ?? []).map((c) => c.prospect_id),
+      ...(funnelRows ?? []).map((r) => r.prospect_id),
+    ]),
+  ];
+  const { data: prospects } = prospectIds.length
+    ? await supabase
+        .from("prospects")
+        .select("id, first_name, last_name, title, company, linkedin_url")
+        .in("id", prospectIds)
+    : { data: [] as Array<Record<string, string | null>> };
+
+  const prospectById = new Map((prospects ?? []).map((p) => [p.id as string, p]));
   const prospectByConversation = new Map(
     (conversations ?? []).map((c) => [c.id, prospectById.get(c.prospect_id)]),
   );
+
+  const counts = STAGES.reduce<Record<string, number>>((acc, s) => {
+    acc[s.key] =
+      s.key === "waiting"
+        ? conversationIds.length
+        : (funnelRows ?? []).filter((r) => stageOf(r.status) === s.key).length;
+    return acc;
+  }, {});
+
+  const listed = (funnelRows ?? []).filter((r) => stageOf(r.status) === stage);
 
   return (
     <>
       <PageNotice error={params.error} notice={params.notice} />
       <PageHeader
         title="Inbox"
-        lede={
-          <>
-          {conversationIds.length}{" "}
-          {conversationIds.length === 1 ? "conversation needs" : "conversations need"} your decision.
-          </>
-        }
+        lede="Everyone this workspace has written to, and what happened next. Anything the Reply Agent will not answer on its own waits under “Waiting on you”."
       />
 
-      <div className="grid">
+      {/* One row of stages, each carrying its own count. A stage with nobody in
+          it still shows, because "zero replied" is an answer and a missing tab
+          is not. */}
+      <nav className="cluster" aria-label="Funnel stage">
+        {STAGES.map((s) => (
+          <Link
+            key={s.key}
+            href={s.key === "waiting" ? "/app/inbox" : `/app/inbox?stage=${s.key}`}
+            className={`pill ${s.key === stage ? "accent" : ""}`}
+            aria-current={s.key === stage ? "page" : undefined}
+          >
+            {s.label} · {counts[s.key] ?? 0}
+          </Link>
+        ))}
+      </nav>
+
+      {stage === "waiting" ? (
+        conversationIds.length === 0 ? (
+          <Empty title="Nothing is waiting for you.">
+            Anything the Reply Agent will not answer on its own — a price, a legal question, anything
+            negative, or simply low confidence — is held here rather than guessed at. Use the stages
+            above to see everyone you have written to.
+          </Empty>
+        ) : (
+          <div className="grid">
         {conversationIds.map((conversationId) => {
           const hold = heldById.get(conversationId);
           const draft = draftByConversation.get(conversationId);
@@ -317,7 +399,48 @@ export default async function InboxPage({ searchParams }: { searchParams: Notice
             </article>
           );
         })}
-      </div>
+        </div>
+        )
+      ) : listed.length === 0 ? (
+        <Empty title={`Nobody is at “${STAGES.find((s) => s.key === stage)?.label}” yet.`}>
+          This is history, not a queue — nothing here needs a decision from you.
+        </Empty>
+      ) : (
+        <div className="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Person</th>
+                <th>Company</th>
+                <th>Stage</th>
+                <th>When</th>
+              </tr>
+            </thead>
+            <tbody>
+              {listed.map((row) => {
+                const p = prospectById.get(row.prospect_id);
+                const when = whenOf(row);
+                return (
+                  <tr key={row.id}>
+                    <td>
+                      {p?.linkedin_url ? (
+                        <a href={p.linkedin_url as string} target="_blank" rel="noreferrer">
+                          {nameOf(p as never)}
+                        </a>
+                      ) : (
+                        nameOf(p as never)
+                      )}
+                    </td>
+                    <td className="muted">{(p?.company as string) || "—"}</td>
+                    <td>{STAGES.find((s) => s.key === stageOf(row.status))?.label ?? row.status}</td>
+                    <td className="muted">{when ? new Date(when).toLocaleDateString() : "—"}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </>
   );
 }

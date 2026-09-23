@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MockLinkedInProvider } from "@le/linkedin";
-import { normalizeExclusionValue } from "@le/shared";
+import { LINKEDIN_LIMITS, normalizeExclusionValue } from "@le/shared";
 import { FakeDb } from "./fake-db.js";
 import { runCampaignTick } from "../src/jobs/campaign-tick.js";
 import { runLinkedInAction } from "../src/jobs/linkedin-action.js";
+import { detectAcceptedInvitations, followUpDueAt } from "../src/jobs/acceptance.js";
 import { handleInboundMessage } from "../src/jobs/inbound.js";
 import type { WorkerContext } from "../src/context.js";
 import type { LinkedInActionJob, Queues } from "../src/queues.js";
@@ -1303,5 +1304,76 @@ describe("holds on a conversation", () => {
     const conversation = db.find("conversations", { id: CONVERSATION })!;
     expect(conversation.needs_human).toBe(false);
     expect(conversation.needs_human_kind).toBeNull();
+  });
+});
+
+describe("when a follow-up falls due after an acceptance", () => {
+  it("honours the delay a human configured on a campaign that tests angles", async () => {
+    /*
+     * The bug this replaces: `firstStepDelay` asked for step 1 with
+     * `maybeSingle()`, and a campaign with three angles has four rows for step
+     * 1. PostgREST fails that request, the result is null, and the function
+     * silently returned its default of one day — so the configured delay was
+     * ignored on every campaign this product builds.
+     */
+    const { db, ctx, linkedin } = harness({
+      trialEndsAt: new Date(NOW.getTime() + 30 * 86_400_000).toISOString(),
+    });
+    db.seed("campaign_variants", [
+      {
+        id: "variant-1",
+        workspace_id: WORKSPACE,
+        campaign_id: CAMPAIGN,
+        name: "Angle",
+        angle: "a",
+        pain_point: null,
+        connection_note: "n",
+        enabled: true,
+        pitch_id: null,
+        hook_id: null,
+      },
+    ]);
+    // Four rows for step 1, exactly as a campaign with angles has.
+    db.seed("campaign_steps", [
+      { id: "s1v", campaign_id: CAMPAIGN, variant_id: "variant-1", step_number: 1, delay_days: 3, message: "m" },
+    ]);
+    db.find("campaign_prospects", { id: CP })!.variant_id = "variant-1";
+    // Invited through the real path, as the working acceptance test does:
+    // hand-setting the status skips whatever else the send writes.
+    await runLinkedInAction(ctx, { kind: "invite", workspaceId: WORKSPACE, campaignProspectId: CP });
+    linkedin.relations = [{ providerId: "prov_jane", connectedAt: NOW.toISOString() }];
+
+    await detectAcceptedInvitations(ctx, NOW);
+
+    const after = db.find("campaign_prospects", { id: CP })!;
+    expect(after.status).toBe("accepted");
+    // Three days, as configured — not the one-day default it used to fall back to.
+    const due = new Date(after.next_action_at as string).getTime() - NOW.getTime();
+    expect(Math.round(due / 86_400_000)).toBe(3);
+  });
+});
+
+describe("followUpDueAt", () => {
+  it("never sends in the same second somebody accepted", () => {
+    /*
+     * A message landing the instant an invitation is accepted is a robot
+     * announcing itself, and it is the pattern LinkedIn's own heuristics watch
+     * for — on the account this product exists to protect.
+     */
+    const at = followUpDueAt(NOW, 0, () => 0);
+    expect(at.getTime() - NOW.getTime()).toBe(LINKEDIN_LIMITS.acceptFollowUpMinMs);
+  });
+
+  it("spreads a prompt follow-up rather than sending them all together", () => {
+    // Every acceptance in one hourly poll would otherwise be written to at the
+    // same minute, which is its own pattern.
+    const early = followUpDueAt(NOW, 0, () => 0).getTime();
+    const late = followUpDueAt(NOW, 0, () => 0.999).getTime();
+    expect(late).toBeGreaterThan(early);
+    expect(late - NOW.getTime()).toBeLessThanOrEqual(LINKEDIN_LIMITS.acceptFollowUpMaxMs);
+  });
+
+  it("still honours a delay measured in days", () => {
+    expect(followUpDueAt(NOW, 2).getTime() - NOW.getTime()).toBe(2 * 86_400_000);
   });
 });

@@ -14,6 +14,7 @@ import { runLinkedInAction, RescheduleError } from "./jobs/linkedin-action.js";
 import { handleInboundMessage } from "./jobs/inbound.js";
 import { runStrategyJob } from "./jobs/strategy.js";
 import { runTargetingJob } from "./jobs/targeting.js";
+import { detectAcceptedInvitations } from "./jobs/acceptance.js";
 import { runMaintenance } from "./jobs/maintenance.js";
 import { runDailyDigest } from "./jobs/digest.js";
 import { createServer } from "./server.js";
@@ -111,7 +112,18 @@ const workers = [
     connection,
     concurrency: 4,
   }),
-  new Worker(QUEUE_NAMES.maintenance, () => runMaintenance(ctx, queues), { connection, concurrency: 1 }),
+  // Two schedules share this queue: the nightly sweep, and the hourly
+  // acceptance poll that decides how long a warm prospect waits to be written
+  // to. Running the whole sweep hourly would withdraw invitations and send
+  // digests twelve times a day.
+  new Worker(
+    QUEUE_NAMES.maintenance,
+    (job) =>
+      job.name === "acceptance"
+        ? detectAcceptedInvitations(ctx).then(() => undefined)
+        : runMaintenance(ctx, queues),
+    { connection, concurrency: 1 },
+  ),
   new Worker(QUEUE_NAMES.digest, () => runDailyDigest(ctx), { connection, concurrency: 1 }),
 ];
 

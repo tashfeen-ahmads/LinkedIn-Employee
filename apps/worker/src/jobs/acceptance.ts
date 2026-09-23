@@ -54,7 +54,7 @@ async function detectForAccount(
   const oldest = new Date(now.getTime() - LINKEDIN_LIMITS.withdrawAfterDays * 86_400_000);
   const { data: outstanding } = await db
     .from("campaign_prospects")
-    .select("id, campaign_id, prospect_id, status")
+    .select("id, campaign_id, prospect_id, status, variant_id")
     .in("campaign_id", campaignIds)
     .eq("status", "invited")
     .gte("invited_at", oldest.toISOString())
@@ -80,7 +80,7 @@ async function detectForAccount(
     if (!providerId || !connected.has(providerId)) continue;
     if (!canTransition(row.status as CampaignProspectStatus, "accepted")) continue;
 
-    const delayDays = await firstStepDelay(ctx, row.campaign_id);
+    const delayDays = await firstStepDelay(ctx, row.campaign_id, row.variant_id ?? null);
     await db
       .from("campaign_prospects")
       .update({
@@ -88,7 +88,7 @@ async function detectForAccount(
         accepted_at: now.toISOString(),
         // What makes the follow-up scheduler pick them up. Without it the
         // prospect sits in `accepted` and is still never messaged.
-        next_action_at: new Date(now.getTime() + delayDays * 86_400_000).toISOString(),
+        next_action_at: followUpDueAt(now, delayDays).toISOString(),
       })
       .eq("id", row.id);
 
@@ -103,13 +103,59 @@ async function detectForAccount(
   return count;
 }
 
-/** How long after accepting the first follow-up is due. */
-async function firstStepDelay(ctx: WorkerContext, campaignId: string): Promise<number> {
+/**
+ * When the first follow-up falls due.
+ *
+ * A delay of zero does not mean "this second". A message arriving in the same
+ * second as the acceptance is a robot announcing itself — it is the pattern
+ * LinkedIn's own heuristics watch for, on the account this product exists to
+ * protect. So zero means soon and human: twenty to ninety minutes, jittered,
+ * with the working-hours check still applied on top by the limiter.
+ */
+export function followUpDueAt(now: Date, delayDays: number, random = Math.random): Date {
+  if (delayDays > 0) return new Date(now.getTime() + delayDays * 86_400_000);
+  const { acceptFollowUpMinMs, acceptFollowUpMaxMs } = LINKEDIN_LIMITS;
+  const spread = acceptFollowUpMaxMs - acceptFollowUpMinMs;
+  return new Date(now.getTime() + acceptFollowUpMinMs + Math.floor(random() * spread));
+}
+
+/**
+ * How long after accepting the first follow-up is due, for this person.
+ *
+ * Their angle's step, falling back to the campaign-wide one — rule 28, where an
+ * angle owns its sequence end to end.
+ *
+ * It used to ask for `step_number = 1` with `maybeSingle()`, and a campaign
+ * with three angles has four rows for step 1. PostgREST fails that request, the
+ * result is null, and the function silently returned its default of one day —
+ * so the delay a human configured was ignored on every campaign that tests
+ * angles, which is every campaign this product builds. The first live
+ * acceptance was scheduled a day out when the campaign said three, and nothing
+ * anywhere said so.
+ */
+async function firstStepDelay(
+  ctx: WorkerContext,
+  campaignId: string,
+  variantId: string | null,
+): Promise<number> {
+  if (variantId) {
+    const { data: own } = await ctx.db
+      .from("campaign_steps")
+      .select("delay_days")
+      .eq("campaign_id", campaignId)
+      .eq("variant_id", variantId)
+      .eq("step_number", 1)
+      .limit(1);
+    const delay = own?.[0]?.delay_days;
+    if (typeof delay === "number") return delay;
+  }
+
   const { data } = await ctx.db
     .from("campaign_steps")
     .select("delay_days")
     .eq("campaign_id", campaignId)
+    .is("variant_id", null)
     .eq("step_number", 1)
-    .maybeSingle();
-  return data?.delay_days ?? 1;
+    .limit(1);
+  return data?.[0]?.delay_days ?? 1;
 }
