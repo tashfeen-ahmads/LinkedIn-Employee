@@ -175,17 +175,20 @@ const MUTATIONS = [
   },
   {
     id: "gate/pricing",
-    rule: "A pricing question always reaches a human",
+    // Not "always" any more: rule 41 lets a workspace choose to have the agent
+    // answer. What must hold is that a *supervised* workspace still gets the
+    // hold it asked for — the setting has to mean something in both positions.
+    rule: "A pricing question reaches a human in a supervised workspace",
     file: "packages/agents/src/reply.ts",
-    from: "if (rules.handOffOnPricing && classification.mentionsPricing) {",
+    from: "if (!autonomous && rules.handOffOnPricing && classification.mentionsPricing) {",
     to: "if (false) {",
     pkg: "@le/agents",
   },
   {
     id: "gate/legal",
-    rule: "A legal or security question always reaches a human",
+    rule: "A legal or security question reaches a human in a supervised workspace",
     file: "packages/agents/src/reply.ts",
-    from: "if (rules.handOffOnLegal && classification.mentionsLegalOrCompliance) {",
+    from: "if (!autonomous && rules.handOffOnLegal && classification.mentionsLegalOrCompliance) {",
     to: "if (false) {",
     pkg: "@le/agents",
   },
