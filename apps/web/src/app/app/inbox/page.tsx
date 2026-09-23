@@ -3,7 +3,7 @@ import { revalidatePath } from "next/cache";
 import { Empty, PageHeader } from "@/components/page";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
-import { callWorker, errorQuery } from "@/lib/worker";
+import { callWorker, errorQuery, noticeQuery } from "@/lib/worker";
 import { redirect } from "next/navigation";
 import { PageNotice, type NoticeParams } from "@/components/page-notice";
 
@@ -51,6 +51,7 @@ async function approveDraft(formData: FormData) {
   }
 
   revalidatePath("/app/inbox");
+  redirect(noticeQuery("/app/inbox", "Approved and sending."));
 }
 
 /** A reply a person wrote themselves, for a conversation with no draft. */
@@ -109,6 +110,7 @@ async function dismissDraft(formData: FormData) {
   await clearConversationHold(conversationId, session.workspaceId, "reply");
 
   revalidatePath("/app/inbox");
+  redirect(noticeQuery("/app/inbox", "Dismissed."));
 }
 
 async function markBooked(formData: FormData) {
@@ -117,6 +119,7 @@ async function markBooked(formData: FormData) {
   const session = await requireSession();
   await clearConversationHold(conversationId, session.workspaceId, "booking");
   revalidatePath("/app/inbox");
+  redirect(noticeQuery("/app/inbox", "Marked as booked."));
 }
 
 /**

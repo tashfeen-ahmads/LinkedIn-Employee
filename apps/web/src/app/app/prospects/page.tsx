@@ -2,7 +2,7 @@ import { revalidatePath } from "next/cache";
 import { Empty, PageHeader } from "@/components/page";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
-import { callWorker, errorQuery } from "@/lib/worker";
+import { callWorker, errorQuery, noticeQuery } from "@/lib/worker";
 import { isPublicProfileUrl } from "@le/shared";
 import { redirect } from "next/navigation";
 import { PageNotice } from "@/components/page-notice";
@@ -31,6 +31,7 @@ async function eraseProspect(formData: FormData) {
     redirect(errorQuery("/app/prospects", `This person was not erased: ${erased.error}`));
   }
   revalidatePath("/app/prospects");
+  redirect(noticeQuery("/app/prospects", "Saved."));
 }
 
 interface Signal {

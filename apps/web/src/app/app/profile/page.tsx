@@ -6,6 +6,8 @@ import { callWorker, errorQuery, noticeQuery } from "@/lib/worker";
 import { checkCtaUrl, LINKEDIN_LIMITS } from "@le/shared";
 import { cannotSend, describeRepair, type RefreshResult, type RepairNotice } from "../team/repair";
 import { PageNotice } from "@/components/page-notice";
+import { TeamSection } from "./team-section";
+import { BillingSection } from "./billing-section";
 import { PageHeader, Section } from "@/components/page";
 
 /**
@@ -478,6 +480,19 @@ export default async function ProfilePage({
           </>
         )}
       </section>
+      {/*
+        Team and billing live here rather than on tabs of their own.
+        Somebody managing a workspace does all three in one sitting — who is on
+        it, what it costs, and how the agent behaves — and three screens meant
+        three places to find and three saves to remember. The anchors keep
+        every existing link working.
+      */}
+      <div id="team">
+        <TeamSection searchParams={searchParams} />
+      </div>
+      <div id="billing">
+        <BillingSection searchParams={searchParams} />
+      </div>
     </>
   );
 }

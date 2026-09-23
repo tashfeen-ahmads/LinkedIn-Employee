@@ -1,4 +1,7 @@
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { noticeQuery } from "@/lib/worker";
+import { PageNotice } from "@/components/page-notice";
 import { PageHeader } from "@/components/page";
 import { KNOWLEDGE_BUDGET_CHARS, selectKnowledge } from "@le/agents";
 import { requireSession } from "@/lib/workspace";
@@ -44,6 +47,9 @@ async function saveDocument(formData: FormData) {
   }
 
   revalidatePath("/app/knowledge");
+  // Said out loud. It saved before this too — it just never told anybody, which
+  // from the other side of the screen is the same as a button that does nothing.
+  redirect(noticeQuery("/app/knowledge", id ? "Page updated." : "Page added."));
 }
 
 async function deleteDocument(formData: FormData) {
@@ -56,9 +62,15 @@ async function deleteDocument(formData: FormData) {
   await supabase.from("knowledge_documents").delete().eq("id", id).eq("workspace_id", session.workspaceId);
 
   revalidatePath("/app/knowledge");
+  redirect(noticeQuery("/app/knowledge", "Page deleted."));
 }
 
-export default async function KnowledgePage() {
+export default async function KnowledgePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string; notice?: string }>;
+}) {
+  const params = await searchParams;
   const session = await requireSession();
   const supabase = await createClient();
 
@@ -78,6 +90,7 @@ export default async function KnowledgePage() {
 
   return (
     <>
+      <PageNotice error={params.error} notice={params.notice} />
       <PageHeader
         eyebrow="Pipeline"
         title="Knowledge base"

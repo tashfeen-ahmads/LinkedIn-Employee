@@ -59,6 +59,7 @@ const STORAGE_KEY = "le.nav.collapsed";
 export function AppNav({ groups }: { groups: NavGroup[] }) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState<string[]>([]);
+  const [query, setQuery] = useState("");
 
   // Read after mount, never during render: the server has no localStorage, and
   // a first paint that disagrees with it is a hydration mismatch.
@@ -86,13 +87,65 @@ export function AppNav({ groups }: { groups: NavGroup[] }) {
     });
   };
 
+  /*
+   * Filtering, not a search index.
+   *
+   * There are about twenty destinations in this product, and the thing a
+   * person actually wants is to type "pitch" and land on it rather than
+   * remember which of five headings it sits under. Matching the group's name
+   * too means "settings" finds everything under Settings, which is how
+   * somebody who does not yet know the vocabulary looks for a thing.
+   */
+  const needle = query.trim().toLowerCase();
+  const shown = needle
+    ? groups
+        .map((group) => ({
+          ...group,
+          items: group.items.filter(
+            (item) =>
+              item.label.toLowerCase().includes(needle) ||
+              group.label.toLowerCase().includes(needle),
+          ),
+        }))
+        .filter((group) => group.items.length > 0)
+    : groups;
+
   return (
     <nav className="nav" aria-label="Sections">
-      {groups.map((group) => {
+      <div className="nav-search">
+        <label className="sr-only" htmlFor="nav-search">
+          Search the menu
+        </label>
+        <input
+          id="nav-search"
+          type="search"
+          value={query}
+          placeholder="Search…"
+          onChange={(event) => setQuery(event.target.value)}
+          // Escape clears rather than blurs: the nav is a place you pass
+          // through, and leaving a stale filter behind hides most of it.
+          onKeyDown={(event) => {
+            if (event.key === "Escape") setQuery("");
+          }}
+        />
+      </div>
+
+      {needle && shown.length === 0 ? (
+        <p className="small muted nav-empty">Nothing matches “{query.trim()}”.</p>
+      ) : null}
+
+      {shown.map((group) => {
         const holdsCurrentPage = group.items.some((item) => isCurrent(pathname, item.href));
         const wants = group.items.some((item) => item.state);
         const open =
-          group.alwaysOpen || holdsCurrentPage || wants || !collapsed.includes(group.label);
+          // A filtered group is always open: finding a match and then hiding
+          // it behind a fold somebody collapsed last week is worse than no
+          // search at all.
+          Boolean(needle) ||
+          group.alwaysOpen ||
+          holdsCurrentPage ||
+          wants ||
+          !collapsed.includes(group.label);
         // A group folded away still has to report what is waiting inside it,
         // or collapsing the sidebar is how somebody stops seeing their inbox.
         const hidden = group.items.reduce((sum, item) => sum + (item.count ?? 0), 0);

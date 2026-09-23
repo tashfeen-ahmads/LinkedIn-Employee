@@ -12,6 +12,8 @@ import { readSetupState } from "@/lib/setup-state";
 import { readFunnelData } from "@/lib/funnel-data";
 import { StrategyStatus } from "@/components/strategy-status";
 
+import { ResultsSection } from "./analytics-section";
+import { SpendSection } from "./usage-section";
 /**
  * The morning screen: what to do, and whether what was done is working.
  *
@@ -170,6 +172,19 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
           </Empty>
         )}
       </Section>
+
+      {/*
+        Results and spend, on the screen somebody already lands on.
+        They were two more tabs carrying two more readings of numbers this page
+        already had, and "is this working" should not require knowing which of
+        three screens to open. The anchors keep the old links working.
+      */}
+      <div id="results">
+        <ResultsSection />
+      </div>
+      <div id="spend">
+        <SpendSection />
+      </div>
     </>
   );
 }

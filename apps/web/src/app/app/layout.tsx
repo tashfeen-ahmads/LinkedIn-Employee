@@ -59,26 +59,14 @@ function navGroups(waiting: number, marks: NavMarks): NavGroup[] {
       ],
     },
     {
-      // One analytics destination. Reporting and the dashboard's KPI block were
-      // two readings of the same numbers, and two readings drift.
-      label: "Analytics",
-      items: [
-        { href: "/app/analytics", label: "Results" },
-        { href: "/app/usage", label: "Agent spend" },
-      ],
-    },
-    {
       label: "Settings",
       items: [
-        { href: "/app/profile", label: "Your profile", ...next("/app/profile", "Your profile") },
-        {
-          href: "/app/team",
-          label: "Team",
-          ...next("/app/team", "Team"),
-        },
+        // Profile carries the rep's own details, the LinkedIn connection, sending
+        // hours, the team and the subscription. Somebody managing a workspace
+        // does all of that in one sitting, and it used to be three tabs.
+        { href: "/app/profile", label: "Profile & team", ...next("/app/profile", "Profile & team") },
         { href: "/app/cta", label: "Calls to action" },
         { href: "/app/exclusions", label: "Do not contact" },
-        { href: "/app/billing", label: "Billing" },
       ],
     },
     {

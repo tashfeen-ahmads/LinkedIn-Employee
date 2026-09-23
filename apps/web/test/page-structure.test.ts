@@ -49,6 +49,13 @@ describe("application page structure", () => {
   it("gives every page exactly one PageHeader", () => {
     for (const page of PAGES) {
       const source = readFileSync(page, "utf8");
+      /*
+       * A page that only redirects has no header because it has no content.
+       * Team and billing are sections of the profile screen now, and these
+       * routes exist so that every link, bookmark and email that pointed at
+       * them still lands somewhere sensible.
+       */
+      if (/^\s*redirect\(/m.test(source) && !source.includes("return (")) continue;
       const used = source.match(/<PageHeader\b/g) ?? [];
       // More than one is allowed only where a page returns early — a loading
       // or empty branch and the real one — because only one ever renders. Zero

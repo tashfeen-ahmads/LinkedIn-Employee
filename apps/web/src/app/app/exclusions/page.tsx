@@ -3,6 +3,9 @@ import { PageHeader } from "@/components/page";
 import { createClient } from "@/lib/supabase-server";
 import { normalizeExclusionValue, type ExclusionKind } from "@le/shared";
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { noticeQuery } from "@/lib/worker";
+import { PageNotice } from "@/components/page-notice";
 
 const KINDS: ReadonlyArray<{ value: ExclusionKind; label: string }> = [
   { value: "company", label: "Company" },
@@ -45,6 +48,7 @@ async function addExclusion(formData: FormData) {
   );
 
   revalidatePath("/app/exclusions");
+  redirect(noticeQuery("/app/exclusions", "Saved."));
 }
 
 async function removeExclusion(formData: FormData) {
@@ -57,6 +61,7 @@ async function removeExclusion(formData: FormData) {
   await supabase.from("exclusions").delete().eq("id", id).eq("workspace_id", session.workspaceId);
 
   revalidatePath("/app/exclusions");
+  redirect(noticeQuery("/app/exclusions", "Saved."));
 }
 
 /**
@@ -64,7 +69,12 @@ async function removeExclusion(formData: FormData) {
  * a name was skipped — and admins and managers change it, because removing an
  * entry is what lets a message reach an off-limits account.
  */
-export default async function ExclusionsPage() {
+export default async function ExclusionsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string; notice?: string }>;
+}) {
+  const params = await searchParams;
   const session = await requireSession();
   const supabase = await createClient();
 
@@ -81,6 +91,7 @@ export default async function ExclusionsPage() {
 
   return (
     <>
+      <PageNotice error={params.error} notice={params.notice} />
       <PageHeader
         eyebrow="Settings"
         title="Do not contact"

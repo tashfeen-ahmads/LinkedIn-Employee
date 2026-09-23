@@ -832,6 +832,19 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   color: var(--text-muted);
 }
 .notice strong { color: var(--text); }
+
+/* A confirmation fades out on its own rather than sitting in the corner for
+   the rest of the session. `forwards` so it stays gone once the animation is
+   done, and the whole thing is skipped for anybody who asked for less motion —
+   for them it simply disappears when the timer removes it. */
+.notice-transient { animation: notice-fade 4s ease-in forwards; }
+@keyframes notice-fade {
+  0%, 70% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .notice-transient { animation: none; }
+}
 .notice.accent  { border-left-color: var(--accent);   background: var(--accent-soft);   color: var(--text); }
 .notice.warning { border-left-color: var(--warning);  background: var(--warning-soft);  color: var(--text); }
 .notice.danger  { border-left-color: var(--danger);   background: var(--danger-soft);   color: var(--text); }
@@ -1722,3 +1735,18 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
 @media (max-width: 640px) {
   .meeting-row { grid-template-columns: 1fr; gap: var(--space-2); }
 }
+
+/* The sidebar's own search. Full width so it reads as part of the nav rather
+   than a control floating above it. */
+.nav-search { padding: 0 0 var(--space-3); }
+.nav-search input {
+  width: 100%;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.875rem;
+}
+.nav-search input::placeholder { color: var(--text-muted); }
+.nav-empty { padding: 0 var(--space-3) var(--space-3); }
