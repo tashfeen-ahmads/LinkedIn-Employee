@@ -7,6 +7,7 @@ import {
   CLICKS_ARE_INVISIBLE,
   CTA_DEFINITIONS,
   effectiveCta,
+  FIRST_STEP_TIMING_LABEL,
   LINKEDIN_LIMITS,
   PACING_LOOP,
   countFunnel,
@@ -817,8 +818,13 @@ export default async function CampaignPage({
           {(steps ?? []).map((step) => (
             <label className="field" key={step.id}>
               <span>
-                Follow-up {step.step_number} · {step.delay_days}{" "}
-                {step.delay_days === 1 ? "day" : "days"} after the previous message
+                Follow-up {step.step_number} ·{" "}
+                {/* Step 1 has no previous message — what precedes it is the
+                    acceptance, and it is sent inside the hour (rule 43). Saying
+                    "0 days after the previous message" described neither. */}
+                {step.step_number === 1
+                  ? FIRST_STEP_TIMING_LABEL
+                  : `${step.delay_days} ${step.delay_days === 1 ? "day" : "days"} after the previous message`}
               </span>
               <textarea name={`step-${step.id}`} rows={3} defaultValue={step.message} />
             </label>

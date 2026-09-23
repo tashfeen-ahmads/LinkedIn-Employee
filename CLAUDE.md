@@ -895,6 +895,114 @@ tests that were verified by deliberately breaking the code.
     `opted_out` row — those are outcomes, and restarting one writes to a person
     who has already been dealt with, or who asked us to stop.
 
+    The one schedule it does pull earlier is a first message an older rule
+    pushed days out (rule 43). There is no rep's judgement to collapse there —
+    step 1 has exactly one correct answer — and it stays narrow: `accepted`,
+    never messaged, and only beyond the window the rule allows.
+
+43. **The first message after an acceptance is not on a schedule anybody sets.**
+    Each campaign step waits `delay_days` before sending, measured from the
+    message before it — which works from step 2 on and is meaningless for step
+    1, because there is no message before it. What precedes step 1 is the
+    acceptance, which is the event the whole campaign exists to produce.
+
+    Left configurable, the Targeting Agent wrote `3` into step 1 of every
+    campaign this deployment has ever built. A stranger accepted a connection
+    request, heard nothing for three days, and then received an opener about a
+    conversation they had forgotten starting. Three accepted invitations were
+    sitting in exactly that state while the funnel reported no messages and no
+    replies — which reads from every screen as an agent doing nothing, and is
+    what "there must not be a 0% rate on connections accepted" means.
+
+    So `FIRST_STEP_DELAY_DAYS` is a product rule, enforced in code rather than
+    asked for in a prompt — `callStructured` casts rather than parses, so the
+    prompt saying "follow-up 1 goes out the moment the connection is accepted"
+    had been true in the prompt and false in the database for months. It is
+    discarded **at the write as well as at the read**: a campaign screen reading
+    "3 days" for something that happens within the hour is a second reading of
+    the rule, and the screen's is the one somebody believes. `acceptFollowUpMin`
+    /`MaxMs` remain the window — twenty to ninety minutes, jittered, with the
+    working-hours check on top. Steps 2 and beyond keep their configured delays
+    in full: those are measured from a message that really was sent.
+
+44. **A job id stops a second tick; it must never stop every tick.** The pacing
+    loop runs every five minutes and gives each unit of work a stable id, which
+    is what stops it queueing an invitation the previous run already queued
+    (rule 21). BullMQ implements that by accepting an `add()` whose id is taken
+    and **silently returning the existing job** — correct while that job is
+    waiting, and catastrophic once it has finished.
+
+    Completed jobs are kept a day and failed ones a week. So an invitation that
+    ran and came back without sending — any of the silent `return`s in
+    `runLinkedInAction`, a provider refusal, a throw past its retries — leaves
+    its prospect at `queued` with the id held by a corpse, and every tick after
+    that adds nothing and reports the same cheerful zero. Seven real people sat
+    in that state through a full working day while the loop, the queue counts
+    and the campaign screen all looked healthy. Rule 21 put the counts on a
+    screen, which told somebody a number was wrong; it did not put anybody back
+    on the conveyor belt, and repair must never wait for that (rule 8).
+
+    `enqueueOnce` asks **before** adding, because `add()` gives no sign it
+    declined — a job created this second and one from an hour ago come back
+    indistinguishable, and telling those apart is the whole job. A terminal
+    state with the row still waiting is the evidence: the work is over and the
+    prospect still needs doing, so the id is stale, and the job is removed and
+    re-added. `waiting`, `delayed` and `active` are left exactly alone — that is
+    the dedupe working. A state that cannot be **read** is also left alone:
+    unknowable is not stale, and acting on it is how one unit of work becomes
+    two messages to the same person. It cannot double-send in any case, because
+    a job that really did send stamped `last_contacted_at`, which the never-twice
+    check reads immediately before the call (rule 24).
+
+    The three outcomes are reported separately. `queued 7` while seven jobs sat
+    finished in Redis is the sentence that cost the day.
+
+45. **The loop's record has to survive the next quiet run.** `worker_heartbeats`
+    keeps one row per name, upserted — the right shape for "is the loop alive",
+    and useless for "what did it do today". The loop declines most of its runs
+    correctly, so by evening the row says `outside_working_hours` whatever
+    happened at eleven, and a run that threw at two is erased by the healthy
+    decline at five past. That is not hypothetical: the day above was
+    investigated after the only record of why had already been overwritten by a
+    run that correctly did nothing.
+
+    So a run that **sends** stamps `PACING_LAST_ACTION` and a run that **throws**
+    stamps `PACING_LAST_FAILURE`, and no quiet run writes either. "Nothing since
+    11:04" and "nothing ever" are different situations; so are "failing every
+    five minutes" and "fine". The single row reported each pair identically.
+
+46. **A check about the webhook asks whether deliveries arrive, not whether a
+    secret is set.** Failing closed is right — a forged delivery writes a
+    stranger's words into a rep's inbox under a real name (rule 8) — but the
+    refusal was said to nobody. Unipile called this deployment carrying no
+    signature header at all, the worker answered 401 exactly as it should, and
+    the only trace was a heartbeat row no screen read. A prospect's reply was
+    live on LinkedIn and absent from the product's own inbox while
+    `/app/system` reported the webhook healthy, because the check asked whether
+    `UNIPILE_WEBHOOK_SECRET` was configured and it was. A check that passes
+    because it could not look is rule 17, and it costs the same week every time.
+
+    `webhook-deliveries` reads what the endpoint itself recorded, and tells the
+    two refusals apart by whether a signature arrived: **no header** is the
+    webhook configured without one, **a header that does not verify** is the
+    wrong secret on one side. Different people, different things to go and do,
+    and telling somebody to re-copy a secret that is already correct is its own
+    wasted afternoon. Never called at all reports `waiting`, never `ok` — a
+    campaign that has had no reply yet and a webhook nobody ever pointed here
+    look identical from that row.
+
+47. **A wrapper that only carries an anchor must not change the page's
+    rhythm.** A page is a flex column and its gap falls between its direct
+    children, so wrapping two sections in `<div id="team">` makes the pair one
+    child: spacing either side of them and none between them. Every section
+    merged into Profile and into the overview ran straight into the next, which
+    is precisely what somebody reads as "some have a lot of padding, some have
+    none".
+
+    `PageGroup` is the fix, in the frame rather than as a margin on each page
+    that merged something (rule 34), and it takes the page's own `--app-gap` so
+    a group is transparent to the rhythm instead of inventing a second one.
+
 ## Conventions
 
 - Agent output is validated against a zod schema before it touches the

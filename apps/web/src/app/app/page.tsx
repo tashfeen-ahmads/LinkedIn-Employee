@@ -4,7 +4,7 @@ import { requireSession } from "@/lib/workspace";
 import { SetupChecklist } from "@/components/setup-checklist";
 import { NextStep } from "@/components/next-step";
 import { Kpi } from "@/components/charts";
-import { PageHeader, Section, Empty } from "@/components/page";
+import { PageHeader, PageGroup, Section, Empty } from "@/components/page";
 import { createClient } from "@/lib/supabase-server";
 import { PageNotice, type NoticeParams } from "@/components/page-notice";
 import { readStrategyState } from "@/lib/strategy-state";
@@ -179,12 +179,12 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
         already had, and "is this working" should not require knowing which of
         three screens to open. The anchors keep the old links working.
       */}
-      <div id="results">
+      <PageGroup id="results">
         <ResultsSection />
-      </div>
-      <div id="spend">
+      </PageGroup>
+      <PageGroup id="spend">
         <SpendSection />
-      </div>
+      </PageGroup>
     </>
   );
 }

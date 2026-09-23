@@ -52,6 +52,38 @@ export const LINKEDIN_LIMITS = {
 } as const;
 
 /**
+ * The first message after somebody accepts is not on a schedule anybody sets.
+ *
+ * A campaign's steps each wait `delay_days` before sending, measured from the
+ * message before them — which works for step 2 onward and is meaningless for
+ * step 1, because there is no message before it. What comes before step 1 is
+ * the acceptance, and the acceptance is the event the whole campaign was built
+ * to produce.
+ *
+ * Left configurable, the Targeting Agent wrote `3` into step 1 of every
+ * campaign this deployment has ever built. So a stranger accepted a connection
+ * request, heard nothing for three days, and then received an opener about a
+ * conversation they had forgotten starting. Three accepted invitations sat in
+ * exactly that state while the funnel reported no messages sent and no replies,
+ * which reads from every screen as an agent doing nothing.
+ *
+ * It is a product rule for the same reason the caps are: it is the difference
+ * between an outreach that works and one that quietly does not, and it is not
+ * improved by anyone turning it up. `acceptFollowUpMinMs`/`MaxMs` already say
+ * what the window is — twenty to ninety minutes, jittered, with the
+ * working-hours check on top. This is the sentence that says step 1 may not
+ * opt out of it.
+ *
+ * Steps 2 and beyond keep their configured delays in full: those are measured
+ * from a message that really was sent, and a rep pacing their own follow-ups is
+ * exactly the judgement this product should take from them.
+ */
+export const FIRST_STEP_DELAY_DAYS = 0;
+
+/** What the screens say step 1 waits for, so no screen invents its own wording. */
+export const FIRST_STEP_TIMING_LABEL = "as soon as they accept";
+
+/**
  * The name the pacing loop stamps its heartbeat under.
  *
  * One string, because the loop writes it and three screens read it, and a
@@ -59,6 +91,28 @@ export const LINKEDIN_LIMITS = {
  * exist.
  */
 export const PACING_LOOP = "campaign-tick";
+
+/**
+ * Two more stamps the pacing loop writes, because one row cannot answer the
+ * question anybody actually has.
+ *
+ * `worker_heartbeats` keeps one row per name, upserted — the right shape for
+ * "is the loop alive", and useless for "what did it do today". The loop runs
+ * every five minutes and declines most of them correctly, so by the evening the
+ * single row says `outside_working_hours` and nothing else, whatever happened
+ * at eleven in the morning. A run that threw at two o'clock is erased by the
+ * healthy decline at five past. That is not a hypothetical: a full working day
+ * went by with seven prospects queued and nothing sent, and the only record of
+ * why had already been overwritten by a run that correctly did nothing.
+ *
+ * A quiet run never writes either of these, which is the whole point. The last
+ * run that did something and the last run that broke both survive every quiet
+ * run after them, so the two questions worth asking — "when did it last send
+ * anything" and "when did it last fail, and how" — have answers on the screen
+ * rather than in a log on a host the person asking cannot reach.
+ */
+export const PACING_LAST_ACTION = "campaign-tick:last-action";
+export const PACING_LAST_FAILURE = "campaign-tick:last-failure";
 
 /**
  * The name the worker stamps the moment it starts.
@@ -93,6 +147,19 @@ export const PACING_STALE_MS = 15 * 60_000;
  * running and finding nothing to do.
  */
 export const MAINTENANCE_BEAT = "maintenance";
+
+/**
+ * The name the inbound message webhook stamps on every delivery it refuses.
+ *
+ * Failing closed is right — a forged delivery writes a stranger's words into a
+ * rep's inbox — but the refusal was said to nobody. Unipile called this
+ * deployment carrying no signature header at all, the worker answered 401 as it
+ * should, and the only trace was this row, which no screen read. A real
+ * conversation was live on LinkedIn and absent from the product's own inbox,
+ * with the product reporting a healthy webhook because the *secret* was
+ * configured: a check passing because it could not look (rule 17).
+ */
+export const MESSAGE_WEBHOOK_BEAT = "webhook:messages";
 
 /**
  * How long maintenance may go unheard before a screen says so.

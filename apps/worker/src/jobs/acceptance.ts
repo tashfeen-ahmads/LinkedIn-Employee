@@ -1,4 +1,9 @@
-import { LINKEDIN_LIMITS, canTransition, type CampaignProspectStatus } from "@le/shared";
+import {
+  FIRST_STEP_DELAY_DAYS,
+  LINKEDIN_LIMITS,
+  canTransition,
+  type CampaignProspectStatus,
+} from "@le/shared";
 import type { WorkerContext } from "../context.js";
 import { recordEvent } from "../context.js";
 
@@ -80,7 +85,11 @@ async function detectForAccount(
     if (!providerId || !connected.has(providerId)) continue;
     if (!canTransition(row.status as CampaignProspectStatus, "accepted")) continue;
 
-    const delayDays = await firstStepDelay(ctx, row.campaign_id, row.variant_id ?? null);
+    // Not read off the campaign. Step 1 has no configurable delay, because
+    // what precedes it is the acceptance rather than a message (rule 43) — and
+    // left configurable it was written as three days into every campaign this
+    // deployment built.
+    const delayDays = FIRST_STEP_DELAY_DAYS;
     await db
       .from("campaign_prospects")
       .update({
@@ -117,45 +126,4 @@ export function followUpDueAt(now: Date, delayDays: number, random = Math.random
   const { acceptFollowUpMinMs, acceptFollowUpMaxMs } = LINKEDIN_LIMITS;
   const spread = acceptFollowUpMaxMs - acceptFollowUpMinMs;
   return new Date(now.getTime() + acceptFollowUpMinMs + Math.floor(random() * spread));
-}
-
-/**
- * How long after accepting the first follow-up is due, for this person.
- *
- * Their angle's step, falling back to the campaign-wide one — rule 28, where an
- * angle owns its sequence end to end.
- *
- * It used to ask for `step_number = 1` with `maybeSingle()`, and a campaign
- * with three angles has four rows for step 1. PostgREST fails that request, the
- * result is null, and the function silently returned its default of one day —
- * so the delay a human configured was ignored on every campaign that tests
- * angles, which is every campaign this product builds. The first live
- * acceptance was scheduled a day out when the campaign said three, and nothing
- * anywhere said so.
- */
-async function firstStepDelay(
-  ctx: WorkerContext,
-  campaignId: string,
-  variantId: string | null,
-): Promise<number> {
-  if (variantId) {
-    const { data: own } = await ctx.db
-      .from("campaign_steps")
-      .select("delay_days")
-      .eq("campaign_id", campaignId)
-      .eq("variant_id", variantId)
-      .eq("step_number", 1)
-      .limit(1);
-    const delay = own?.[0]?.delay_days;
-    if (typeof delay === "number") return delay;
-  }
-
-  const { data } = await ctx.db
-    .from("campaign_steps")
-    .select("delay_days")
-    .eq("campaign_id", campaignId)
-    .is("variant_id", null)
-    .eq("step_number", 1)
-    .limit(1);
-  return data?.[0]?.delay_days ?? 1;
 }

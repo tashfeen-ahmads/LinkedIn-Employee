@@ -9,7 +9,7 @@ import { PageNotice } from "@/components/page-notice";
 import { SubmitButton } from "@/components/submit-button";
 import { TeamSection } from "./team-section";
 import { BillingSection } from "./billing-section";
-import { PageHeader, Section } from "@/components/page";
+import { PageHeader, PageGroup, Section } from "@/components/page";
 
 /**
  * You, and the account you send from.
@@ -588,12 +588,12 @@ export default async function ProfilePage({
         three places to find and three saves to remember. The anchors keep
         every existing link working.
       */}
-      <div id="team">
+      <PageGroup id="team">
         <TeamSection searchParams={searchParams} />
-      </div>
-      <div id="billing">
+      </PageGroup>
+      <PageGroup id="billing">
         <BillingSection searchParams={searchParams} />
-      </div>
+      </PageGroup>
     </>
   );
 }

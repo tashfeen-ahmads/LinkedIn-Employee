@@ -441,6 +441,24 @@ p  { margin: 0; }
 .app .section-header-text { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
 .app .section-header-action { display: flex; align-items: center; gap: var(--space-2); margin-left: auto; }
 
+/*
+ * Several sections under one anchor, keeping the page's own rhythm.
+ *
+ * The page is a flex column and its gap falls between its direct children.
+ * Wrap two sections in a plain `<div id="team">` — which is all an anchor
+ * needs to be — and that div becomes the single child: the gap now falls
+ * either side of the pair, and inside it there is none at all. Every section
+ * merged into Profile and into the overview ran straight into the next one,
+ * which is exactly what somebody reads as "some have a lot of padding, some
+ * have none".
+ *
+ * The frame owns spacing (rule 34), so the fix belongs here rather than in a
+ * margin on each page that merged something. `--app-gap` is the page's own
+ * value, so a group is transparent to the rhythm instead of inventing a
+ * second one.
+ */
+.app .page-group { display: flex; flex-direction: column; gap: var(--app-gap); }
+
 /* An empty list says why, and what to do. Never the word "None". */
 .app .empty {
   display: flex;
@@ -875,7 +893,11 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   /* Gap and padding both scale with the viewport rather than stepping once at
      820px. On a phone the old fixed 1.5rem gutter spent a tenth of the screen
      on empty margin; on a wide monitor the same value left sections touching. */
-  gap: clamp(var(--space-5), 3vw, var(--space-6));
+  /* Named, because a group nested inside the page has to use the same value —
+     two numbers for one rhythm is how the merged sections came to sit tighter
+     than everything around them. */
+  --app-gap: clamp(var(--space-5), 3vw, var(--space-6));
+  gap: var(--app-gap);
   padding: clamp(var(--space-4), 3vw, var(--space-6))
            clamp(var(--space-3), 4vw, var(--space-5))
            var(--space-8);

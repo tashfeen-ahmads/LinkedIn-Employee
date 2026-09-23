@@ -197,6 +197,67 @@ describe("system check", () => {
     expect(check(report, "worker-boot").fix).toMatch(/REDIS_URL/);
   });
 
+  it("says a webhook Unipile is calling unsigned is a webhook nobody is receiving", async () => {
+    /*
+     * The failure this was written for. Unipile was calling with no signature
+     * header, the worker refused every delivery as it should, and the only
+     * check on the screen asked whether the *secret* was configured — which it
+     * was. So a live conversation on LinkedIn was absent from the product's own
+     * inbox with every light green.
+     */
+    const { db, ctx } = harness();
+    db.seed("worker_heartbeats", [
+      {
+        name: "webhook:messages",
+        beat_at: "2026-09-23T09:57:55.094Z",
+        detail: { ok: false, reason: "Invalid Unipile webhook signature", hadSignature: false, bytes: 2308 },
+      },
+    ]);
+
+    const report = await run(ctx);
+
+    expect(check(report, "webhook-deliveries").state).toBe("blocked");
+    // The header, not the secret: those are two different things to go and do,
+    // and telling somebody to re-copy a secret that is already correct is an
+    // afternoon.
+    expect(check(report, "webhook-deliveries").fix).toMatch(/unipile-signature/);
+    // And the secret check still reads ok, which is why this row had to exist.
+    expect(check(report, "webhook-secret").state).toBe("ok");
+  });
+
+  it("names the secret when a signature arrived and did not verify", async () => {
+    const { db, ctx } = harness();
+    db.seed("worker_heartbeats", [
+      {
+        name: "webhook:messages",
+        beat_at: "2026-09-23T09:57:55.094Z",
+        detail: { ok: false, reason: "Invalid Unipile webhook signature", hadSignature: true },
+      },
+    ]);
+
+    expect(check(await run(ctx), "webhook-deliveries").fix).toMatch(/UNIPILE_WEBHOOK_SECRET/);
+  });
+
+  it("does not report a webhook that has never been called as working", async () => {
+    // `waiting`, never `ok`. A campaign that has had no reply yet and a webhook
+    // that was never pointed here look identical from this row, and calling the
+    // second one healthy is how a week goes by.
+    const { ctx } = harness();
+
+    const state = check(await run(ctx), "webhook-deliveries").state;
+    expect(state).toBe("waiting");
+    expect(state).not.toBe("ok");
+  });
+
+  it("reports an accepted delivery as working", async () => {
+    const { db, ctx } = harness();
+    db.seed("worker_heartbeats", [
+      { name: "webhook:messages", beat_at: "2026-09-23T09:57:55.094Z", detail: { ok: true, messages: 1 } },
+    ]);
+
+    expect(check(await run(ctx), "webhook-deliveries").state).toBe("ok");
+  });
+
   it("does not call a worker down when it has only never said it started", async () => {
     // Which is also what a deployment looks like before the build carrying the
     // stamp has shipped. "unknown", not "blocked": a check that asserts more

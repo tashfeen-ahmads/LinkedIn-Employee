@@ -1,4 +1,6 @@
+import { LINKEDIN_LIMITS } from "@le/shared";
 import type { Db } from "@le/db";
+import { followUpDueAt } from "./acceptance.js";
 
 /**
  * Puts the sequence back on the rails for anybody who fell off it.
@@ -23,6 +25,16 @@ import type { Db } from "@le/db";
  * this would collapse every configured delay to now. And it never invents a
  * step: a prospect whose sequence has genuinely ended is left alone, because
  * the end of a sequence is an answer.
+ *
+ * There is exactly one schedule it does move earlier, and it is the case the
+ * docstring above already names: a first message that an older rule pushed days
+ * out. Step 1 has no configurable delay (rule 43) — the acceptance is what it
+ * waits for — so there is no rep's judgement to collapse here and exactly one
+ * correct answer. Three real prospects accepted a connection request and were
+ * holding schedules up to three days out, written by code that has since been
+ * corrected; without this they would have waited them out in full. It is
+ * deliberately narrow: `accepted`, never messaged, and only when the stored
+ * time is beyond the window the rule allows.
  */
 export async function unstickProspects(db: Db, now: Date = new Date(), limit = 200): Promise<number> {
   // The statuses that mean "mid-sequence, waiting for the next message". A
@@ -44,7 +56,21 @@ export async function unstickProspects(db: Db, now: Date = new Date(), limit = 2
   for (const row of rows ?? []) {
     const due = row.next_action_at ? Date.parse(row.next_action_at) : null;
     const stuck = due === null || (Number.isFinite(due) && (due as number) < overdueBefore);
-    if (!stuck) continue;
+
+    if (!stuck) {
+      if (!staleAcceptWindow(row, due)) continue;
+      await db
+        .from("campaign_prospects")
+        // Into the window the rule gives it, counted from now rather than from
+        // the acceptance: the acceptance may be days ago, and a time in the
+        // past would land this message in the same second the tick notices it,
+        // which is the robot-announcing-itself pattern the window exists to
+        // avoid.
+        .update({ next_action_at: followUpDueAt(now, 0).toISOString() })
+        .eq("id", row.id);
+      repaired += 1;
+      continue;
+    }
 
     const nextNumber = (row.last_step_sent ?? 0) + 1;
     const step = await stepFor(db, row.campaign_id, row.variant_id ?? null, nextNumber);
@@ -89,4 +115,25 @@ async function stepFor(
     .eq("step_number", stepNumber)
     .limit(1);
   return data?.[0] ?? null;
+}
+
+/**
+ * Whether this row's first message is scheduled by a rule the product no longer
+ * has.
+ *
+ * Narrow on purpose. It has to be somebody who accepted and has never been
+ * written to, and their stored time has to sit beyond the longest wait the
+ * acceptance window permits — so a prospect correctly waiting out the twenty to
+ * ninety minutes is never touched, and neither is anybody mid-sequence, whose
+ * delays are the rep's to set.
+ */
+function staleAcceptWindow(
+  row: { status: string; last_step_sent: number | null; accepted_at: string | null },
+  due: number | null,
+): boolean {
+  if (row.status !== "accepted" || (row.last_step_sent ?? 0) !== 0) return false;
+  if (due === null || !Number.isFinite(due)) return false;
+  const acceptedAt = row.accepted_at ? Date.parse(row.accepted_at) : NaN;
+  if (!Number.isFinite(acceptedAt)) return false;
+  return due > acceptedAt + LINKEDIN_LIMITS.acceptFollowUpMaxMs;
 }

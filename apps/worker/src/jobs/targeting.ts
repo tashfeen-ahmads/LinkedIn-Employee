@@ -3,6 +3,7 @@ import type { ProspectCandidate } from "@le/shared";
 import {
   BusinessProfileSchema,
   CustomerProfileSchema,
+  FIRST_STEP_DELAY_DAYS,
   LINKEDIN_LIMITS,
   assignVariants,
   isPublicProfileUrl,
@@ -438,7 +439,7 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
       campaign_id: campaign.id,
       variant_id: null,
       step_number: index + 1,
-      delay_days: step.delayDays,
+      delay_days: stepDelay(index + 1, step.delayDays),
       message: step.message,
     })),
     ...plannedVariants.flatMap((variant) => {
@@ -449,7 +450,7 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
         campaign_id: campaign.id,
         variant_id: variantId,
         step_number: index + 1,
-        delay_days: step.delayDays,
+        delay_days: stepDelay(index + 1, step.delayDays),
         message: step.message,
       }));
     }),
@@ -969,4 +970,20 @@ async function verifyProfiles(
   }
 
   return { verified, unverifiable };
+}
+
+/**
+ * The delay stored against a step.
+ *
+ * Step 1 waits for the acceptance and nothing else (rule 43), so whatever the
+ * model wrote for it is discarded rather than stored. Discarded at the write
+ * rather than only honoured at the read, because a campaign screen showing
+ * "3 days" for something that happens in an hour is a second reading of the
+ * rule, and the screen's is the one somebody believes.
+ *
+ * Every later step keeps its number in full: those are measured from a message
+ * that really was sent, and pacing a follow-up is the rep's call.
+ */
+function stepDelay(stepNumber: number, written: number): number {
+  return stepNumber === 1 ? FIRST_STEP_DELAY_DAYS : written;
 }

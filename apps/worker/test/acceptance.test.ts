@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { LINKEDIN_LIMITS } from "@le/shared";
 import { MockLinkedInProvider } from "@le/linkedin";
 import { FakeDb } from "./fake-db.js";
 import { detectAcceptedInvitations } from "../src/jobs/acceptance.js";
@@ -61,7 +62,28 @@ describe("detectAcceptedInvitations", () => {
     await detectAcceptedInvitations(ctx, NOW);
 
     const cp = db.find("campaign_prospects", { id: CP })!;
-    expect(cp.next_action_at).toBe(new Date(NOW.getTime() + 2 * 86_400_000).toISOString());
+    const due = Date.parse(cp.next_action_at as string);
+    expect(due).toBeGreaterThanOrEqual(NOW.getTime() + LINKEDIN_LIMITS.acceptFollowUpMinMs);
+    expect(due).toBeLessThanOrEqual(NOW.getTime() + LINKEDIN_LIMITS.acceptFollowUpMaxMs);
+  });
+
+  it("ignores a step-1 delay somebody configured, because step 1 has none", async () => {
+    // Rule 43. The campaign in this harness carries a two-day delay on step 1,
+    // and it is what the Targeting Agent wrote into every live campaign — a
+    // stranger who accepted and then heard nothing for days. What precedes
+    // step 1 is the acceptance, not a message, so there is no delay to serve.
+    //
+    // Asserted against a campaign that really does hold a non-zero step-1
+    // delay: reading it off a campaign with no steps at all would pass on an
+    // empty table and prove nothing.
+    const { db, ctx, linkedin } = harness();
+    expect(db.rows("campaign_steps").find((s) => s.step_number === 1)?.delay_days).toBe(2);
+    linkedin.relations = [{ providerId: "prov_jane", connectedAt: NOW.toISOString() }];
+
+    await detectAcceptedInvitations(ctx, NOW);
+
+    const due = Date.parse(db.find("campaign_prospects", { id: CP })!.next_action_at as string);
+    expect(due).toBeLessThan(NOW.getTime() + 86_400_000);
   });
 
   it("leaves someone who has not accepted alone", async () => {

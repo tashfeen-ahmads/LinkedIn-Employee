@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { FakeDb } from "./fake-db.js";
+import { LINKEDIN_LIMITS } from "@le/shared";
 import { unstickProspects } from "../src/jobs/unstick.js";
 
 const NOW = new Date("2026-09-23T12:00:00Z");
@@ -97,5 +98,77 @@ describe("putting a stuck prospect back on the rails", () => {
     );
     expect(await unstickProspects(fake.asDb(), NOW)).toBe(0);
     expect(fake.find("campaign_prospects", { id: "cp1" })?.next_action_at).toBeNull();
+  });
+});
+
+describe("a first message left on a rule the product no longer has", () => {
+  /*
+   * Rule 43. Step 1 has no configurable delay — what precedes it is the
+   * acceptance — but the Targeting Agent wrote three days into every campaign
+   * this deployment built before that was enforced. Three people accepted a
+   * connection request and were holding schedules days out, written by code
+   * since corrected; without this they wait them out in full while the funnel
+   * reads zero messages sent.
+   *
+   * This is the one schedule the job moves earlier, and it is narrow on
+   * purpose: accepted, never messaged, and only beyond the window the rule
+   * allows.
+   */
+  const accepted = (over: Record<string, unknown>) => ({
+    id: "cp1",
+    campaign_id: CAMPAIGN,
+    status: "accepted",
+    last_step_sent: 0,
+    accepted_at: NOW.toISOString(),
+    ...over,
+  });
+
+  it("pulls a three-day wait back into the acceptance window", async () => {
+    const fake = db(
+      [accepted({ next_action_at: new Date(NOW.getTime() + 3 * 86_400_000).toISOString() })],
+      [{ ...STEP2, step_number: 1, delay_days: 3 }],
+    );
+
+    expect(await unstickProspects(fake.asDb(), NOW)).toBe(1);
+
+    const due = Date.parse(fake.find("campaign_prospects", { id: "cp1" })!.next_action_at as string);
+    expect(due).toBeGreaterThanOrEqual(NOW.getTime() + LINKEDIN_LIMITS.acceptFollowUpMinMs);
+    expect(due).toBeLessThanOrEqual(NOW.getTime() + LINKEDIN_LIMITS.acceptFollowUpMaxMs);
+  });
+
+  it("leaves somebody already inside the window alone", async () => {
+    // Forty minutes out is the rule working. Re-arming it every hour would
+    // push the message further away each time it ran.
+    const due = new Date(NOW.getTime() + 40 * 60_000).toISOString();
+    const fake = db([accepted({ next_action_at: due })], [{ ...STEP2, step_number: 1 }]);
+
+    expect(await unstickProspects(fake.asDb(), NOW)).toBe(0);
+    expect(fake.find("campaign_prospects", { id: "cp1" })?.next_action_at).toBe(due);
+  });
+
+  it("leaves a later step's configured delay alone", async () => {
+    // Somebody who has had message 1 is waiting out a delay a rep set, and
+    // that is exactly the judgement this product should take from them.
+    const due = new Date(NOW.getTime() + 7 * 86_400_000).toISOString();
+    const fake = db(
+      [accepted({ status: "messaged_1", last_step_sent: 1, next_action_at: due })],
+      [STEP2],
+    );
+
+    expect(await unstickProspects(fake.asDb(), NOW)).toBe(0);
+    expect(fake.find("campaign_prospects", { id: "cp1" })?.next_action_at).toBe(due);
+  });
+
+  it("leaves a row that never recorded when it was accepted", async () => {
+    // Without accepted_at there is nothing to measure the stored time against,
+    // and guessing would move a schedule on no evidence.
+    const due = new Date(NOW.getTime() + 3 * 86_400_000).toISOString();
+    const fake = db(
+      [accepted({ accepted_at: null, next_action_at: due })],
+      [{ ...STEP2, step_number: 1 }],
+    );
+
+    expect(await unstickProspects(fake.asDb(), NOW)).toBe(0);
+    expect(fake.find("campaign_prospects", { id: "cp1" })?.next_action_at).toBe(due);
   });
 });

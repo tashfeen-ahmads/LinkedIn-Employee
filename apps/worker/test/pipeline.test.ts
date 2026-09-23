@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MockLinkedInProvider } from "@le/linkedin";
-import { LINKEDIN_LIMITS, normalizeExclusionValue } from "@le/shared";
+import { LINKEDIN_LIMITS, PACING_LAST_ACTION, PACING_LOOP, normalizeExclusionValue } from "@le/shared";
 import { FakeDb } from "./fake-db.js";
 import { runCampaignTick } from "../src/jobs/campaign-tick.js";
 import { runLinkedInAction } from "../src/jobs/linkedin-action.js";
@@ -378,10 +378,31 @@ describe("campaign pipeline", () => {
     await runCampaignTick(db.asDb(), queues, NOW);
     await runCampaignTick(db.asDb(), queues, new Date(NOW.getTime() + 300_000));
 
-    // Only the most recent run answers the question this exists for, and a row
-    // every five minutes for ever answers it no better.
-    expect(db.rows("worker_heartbeats")).toHaveLength(1);
-    expect(db.rows("worker_heartbeats")[0]?.beat_at).toBe(new Date(NOW.getTime() + 300_000).toISOString());
+    // One row per name. The question "is the loop alive" is answered by the
+    // most recent run and no better by a row every five minutes for ever.
+    const live = db.rows("worker_heartbeats").filter((h) => h.name === PACING_LOOP);
+    expect(live).toHaveLength(1);
+    expect(live[0]?.beat_at).toBe(new Date(NOW.getTime() + 300_000).toISOString());
+  });
+
+  it("keeps the last productive run where a quiet one cannot erase it", async () => {
+    // The row above is upserted, so by the evening it says "outside working
+    // hours" whatever happened at eleven. "Nothing since 11:04" and "nothing
+    // ever" are different situations and it reported both as the decline it
+    // happened to be making. So a run that sent somebody stamps a second name
+    // that no quiet run writes.
+    const { db, queues } = harness();
+
+    expect(await runCampaignTick(db.asDb(), queues, NOW)).toBeGreaterThan(0);
+    const stamped = db.rows("worker_heartbeats").find((h) => h.name === PACING_LAST_ACTION);
+    expect(stamped?.beat_at).toBe(NOW.toISOString());
+
+    // Now a run with nothing to do. It must not move or clear that stamp.
+    db.rows("campaigns").forEach((row) => (row.status = "draft"));
+    await runCampaignTick(db.asDb(), queues, new Date(NOW.getTime() + 300_000));
+
+    const after = db.rows("worker_heartbeats").find((h) => h.name === PACING_LAST_ACTION);
+    expect(after?.beat_at).toBe(NOW.toISOString());
   });
 
   /**
@@ -1308,13 +1329,19 @@ describe("holds on a conversation", () => {
 });
 
 describe("when a follow-up falls due after an acceptance", () => {
-  it("honours the delay a human configured on a campaign that tests angles", async () => {
+  it("writes within the hour on a campaign that tests angles, whatever its steps say", async () => {
     /*
-     * The bug this replaces: `firstStepDelay` asked for step 1 with
-     * `maybeSingle()`, and a campaign with three angles has four rows for step
-     * 1. PostgREST fails that request, the result is null, and the function
-     * silently returned its default of one day — so the configured delay was
-     * ignored on every campaign this product builds.
+     * Rule 43, on the shape that used to break this path.
+     *
+     * Step 1 has no configurable delay: what precedes it is the acceptance, not
+     * a message. Left configurable it was written as three days into every
+     * campaign this deployment built, and three people who accepted a
+     * connection request heard nothing while the funnel read zero.
+     *
+     * Asserted here rather than on a plain campaign because a campaign with
+     * angles has several rows for step 1, which is the shape that defeated the
+     * lookup this replaces — it asked with `maybeSingle()`, PostgREST failed
+     * the request, and the silent fallback sent everybody a day late.
      */
     const { db, ctx, linkedin } = harness({
       trialEndsAt: new Date(NOW.getTime() + 30 * 86_400_000).toISOString(),
@@ -1347,9 +1374,11 @@ describe("when a follow-up falls due after an acceptance", () => {
 
     const after = db.find("campaign_prospects", { id: CP })!;
     expect(after.status).toBe("accepted");
-    // Three days, as configured — not the one-day default it used to fall back to.
+    // The angle's step 1 above asks for three days and is ignored, which is
+    // the point: the window is the product's, not the campaign's.
     const due = new Date(after.next_action_at as string).getTime() - NOW.getTime();
-    expect(Math.round(due / 86_400_000)).toBe(3);
+    expect(due).toBeGreaterThanOrEqual(LINKEDIN_LIMITS.acceptFollowUpMinMs);
+    expect(due).toBeLessThanOrEqual(LINKEDIN_LIMITS.acceptFollowUpMaxMs);
   });
 });
 

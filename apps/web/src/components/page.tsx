@@ -111,3 +111,25 @@ export function Empty({
     </div>
   );
 }
+
+/**
+ * Several sections under one anchor, keeping the page's rhythm.
+ *
+ * A page is a flex column and its gap falls between its direct children, so
+ * wrapping two sections in a plain `<div id="team">` — which is all an anchor
+ * has to be — makes the pair one child: spacing either side of them, and none
+ * between them. Every section merged into Profile and into the overview ran
+ * into the next one, which reads as a page where some things have padding and
+ * some have none.
+ *
+ * A component rather than a class somebody remembers, for the same reason
+ * `Section` is one: the frame owns spacing, and a convention nothing enforces
+ * drifts back within a month.
+ */
+export function PageGroup({ id, children }: { id?: string; children: ReactNode }) {
+  return (
+    <div className="page-group" id={id}>
+      {children}
+    </div>
+  );
+}

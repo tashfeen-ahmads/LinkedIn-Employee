@@ -1,6 +1,7 @@
 import {
   BOOT_BEAT,
   MAINTENANCE_BEAT,
+  MESSAGE_WEBHOOK_BEAT,
   MAINTENANCE_STALE_MS,
   PACING_LOOP,
   PACING_STALE_MS,
@@ -272,7 +273,7 @@ export async function runDiagnostics(
   const { data: beats } = await db
     .from("worker_heartbeats")
     .select("name, beat_at, detail")
-    .in("name", [PACING_LOOP, BOOT_BEAT, MAINTENANCE_BEAT]);
+    .in("name", [PACING_LOOP, BOOT_BEAT, MAINTENANCE_BEAT, MESSAGE_WEBHOOK_BEAT]);
   const beat = (beats ?? []).find((b) => b.name === PACING_LOOP);
   const boot = (beats ?? []).find((b) => b.name === BOOT_BEAT);
   const bootDetail =
@@ -302,6 +303,53 @@ export async function runDiagnostics(
         : boot
           ? undefined
           : "Check the worker process, and that the latest build actually deployed.",
+  });
+
+  /*
+   * Whether replies are actually arriving — not whether we configured a secret.
+   *
+   * The check above this one asks whether `UNIPILE_WEBHOOK_SECRET` is set, and
+   * it answered `ok` throughout the failure it was written to catch. Unipile
+   * was calling this deployment, carrying no signature header at all, and the
+   * worker was rejecting all of it: a prospect replied, the conversation was
+   * live on LinkedIn, and the product's own inbox was empty. A check that
+   * passes because it could not look sends somebody to investigate the wrong
+   * stage, which is rule 17 exactly.
+   *
+   * So this one reads what the endpoint itself recorded. The two refusals need
+   * different people to do different things, and they are told apart by whether
+   * a signature arrived at all: no header is the webhook configured without
+   * one, and a header that does not verify is the wrong secret on one side.
+   */
+  const webhook = (beats ?? []).find((b) => b.name === MESSAGE_WEBHOOK_BEAT);
+  const webhookDetail =
+    webhook?.detail && typeof webhook.detail === "object"
+      ? (webhook.detail as Record<string, unknown>)
+      : {};
+  const rejected = Boolean(webhook) && webhookDetail.ok === false;
+  const unsigned = rejected && webhookDetail.hadSignature === false;
+  add({
+    key: "webhook-deliveries",
+    stage: STAGES.replies,
+    label: "Replies from prospects are getting in",
+    // Never delivered is `waiting`, never `ok`: a campaign that has had no
+    // reply yet and a webhook that has never been pointed here look identical
+    // from this row, and reporting the second as working is how a week goes.
+    state: !webhook ? "waiting" : rejected ? "blocked" : "ok",
+    detail: !webhook
+      ? "Unipile has not called this deployment yet. Until it does, a reply from a prospect reaches LinkedIn and not this product."
+      : rejected
+        ? unsigned
+          ? `Unipile called at ${webhook.beat_at} with no signature header, so the delivery was refused. Replies are reaching LinkedIn and not this inbox.`
+          : `Unipile called at ${webhook.beat_at} and the signature did not verify (${String(webhookDetail.reason ?? "no reason recorded")}).`
+        : `Last delivery accepted ${webhook.beat_at}.`,
+    fix: !webhook
+      ? "Point Unipile's messaging webhook at this worker's /webhooks/unipile/messages."
+      : unsigned
+        ? "In Unipile's webhook settings, add the signature header (`unipile-signature`) with the same value as UNIPILE_WEBHOOK_SECRET. The endpoint refuses an unsigned delivery on purpose and will keep doing so."
+        : rejected
+          ? "Make UNIPILE_WEBHOOK_SECRET and the value in Unipile's webhook settings match."
+          : undefined,
   });
 
   add({

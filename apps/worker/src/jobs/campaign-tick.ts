@@ -1,8 +1,15 @@
-import { canTransition, LINKEDIN_LIMITS, PACING_LOOP, type CampaignProspectStatus } from "@le/shared";
+import {
+  canTransition,
+  LINKEDIN_LIMITS,
+  PACING_LAST_ACTION,
+  PACING_LAST_FAILURE,
+  PACING_LOOP,
+  type CampaignProspectStatus,
+} from "@le/shared";
 import { entitlementFor } from "@le/billing";
 import { checkAction, dailyInviteCap, nextGapMs } from "@le/linkedin";
 import type { Db } from "@le/db";
-import { jobId } from "../queues.js";
+import { enqueueOnce, jobId } from "../queues.js";
 import type { Queues } from "../queues.js";
 import { resetCountersIfNeeded, toUsage, type AccountRecord, ACCOUNT_USAGE_COLUMNS } from "../accounts.js";
 import { recordBeat } from "../heartbeat.js";
@@ -29,6 +36,11 @@ export async function runCampaignTick(db: Db, queues: Queues, now: Date = new Da
     const reason = (err as { message?: string })?.message ?? "unknown";
     console.error("campaign tick failed", { reason });
     await beat(db, now, { failed: reason });
+    // And again under a name no successful run ever writes. The stamp above is
+    // overwritten by the next quiet decline five minutes from now, so on its
+    // own it reports a loop that has been failing all day as a loop that is
+    // fine — which is the same disease it was written to cure.
+    await recordBeat(db, PACING_LAST_FAILURE, { failed: reason }, now);
     // Rethrown so the queue retries and the error tracker sees it. The point of
     // the stamp above is that it is written before this line, not instead of it.
     throw err;
@@ -109,6 +121,13 @@ async function tick(db: Db, queues: Queues, now: Date): Promise<number> {
     // only place that shows.
     queue: await jobCounts(queues),
   });
+  // A run that sent somebody, kept where a quiet run cannot erase it. "Nothing
+  // has gone out since 11:04 this morning" and "nothing has ever gone out" are
+  // different situations, and the single upserted row reports both as the
+  // decline it happens to be making right now.
+  if (enqueued > 0) {
+    await recordBeat(db, PACING_LAST_ACTION, { enqueued, campaigns: campaigns.length, decisions }, now);
+  }
   return enqueued;
 }
 
@@ -192,18 +211,33 @@ async function enqueueInvites(
   if (!queued?.length) return { enqueued: 0, reason: "nobody left to invite" };
 
   let delay = decision.allowed ? 0 : decision.retryAfterMs;
+  let added = 0;
+  let revived = 0;
+  let pending = 0;
   for (const row of queued) {
     delay += nextGapMs();
-    await queues.linkedinAction.add(
+    // The id is what stops a second tick queueing the same invitation five
+    // minutes later — and what strands a prospect for ever when the job that
+    // holds it has already finished without sending. enqueueOnce keeps the
+    // first behaviour and refuses the second.
+    const outcome = await enqueueOnce(
+      queues.linkedinAction,
       "invite",
       { kind: "invite", workspaceId: campaign.workspace_id, campaignProspectId: row.id },
-      // The id is what stops a second tick queueing the same invitation five
-      // minutes later. It also means a job already holding it is never
-      // replaced, which is why the queue counts go into the heartbeat.
       { delay, jobId: jobId("invite", row.id) },
     );
+    if (outcome === "added") added++;
+    else if (outcome === "revived") revived++;
+    else pending++;
   }
-  return { enqueued: queued.length, reason: `queued ${queued.length} invitation(s)` };
+
+  // Said in full, because these three numbers are three different situations
+  // and they used to be reported as one. `queued 7` while seven jobs sat
+  // finished in Redis is the sentence that cost a working day.
+  const parts = [`queued ${added} invitation(s)`];
+  if (revived) parts.push(`re-queued ${revived} stranded`);
+  if (pending) parts.push(`${pending} already waiting`);
+  return { enqueued: added + revived, reason: parts.join(", ") };
 }
 
 async function enqueueFollowUps(
@@ -235,7 +269,11 @@ async function enqueueFollowUps(
     const target = `messaged_${nextStep}` as CampaignProspectStatus;
     if (!canTransition(row.status as CampaignProspectStatus, target)) continue;
     delay += nextGapMs();
-    await queues.linkedinAction.add(
+    // Same hazard as an invitation, and worse: a follow-up job that finished
+    // without sending leaves somebody who accepted a connection request waiting
+    // on a message that no later tick will ever queue.
+    const outcome = await enqueueOnce(
+      queues.linkedinAction,
       "follow_up",
       {
         kind: "follow_up",
@@ -245,7 +283,7 @@ async function enqueueFollowUps(
       },
       { delay, jobId: jobId("follow_up", row.id, nextStep) },
     );
-    count++;
+    if (outcome !== "already_pending") count++;
   }
   return count;
 }

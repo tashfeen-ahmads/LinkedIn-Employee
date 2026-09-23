@@ -338,7 +338,14 @@ describe("runTargetingJob", () => {
       .filter((s) => !s.variant_id)
       .sort((a, b) => Number(a.step_number) - Number(b.step_number));
     expect(steps.map((s) => s.step_number)).toEqual([1, 2]);
-    expect(steps[0]?.delay_days).toBe(2);
+    // Step 1 is stored with no delay whatever the model wrote for it (rule 43):
+    // it waits for the acceptance, and a campaign screen reading "2 days" for
+    // something that happens within the hour is a second reading of the rule.
+    expect(steps[0]?.delay_days).toBe(0);
+    // Every later step keeps the number it was given. Clamping those too would
+    // collapse a fortnight's pacing into an afternoon.
+    // 4 is what the fixture above asks for, unchanged.
+    expect(steps[1]?.delay_days).toBe(4);
   });
 
   it("caps the daily invite rate at the product's own maximum", async () => {

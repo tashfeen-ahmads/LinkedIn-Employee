@@ -201,3 +201,108 @@ export async function scheduleRepeatables(queues: Queues): Promise<void> {
     { name: "digest", data: {} },
   );
 }
+
+/** What `enqueueOnce` did, so the caller can say it on a screen. */
+export type EnqueueOutcome = "added" | "already_pending" | "revived";
+
+/**
+ * Adds a job under a stable id, and refuses to let a finished job hold that id
+ * for ever.
+ *
+ * The id is deliberate: it is what stops the five-minute pacing loop queueing
+ * an invitation the previous tick already queued (rule 21). BullMQ implements
+ * that by accepting an `add()` whose id is taken and **silently returning the
+ * existing job** instead of adding anything. That is exactly the behaviour we
+ * want while the job is still waiting to run.
+ *
+ * It is exactly the wrong behaviour once the job has finished. Completed jobs
+ * are kept for a day and failed ones for a week, so an invitation that ran and
+ * came back without sending — any of the half-dozen silent `return`s in
+ * `runLinkedInAction`, a provider refusal, a throw after the retries were spent
+ * — leaves its prospect sitting at `queued` with its id held by a corpse. Every
+ * tick after that adds nothing, reports the cheerful zero it has always
+ * reported, and that person is never written to again. Seven real prospects sat
+ * in that state through a full working day while the loop, the queue counts and
+ * the campaign screen all looked healthy. Reporting the counts told us a number
+ * was wrong; it did not put anybody back on the conveyor belt, and repair must
+ * never wait for somebody to notice (rule 8).
+ *
+ * So a terminal state is treated as the evidence it is: the unit of work is
+ * over and the row still needs doing, therefore the id is stale. The job is
+ * removed and re-added. Nothing else is touched — a `waiting`, `delayed` or
+ * `active` job is the dedupe working, and is left exactly alone.
+ *
+ * This cannot double-send. The caller only passes rows that are still waiting,
+ * and a job that really did send has already stamped `last_contacted_at`, which
+ * the never-twice check reads immediately before the call and closes the
+ * prospect on (rule 24).
+ */
+/** The two methods this needs off a BullMQ job, and nothing else. */
+interface HeldJob {
+  getState: () => Promise<string>;
+  remove: () => Promise<unknown>;
+}
+
+export async function enqueueOnce<D>(
+  queue: Queue<D>,
+  name: string,
+  data: D,
+  opts: JobsOptions & { jobId: string },
+): Promise<EnqueueOutcome> {
+  // BullMQ correlates the job name with the data shape through a conditional
+  // type that it cannot resolve inside a generic function. The job payloads
+  // here carry no name field, so the correlation is vacuous; narrowed to the
+  // one call this needs rather than loosened at every call site, which would
+  // stop `data` being checked against the queue at all.
+  const add = (queue as unknown as { add: (n: string, d: D, o: JobsOptions) => Promise<unknown> }).add.bind(
+    queue,
+  );
+  // Asked before adding, not after. `add()` on a taken id returns the existing
+  // job with no indication that it did nothing, so a job we just created and a
+  // job from an hour ago come back indistinguishable — and the whole point here
+  // is to tell those two apart.
+  //
+  // Guarded because the test double is a plain object with an `add`. A
+  // diagnostic that throws would take down the one loop that has to keep
+  // running.
+  const q = queue as unknown as { getJob?: (id: string) => Promise<unknown> };
+  if (typeof q.getJob !== "function") {
+    await add(name, data, opts);
+    return "added";
+  }
+
+  let found: unknown;
+  try {
+    found = await q.getJob(opts.jobId);
+  } catch {
+    // Unknowable is not the same as absent. Add anyway: BullMQ will decline it
+    // if the id is in fact taken, which is the behaviour we would have chosen.
+    await add(name, data, opts);
+    return "added";
+  }
+
+  const held = found as Partial<HeldJob> | null | undefined;
+  if (typeof held?.getState !== "function" || typeof held.remove !== "function") {
+    await add(name, data, opts);
+    return "added";
+  }
+
+  let state: string;
+  try {
+    state = await held.getState();
+  } catch {
+    // Leave it. The next tick asks again, and re-adding on a state we could not
+    // read is how one job becomes two.
+    return "already_pending";
+  }
+  if (state !== "completed" && state !== "failed") return "already_pending";
+
+  try {
+    await held.remove();
+  } catch {
+    // Locked, or already gone. Either way not ours to force.
+    return "already_pending";
+  }
+  await add(name, data, opts);
+  return "revived";
+}
