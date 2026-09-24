@@ -20,3 +20,4 @@ export {
 } from "./prompts/reply.js";
 export { PITCH_PROMPT_VERSION } from "./prompts/pitch.js";
 export { HOOK_PROMPT_VERSION } from "./prompts/hook.js";
+export * from "./agent-test.js";

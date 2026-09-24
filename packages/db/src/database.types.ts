@@ -274,6 +274,8 @@ export type CampaignRow = {
   launched_at: string | null;
   created_at: string;
   updated_at: string;
+  /** The agent this belongs to. Null means workspace-wide, which is what every row was before agents existed. */
+  agent_id: string | null;
 };
 
 export type CampaignStepRow = {
@@ -514,6 +516,8 @@ export type KnowledgeDocumentRow = {
   content: string;
   source: string | null;
   created_at: string;
+  /** The agent this belongs to. Null means workspace-wide, which is what every row was before agents existed. */
+  agent_id: string | null;
 };
 
 export type EventRow = {
@@ -595,6 +599,8 @@ export type PitchRow = {
   approved_by: string | null;
   created_at: string;
   updated_at: string;
+  /** The agent this belongs to. Null means workspace-wide, which is what every row was before agents existed. */
+  agent_id: string | null;
 };
 
 /**
@@ -619,6 +625,48 @@ export type HookRow = {
   is_default: boolean;
   created_at: string;
   updated_at: string;
+  /** The agent this belongs to. Null means workspace-wide, which is what every row was before agents existed. */
+  agent_id: string | null;
+};
+
+export type AgentRow = {
+  id: string;
+  workspace_id: string;
+  name: string;
+  /** Validated against MODEL_PRICING: a model nobody can price cannot be run. */
+  model: string | null;
+  system_prompt: string | null;
+  /** Who the message appears to come from, which is not always a full name. */
+  from_name: string | null;
+  /** AgentPlaybook. Shape enforced in code, never by a check constraint. */
+  playbook: Json;
+  /** CustomField[] — the merge fields this workspace fills from its own data. */
+  custom_fields: Json;
+  is_default: boolean;
+  /** Retired rather than deleted: a campaign that ran on it must still say so. */
+  archived_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AgentTestRunRow = {
+  id: string;
+  workspace_id: string;
+  agent_id: string;
+  /** The prospect it ran against — a real row, or one typed into the form. */
+  subject: Json;
+  invite_note: string | null;
+  first_message: string | null;
+  sample_question: string | null;
+  sample_reply: string | null;
+  fields_used: Json;
+  /** The useful list: fields the copy asked for and the data could not fill. */
+  fields_missing: Json;
+  model: string | null;
+  prompt_version: string | null;
+  error: string | null;
+  created_by: string | null;
+  created_at: string;
 };
 
 export type SupportTicketRow = {
@@ -688,6 +736,8 @@ export type Database = {
       ctas: Table<CtaRow>;
       pitches: Table<PitchRow>;
       hooks: Table<HookRow>;
+      agents: Table<AgentRow>;
+      agent_test_runs: Table<AgentTestRunRow>;
       support_tickets: Table<SupportTicketRow>;
       worker_heartbeats: Table<WorkerHeartbeatRow>;
     };

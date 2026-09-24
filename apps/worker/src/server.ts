@@ -18,6 +18,7 @@ import { jobId } from "./queues.js";
 import type { Queues } from "./queues.js";
 import { queueReachable } from "./queues.js";
 import { sendOneNow } from "./jobs/send-one.js";
+import { runAgentTest } from "./jobs/agent-test.js";
 import { writeWorkspacePitch } from "./jobs/write-pitch.js";
 import { writeWorkspaceHooks } from "./jobs/write-hooks.js";
 import type IORedis from "ioredis";
@@ -30,6 +31,26 @@ import { eraseProspect, exportWorkspace } from "./jobs/retention.js";
 import { inviteEmail } from "@le/email";
 import { trySend } from "./email.js";
 import { recordEvent } from "./context.js";
+
+const AgentTestRequestSchema = z.object({
+  workspaceId: z.string().uuid(),
+  userId: z.string().uuid(),
+  agentId: z.string().uuid(),
+  prospectId: z.string().uuid().optional(),
+  // Typed into a form when no real prospect is picked, so every field is
+  // capped: this goes straight into a prompt.
+  subject: z
+    .object({
+      firstName: z.string().max(80),
+      lastName: z.string().max(80).nullish(),
+      company: z.string().max(120).nullish(),
+      title: z.string().max(160).nullish(),
+      headline: z.string().max(300).nullish(),
+      location: z.string().max(120).nullish(),
+      linkedinUrl: z.string().max(300).nullish(),
+    })
+    .optional(),
+});
 
 const WritePitchRequest = z.object({
   workspaceId: z.string().uuid(),
@@ -433,6 +454,24 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
     }
     const result = await writeWorkspaceHooks(ctx, parsed.data);
     return c.json(result);
+  });
+
+  /*
+   * Run an agent against one prospect and hand back what it would send.
+   *
+   * Synchronous for the same reason /jobs/write-pitch is: the output is the
+   * whole point of the click, and an answer delivered by a background job is an
+   * answer nobody waits for. 200 either way — "approve a strategy first" is a
+   * correct answer to the question, and the caller renders the sentence rather
+   * than turning a status code into a shrug.
+   */
+  app.post("/jobs/agent-test", async (c) => {
+    const parsed = AgentTestRequestSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "invalid request" }, 400);
+    if (!(await assertMembership(ctx.db, parsed.data.workspaceId, parsed.data.userId))) {
+      return c.json({ error: "not a member of that workspace" }, 403);
+    }
+    return c.json(await runAgentTest(ctx, parsed.data));
   });
 
   app.post("/jobs/send-reply", async (c) => {

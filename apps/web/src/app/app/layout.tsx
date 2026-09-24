@@ -46,16 +46,20 @@ function navGroups(waiting: number, marks: NavMarks): NavGroup[] {
         { href: "/app/strategy", label: "Strategies", ...next("/app/strategy", "Strategies") },
         { href: "/app/prospects", label: "Prospects" },
         { href: "/app/campaigns", label: "Campaigns", ...next("/app/campaigns", "Campaigns") },
-        // The other half of the pipeline. A prospect who replies is answered
-        // from this page and nothing else, so filed under Settings between
-        // "Do not contact" and "Billing" it read as a preference nobody had to
-        // set — and an empty knowledge base sends every product question to a
-        // human, which is most of what a prospect asks.
-        { href: "/app/knowledge", label: "Knowledge base", ...next("/app/knowledge", "Knowledge base") },
-        // The offer itself. It sits after the knowledge base because it is
-        // written from it, and before nothing, because the pitch is the last
-        // piece of copy anybody writes and the first one a prospect judges.
-        { href: "/app/pitch", label: "Opener & pitch" },
+        /*
+         * One link where there were two, and a prompt constant besides.
+         *
+         * "Knowledge base" and "Opener & pitch" were two thirds of one
+         * decision — what a prospect reads — and the third was a system prompt
+         * in the repo that nobody outside it could see. A rep who wanted the
+         * messages to sound different had no single place to go and no way to
+         * find out what a change would produce before a stranger read it.
+         *
+         * An agent is that place, and it is in Pipeline rather than Settings
+         * because it is not a preference: a campaign cannot run without one,
+         * and it is the piece a rep changes most.
+         */
+        { href: "/app/agents", label: "Agents", ...next("/app/agents", "Agents") },
       ],
     },
     {
