@@ -470,6 +470,15 @@ p  { margin: 0; }
  * `overscroll-behavior` so reaching the end of the list does not then start
  * scrolling the page underneath it, which reads as the page jumping.
  */
+/* A checkbox that sits beside a heading rather than in a form column. */
+.app .inline-check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
 .app .scroll-box {
   max-height: 60vh;
   overflow-y: auto;

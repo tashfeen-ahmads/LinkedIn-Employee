@@ -13,6 +13,7 @@ import { errorQuery, noticeQuery } from "@/lib/worker";
 import { PageNotice, type NoticeParams } from "@/components/page-notice";
 import { PageHeader, Section, Empty } from "@/components/page";
 import { SubmitButton } from "@/components/submit-button";
+import { SelectAll } from "@/components/select-all";
 
 /**
  * A campaign built from a list you already have.
@@ -305,6 +306,7 @@ export default async function NewCampaignPage({
           <Section
             title="Who is on it"
             description="Only people this workspace has never contacted. Ranked by fit."
+            action={<SelectAll name="prospect" label={`Select all ${(prospects ?? []).length}`} />}
           >
             <div className="scroll-box">
               <table className="table">
