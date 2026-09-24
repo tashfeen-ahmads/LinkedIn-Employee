@@ -765,8 +765,11 @@ const MUTATIONS = [
     id: "cta/the-destination-reaches-the-message",
     rule: "The campaign's destination is substituted into the follow-up; the URL lives on the campaign, not in the copy",
     file: "apps/worker/src/jobs/linkedin-action.ts",
-    from: "  const body = renderCta(\n    renderTemplate(withPitch.message, prospect.first_name, mergeValuesFor(prospect, sender)),\n    ctaUrl,\n  );",
-    to: "  const body = renderTemplate(withPitch.message, prospect.first_name, mergeValuesFor(prospect, sender));",
+    // Repointed: the merge values now carry the campaign's agent, so the call
+    // this wrapped moved. The rule is unchanged — dropping `renderCta` leaves
+    // `{{cta_link}}` in the text a real person receives.
+    from: "  const body = renderCta(\n    renderTemplate(\n      withPitch.message,\n      prospect.first_name,\n      mergeValuesFor(prospect, sender, agent),\n    ),\n    ctaUrl,\n  );",
+    to: "  const body = renderTemplate(\n    withPitch.message,\n    prospect.first_name,\n    mergeValuesFor(prospect, sender, agent),\n  );",
     pkg: "@le/worker",
   },
   {

@@ -515,6 +515,55 @@ describe("personalised connection notes", () => {
     expect(handed.hooks).not.toContain("Nobody has read this one yet.");
   });
 
+  it("hands over nothing at all rather than a line nobody approved", async () => {
+    /*
+     * The case the other test cannot reach, and the one a full mutation run
+     * caught as unguarded.
+     *
+     * `openersFor` now decides which openers a campaign may use, and it filters
+     * by approval — so the test above, which seeds one approved line, never
+     * reaches the second approved-filter inside `loadHooks`. That filter is
+     * still load-bearing: it is what `loadHooks` falls back to when the
+     * campaign's resolved set is empty.
+     *
+     * A workspace whose only opener is unapproved is exactly that case. The
+     * right answer is an empty set, falling through to the strategy's own
+     * openers — never the unread draft.
+     */
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    db.seed("hooks", [
+      {
+        id: "hook-unread",
+        workspace_id: WORKSPACE,
+        name: "Unread draft",
+        body: "Nobody has read this one yet.",
+        angle: "none",
+        written_by: "agent",
+        approved_at: null,
+        is_default: false,
+      },
+    ]);
+    linkedin.candidates = {
+      items: [candidate("p1", "https://www.linkedin.com/in/jane-one")],
+      cursor: null,
+      droppedFilters: [],
+    };
+    scoreMock.mockResolvedValue([ranked("https://www.linkedin.com/in/jane-one", "p1", 90)]);
+    notesMock.mockResolvedValue(new Map());
+
+    await runTargetingJob(ctx, job);
+
+    // The writer was called, and never with that line. Asserting the call
+    // happened matters: an assertion over zero calls passes without proving
+    // anything, which is the way this test would quietly stop checking.
+    expect(notesMock.mock.calls.length).toBeGreaterThan(0);
+    for (const call of notesMock.mock.calls) {
+      const handed = (call?.[1] ?? {}) as { hooks?: string[] };
+      expect(handed.hooks ?? []).not.toContain("Nobody has read this one yet.");
+    }
+  });
+
   it("leaves the note null when the writer did not answer for that prospect", async () => {
     // Not an error. The send falls back to the campaign template, which is the
     // behaviour that existed before any of this — so a writer outage degrades
