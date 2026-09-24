@@ -17,7 +17,7 @@ import {
 } from "@le/shared";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
-import { errorQuery, noticeQuery } from "@/lib/worker";
+import { callWorker, errorQuery, noticeQuery } from "@/lib/worker";
 import { PageNotice, type NoticeParams } from "@/components/page-notice";
 import { PageHeader, PageGroup, Section, Empty } from "@/components/page";
 import { SubmitButton } from "@/components/submit-button";
@@ -191,6 +191,60 @@ async function removeCustomField(formData: FormData) {
 
   revalidatePath(here);
   redirect(noticeQuery(here, `Removed {{${key}}}. Copy still using it will show the placeholder.`));
+}
+
+/**
+ * Ask the agent to write its own openers or offer lines.
+ *
+ * This is the part of "train the agent" that was reachable from nowhere. The
+ * writers existed and ran well — they were behind a screen that had been taken
+ * out of the navigation, so the only way to give an agent copy was to type it,
+ * and the business profile the product spent onboarding collecting was read by
+ * nothing on this page.
+ *
+ * It writes and does not approve (rule 40). Every line comes back waiting for
+ * somebody to read it, which is the whole reason the approval step exists — the
+ * last two generations this deployment ran produced a mangled acronym and a
+ * product claim in a connection request, and both were caught by a person
+ * looking at them.
+ *
+ * Scoped to this agent, so a rewrite here cannot delete another agent's drafts.
+ */
+async function writeLines(formData: FormData) {
+  "use server";
+  const id = String(formData.get("id") ?? "");
+  const { session } = await loadAgent(id);
+  const here = `/app/agents/${id}`;
+  const table = String(formData.get("table") ?? "");
+  const openers = table === "hooks";
+  const instruction = String(formData.get("instruction") ?? "").trim();
+
+  // Ninety seconds rather than the ten a queue-and-return route needs: the
+  // writer runs on this request so the person who clicked sees what it
+  // produced, and a working agent cut off at ten seconds reads as a broken one.
+  const result = await callWorker<{ ok: boolean; reason?: string; written?: number }>(
+    openers ? "/jobs/write-hooks" : "/jobs/write-pitch",
+    {
+      workspaceId: session.workspaceId,
+      userId: session.userId,
+      agentId: id,
+      instruction: instruction || undefined,
+    },
+    90_000,
+  );
+
+  if (!result.ok) redirect(errorQuery(here, result.error));
+  if (result.data && result.data.ok === false) {
+    redirect(errorQuery(here, result.data.reason ?? "The agent could not write those."));
+  }
+
+  revalidatePath(here);
+  redirect(
+    noticeQuery(
+      here,
+      `Wrote ${result.data?.written ?? 0} ${openers ? "openers" : "offer lines"}. Read them before approving — they go to real people.`,
+    ),
+  );
 }
 
 async function addOpener(formData: FormData) {
@@ -493,6 +547,27 @@ export default async function AgentPage({
             </table>
           )}
 
+          <form action={writeLines} className="stack">
+            <input type="hidden" name="id" value={id} />
+            <input type="hidden" name="table" value="hooks" />
+            <label className="field">
+              <span>Write some with the agent</span>
+              <input
+                name="instruction"
+                maxLength={2000}
+                defaultValue=""
+                placeholder="Optional: what to change about the ones on screen"
+              />
+              <span className="small muted">
+                Written from your business profile and your approved strategies, and approved by
+                nobody — they arrive here for you to read first.
+              </span>
+            </label>
+            <SubmitButton className="btn secondary" pendingLabel="Writing…">
+              Write openers
+            </SubmitButton>
+          </form>
+
           <form action={addOpener} className="stack">
             <input type="hidden" name="id" value={id} />
             <label className="field">
@@ -563,6 +638,27 @@ export default async function AgentPage({
               </tbody>
             </table>
           )}
+
+          <form action={writeLines} className="stack">
+            <input type="hidden" name="id" value={id} />
+            <input type="hidden" name="table" value="pitches" />
+            <label className="field">
+              <span>Write some with the agent</span>
+              <input
+                name="instruction"
+                maxLength={2000}
+                defaultValue=""
+                placeholder="Optional: what to change about the ones on screen"
+              />
+              <span className="small muted">
+                Written from your business profile and your knowledge base. Nothing is approved
+                until you approve it.
+              </span>
+            </label>
+            <SubmitButton className="btn secondary" pendingLabel="Writing…">
+              Write offer lines
+            </SubmitButton>
+          </form>
 
           <form action={addOffer} className="stack">
             <input type="hidden" name="id" value={id} />

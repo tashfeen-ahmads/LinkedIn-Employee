@@ -7,6 +7,16 @@ export interface WriteHooksInput {
   workspaceId: string;
   userId: string;
   instruction?: string;
+  /**
+   * The agent these openers belong to.
+   *
+   * Null is the workspace's own set, which is what every caller meant before
+   * agents existed. It scopes the read, the replacement and the write alike:
+   * an agent's openers are the ones somebody chose for that agent (rule: the
+   * agent's own win outright), so writing a new set for one agent must not
+   * delete another's drafts or quietly add to a list nobody was looking at.
+   */
+  agentId?: string | null;
 }
 
 export type WriteHooksResult =
@@ -40,9 +50,14 @@ export async function writeWorkspaceHooks(
     };
   }
 
+  const mine = () => {
+    const q = ctx.db.from("hooks").select("id, body, approved_at").eq("workspace_id", input.workspaceId);
+    return input.agentId ? q.eq("agent_id", input.agentId) : q.is("agent_id", null);
+  };
+
   const [{ data: rep }, { data: existing }, { data: profiles }] = await Promise.all([
     ctx.db.from("profiles").select("full_name").eq("id", input.userId).maybeSingle(),
-    ctx.db.from("hooks").select("id, body, approved_at").eq("workspace_id", input.workspaceId),
+    mine(),
     // An opener is about the person receiving it, so the agent is given who
     // that is. Approved strategies only: an unapproved one describes people
     // nobody has agreed to contact.
@@ -84,10 +99,12 @@ export async function writeWorkspaceHooks(
   // the test was run, and rule 28 is explicit that a comparison which loses its
   // loser is not a comparison.
   const kept = (existing ?? []).filter((row) => row.approved_at).length;
-  await ctx.db.from("hooks").delete().eq("workspace_id", input.workspaceId).is("approved_at", null);
+  const stale = ctx.db.from("hooks").delete().eq("workspace_id", input.workspaceId).is("approved_at", null);
+  await (input.agentId ? stale.eq("agent_id", input.agentId) : stale.is("agent_id", null));
 
   const rows = set.variants.map((hook) => ({
     workspace_id: input.workspaceId,
+    agent_id: input.agentId ?? null,
     name: hook.name,
     body: hook.body,
     angle: hook.angle,

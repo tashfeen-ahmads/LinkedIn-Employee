@@ -5,6 +5,7 @@ import {
   DEFAULT_OPENER_TEMPLATE,
   FIRST_STEP_DELAY_DAYS,
   FIRST_STEP_TIMING_LABEL,
+  fieldsUsed,
   LINKEDIN_LIMITS,
 } from "@le/shared";
 import { requireSession } from "@/lib/workspace";
@@ -61,15 +62,33 @@ async function createCampaign(formData: FormData) {
   // individually. Without one the fallback is empty and the invitation goes
   // out with no note at all, which is ordinary on LinkedIn but is not what
   // anybody picking an agent expected.
+  //
+  // The default one, not whichever row came back first. An opener is chosen as
+  // the default precisely so that a question like "which of these does this
+  // workspace lead with" has one answer on every day rather than whichever
+  // answer the row order happened to give.
+  //
+  // Greeted, unless the opener greets them itself. An opener is written to be
+  // one line inside a note — most of them are a bare question — and a
+  // connection request opening on a bare question, from a name the reader does
+  // not know, reads as a mailshot. The two halves together are the shape this
+  // product was actually asked for: name the person, name their company, then
+  // ask the one thing.
   let template = DEFAULT_OPENER_TEMPLATE;
   if (agentId) {
     const { data: opener } = await supabase
       .from("hooks")
-      .select("body")
+      .select("body, is_default")
       .eq("agent_id", agentId)
       .not("approved_at", "is", null)
+      .order("is_default", { ascending: false })
       .limit(1);
-    if (opener?.[0]?.body?.trim()) template = opener[0].body.trim();
+    const line = opener?.[0]?.body?.trim();
+    if (line) {
+      template = fieldsUsed(line).includes("first_name")
+        ? line
+        : `${DEFAULT_OPENER_TEMPLATE} ${line}`;
+    }
   }
 
   const { data: cta } = ctaId

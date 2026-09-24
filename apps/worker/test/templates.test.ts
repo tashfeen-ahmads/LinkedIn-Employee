@@ -110,6 +110,47 @@ describe("inviteNote", () => {
     expect(inviteNote("   ", TEMPLATE, "Jane")).toBe("Hi Jane, we work with heads of ops.");
     expect(inviteNote("", TEMPLATE, null)).toBe("Hi there, we work with heads of ops.");
   });
+
+  it("fills every field of the fallback, not only the name", () => {
+    // The whole reason this argument exists. Before it, `{{rep_name}}` and
+    // `{{company}}` survived substitution and were delivered verbatim to a
+    // stranger, and it only stopped being latent when a seeded agent arrived
+    // carrying a template that used them.
+    expect(
+      inviteNote(null, "Hi {{first_name}}, {{rep_name}} here regarding {{company}}.", "Jane", null, {
+        rep_name: "Tashfeen",
+        company: "Acme Design",
+      }),
+    ).toBe("Hi Jane, Tashfeen here regarding Acme Design.");
+  });
+
+  it("sends no note rather than one with a placeholder still in it", () => {
+    // Nobody reviews the fallback: it is chosen at the moment of sending, for
+    // the prospect the writer did not answer for. A visible {{company}} on a
+    // review screen is caught; this one reaches a real person under a real
+    // rep's name, and no note at all is ordinary on LinkedIn.
+    expect(
+      inviteNote(null, "Hi {{first_name}}, {{rep_name}} here regarding {{company}}.", "Jane", null, {
+        rep_name: "Tashfeen",
+        company: null,
+      }),
+    ).toBe("");
+  });
+
+  it("keeps a template that says what to do when the field is missing", () => {
+    // A conditional block is a template declaring its own fallback, which is
+    // the whole point of them — dropping it would punish the copy that got
+    // this right.
+    expect(
+      inviteNote(
+        null,
+        "Hi {{first_name}}, {{rep_name}} here{{#company}} regarding {{company}}{{/company}}.",
+        "Jane",
+        null,
+        { rep_name: "Tashfeen", company: null },
+      ),
+    ).toBe("Hi Jane, Tashfeen here.");
+  });
 });
 
 describe("the note that is actually sent", () => {

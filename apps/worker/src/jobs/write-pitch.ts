@@ -8,6 +8,14 @@ export interface WritePitchInput {
   userId: string;
   /** What the person asked to change about the pitches they are looking at. */
   instruction?: string;
+  /**
+   * The agent these lines belong to, or null for the workspace's own set.
+   *
+   * Scopes the read, the replacement and the write together, for the reason it
+   * does on the openers: the agent's lines are the ones somebody chose for
+   * that agent, and a rewrite for one must not delete another's drafts.
+   */
+  agentId?: string | null;
 }
 
 export type WritePitchResult =
@@ -50,6 +58,14 @@ export async function writeWorkspacePitch(
     };
   }
 
+  const mine = () => {
+    const q = ctx.db
+      .from("pitches")
+      .select("id, body, is_default, approved_at")
+      .eq("workspace_id", input.workspaceId);
+    return input.agentId ? q.eq("agent_id", input.agentId) : q.is("agent_id", null);
+  };
+
   const [{ data: knowledge }, { data: rep }, { data: existing }, { data: profiles }] =
     await Promise.all([
       ctx.db
@@ -58,7 +74,7 @@ export async function writeWorkspacePitch(
         .eq("workspace_id", input.workspaceId)
         .limit(20),
       ctx.db.from("profiles").select("full_name").eq("id", input.userId).maybeSingle(),
-      ctx.db.from("pitches").select("id, body, is_default, approved_at").eq("workspace_id", input.workspaceId),
+      mine(),
       // The opening angles a person already approved on /app/strategy. Written
       // without them, the pitches are bets nobody placed — and a prospect who
       // accepted because of one pain would hear an offer arguing another.
@@ -101,14 +117,16 @@ export async function writeWorkspacePitch(
    * explicit that a comparison which loses its loser is not a comparison.
    */
   const kept = (existing ?? []).filter((row) => row.approved_at).length;
-  await ctx.db
+  const stale = ctx.db
     .from("pitches")
     .delete()
     .eq("workspace_id", input.workspaceId)
     .is("approved_at", null);
+  await (input.agentId ? stale.eq("agent_id", input.agentId) : stale.is("agent_id", null));
 
   const rows = set.variants.map((pitch) => ({
     workspace_id: input.workspaceId,
+    agent_id: input.agentId ?? null,
     name: pitch.name,
     body: pitch.body,
     angle: pitch.angle,

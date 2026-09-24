@@ -58,6 +58,9 @@ const WritePitchRequest = z.object({
   // What the person asked to change. Capped because it is typed into a box and
   // goes straight into a prompt.
   instruction: z.string().max(2000).optional(),
+  // Which agent's set to write. Absent is the workspace's own, which is what
+  // every caller meant before an agent could own copy.
+  agentId: z.string().uuid().optional(),
 });
 
 const StrategyRequest = z

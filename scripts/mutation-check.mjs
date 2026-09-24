@@ -762,6 +762,22 @@ const MUTATIONS = [
     pkg: "@le/worker",
   },
   {
+    id: "invite/the-fallback-note-fills-every-field",
+    rule: "The campaign's fallback note resolves every merge field, not only the first name",
+    file: "apps/worker/src/jobs/linkedin-action.ts",
+    from: "  const rendered = renderTemplate(fallback, firstName, values);",
+    to: "  const rendered = renderTemplate(fallback, firstName);",
+    pkg: "@le/worker",
+  },
+  {
+    id: "invite/a-placeholder-never-reaches-a-stranger",
+    rule: "A fallback note with a field this prospect has no value for is dropped, never sent with the placeholder in it",
+    file: "apps/worker/src/jobs/linkedin-action.ts",
+    from: '  if (missingFields(fallback, merged).some((field) => field !== "first_name")) return "";',
+    to: '  if (false && missingFields(fallback, merged).some((field) => field !== "first_name")) return "";',
+    pkg: "@le/worker",
+  },
+  {
     id: "cta/the-destination-reaches-the-message",
     rule: "The campaign's destination is substituted into the follow-up; the URL lives on the campaign, not in the copy",
     file: "apps/worker/src/jobs/linkedin-action.ts",

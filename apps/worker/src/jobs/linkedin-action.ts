@@ -12,6 +12,7 @@ import {
   usesPitch,
   renderMerge,
   parseHeadline,
+  missingFields,
   type MergeValues,
 } from "@le/shared";
 import type { Db } from "@le/db";
@@ -177,6 +178,22 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
       await failProspect(ctx, cp.id, "no provider id for prospect");
       return;
     }
+
+    /*
+     * Who the invitation comes from, and what this person's own details are.
+     *
+     * The follow-up path has resolved these for months and the invitation path
+     * never did — it passed the first name alone, so every other field in a
+     * fallback template survived substitution and was delivered verbatim. The
+     * invitation is the one message that cannot be taken back: it is the first
+     * thing a stranger ever reads, and it is spent off a capped allowance.
+     */
+    const inviteAgent = await agentForCampaign(db, cp.campaign_id);
+    const { data: inviteSender } = await db
+      .from("profiles")
+      .select("full_name")
+      .eq("id", accountRow.user_id)
+      .maybeSingle();
     const result = await ctx.linkedin.sendInvitation({
       accountId: accountRow.provider_account_id,
       providerId: prospect.provider_id,
@@ -187,7 +204,14 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
       // never seen a personalised note keeps working exactly as it did.
       // Empty means no note, not an empty one: the provider omits the field
       // rather than sending a blank line.
-      note: inviteNote(cp.invite_note, campaign.connection_note, prospect.first_name, variantNote) || undefined,
+      note:
+        inviteNote(
+          cp.invite_note,
+          campaign.connection_note,
+          prospect.first_name,
+          variantNote,
+          mergeValuesFor(prospect, inviteSender, inviteAgent),
+        ) || undefined,
     });
     if (result.health) await applyHealth(db, accountRow, result.health, { email: ctx.email, appUrl: ctx.env.APP_URL });
     if (!result.ok) {
@@ -692,6 +716,18 @@ export function inviteNote(
    * partly received something else.
    */
   variantTemplate?: string | null,
+  /**
+   * Everything else the template may be written from — the company, the title,
+   * and the name the invitation comes from.
+   *
+   * Left out, every field but `{{first_name}}` survives substitution and is
+   * delivered verbatim. That was latent for as long as the Targeting Agent
+   * wrote every template and only ever used the name, and it stopped being
+   * latent the moment a seeded agent arrived carrying `{{rep_name}}`: a
+   * prospect the writer had not answered for would have read "Hi Jane,
+   * {{rep_name}} here regarding {{company}}."
+   */
+  values: Partial<MergeValues> = {},
 ): string {
   const note = personalized?.trim();
   // A connection request never carries a link.
@@ -733,7 +769,33 @@ export function inviteNote(
    * person mid-word under a real rep's name.
    */
   const fallback = variantTemplate?.trim() || template;
-  const rendered = renderTemplate(fallback, firstName);
+
+  /*
+   * A field this prospect has no value for means no note, not a note with a
+   * hole in it.
+   *
+   * `renderMerge` deliberately leaves an unresolved `{{company}}` visible
+   * rather than substituting a blank, because on a review screen a visible
+   * placeholder is caught and "regarding your ." is not. Nobody reviews this
+   * one: it is the fallback, chosen at the moment of sending, for the prospect
+   * the writer did not answer for. So the same reasoning that leaves it
+   * visible upstream is what drops it here — and dropping to no note at all is
+   * what this function already does with a link and with an over-length note,
+   * for the same reason each time.
+   *
+   * A template that should degrade rather than disappear says so with a
+   * conditional block, which is why `DEFAULT_OPENER_TEMPLATE` carries one.
+   *
+   * `first_name` is the exception, and it is the same exception `renderMerge`
+   * already makes: it resolves to "there", which is what a person writes when
+   * they cannot see a name. Counting it as a hole would send no note at all to
+   * every prospect whose first name LinkedIn did not give us — a real cost, to
+   * avoid a greeting that reads perfectly ordinary.
+   */
+  const merged = { ...values, first_name: firstName ?? values.first_name ?? null };
+  if (missingFields(fallback, merged).some((field) => field !== "first_name")) return "";
+
+  const rendered = renderTemplate(fallback, firstName, values);
   if (containsLink(rendered)) return "";
   return rendered.length <= INVITE_NOTE_MAX_CHARS ? rendered : "";
 }

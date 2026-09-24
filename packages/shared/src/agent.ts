@@ -202,7 +202,7 @@ export function blankAgent(repName: string | null): Agent {
  * imposed: a rep who has a better opener should not have to delete ours first.
  */
 export const DEFAULT_OPENER_TEMPLATE =
-  "Hi {{first_name}}, {{rep_name}} here regarding {{company}}.";
+  "Hi {{first_name}}, {{rep_name}} here{{#company}} regarding {{company}}{{/company}}.";
 
 
 /**
