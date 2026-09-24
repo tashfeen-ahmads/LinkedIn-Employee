@@ -15,7 +15,7 @@ import { handleInboundMessage } from "./jobs/inbound.js";
 import { runStrategyJob } from "./jobs/strategy.js";
 import { runTargetingJob } from "./jobs/targeting.js";
 import { detectAcceptedInvitations } from "./jobs/acceptance.js";
-import { unstickProspects } from "./jobs/unstick.js";
+import { recoverThrottledProspects, unstickProspects } from "./jobs/unstick.js";
 import { runMaintenance } from "./jobs/maintenance.js";
 import { runDailyDigest } from "./jobs/digest.js";
 import { createServer } from "./server.js";
@@ -126,6 +126,9 @@ const workers = [
           // warm prospect is written to today or never.
           detectAcceptedInvitations(ctx)
             .then(() => unstickProspects(ctx.db))
+            // A throttle lifts on its own schedule, so the rows it wrote off are
+            // checked on the same hourly beat rather than waiting for the night.
+            .then(() => recoverThrottledProspects(ctx.db))
             .then(() => undefined)
         : runMaintenance(ctx, queues),
     { connection, concurrency: 1 },

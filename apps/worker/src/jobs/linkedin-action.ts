@@ -1,4 +1,4 @@
-import { checkAction } from "@le/linkedin";
+import { checkAction, classifyProviderError } from "@le/linkedin";
 import {
   canTransition,
   containsLink,
@@ -164,7 +164,12 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
     });
     if (result.health) await applyHealth(db, accountRow, result.health, { email: ctx.email, appUrl: ctx.env.APP_URL });
     if (!result.ok) {
-      await failProspect(ctx, cp.id, result.error ?? "invitation failed");
+      await handleInviteRefusal(ctx, {
+        campaignProspectId: cp.id,
+        workspaceId: cp.workspace_id,
+        accountId: accountRow.id,
+        error: result.error ?? "invitation failed",
+      });
       return;
     }
     await recordAction(db, accountRow.id, "invite");
@@ -681,4 +686,75 @@ export class RescheduleError extends Error {
     super(`rate limited: ${reason}, retry in ${Math.round(retryAfterMs / 1000)}s`);
     this.name = "RescheduleError";
   }
+}
+
+/**
+ * What to do with an invitation the provider would not send.
+ *
+ * Every refusal used to mean the same thing — `failed`, no next action, that
+ * person gone from the campaign for good. Most of LinkedIn's refusals are not
+ * that. The common one is
+ *
+ *     422 cannot_resend_yet — You have reached a temporary provider limit.
+ *     Please try again later.
+ *
+ * and on a single morning seven real prospects were written off on that
+ * sentence in twenty-five minutes, while the loop kept posting fresh
+ * invitations to an account LinkedIn had already decided to slow down. The rep
+ * reads "7 failed" and concludes the list was bad. The list was fine.
+ *
+ * So a retryable refusal does two things, and the second matters more than the
+ * first. The prospect goes back to `queued` — they were never asked, so
+ * "failed" is not a fact about them. And invitations stop **for the whole
+ * account**, because the limit is LinkedIn's opinion of the account rather than
+ * of this person, and failing one row at a time means the next tick walks the
+ * next prospect into the same wall. One throttle must cost one attempt, not a
+ * campaign.
+ *
+ * A refusal we do not recognise still fails permanently (`classifyProviderError`
+ * is conservative on purpose): retrying an unknown error against LinkedIn for
+ * ever is how an account gets restricted.
+ */
+async function handleInviteRefusal(
+  ctx: WorkerContext,
+  input: { campaignProspectId: string; workspaceId: string; accountId: string; error: string },
+): Promise<void> {
+  const verdict = classifyProviderError(input.error);
+  if (verdict.kind === "permanent") {
+    await failProspect(ctx, input.campaignProspectId, input.error);
+    return;
+  }
+
+  const until = new Date(Date.now() + verdict.cooldownMs);
+  // Never shortened by a later refusal during the same throttle. A fifteen
+  // minute network blip arriving inside a six hour invitation limit would
+  // otherwise cut that limit short and walk the account straight back into it.
+  const { data: held } = await ctx.db
+    .from("linkedin_accounts")
+    .select("invites_paused_until")
+    .eq("id", input.accountId)
+    .maybeSingle();
+  const standing = held?.invites_paused_until ? Date.parse(held.invites_paused_until) : 0;
+  if (!Number.isFinite(standing) || standing < until.getTime()) {
+    await ctx.db
+      .from("linkedin_accounts")
+      .update({ invites_paused_until: until.toISOString(), invites_paused_reason: verdict.summary })
+      .eq("id", input.accountId);
+  }
+
+  await ctx.db
+    .from("campaign_prospects")
+    // Back in the queue, not failed. `status_reason` still carries the
+    // provider's words so the screen can say why they are waiting rather than
+    // leaving a silent row somebody assumes is stuck.
+    .update({ status: "queued", status_reason: input.error, next_action_at: null })
+    .eq("id", input.campaignProspectId);
+
+  await recordEvent(ctx.db, {
+    workspaceId: input.workspaceId,
+    name: "invite.throttled",
+    subjectType: "campaign_prospect",
+    subjectId: input.campaignProspectId,
+    payload: { until: until.toISOString(), reason: verdict.summary, provider: input.error },
+  });
 }

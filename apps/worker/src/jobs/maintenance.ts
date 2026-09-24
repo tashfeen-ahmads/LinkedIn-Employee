@@ -4,7 +4,7 @@ import type { WorkerContext } from "../context.js";
 import { pollHealth, recoverAccounts } from "../accounts.js";
 import { recordEvent } from "../context.js";
 import { detectAcceptedInvitations } from "./acceptance.js";
-import { unstickProspects } from "./unstick.js";
+import { recoverThrottledProspects, unstickProspects } from "./unstick.js";
 import { syncCalendarFeeds } from "./calendar-feed.js";
 import { runLifecycleEmails } from "./lifecycle.js";
 import { runRetentionSweep } from "./retention.js";
@@ -96,6 +96,7 @@ export async function runMaintenance(
   // Belt and braces: the hourly job does this too, and a stall is the one
   // failure that is invisible from every screen.
   await step("unstick", () => unstickProspects(ctx.db, now));
+  await step("recover-throttled", () => recoverThrottledProspects(ctx.db, now));
   await step("approved-drafts", () => sweepApprovedDrafts(ctx, queues, now));
   await step("acceptance-rates", () => flagPoorAcceptanceRates(ctx));
   await step("withdraw-stale", () => withdrawStaleInvites(ctx, now));

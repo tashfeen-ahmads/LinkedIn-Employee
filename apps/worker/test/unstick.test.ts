@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { FakeDb } from "./fake-db.js";
 import { LINKEDIN_LIMITS } from "@le/shared";
-import { unstickProspects } from "../src/jobs/unstick.js";
+import { recoverThrottledProspects, unstickProspects } from "../src/jobs/unstick.js";
 
 const NOW = new Date("2026-09-23T12:00:00Z");
 const CAMPAIGN = "44444444-4444-4444-8444-444444444444";
@@ -170,5 +170,84 @@ describe("a first message left on a rule the product no longer has", () => {
 
     expect(await unstickProspects(fake.asDb(), NOW)).toBe(0);
     expect(fake.find("campaign_prospects", { id: "cp1" })?.next_action_at).toBe(due);
+  });
+});
+
+describe("prospects a temporary refusal wrote off", () => {
+  /*
+   * `failed` is meant to be an outcome. For one morning it also meant
+   * "LinkedIn said please try again later and we did not" — seven real people
+   * in twenty-five minutes, each with next_action_at cleared, so nothing was
+   * ever going to pick them up. Repair must not wait for somebody to notice.
+   */
+  const THROTTLED =
+    "Unipile POST /api/v1/users/invite failed with 422: Cannot resend yet — You have reached a temporary provider limit. Please try again later. — errors/cannot_resend_yet";
+
+  it("puts a throttled prospect back in the queue", async () => {
+    const fake = db(
+      [
+        {
+          id: "cp1",
+          campaign_id: CAMPAIGN,
+          status: "failed",
+          status_reason: THROTTLED,
+          invited_at: null,
+          last_step_sent: 0,
+          next_action_at: null,
+        },
+      ],
+      [STEP2],
+    );
+
+    expect(await recoverThrottledProspects(fake.asDb(), NOW)).toBe(1);
+
+    const after = fake.find("campaign_prospects", { id: "cp1" })!;
+    expect(after.status).toBe("queued");
+    // No schedule of its own: the pacing loop owns when, and the account's
+    // cooldown is what holds it. A time here would be a second opinion.
+    expect(after.next_action_at).toBeNull();
+    expect(after.status_reason).toBeNull();
+  });
+
+  it("leaves a prospect LinkedIn genuinely refused", async () => {
+    // Re-queueing this one spends a daily invitation on a send that will fail
+    // again, and posts another rejected request against the account.
+    const reason = "Unipile POST /api/v1/users/invite failed with 422: Cannot send invitation to this member";
+    const fake = db(
+      [{ id: "cp1", campaign_id: CAMPAIGN, status: "failed", status_reason: reason, invited_at: null }],
+      [STEP2],
+    );
+
+    expect(await recoverThrottledProspects(fake.asDb(), NOW)).toBe(0);
+    expect(fake.find("campaign_prospects", { id: "cp1" })?.status).toBe("failed");
+  });
+
+  it("never re-queues somebody whose invitation actually went out", async () => {
+    // Whatever the row says afterwards: inviting them again is a second
+    // approach from the same company to a stranger (rule 24).
+    const fake = db(
+      [
+        {
+          id: "cp1",
+          campaign_id: CAMPAIGN,
+          status: "failed",
+          status_reason: THROTTLED,
+          invited_at: "2026-09-22T17:00:00.000Z",
+        },
+      ],
+      [STEP2],
+    );
+
+    expect(await recoverThrottledProspects(fake.asDb(), NOW)).toBe(0);
+    expect(fake.find("campaign_prospects", { id: "cp1" })?.status).toBe("failed");
+  });
+
+  it("leaves a row with no reason recorded", async () => {
+    const fake = db(
+      [{ id: "cp1", campaign_id: CAMPAIGN, status: "failed", status_reason: null, invited_at: null }],
+      [STEP2],
+    );
+
+    expect(await recoverThrottledProspects(fake.asDb(), NOW)).toBe(0);
   });
 });

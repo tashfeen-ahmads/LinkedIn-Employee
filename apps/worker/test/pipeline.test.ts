@@ -1406,3 +1406,85 @@ describe("followUpDueAt", () => {
     expect(followUpDueAt(NOW, 2).getTime() - NOW.getTime()).toBe(2 * 86_400_000);
   });
 });
+
+describe("when LinkedIn refuses an invitation", () => {
+  /*
+   * The morning this was written for. Seven real prospects were marked
+   * permanently failed in twenty-five minutes, every one on
+   *
+   *   422 cannot_resend_yet — You have reached a temporary provider limit.
+   *   Please try again later.
+   *
+   * and the loop kept going, posting six more rejected invitations against an
+   * account LinkedIn had already decided to slow down. The campaign read
+   * "7 failed", which is seven bad prospects to anybody looking at it.
+   */
+  const THROTTLED =
+    "Unipile POST /api/v1/users/invite failed with 422: Cannot resend yet — You have reached a temporary provider limit. Please try again later. — errors/cannot_resend_yet";
+
+  it("keeps the prospect instead of burning them", async () => {
+    const { db, ctx, linkedin } = harness({
+      trialEndsAt: new Date(NOW.getTime() + 30 * 86_400_000).toISOString(),
+    });
+    linkedin.invitationRefusal = THROTTLED;
+
+    await runLinkedInAction(ctx, { kind: "invite", workspaceId: WORKSPACE, campaignProspectId: CP });
+
+    const after = db.find("campaign_prospects", { id: CP })!;
+    // Queued, not failed. They were never actually asked, so "failed" is not a
+    // fact about them.
+    expect(after.status).toBe("queued");
+    expect(after.status).not.toBe("failed");
+    // And nothing was counted against the account, because nothing was sent.
+    expect(db.find("linkedin_accounts", { id: ACCOUNT })?.invites_today).toBe(0);
+  });
+
+  it("stops invitations for the whole account, not just this one row", async () => {
+    // The part that matters more than the requeue. The limit is LinkedIn's
+    // opinion of the account, so failing one row at a time walks the next
+    // prospect into the same wall five minutes later.
+    const { db, ctx, linkedin } = harness({
+      trialEndsAt: new Date(NOW.getTime() + 30 * 86_400_000).toISOString(),
+    });
+    linkedin.invitationRefusal = THROTTLED;
+
+    await runLinkedInAction(ctx, { kind: "invite", workspaceId: WORKSPACE, campaignProspectId: CP });
+
+    const account = db.find("linkedin_accounts", { id: ACCOUNT })!;
+    const until = Date.parse(account.invites_paused_until as string);
+    expect(until).toBeGreaterThan(Date.now() + 60 * 60_000);
+    expect(account.invites_paused_reason).toMatch(/temporarily refusing/i);
+  });
+
+  it("still fails permanently on a refusal that is not going to change", async () => {
+    // "Cannot send invitation to this member" is an answer. Retrying it for
+    // ever spends a capped daily allowance on a send that cannot work.
+    const { db, ctx, linkedin } = harness({
+      trialEndsAt: new Date(NOW.getTime() + 30 * 86_400_000).toISOString(),
+    });
+    linkedin.invitationRefusal =
+      "Unipile POST /api/v1/users/invite failed with 422: Cannot send invitation to this member";
+
+    await runLinkedInAction(ctx, { kind: "invite", workspaceId: WORKSPACE, campaignProspectId: CP });
+
+    expect(db.find("campaign_prospects", { id: CP })?.status).toBe("failed");
+    expect(db.find("linkedin_accounts", { id: ACCOUNT })?.invites_paused_until ?? null).toBeNull();
+  });
+
+  it("offers nothing on an account inside its cooldown", async () => {
+    const { db, queues } = harness();
+    db.find("linkedin_accounts", { id: ACCOUNT })!.invites_paused_until = new Date(
+      NOW.getTime() + 3 * 60 * 60_000,
+    ).toISOString();
+    db.find("linkedin_accounts", { id: ACCOUNT })!.invites_paused_reason =
+      "LinkedIn is temporarily refusing invitations from this account";
+
+    expect(await runCampaignTick(db.asDb(), queues, NOW)).toBe(0);
+
+    // And says which no it is. "Nothing queued" is what this loop says at two
+    // in the morning too.
+    const beat = db.rows("worker_heartbeats").find((h) => h.name === PACING_LOOP);
+    const reasons = JSON.stringify((beat?.detail as { decisions?: unknown })?.decisions ?? []);
+    expect(reasons).toMatch(/temporarily refusing/i);
+  });
+});

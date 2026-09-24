@@ -1,4 +1,5 @@
 import { LINKEDIN_LIMITS } from "@le/shared";
+import { classifyProviderError } from "@le/linkedin";
 import type { Db } from "@le/db";
 import { followUpDueAt } from "./acceptance.js";
 
@@ -136,4 +137,59 @@ function staleAcceptWindow(
   const acceptedAt = row.accepted_at ? Date.parse(row.accepted_at) : NaN;
   if (!Number.isFinite(acceptedAt)) return false;
   return due > acceptedAt + LINKEDIN_LIMITS.acceptFollowUpMaxMs;
+}
+
+/**
+ * Gives back the prospects a temporary refusal wrote off permanently.
+ *
+ * `failed` is meant to be an outcome: this person cannot be invited, stop
+ * asking. For most of a morning it also meant "LinkedIn said *please try again
+ * later* and we did not". Seven real people were marked failed in twenty-five
+ * minutes on an error whose own words were an instruction to retry, and
+ * `failProspect` clears `next_action_at`, so nothing was ever going to pick
+ * them up again. The campaign screen showed seven failures, which reads as
+ * seven bad prospects and a list that did not work.
+ *
+ * The send path no longer writes those rows (`handleInviteRefusal` requeues
+ * them), but the ones already written are still sitting there, and repair must
+ * never depend on somebody noticing and writing an UPDATE by hand — rule 8, and
+ * the reason this whole file exists.
+ *
+ * Deliberately narrow. Only `failed`, only where the stored reason is one the
+ * classifier itself calls retryable, and only where the invitation never
+ * actually went out. A row that was genuinely refused — "cannot send invitation
+ * to this member" — is left exactly alone, because putting that person back in
+ * the queue spends a daily invitation on a send that will fail again and posts
+ * another rejected request against the account.
+ */
+export async function recoverThrottledProspects(
+  db: Db,
+  now: Date = new Date(),
+  limit = 500,
+): Promise<number> {
+  const { data: rows } = await db
+    .from("campaign_prospects")
+    .select("id, status, status_reason, invited_at")
+    .eq("status", "failed")
+    .limit(limit);
+
+  let recovered = 0;
+  for (const row of rows ?? []) {
+    // An invitation that really went out is not a refusal, whatever the row
+    // says: re-queueing it would invite somebody twice.
+    if (row.invited_at) continue;
+    if (classifyProviderError(row.status_reason).kind !== "retry_later") continue;
+
+    await db
+      .from("campaign_prospects")
+      // Straight back to the queue with no schedule of its own: the pacing loop
+      // owns when, and the account's own cooldown is what holds it until
+      // LinkedIn is ready. Setting a time here would be a second opinion about
+      // that, and the two would drift.
+      .update({ status: "queued", status_reason: null, next_action_at: null })
+      .eq("id", row.id);
+    recovered += 1;
+  }
+  if (recovered) console.log("returned throttled prospects to the queue", { recovered, at: now.toISOString() });
+  return recovered;
 }

@@ -114,8 +114,20 @@ export class MockLinkedInProvider implements LinkedInProvider {
    */
   invitationError: Error | null = null;
 
+  /**
+   * A refusal *returned* rather than thrown, which is what the real adapter
+   * does with a 422 — it catches and answers `{ ok: false, error }`.
+   *
+   * Both paths are real and they are handled differently, so the double has to
+   * offer both. Every refusal this deployment has actually been handed arrived
+   * this way, and a test that could only throw exercised the branch LinkedIn
+   * does not use.
+   */
+  invitationRefusal: string | null = null;
+
   async sendInvitation(input: { accountId: string; providerId: string; note?: string }): Promise<ActionResult> {
     if (this.invitationError) throw this.invitationError;
+    if (this.invitationRefusal) return { ok: false, error: this.invitationRefusal };
     this.sentInvitations.push(input);
     return { ok: true, providerId: `inv_${this.sentInvitations.length}` };
   }

@@ -153,6 +153,17 @@ export type LinkedinAccountRow = {
   /** Day zero of the warm-up ramp. Null until the account has sent anything. */
   first_action_at: string | null;
   working_hours: Json;
+  /**
+   * While this is in the future the account sends no invitations at all.
+   *
+   * Set when the provider refuses with a retryable throttle — LinkedIn's
+   * "temporary provider limit, please try again later" — and cleared only by
+   * time passing. It is not the rate limiter, which is the pace we chose; this
+   * is the platform refusing outright, and it belongs to the account because
+   * that is what LinkedIn is forming an opinion about.
+   */
+  invites_paused_until: string | null;
+  invites_paused_reason: string | null;
   created_at: string;
 };
 

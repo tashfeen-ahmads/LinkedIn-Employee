@@ -105,7 +105,7 @@ async function tick(db: Db, queues: Queues, now: Date): Promise<number> {
     // Follow-ups first: a conversation already started is worth more than a
     // new invitation, and both draw on the same daily message budget.
     enqueued += await enqueueFollowUps(db, queues, campaign, usage, now);
-    const invites = await enqueueInvites(db, queues, campaign, usage, now);
+    const invites = await enqueueInvites(db, queues, campaign, usage, loaded.account, now);
     enqueued += invites.enqueued;
     say(campaign.id, invites.reason);
   }
@@ -182,8 +182,26 @@ async function enqueueInvites(
   queues: Queues,
   campaign: CampaignRow,
   usage: ReturnType<typeof toUsage>,
+  account: AccountRecord,
   now: Date,
 ): Promise<{ enqueued: number; reason: string }> {
+  /*
+   * LinkedIn asked for time, so nothing is offered until it has had it.
+   *
+   * Checked before the limiter because it is a different kind of no: ours is a
+   * pace we chose, this is the platform refusing outright. Without it the loop
+   * walks the next prospect into the same wall every few minutes — seven real
+   * people were written off that way in twenty-five minutes, each attempt
+   * another rejected invitation against an account already being slowed down.
+   */
+  const pausedUntil = account.invites_paused_until ? Date.parse(account.invites_paused_until) : 0;
+  if (Number.isFinite(pausedUntil) && pausedUntil > now.getTime()) {
+    return {
+      enqueued: 0,
+      reason: `${account.invites_paused_reason ?? "the provider refused invitations"} — holding until ${new Date(pausedUntil).toISOString()}`,
+    };
+  }
+
   const decision = checkAction("invite", usage, now);
   if (!decision.allowed && decision.reason !== "too_soon") {
     // The limiter's own word for it, not a paraphrase. "outside_working_hours"

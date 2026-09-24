@@ -25,6 +25,17 @@ export interface AccountRecord {
   counters_reset_on: string | null;
   last_action_at: string | null;
   working_hours: unknown;
+  /**
+   * While this is in the future the account sends no invitations at all.
+   *
+   * Not the limiter's business — the limiter is the pace *we* chose, and this
+   * is LinkedIn refusing outright with "please try again later". Kept on the
+   * account rather than the campaign because that is what the platform is
+   * forming an opinion about: a second campaign on the same account must not
+   * walk into the same wall.
+   */
+  invites_paused_until?: string | null;
+  invites_paused_reason?: string | null;
 }
 
 /**
@@ -33,7 +44,7 @@ export interface AccountRecord {
  * function that needs it rather than being retyped at each call site.
  */
 export const ACCOUNT_USAGE_COLUMNS =
-  "id, workspace_id, user_id, provider_account_id, status, connected_at, first_action_at, invites_today, invites_this_week, messages_today, counters_reset_on, last_action_at, working_hours";
+  "id, workspace_id, user_id, provider_account_id, status, connected_at, first_action_at, invites_today, invites_this_week, messages_today, counters_reset_on, last_action_at, working_hours, invites_paused_until, invites_paused_reason";
 
 export function parseWorkingHours(value: unknown): WorkingHours {
   if (value && typeof value === "object") {
