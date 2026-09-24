@@ -296,3 +296,72 @@ describe("the offer a real business gets", () => {
     ).toContain(last);
   });
 });
+
+describe("a workspace that already has a default line", () => {
+  it("still gets its opener and offer", async () => {
+    /*
+     * The bug this replaces shipped and produced a live agent with no copy at
+     * all.
+     *
+     * `is_default` means "the workspace's fallback" and `hooks_one_default`
+     * allows one per workspace. The seeder set it on its own line, the insert
+     * violated that index on a workspace that already had a default, and
+     * nothing looked at the error — so the agent row was created, the screen
+     * showed it as ready, and it could not write a word.
+     *
+     * An agent that exists and cannot write is worse than one that was never
+     * made, because the screen says otherwise.
+     */
+    const db = new FakeDb();
+    db.seed("hooks", [
+      {
+        id: "existing-default",
+        workspace_id: WORKSPACE,
+        agent_id: null,
+        body: "An opener from before agents existed",
+        approved_at: "2026-09-01T00:00:00.000Z",
+        is_default: true,
+      },
+    ]);
+    db.seed("pitches", [
+      {
+        id: "existing-pitch",
+        workspace_id: WORKSPACE,
+        agent_id: null,
+        body: "An offer from before agents existed",
+        approved_at: "2026-09-01T00:00:00.000Z",
+        is_default: true,
+      },
+    ]);
+
+    const id = await seedWorkspaceAgent(db.asDb(), {
+      workspaceId: WORKSPACE,
+      userId: USER,
+      business: BUSINESS,
+      repName: "Tashfeen",
+    });
+
+    expect(id).toBeTruthy();
+    // Its own copy, found by agent_id rather than by being the default.
+    expect(db.rows("hooks").filter((h) => h.agent_id === id)).toHaveLength(1);
+    expect(db.rows("pitches").filter((p) => p.agent_id === id)).toHaveLength(1);
+    // And the workspace's existing default is untouched: it is still what a
+    // campaign with no agent falls back to.
+    expect(db.find("hooks", { id: "existing-default" })?.is_default).toBe(true);
+  });
+
+  it("never claims the workspace default for itself", async () => {
+    // Two defaults is a state the database will not hold, and taking the
+    // existing one would move copy out from under a running campaign.
+    const db = new FakeDb();
+
+    const id = await seedWorkspaceAgent(db.asDb(), {
+      workspaceId: WORKSPACE,
+      userId: USER,
+      business: BUSINESS,
+      repName: "Tashfeen",
+    });
+
+    expect(db.rows("hooks").filter((h) => h.agent_id === id && h.is_default)).toHaveLength(0);
+  });
+});

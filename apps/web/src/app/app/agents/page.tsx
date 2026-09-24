@@ -1,7 +1,7 @@
 import { revalidatePath } from "next/cache";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { blankAgent, isSelectableModel } from "@le/shared";
+import { isSelectableModel } from "@le/shared";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { errorQuery, noticeQuery } from "@/lib/worker";
@@ -24,88 +24,6 @@ import { SubmitButton } from "@/components/submit-button";
  * still retire without deleting (rule 40), because those are what stand between
  * a line nobody read and a real person.
  */
-
-async function createAgent() {
-  "use server";
-  const session = await requireSession();
-  const supabase = await createClient();
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("full_name")
-    .eq("id", session.userId)
-    .maybeSingle();
-
-  // Not a blank form. An agent with no voice produces exactly the unanchored
-  // copy this screen exists to replace, and a rep handed an empty box has been
-  // given the problem rather than a starting point.
-  const seed = blankAgent(profile?.full_name ?? null);
-
-  // Asked before the insert, because the insert is what stops it being true.
-  const first = await isFirstAgent(supabase, session.workspaceId);
-
-  const { data, error } = await supabase
-    .from("agents")
-    .insert({
-      workspace_id: session.workspaceId,
-      name: seed.name,
-      model: seed.model,
-      system_prompt: seed.systemPrompt,
-      from_name: seed.fromName,
-      playbook: seed.playbook as never,
-      custom_fields: seed.customFields as never,
-      // The first agent a workspace makes is the one new campaigns start with.
-      // "Which agent" answered by row order is answered differently on
-      // different days.
-      is_default: first,
-    })
-    .select("id")
-    .single();
-
-  if (error || !data) {
-    redirect(errorQuery("/app/agents", error?.message ?? "The agent could not be created."));
-  }
-
-  /*
-   * The first agent adopts the openers and offer lines this workspace already
-   * approved.
-   *
-   * Those rows predate agents: they belong to the workspace, and until now that
-   * was the only place they could belong. A first agent that started empty
-   * would read to the person who wrote and approved them as though the rework
-   * had thrown their work away — and the openers are the part of this product
-   * somebody spends real time on.
-   *
-   * Only the first, and only rows nothing else claims. A second agent starts
-   * clean rather than taking the first one's lines, which would move copy out
-   * from under a campaign already running on it.
-   */
-  if (first) {
-    for (const table of ["hooks", "pitches"] as const) {
-      await supabase
-        .from(table)
-        .update({ agent_id: data.id })
-        .eq("workspace_id", session.workspaceId)
-        .is("agent_id", null)
-        .not("approved_at", "is", null);
-    }
-  }
-
-  redirect(`/app/agents/${data.id}`);
-}
-
-async function isFirstAgent(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  workspaceId: string,
-): Promise<boolean> {
-  const { data } = await supabase
-    .from("agents")
-    .select("id")
-    .eq("workspace_id", workspaceId)
-    .is("archived_at", null)
-    .limit(1);
-  return (data ?? []).length === 0;
-}
 
 async function makeDefault(formData: FormData) {
   "use server";
@@ -204,11 +122,19 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
         eyebrow="Pipeline"
         title="Agents"
         lede="An agent is everything a prospect reads: how it writes, what it opens with, what it offers, and what it is trying to find out. A campaign picks one."
-        actions={
-          <form action={createAgent}>
-            <SubmitButton pendingLabel="Creating…">New agent</SubmitButton>
-          </form>
-        }
+        /*
+         * No "New agent" button.
+         *
+         * A workspace gets one, built from what onboarding already learned,
+         * and it is seeded at boot for every workspace that has a business
+         * profile. The button let this deployment end up with three agents in
+         * one workspace — two of them blank, one of them holding the copy the
+         * other two needed — and "which agent" then has three answers.
+         *
+         * A second one is a real thing to want eventually. It is not the
+         * thing to offer before the first has sent anybody anything.
+         */
+        actions={null}
       />
 
       <PageNotice error={params.error} notice={params.notice} />

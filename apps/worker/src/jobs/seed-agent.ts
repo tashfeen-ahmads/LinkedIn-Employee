@@ -90,7 +90,20 @@ export async function seedWorkspaceAgent(
     return null;
   }
 
-  await db.from("hooks").insert({
+  /*
+   * `is_default` is deliberately absent from both lines below.
+   *
+   * It means "the workspace's fallback", and `hooks_one_default` enforces one
+   * per workspace. The agent's own lines are found by `agent_id`, so setting
+   * it buys nothing — and on a workspace that already had a default it made
+   * the insert violate that index.
+   *
+   * Which is exactly what happened: the first seeded agent on this deployment
+   * was created with no opener and no offer at all, because the insert failed
+   * and nothing looked at the error. An agent that exists and cannot write is
+   * worse than one that was never made, because the screen says it is ready.
+   */
+  const { error: hookError } = await db.from("hooks").insert({
     workspace_id: input.workspaceId,
     agent_id: agent.id,
     name: "Opening line",
@@ -102,18 +115,28 @@ export async function seedWorkspaceAgent(
     angle: "Names them and their company, and asks one thing",
     written_by: "agent",
     approved_at: null,
-    is_default: true,
   });
 
-  await db.from("pitches").insert({
+  const { error: pitchError } = await db.from("pitches").insert({
     workspace_id: input.workspaceId,
     agent_id: agent.id,
     name: "What this is",
     body: offerFrom(input.business),
     written_by: "agent",
     approved_at: null,
-    is_default: true,
   });
+
+  // Reported, never swallowed. A half-seeded agent is the failure this whole
+  // sweep exists to prevent, and the only thing worse than not seeding one is
+  // seeding one that cannot write and saying nothing.
+  if (hookError || pitchError) {
+    console.error("the agent was created but its copy was not", {
+      workspaceId: input.workspaceId,
+      agentId: agent.id,
+      hook: hookError?.message ?? null,
+      pitch: pitchError?.message ?? null,
+    });
+  }
 
   await recordEvent(db, {
     workspaceId: input.workspaceId,

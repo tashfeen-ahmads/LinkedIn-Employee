@@ -1056,8 +1056,18 @@ const MUTATIONS = [
     id: "agent/seeded-lines-are-not-pre-approved",
     rule: "A seeded opener is written, not approved: nobody has read it yet",
     file: "apps/worker/src/jobs/seed-agent.ts",
-    from: '    written_by: "agent",\n    approved_at: null,\n    is_default: true,\n  });\n\n  await db.from("pitches").insert({',
-    to: '    written_by: "agent",\n    approved_at: new Date().toISOString(),\n    is_default: true,\n  });\n\n  await db.from("pitches").insert({',
+    // Repointed: `is_default` came off the seeded lines, because it means "the
+    // workspace's fallback" and its unique index rejected the insert.
+    from: '    written_by: "agent",\n    approved_at: null,\n  });\n\n  const { error: pitchError } = await db.from("pitches").insert({',
+    to: '    written_by: "agent",\n    approved_at: new Date().toISOString(),\n  });\n\n  const { error: pitchError } = await db.from("pitches").insert({',
+    pkg: "@le/worker",
+  },
+  {
+    id: "agent/a-seeded-line-never-claims-the-workspace-default",
+    rule: "A seeded opener does not take the workspace default, whose unique index would reject it",
+    file: "apps/worker/src/jobs/seed-agent.ts",
+    from: '    name: "Opening line",',
+    to: '    name: "Opening line",\n    is_default: true,',
     pkg: "@le/worker",
   },
   {
