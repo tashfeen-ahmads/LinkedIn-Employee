@@ -259,6 +259,37 @@ async function addOffer(formData: FormData) {
   redirect(noticeQuery(here, "Offer line added."));
 }
 
+async function approveLine(formData: FormData) {
+  "use server";
+  const id = String(formData.get("id") ?? "");
+  const table = String(formData.get("table") ?? "");
+  const lineId = String(formData.get("line") ?? "");
+  const { session, supabase } = await loadAgent(id);
+  const here = `/app/agents/${id}`;
+  if (table !== "hooks" && table !== "pitches") redirect(errorQuery(here, "Unknown line."));
+
+  /*
+   * The seeded lines arrive written and unapproved, and this is the click that
+   * arms them.
+   *
+   * Seeding them approved would have saved this click and made the approval
+   * screen decorative on the one screen where it matters most — the first
+   * thing a stranger ever reads from this workspace. An approval is a
+   * statement that a person read those exact words (rule 40), and nobody had.
+   * Editing them clears it again, in a trigger rather than here, because an
+   * approval is about particular text.
+   */
+  const { error } = await supabase
+    .from(table)
+    .update({ approved_at: new Date().toISOString(), approved_by: session.userId })
+    .eq("id", lineId)
+    .eq("workspace_id", session.workspaceId);
+
+  if (error) redirect(errorQuery(here, error.message));
+  revalidatePath(here);
+  redirect(noticeQuery(here, "Approved. The agent may use it now."));
+}
+
 async function retireLine(formData: FormData) {
   "use server";
   const id = String(formData.get("id") ?? "");
@@ -315,6 +346,11 @@ export default async function AgentPage({
   const customFields = parseCustomFields(agent.custom_fields);
   const approvedOpeners = (openers ?? []).filter((o) => o.approved_at);
   const approvedOffers = (offers ?? []).filter((o) => o.approved_at);
+  // Written and waiting on a person. Shown first, because an agent that cannot
+  // send yet and does not say why is the disease this whole product keeps
+  // re-learning.
+  const pendingOpeners = (openers ?? []).filter((o) => !o.approved_at);
+  const pendingOffers = (offers ?? []).filter((o) => !o.approved_at);
   const gaps = agentGaps(
     {
       name: agent.name,
@@ -399,12 +435,30 @@ export default async function AgentPage({
           title="Openers"
           description={`The first line a stranger reads, up to ${HOOK_MAX_CHARS} characters. Shapes to lean on — the note is still written for the person receiving it.`}
         >
-          {approvedOpeners.length === 0 ? (
+          {/* Written by the product from your onboarding answers, waiting on one
+              click. A line nobody has read never opens a conversation. */}
+          {pendingOpeners.map((opener) => (
+            <div className="notice" role="status" key={opener.id}>
+              <p>
+                <strong>Ready to approve.</strong> {opener.body}
+              </p>
+              <form action={approveLine}>
+                <input type="hidden" name="id" value={id} />
+                <input type="hidden" name="table" value="hooks" />
+                <input type="hidden" name="line" value={opener.id} />
+                <SubmitButton className="btn small" pendingLabel="Approving…">
+                  Approve this opener
+                </SubmitButton>
+              </form>
+            </div>
+          ))}
+
+          {approvedOpeners.length === 0 && pendingOpeners.length === 0 ? (
             <Empty title="No openers yet">
               Without one the agent writes from nothing and every note reads the same. A plain,
               recognisable line beats a clever one: <code>{DEFAULT_OPENER_TEMPLATE}</code>
             </Empty>
-          ) : (
+          ) : approvedOpeners.length === 0 ? null : (
             <table className="table">
               <thead>
                 <tr>
@@ -458,13 +512,29 @@ export default async function AgentPage({
           title="The offer"
           description={`What this agent says when somebody asks what it is, in ${PITCH_MAX_CHARS} characters or fewer. Never sent in a connection request.`}
         >
-          {approvedOffers.length === 0 ? (
+          {pendingOffers.map((offer) => (
+            <div className="notice" role="status" key={offer.id}>
+              <p>
+                <strong>Ready to approve.</strong> {offer.body}
+              </p>
+              <form action={approveLine}>
+                <input type="hidden" name="id" value={id} />
+                <input type="hidden" name="table" value="pitches" />
+                <input type="hidden" name="line" value={offer.id} />
+                <SubmitButton className="btn small" pendingLabel="Approving…">
+                  Approve this offer
+                </SubmitButton>
+              </form>
+            </div>
+          ))}
+
+          {approvedOffers.length === 0 && pendingOffers.length === 0 ? (
             <Empty title="No offer line yet">
               Without one the agent argues for the product from the business profile and does it
               slightly differently every time — so every prospect who asks &ldquo;what is this?&rdquo;
               hears a different proposition, and none of them was read by anyone.
             </Empty>
-          ) : (
+          ) : approvedOffers.length === 0 ? null : (
             <table className="table">
               <thead>
                 <tr>

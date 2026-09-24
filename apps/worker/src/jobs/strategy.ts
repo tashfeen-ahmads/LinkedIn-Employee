@@ -2,6 +2,7 @@ import { cleanWebsiteText, runStrategyAgent } from "@le/agents";
 import { welcomeEmail } from "@le/email";
 import type { WorkerContext } from "../context.js";
 import { recordEvent } from "../context.js";
+import { seedWorkspaceAgent } from "./seed-agent.js";
 import { trySend } from "../email.js";
 import type { StrategyJob } from "../queues.js";
 
@@ -118,6 +119,29 @@ async function strategy(ctx: WorkerContext, job: StrategyJob): Promise<string> {
       })),
     );
   }
+
+  /*
+   * The workspace's one agent, from what this run just learned.
+   *
+   * Here rather than on a button, because this is the moment the product
+   * knows what the company does, who it sells to and how it sounds — and a
+   * rep who has just said all that should not be handed a blank form and
+   * asked to say it again.
+   *
+   * Idempotent and never fatal: a workspace that already has one is left
+   * alone, and a failure to seed loses a convenience rather than the run.
+   */
+  const { data: owner } = await ctx.db
+    .from("profiles")
+    .select("full_name")
+    .eq("id", job.userId)
+    .maybeSingle();
+  await seedWorkspaceAgent(ctx.db, {
+    workspaceId: job.workspaceId,
+    userId: job.userId,
+    business: output.businessProfile,
+    repName: owner?.full_name ?? null,
+  });
 
   await recordEvent(ctx.db, {
     workspaceId: job.workspaceId,

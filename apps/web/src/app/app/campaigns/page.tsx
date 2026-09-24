@@ -4,7 +4,84 @@ import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { fetchAllRows } from "@/lib/rows";
 
-export default async function CampaignsPage() {
+import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
+import { buildCampaign, eligibleProspects } from "@/lib/build-campaign";
+import { errorQuery, noticeQuery } from "@/lib/worker";
+import { SubmitButton } from "@/components/submit-button";
+import { PageNotice, type NoticeParams } from "@/components/page-notice";
+
+/**
+ * One campaign over everybody you have, in one click.
+ *
+ * The first version of this was a form: name it, pick the goal, pick the
+ * agent, set the follow-up, tick two hundred checkboxes. Every one of those
+ * has a sensible answer already — the workspace has one agent, one LinkedIn
+ * account and a list of people nobody has written to — so the form was asking
+ * a rep to confirm what the product already knew.
+ *
+ * It still arrives as a draft. Nothing sends until somebody has read the names
+ * and the copy and pressed Launch, which is the review this product is built
+ * on; a button that skipped it would be a way around it.
+ */
+async function startCampaign() {
+  "use server";
+  const session = await requireSession();
+  const supabase = await createClient();
+
+  const [{ data: account }, { data: agent }, prospects] = await Promise.all([
+    supabase
+      .from("linkedin_accounts")
+      .select("id")
+      .eq("workspace_id", session.workspaceId)
+      .eq("status", "active")
+      .limit(1),
+    supabase
+      .from("agents")
+      .select("id")
+      .eq("workspace_id", session.workspaceId)
+      .is("archived_at", null)
+      .order("is_default", { ascending: false })
+      .limit(1),
+    eligibleProspects(supabase as never, session.workspaceId),
+  ]);
+
+  if (!account?.[0]) {
+    redirect(errorQuery("/app/campaigns", "Connect a LinkedIn account first — a campaign sends from one."));
+  }
+  if (prospects.length === 0) {
+    redirect(errorQuery("/app/campaigns", "Everyone here has already been contacted. Run a strategy to find more."));
+  }
+
+  const result = await buildCampaign(supabase as never, {
+    workspaceId: session.workspaceId,
+    userId: session.userId,
+    name: `Outreach — ${new Date().toISOString().slice(0, 10)}`,
+    accountId: account[0].id,
+    // Null is a real answer: a workspace whose agent has not been seeded yet
+    // still gets a campaign, on the behaviour every campaign had before agents.
+    agentId: agent?.[0]?.id ?? null,
+    ctaId: null,
+    prospectIds: prospects.map((p) => p.id),
+    followUpDays: 3,
+  });
+
+  if (!result.ok) redirect(errorQuery("/app/campaigns", result.reason ?? "The campaign could not be built."));
+  revalidatePath("/app/campaigns");
+  redirect(
+    noticeQuery(
+      `/app/campaigns/${result.campaignId}`,
+      `${prospects.length} people queued as a draft. Read the notes before you launch.`,
+    ),
+  );
+}
+
+export default async function CampaignsPage({
+  searchParams,
+}: {
+  searchParams: Promise<NoticeParams>;
+}) {
+  const notice = await searchParams;
   const session = await requireSession();
   const supabase = await createClient();
 
@@ -51,15 +128,21 @@ export default async function CampaignsPage() {
           title="Campaigns"
           lede="Built as drafts. You read every name and every message before anything sends."
           actions={
-            <Link className="btn secondary" href="/app/campaigns/new">
-              New campaign
-            </Link>
+            <form action={startCampaign}>
+              <SubmitButton className="btn secondary" pendingLabel="Building…">
+                Start a campaign
+              </SubmitButton>
+            </form>
           }
         />
+        {/* Without this, a refusal from the action above redirects here and
+            says nothing — a button that looks broken rather than one that
+            explained itself. */}
+        <PageNotice error={notice.error} notice={notice.notice} />
         <Empty title="No campaigns yet." action="Open strategies" href="/app/strategy">
           The Targeting Agent builds one from an approved strategy — the list, the copy, and a note
-          written for each person. It arrives as a draft. You can also build one yourself from
-          prospects you already have.
+          written for each person. Or press <strong>Start a campaign</strong> above to build one now
+          over everybody you already have. Either way it arrives as a draft.
         </Empty>
       </>
     );
