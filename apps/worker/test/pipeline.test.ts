@@ -1471,6 +1471,83 @@ describe("when LinkedIn refuses an invitation", () => {
     expect(db.find("linkedin_accounts", { id: ACCOUNT })?.invites_paused_until ?? null).toBeNull();
   });
 
+  it("does not pause the account over one recently-invited recipient", async () => {
+    /*
+     * The bug this replaces cost a live account a day.
+     *
+     * One prospect came back "an invitation has already been sent recently to
+     * this recipient" and the account went into a twenty-four hour hold, so
+     * the other twenty-five people on the list could not be written to. That
+     * refusal is about the recipient; reading it as an account throttle is one
+     * awkward row silencing a campaign.
+     */
+    const { db, ctx, linkedin } = harness({
+      trialEndsAt: new Date(NOW.getTime() + 30 * 86_400_000).toISOString(),
+    });
+    linkedin.invitationRefusal =
+      "Unipile POST /api/v1/users/invite failed with 422: Should delay new invitation to this recipient — An invitation has already been sent recently to this recipient. — errors/already_invited_recently";
+
+    await runLinkedInAction(ctx, { kind: "invite", workspaceId: WORKSPACE, campaignProspectId: CP });
+
+    // The account is untouched, so everybody else still goes out.
+    expect(db.find("linkedin_accounts", { id: ACCOUNT })?.invites_paused_until ?? null).toBeNull();
+    // And this one person waits, rather than being asked again on the next
+    // tick — a hold that holds nobody is no hold at all.
+    const after = db.find("campaign_prospects", { id: CP })!;
+    expect(after.status).toBe("queued");
+    expect(Date.parse(after.next_action_at as string)).toBeGreaterThan(Date.now());
+  });
+
+  it("refuses to send an invitation while the provider's hold stands", async () => {
+    /*
+     * Rule 1, applied to the throttle. The pacing loop checks the hold before
+     * it enqueues, but jobs already delayed in the queue were scheduled before
+     * the hold existed and fire straight through it — eight more invitations
+     * went out over the hour after LinkedIn throttled this account, each one
+     * another rejected request against an account already being slowed down.
+     */
+    const { db, ctx, linkedin } = harness({
+      trialEndsAt: new Date(NOW.getTime() + 30 * 86_400_000).toISOString(),
+    });
+    db.find("linkedin_accounts", { id: ACCOUNT })!.invites_paused_until = new Date(
+      Date.now() + 3 * 60 * 60_000,
+    ).toISOString();
+
+    await expect(
+      runLinkedInAction(ctx, { kind: "invite", workspaceId: WORKSPACE, campaignProspectId: CP }),
+    ).rejects.toThrow();
+
+    // Nothing reached LinkedIn, which is the whole point.
+    expect(linkedin.sentInvitations).toHaveLength(0);
+  });
+
+  it("still sends a follow-up while invitations are held", async () => {
+    /*
+     * A hold is LinkedIn refusing new connection requests. A follow-up to
+     * somebody who has already accepted is a different action on an open
+     * conversation, and stopping those would silence the half of the funnel
+     * the campaign exists for.
+     */
+    const { db, ctx, linkedin } = harness({
+      trialEndsAt: new Date(NOW.getTime() + 30 * 86_400_000).toISOString(),
+    });
+    db.find("linkedin_accounts", { id: ACCOUNT })!.invites_paused_until = new Date(
+      Date.now() + 3 * 60 * 60_000,
+    ).toISOString();
+    const cp = db.find("campaign_prospects", { id: CP })!;
+    cp.status = "accepted";
+    cp.last_step_sent = 0;
+
+    await runLinkedInAction(ctx, {
+      kind: "follow_up",
+      workspaceId: WORKSPACE,
+      campaignProspectId: CP,
+      stepNumber: 1,
+    });
+
+    expect(linkedin.sentMessages.length).toBeGreaterThan(0);
+  });
+
   it("offers nothing on an account inside its cooldown", async () => {
     const { db, queues } = harness();
     db.find("linkedin_accounts", { id: ACCOUNT })!.invites_paused_until = new Date(

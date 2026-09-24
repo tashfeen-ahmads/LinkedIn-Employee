@@ -29,6 +29,24 @@ describe("reading a provider refusal", () => {
     expect(classifyProviderError(LIVE.recentlyInvited).kind).toBe("retry_later");
   });
 
+  it("blames the recipient for a recipient's refusal, not the account", () => {
+    /*
+     * "An invitation has already been sent recently to this recipient" is a
+     * fact about that recipient. Read as an account-wide throttle it put a
+     * live account into a twenty-four hour hold over one awkward row, and the
+     * other twenty-five people on the list could not be written to — one
+     * prospect silencing a campaign, which is the failure the account-wide
+     * pause exists to prevent, pointed the wrong way.
+     */
+    const verdict = classifyProviderError(LIVE.recentlyInvited);
+    expect(verdict.kind === "retry_later" && verdict.scope).toBe("prospect");
+  });
+
+  it("blames the account for an account-wide limit", () => {
+    const verdict = classifyProviderError(LIVE.temporaryLimit);
+    expect(verdict.kind === "retry_later" && verdict.scope).toBe("account");
+  });
+
   it.each([
     "Unipile POST /api/v1/users/invite failed with 422: Cannot send invitation to this member",
     "Unipile POST /api/v1/users/invite failed with 404: member not found",

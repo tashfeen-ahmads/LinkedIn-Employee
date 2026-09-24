@@ -24,8 +24,22 @@
 /** Try again later, and how long to leave the account alone meanwhile. */
 export interface RetryLater {
   kind: "retry_later";
-  /** How long invitations on this account should stop entirely. */
+  /** How long invitations should stop. */
   cooldownMs: number;
+  /**
+   * Who the refusal is actually about.
+   *
+   * `account` is LinkedIn slowing this account down, and everything queued on
+   * it has to wait. `prospect` is LinkedIn saying something about one person —
+   * "an invitation has already been sent recently to this recipient" — and
+   * pausing the whole account on it is a misreading that stops twenty-five
+   * other invitations over one.
+   *
+   * That is not hypothetical: one `already_invited_recently` put a live
+   * account into a twenty-four hour account-wide hold, and nobody else on the
+   * list could be written to.
+   */
+  scope: "account" | "prospect";
   /** Plain words for the screen, not the raw provider string. */
   summary: string;
 }
@@ -67,23 +81,31 @@ const COOLDOWNS = {
 const RETRYABLE: ReadonlyArray<{
   match: RegExp;
   cooldownMs: number;
+  scope: "account" | "prospect";
   summary: string;
 }> = [
   {
     // "You have reached a temporary provider limit. Please try again later."
     match: /errors\/cannot_resend_yet|temporary provider limit/,
     cooldownMs: COOLDOWNS.providerLimit,
+    scope: "account",
     summary: "LinkedIn is temporarily refusing invitations from this account",
   },
   {
     // "An invitation has already been sent recently to this recipient."
+    //
+    // About the recipient, not the account. Everyone else on the list can
+    // still be written to, and holding them over this is how one awkward row
+    // silences a campaign.
     match: /errors\/already_invited_recently|already been sent recently/,
     cooldownMs: COOLDOWNS.recentlyInvited,
+    scope: "prospect",
     summary: "LinkedIn says this person was invited recently",
   },
   {
     match: /errors\/rate_limit|too many requests|\b429\b/,
     cooldownMs: COOLDOWNS.rateLimited,
+    scope: "account",
     summary: "LinkedIn rate-limited this account",
   },
   {
@@ -92,6 +114,7 @@ const RETRYABLE: ReadonlyArray<{
     // one reading that is certainly wrong.
     match: /\b(502|503|504)\b|gateway timeout|service unavailable|socket hang up|etimedout|econnreset/,
     cooldownMs: 15 * 60_000,
+    scope: "account",
     summary: "The provider did not answer",
   },
 ];
@@ -107,7 +130,12 @@ export function classifyProviderError(error: string | null | undefined): Provide
   const text = error.toLowerCase();
   for (const rule of RETRYABLE) {
     if (rule.match.test(text)) {
-      return { kind: "retry_later", cooldownMs: rule.cooldownMs, summary: rule.summary };
+      return {
+        kind: "retry_later",
+        cooldownMs: rule.cooldownMs,
+        scope: rule.scope,
+        summary: rule.summary,
+      };
     }
   }
   return { kind: "permanent" };

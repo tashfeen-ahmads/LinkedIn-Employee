@@ -124,6 +124,32 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
   const { data: profile } = await db.from("profiles").select("timezone").eq("id", accountRow.user_id).single();
   const usage = toUsage(accountRow as AccountRecord, profile?.timezone ?? "UTC");
 
+  /*
+   * The provider's own hold, re-checked immediately before the call.
+   *
+   * Rule 1, applied to the throttle. The pacing loop checks this before it
+   * enqueues, but jobs already sitting delayed in the queue were scheduled
+   * before the hold existed — and they fire straight through it. That is not
+   * theoretical: after LinkedIn throttled this account, eight more invitations
+   * went out over the following hour from jobs queued minutes earlier, each
+   * one another rejected request logged against an account LinkedIn had
+   * already decided to slow down.
+   *
+   * Invitations only. A hold is LinkedIn refusing new connection requests; a
+   * follow-up to somebody who has already accepted is a different action on an
+   * open conversation, and stopping those would silence the half of the funnel
+   * the campaign exists for.
+   */
+  if (job.kind === "invite" && accountRow.invites_paused_until) {
+    const until = Date.parse(accountRow.invites_paused_until);
+    if (Number.isFinite(until) && until > Date.now()) {
+      throw new RescheduleError(
+        accountRow.invites_paused_reason ?? "the provider is refusing invitations",
+        until - Date.now(),
+      );
+    }
+  }
+
   // Second limiter check, immediately before the call. The first was minutes
   // ago at scheduling time and the account may have been used since.
   const kind = job.kind === "invite" ? "invite" : "message";
@@ -765,20 +791,33 @@ async function handleInviteRefusal(
   }
 
   const until = new Date(Date.now() + verdict.cooldownMs);
-  // Never shortened by a later refusal during the same throttle. A fifteen
-  // minute network blip arriving inside a six hour invitation limit would
-  // otherwise cut that limit short and walk the account straight back into it.
-  const { data: held } = await ctx.db
-    .from("linkedin_accounts")
-    .select("invites_paused_until")
-    .eq("id", input.accountId)
-    .maybeSingle();
-  const standing = held?.invites_paused_until ? Date.parse(held.invites_paused_until) : 0;
-  if (!Number.isFinite(standing) || standing < until.getTime()) {
-    await ctx.db
+
+  /*
+   * Who the refusal is about decides who waits.
+   *
+   * "An invitation has already been sent recently to this recipient" is a fact
+   * about that recipient. Reading it as an account-wide throttle put a live
+   * account into a twenty-four hour hold over one awkward row, and the other
+   * twenty-five people on the list could not be written to — one prospect
+   * silencing a campaign, which is the failure the account-wide pause was
+   * built to prevent, pointed the wrong way.
+   */
+  if (verdict.scope === "account") {
+    // Never shortened by a later refusal during the same throttle. A fifteen
+    // minute network blip arriving inside a six hour invitation limit would
+    // otherwise cut that limit short and walk the account straight back in.
+    const { data: held } = await ctx.db
       .from("linkedin_accounts")
-      .update({ invites_paused_until: until.toISOString(), invites_paused_reason: verdict.summary })
-      .eq("id", input.accountId);
+      .select("invites_paused_until")
+      .eq("id", input.accountId)
+      .maybeSingle();
+    const standing = held?.invites_paused_until ? Date.parse(held.invites_paused_until) : 0;
+    if (!Number.isFinite(standing) || standing < until.getTime()) {
+      await ctx.db
+        .from("linkedin_accounts")
+        .update({ invites_paused_until: until.toISOString(), invites_paused_reason: verdict.summary })
+        .eq("id", input.accountId);
+    }
   }
 
   await ctx.db
@@ -786,7 +825,16 @@ async function handleInviteRefusal(
     // Back in the queue, not failed. `status_reason` still carries the
     // provider's words so the screen can say why they are waiting rather than
     // leaving a silent row somebody assumes is stuck.
-    .update({ status: "queued", status_reason: input.error, next_action_at: null })
+    //
+    // `next_action_at` holds *this* person back when the refusal was about
+    // them. Without it a prospect-scoped refusal is no wait at all: the next
+    // tick picks them straight back up and asks LinkedIn the same question it
+    // just answered.
+    .update({
+      status: "queued",
+      status_reason: input.error,
+      next_action_at: verdict.scope === "prospect" ? until.toISOString() : null,
+    })
     .eq("id", input.campaignProspectId);
 
   await recordEvent(ctx.db, {
@@ -794,6 +842,11 @@ async function handleInviteRefusal(
     name: "invite.throttled",
     subjectType: "campaign_prospect",
     subjectId: input.campaignProspectId,
-    payload: { until: until.toISOString(), reason: verdict.summary, provider: input.error },
+    payload: {
+      until: until.toISOString(),
+      scope: verdict.scope,
+      reason: verdict.summary,
+      provider: input.error,
+    },
   });
 }

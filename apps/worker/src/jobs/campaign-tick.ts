@@ -220,13 +220,36 @@ async function enqueueInvites(
     };
   }
 
-  const { data: queued } = await db
+  const { data: waiting } = await db
     .from("campaign_prospects")
-    .select("id")
+    .select("id, next_action_at")
     .eq("campaign_id", campaign.id)
     .eq("status", "queued")
-    .limit(budget);
-  if (!queued?.length) return { enqueued: 0, reason: "nobody left to invite" };
+    // Read wider than the budget, because some of these are serving a hold of
+    // their own and are filtered out below. Taking exactly `budget` rows first
+    // would let a handful of held prospects fill the whole allowance and send
+    // nobody.
+    .limit(budget * 4);
+
+  // A prospect LinkedIn refused *about them* — "already invited recently" —
+  // carries its own wait. Filtered here rather than in the query because the
+  // condition is "null or past", which PostgREST expresses with `.or()` and
+  // the in-memory double cannot model faithfully.
+  const queued = (waiting ?? [])
+    .filter((row) => {
+      if (!row.next_action_at) return true;
+      const due = Date.parse(row.next_action_at);
+      return !Number.isFinite(due) || due <= now.getTime();
+    })
+    .slice(0, budget);
+  if (!queued.length) {
+    return {
+      enqueued: 0,
+      reason: waiting?.length
+        ? `${waiting.length} waiting on a per-person hold from LinkedIn`
+        : "nobody left to invite",
+    };
+  }
 
   let delay = decision.allowed ? 0 : decision.retryAfterMs;
   let added = 0;
