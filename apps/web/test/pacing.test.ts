@@ -53,6 +53,58 @@ describe("describePacing", () => {
     expect(state?.title).toContain("5 people");
   });
 
+  it("says when LinkedIn itself is holding the account", () => {
+    /*
+     * The limiter only knows the caps this product chose, so it is perfectly
+     * happy while LinkedIn refuses every invitation. This screen said
+     * "Sending. The next invitation goes out in about four minutes" — false
+     * four minutes later and for the next two hours. A reassuring sentence
+     * about a system that will not send is the thing rule 21 exists to stop.
+     */
+    const state = describePacing({
+      ...live,
+      account: account({
+        invites_paused_until: "2026-09-17T18:30:00Z",
+        invites_paused_reason: "LinkedIn is temporarily refusing invitations from this account",
+      }),
+    });
+    expect(state?.title).toContain("LinkedIn is holding");
+    expect(state?.body).toContain("refusing invitations");
+    // Said as a wait, not a loss: everybody queued stays queued.
+    expect(state?.body).toMatch(/resumes on its own/);
+    expect(state?.body).not.toMatch(/minutes apart/);
+  });
+
+  it("goes back to the ordinary rules once the hold has expired", () => {
+    // A stale timestamp is not a hold. Reading it as one would silence a
+    // healthy campaign for ever.
+    const state = describePacing({
+      ...live,
+      account: account({
+        invites_paused_until: "2026-09-17T15:00:00Z",
+        invites_paused_reason: "LinkedIn is temporarily refusing invitations from this account",
+      }),
+    });
+    expect(state?.tone).toBe("accent");
+    expect(state?.body).toMatch(/minutes apart/);
+  });
+
+  it("reports a dead loop ahead of a provider hold", () => {
+    // Rule 21: a dead loop is reported ahead of every gentler explanation.
+    // "LinkedIn is holding this account" is a sentence about a system that
+    // would otherwise be sending, and this one would not be.
+    const state = describePacing({
+      ...live,
+      lastBeatAt: "2026-09-17T15:00:00Z",
+      account: account({
+        invites_paused_until: "2026-09-17T18:30:00Z",
+        invites_paused_reason: "LinkedIn is temporarily refusing invitations from this account",
+      }),
+    });
+    expect(state?.tone).toBe("danger");
+    expect(state?.title).not.toContain("LinkedIn is holding");
+  });
+
   it("says when the loop that sends the messages is not running", () => {
     const state = describePacing({ ...live, lastBeatAt: "2026-09-17T15:00:00Z" });
     expect(state?.tone).toBe("danger");

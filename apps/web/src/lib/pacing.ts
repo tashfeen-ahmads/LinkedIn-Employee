@@ -59,6 +59,34 @@ export function describePacing(input: {
     };
   }
 
+  /*
+   * LinkedIn's own hold, ahead of every rule this product enforces.
+   *
+   * The limiter below only knows the caps we chose. When LinkedIn itself is
+   * refusing invitations the limiter is perfectly happy, so this screen said
+   * "Sending. 7 people still to invite. The next invitation goes out in about
+   * four minutes" — which was false, four minutes later and for the next two
+   * hours. A reassuring sentence about a system that will not send is the
+   * thing rule 21 exists to stop, and this is the same disease one layer down:
+   * the true reason was in the heartbeat detail on another screen, and the
+   * campaign page, which is where somebody actually goes to ask, was the one
+   * place it was not said.
+   *
+   * Read off the same two columns the send path re-checks immediately before
+   * the call, so the screen and the send cannot disagree about whether this
+   * account is held.
+   */
+  const heldUntil = input.account.invites_paused_until
+    ? Date.parse(input.account.invites_paused_until)
+    : NaN;
+  if (Number.isFinite(heldUntil) && heldUntil > now.getTime()) {
+    return {
+      tone: "muted",
+      title: "LinkedIn is holding invitations from this account.",
+      body: `${input.account.invites_paused_reason ?? "The provider is refusing invitations"}. Sending resumes on its own ${inWords(heldUntil - now.getTime())}. Nothing is lost — everybody still queued stays queued, and this is LinkedIn slowing the account down rather than anything wrong with the campaign.`,
+    };
+  }
+
   const usage = toUsage(input.account, input.timezone);
   const decision = checkAction("invite", usage, now);
 

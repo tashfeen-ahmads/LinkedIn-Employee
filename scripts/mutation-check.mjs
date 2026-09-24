@@ -762,6 +762,22 @@ const MUTATIONS = [
     pkg: "@le/worker",
   },
   {
+    id: "throttle/the-campaign-screen-says-linkedin-is-holding",
+    rule: "A provider hold is named on the campaign screen, ahead of the gentler explanation the limiter would give",
+    file: "apps/web/src/lib/pacing.ts",
+    from: "  if (Number.isFinite(heldUntil) && heldUntil > now.getTime()) {",
+    to: "  if (false && Number.isFinite(heldUntil) && heldUntil > now.getTime()) {",
+    pkg: "@le/web",
+  },
+  {
+    id: "throttle/an-expired-hold-is-not-a-hold",
+    rule: "A hold that has already passed lets the ordinary rules speak again, rather than silencing the campaign for ever",
+    file: "apps/web/src/lib/pacing.ts",
+    from: "  if (Number.isFinite(heldUntil) && heldUntil > now.getTime()) {",
+    to: "  if (Number.isFinite(heldUntil)) {",
+    pkg: "@le/web",
+  },
+  {
     id: "rewrite/only-people-not-yet-invited",
     rule: "Rewriting a campaign's notes touches only prospects still queued; an invited note is the record of what was sent",
     file: "apps/worker/src/jobs/rewrite-notes.ts",
