@@ -176,6 +176,26 @@ export interface DraftInput {
   availableSlots: string[];
   /** True when this reply confirms a meeting we have already put in the diary. */
   bookedMeeting?: boolean;
+  /**
+   * How the campaign's agent has been told to write, and what it is for.
+   *
+   * Appended to the shipped prompt, never instead of it. That prompt carries
+   * the rules that keep the agent from stating a product fact nobody gave it,
+   * from inventing a datetime and from sending a link it was not handed — a
+   * rep's opinion about voice is worth a great deal and is not worth any of
+   * those. Absent is the behaviour every conversation had before agents.
+   */
+  voice?: string;
+  /**
+   * What this agent needs to learn before a conversation is worth a person's
+   * time.
+   *
+   * Guidance, not a gate. A prospect who asks a simple question and is
+   * interrogated instead has been answered by a form, and the reply gate's own
+   * holds are what actually stop a conversation (rule 41) — a required
+   * question here never overrides a prospect asking for a human.
+   */
+  qualification?: Array<{ ask: string; required: boolean }>;
 }
 
 /** Agent 3, step two: write the reply. */
@@ -204,6 +224,14 @@ export async function draftReply(ctx: AgentContext, input: DraftInput): Promise<
      */
     input.pitch
       ? `\nTHE PITCH — the offer this business makes, approved by the salesperson:\n"""\n${input.pitch}\n"""\n\nWhen the prospect wants to know what this is, or has shown interest, make THIS offer. Adapt the wording to them and to what they actually asked; never invent a different offer, a different problem, or a benefit that is not in it. It is what your colleagues are telling every other prospect this week.`
+      : "",
+    // The rep's own words about voice, after the shipped rules and inside the
+    // cached half: identical for every conversation in this workspace.
+    input.voice ? `\n${input.voice}` : "",
+    input.qualification?.length
+      ? `\nWhat this agent is trying to find out, when the conversation gives you a natural opening for it. Never interrogate; one question at a time, and never at the cost of answering what they actually asked:\n${input.qualification
+          .map((q) => `- ${q.ask}${q.required ? " (needed before handing over)" : ""}`)
+          .join("\n")}`
       : "",
     `\nGoal for this conversation: ${input.rules.goal}`,
     // What the campaign is asking for, which is not always a meeting. Without

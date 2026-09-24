@@ -105,7 +105,13 @@ function harness() {
     linkedin,
     email: null,
     env: {} as WorkerContext["env"],
-    agentsFor: () => ({ client: {} as never }),
+    // Reports what a real client reports. An empty object made every read of
+    // `client.models.writer` throw, and the invite writer's own catch then
+    // turned that into "falling back to the campaign template" — a green test
+    // for a path that never ran.
+    agentsFor: () => ({
+      client: { provider: "openai", models: { writer: "gpt-5", classifier: "gpt-5-mini" } } as never,
+    }),
   } as unknown as WorkerContext;
 
   return { db, ctx, linkedin };

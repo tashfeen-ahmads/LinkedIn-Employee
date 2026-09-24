@@ -17,6 +17,16 @@ export async function pitchFor(
   db: Db,
   workspaceId: string,
   variantId: string | null | undefined,
+  /**
+   * The campaign's agent, when it has one.
+   *
+   * Sits between the angle and the workspace: an angle's own line still wins,
+   * because an angle owns its prospect end to end, and a campaign whose agent
+   * has an offer should not fall past it to a workspace default written for
+   * something else. A campaign built before agents existed passes nothing and
+   * resolves exactly as it always has.
+   */
+  agentId?: string | null,
 ): Promise<string | null> {
   if (variantId) {
     const { data: variant } = await db
@@ -36,6 +46,24 @@ export async function pitchFor(
       // ready, and the default is copy a person approved for exactly this.
       if (data?.approved_at && data.body?.trim()) return data.body.trim();
     }
+  }
+
+  if (agentId) {
+    // The agent's own, newest first. `limit(1)` rather than `maybeSingle()`:
+    // an agent may hold several approved lines and PostgREST fails a
+    // single-row request against more than one, which returns null and
+    // silently falls through — the shape that made a configured delay be
+    // ignored on every campaign that tests angles.
+    const { data: own } = await db
+      .from("pitches")
+      .select("body, approved_at")
+      .eq("agent_id", agentId)
+      .eq("workspace_id", workspaceId)
+      .not("approved_at", "is", null)
+      .order("is_default", { ascending: false })
+      .limit(1);
+    const body = own?.[0]?.body?.trim();
+    if (body) return body;
   }
 
   const { data } = await db

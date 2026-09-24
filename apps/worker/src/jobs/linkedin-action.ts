@@ -23,6 +23,7 @@ import { syncConversationToCrm } from "../crm.js";
 import { loadExclusions } from "../exclusions.js";
 import { clearHold, flagForHuman } from "../holds.js";
 import { pitchFor } from "../pitch.js";
+import { agentForCampaign } from "../agent.js";
 import { createBookingLink } from "./book.js";
 import type { LinkedInActionJob } from "../queues.js";
 
@@ -262,12 +263,27 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
    * greeting with nothing after it. Both reach a real person under the rep's
    * own name, so this refuses instead.
    */
+  /*
+   * The campaign's agent, resolved once and read by everything below.
+   *
+   * It decides the offer this person hears and the name the message comes
+   * from. Resolved here rather than at each use for the reason two readings
+   * are always wrong: they drift, and nothing on the screen says which one
+   * actually sent.
+   *
+   * Null is a real answer. A campaign built before agents existed keeps every
+   * behaviour it had, which is what makes the whole feature additive.
+   */
+  const agent = await agentForCampaign(db, cp.campaign_id);
+
   const withPitch = renderPitch(
     step.message,
-    // This person's own angle picks the line, falling back to the workspace
-    // default. An angle owns its prospect end to end (rule 28), so the
-    // follow-up argues the pain their invitation named.
-    usesPitch(step.message) ? await pitchFor(db, cp.workspace_id, cp.variant_id) : null,
+    // This person's own angle picks the line, then the campaign's agent, then
+    // the workspace default. An angle owns its prospect end to end (rule 28),
+    // so the follow-up argues the pain their invitation named.
+    usesPitch(step.message)
+      ? await pitchFor(db, cp.workspace_id, cp.variant_id, agent?.id ?? null)
+      : null,
   );
   if (!withPitch.ok) {
     /*
@@ -292,8 +308,23 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
     .eq("id", accountRow.user_id)
     .maybeSingle();
 
+  /*
+   * The agent decides the name on the message, and the rep's own is the
+   * fallback.
+   *
+   * Reading the profile alone made the agent's "writes as" field a setting that
+   * changed nothing — and a rep who edits a field, watches the message go out
+   * unchanged, and concludes the screen is lying does not come back to it. The
+   * two are genuinely different: "Tashfeen" reads like a person and a full
+   * legal name reads like a signature block, which is exactly the difference
+   * between a note and a mailshot.
+   */
   const body = renderCta(
-    renderTemplate(withPitch.message, prospect.first_name, mergeValuesFor(prospect, sender)),
+    renderTemplate(
+      withPitch.message,
+      prospect.first_name,
+      mergeValuesFor(prospect, sender, agent),
+    ),
     ctaUrl,
   );
 
@@ -587,6 +618,14 @@ export function mergeValuesFor(
     location?: string | null;
   },
   rep: { full_name?: string | null } | null,
+  /**
+   * The campaign's agent, when it has one.
+   *
+   * Its `from_name` is the name a prospect actually reads, and the rep's own
+   * is the fallback — a campaign built before agents existed has no agent and
+   * must keep behaving exactly as it did.
+   */
+  agent?: { fromName: string | null } | null,
 ): Partial<MergeValues> {
   // The stored columns first; the headline is the fallback for rows written
   // before those columns were ever filled in.
@@ -597,7 +636,7 @@ export function mergeValuesFor(
     company: prospect.company?.trim() || parsed.company,
     title: prospect.title?.trim() || parsed.title,
     location: prospect.location ?? null,
-    rep_name: rep?.full_name ?? null,
+    rep_name: agent?.fromName?.trim() || rep?.full_name || null,
   };
 }
 

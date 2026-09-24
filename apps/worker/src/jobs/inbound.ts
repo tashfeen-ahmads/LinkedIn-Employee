@@ -16,6 +16,7 @@ import {
 } from "@le/shared";
 import type { WorkerContext } from "../context.js";
 import { pitchFor } from "../pitch.js";
+import { agentForCampaign, voiceOf } from "../agent.js";
 import { recordEvent } from "../context.js";
 import { flagForHuman } from "../holds.js";
 import { jobId } from "../queues.js";
@@ -123,13 +124,19 @@ export async function handleInboundMessage(
   });
 
   const history = await loadHistory(ctx, conversation.id, inbound?.id);
+  // The agent this conversation belongs to, resolved before anything reads it.
+  // A conversation with no campaign, or on a campaign built before agents,
+  // resolves to null and behaves exactly as it always did.
+  const agent = campaignProspect?.campaign_id
+    ? await agentForCampaign(ctx.db, campaignProspect.campaign_id)
+    : null;
   const [knowledge, pitch] = await Promise.all([
     loadKnowledge(ctx, job.workspaceId),
-    // This prospect's angle decides which pitch they hear. They accepted
-    // because of one pain being named; hearing an offer that argues a
-    // different one is the two halves of the funnel measuring different
-    // things, which is the whole of rule 28.
-    pitchFor(ctx.db, job.workspaceId, campaignProspect?.variant_id ?? null),
+    // This prospect's angle decides which pitch they hear, then their
+    // campaign's agent, then the workspace default. They accepted because of
+    // one pain being named; hearing an offer that argues a different one is
+    // the two halves of the funnel measuring different things (rule 28).
+    pitchFor(ctx.db, job.workspaceId, campaignProspect?.variant_id ?? null, agent?.id ?? null),
   ]);
   const agents = ctx.agentsFor(job.workspaceId);
 
@@ -281,6 +288,11 @@ export async function handleInboundMessage(
         // for. Absent means it may send none.
         ...(offeredLink ? { bookingLink: offeredLink } : { bookingLink: undefined }),
       },
+      // How this campaign's agent has been told to write, and what it wants to
+      // learn. Without these the agent screen changes nothing about a reply,
+      // which is the fastest way to teach a rep that the screen is decorative.
+      voice: voiceOf(agent),
+      qualification: agent?.playbook.qualification,
       goal,
       // The only datetimes the agent may name. An empty list means it offers
       // to send times rather than inventing any.

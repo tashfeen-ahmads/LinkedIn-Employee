@@ -248,6 +248,27 @@ export async function personalizeInvites(
      * still written for the person receiving it.
      */
     hooks?: string[];
+    /**
+     * How this workspace wants the agent to write, in the rep's own words.
+     *
+     * Appended to the shipped prompt rather than replacing it. That prompt
+     * carries the rules that keep a note inside LinkedIn's limit, keep a link
+     * out of a connection request and keep the agent from stating a fact
+     * nobody gave it — a rep's opinion about voice is worth a great deal and
+     * is not worth any of those.
+     *
+     * Before an agent could carry this, the voice was a constant in the repo:
+     * a rep who wanted the notes to sound like them had no way to say so, and
+     * the result read as software because it was written by software with
+     * nobody's instructions in it.
+     */
+    voice?: string;
+    /**
+     * The model the campaign's agent selected, when this deployment can serve
+     * it. Absent falls back to the deployment's own writer, which is what
+     * every campaign used before an agent could choose.
+     */
+    model?: string;
     prospects: ProspectCandidate[];
   },
 ): Promise<Map<string, PersonalizedInvite>> {
@@ -285,12 +306,16 @@ export async function personalizeInvites(
       callStructured(ctx, {
         agent: "targeting.invite-note",
         // The writer, not the classifier: these words reach a real person under
-        // a real rep's name.
-        model: ctx.client.models.writer,
+        // a real rep's name. The agent's own choice when it has one this
+        // deployment can actually serve.
+        model: input.model ?? ctx.client.models.writer,
         promptVersion: INVITE_NOTE_PROMPT_VERSION,
         schema: InviteNoteBatchSchema,
         system: [
           { text: INVITE_NOTE_SYSTEM },
+          // After the shipped rules, never instead of them, and before the
+          // cache breakpoint: it is identical for every batch in this run.
+          ...(input.voice ? [{ text: input.voice, cached: true }] : []),
           { text: `Who is sending, and why:\n${context}`, cached: true },
         ],
         userContent: `Write one note per person below. Return one entry per providerId, no more, no fewer.\n\n${JSON.stringify(

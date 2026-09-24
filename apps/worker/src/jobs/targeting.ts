@@ -13,6 +13,7 @@ import {
 } from "@le/shared";
 import { isAccountGone } from "@le/linkedin";
 import { markAccountGone } from "../accounts.js";
+import { agentForCampaign, modelFor, openersFor, voiceOf } from "../agent.js";
 import type { WorkerContext } from "../context.js";
 import { recordEvent } from "../context.js";
 import { loadExclusions } from "../exclusions.js";
@@ -531,6 +532,14 @@ function nothingNewYet(continuing: CampaignPosition | null, page: { cursor: stri
 async function loadHooks(
   ctx: WorkerContext,
   workspaceId: string,
+  /**
+   * The set the campaign's agent owns, already resolved.
+   *
+   * Passed in rather than read again here: `openersFor` is the one definition
+   * of which openers a campaign may use, and a second query with its own idea
+   * of the answer is how the screen and the send come apart.
+   */
+  agentOpeners: string[] = [],
 ): Promise<{ byVariantId: Map<string, string>; all: string[] }> {
   const [{ data: hooks }, { data: variants }] = await Promise.all([
     ctx.db
@@ -552,7 +561,10 @@ async function loadHooks(
     const body = variant.hook_id ? bodyById.get(variant.hook_id) : undefined;
     if (body) byVariantId.set(variant.id, body);
   }
-  return { byVariantId, all: [...bodyById.values()] };
+  // The agent's set wins outright where it has one. An agent given three
+  // openers has been given exactly the three somebody wants used, and quietly
+  // adding the workspace's other five back would make that list a suggestion.
+  return { byVariantId, all: agentOpeners.length ? agentOpeners : [...bodyById.values()] };
 }
 
 function groupByAngle(
@@ -778,19 +790,55 @@ async function attachProspects(
     const providerIdByProspectId = new Map(
       insertedProspects.map((p, index) => [p.id, input.shortlist[index]?.candidate.providerId ?? ""]),
     );
+    /*
+     * The campaign's agent, which decides the openers, the voice and the name.
+     *
+     * Without this the agent screen is a settings page that changes nothing —
+     * the rep edits the voice, the notes go out identical, and they conclude
+     * the product is lying to them. A campaign with no agent resolves exactly
+     * as it always did, which is what keeps this additive.
+     */
+    const agent = await agentForCampaign(ctx.db, input.campaignId);
+    const agentOpeners = await openersFor(ctx.db, job.workspaceId, agent);
+
+    /*
+     * The model the agent asked for, if this deployment can serve it.
+     *
+     * A deployment runs on whichever provider has a key, and a client built
+     * for one cannot answer for the other — so an agent set to a Claude model
+     * on an OpenAI-keyed deployment is not slower, it is a failed call and a
+     * campaign with no notes. Falling back keeps the campaign; saying so keeps
+     * the setting honest, because one that quietly does nothing is worse than
+     * one that is missing.
+     */
+    const chosenModel = modelFor(ctx.agentsFor(job.workspaceId).client, agent);
+    if (agent?.model && !chosenModel.honoured) {
+      await recordEvent(ctx.db, {
+        workspaceId: job.workspaceId,
+        name: "agent.model.unavailable",
+        subjectType: "campaign",
+        subjectId: input.campaignId,
+        payload: { asked: agent.model, used: chosenModel.model ?? "the deployment default" },
+      });
+    }
+
     const groups = groupByAngle(
       insertedProspects,
       variantByProspectId,
       providerIdByProspectId,
       input,
-      await loadHooks(ctx, job.workspaceId),
+      await loadHooks(ctx, job.workspaceId, agentOpeners),
     );
 
     for (const group of groups) {
       const written = await personalizeInvites(ctx.agentsFor(job.workspaceId), {
         business: input.business,
         profile: input.profile,
-        repName: input.repName,
+        // The name a prospect reads is the agent's when it has one. A full
+        // legal name reads like a signature block; a first name reads like a
+        // person, and that is the whole difference between a note and a
+        // mailshot.
+        repName: agent?.fromName?.trim() || input.repName,
         campaignAngle: group.angle,
         // The openers a person approved, with this angle's own leading.
         //
@@ -800,6 +848,8 @@ async function attachProspects(
         // strategy's own hooks are the fallback, so a workspace that has not
         // written openers yet keeps exactly the behaviour it had.
         hooks: group.hooks.length ? group.hooks : input.profile.hooks,
+        voice: voiceOf(agent),
+        model: chosenModel.model,
         prospects: group.prospects,
       });
       for (const [providerId, note] of written) notes.set(providerId, note);

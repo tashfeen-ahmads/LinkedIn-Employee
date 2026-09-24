@@ -35,6 +35,45 @@ export function isSelectableModel(model: string | null | undefined): boolean {
 }
 
 /**
+ * Which provider serves a model.
+ *
+ * A deployment runs on whichever provider has a key, and a client built for one
+ * cannot answer for the other. So an agent set to `claude-opus-5` on an
+ * OpenAI-keyed deployment is not a slower agent, it is a failed call — and a
+ * campaign whose notes silently stop being written is the exact failure this
+ * product keeps having to re-learn.
+ *
+ * Read from the name because that is the only thing the two catalogues actually
+ * agree on, and a table mapping every model twice is a second place to forget
+ * to update.
+ */
+export function modelProvider(model: string | null | undefined): "openai" | "anthropic" | null {
+  if (typeof model !== "string") return null;
+  if (model.startsWith("gpt-")) return "openai";
+  if (model.startsWith("claude-")) return "anthropic";
+  return null;
+}
+
+/**
+ * The model to actually call with, given what this deployment can serve.
+ *
+ * The agent's choice when the provider matches, and the deployment's own
+ * otherwise. Falling back rather than failing is right here: a rep who picked a
+ * model this deployment cannot reach should get their campaign written in a
+ * slightly different voice, not no campaign — but it is never silent, because a
+ * setting that quietly does nothing is worse than one that is missing.
+ */
+export function modelToUse(
+  chosen: string | null | undefined,
+  deployment: { provider: string; writer: string },
+): { model: string; honoured: boolean } {
+  if (isSelectableModel(chosen) && modelProvider(chosen) === deployment.provider) {
+    return { model: chosen as string, honoured: true };
+  }
+  return { model: deployment.writer, honoured: !chosen };
+}
+
+/**
  * A question the agent is trying to get answered before it hands over.
  *
  * `required` is what separates a playbook from a wish list. An agent that
