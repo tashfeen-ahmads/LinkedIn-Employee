@@ -17,6 +17,7 @@ import { runTargetingJob } from "./jobs/targeting.js";
 import { detectAcceptedInvitations } from "./jobs/acceptance.js";
 import { recoverThrottledProspects, unstickProspects } from "./jobs/unstick.js";
 import { runMaintenance } from "./jobs/maintenance.js";
+import { seedMissingAgents } from "./jobs/seed-agent.js";
 import { runDailyDigest } from "./jobs/digest.js";
 import { createServer } from "./server.js";
 
@@ -62,6 +63,28 @@ await recordBeat(ctx.db, BOOT_BEAT, {
   redisHost: redisHost(env.REDIS_URL),
   nodeEnv: process.env.NODE_ENV ?? null,
 });
+
+/*
+ * Every workspace that has told us about its business gets an agent.
+ *
+ * At boot rather than only nightly, because the workspaces that need this are
+ * the ones that onboarded before agents existed — they would otherwise open
+ * the screen, find it empty, and be handed the blank form the seeding was
+ * written to remove. A deploy fixes it; waiting until three in the morning
+ * does not.
+ *
+ * Awaited but never fatal. A worker that refuses to start because a
+ * convenience failed is a worker that sends nobody anything.
+ */
+try {
+  const seeded = await seedMissingAgents(ctx.db);
+  if (seeded) console.log("seeded agents for workspaces that had none", { seeded });
+} catch (err) {
+  console.error("could not sweep for missing agents", {
+    reason: err instanceof Error ? err.message : String(err),
+  });
+}
+
 if (!queueOk) {
   // Not a crash: the HTTP API still answers, /health now says 503, and the
   // boot stamp above is readable from the product's own screens. A process

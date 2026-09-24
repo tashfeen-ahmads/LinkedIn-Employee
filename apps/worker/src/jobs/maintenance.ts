@@ -5,6 +5,7 @@ import { pollHealth, recoverAccounts } from "../accounts.js";
 import { recordEvent } from "../context.js";
 import { detectAcceptedInvitations } from "./acceptance.js";
 import { recoverThrottledProspects, unstickProspects } from "./unstick.js";
+import { seedMissingAgents } from "./seed-agent.js";
 import { syncCalendarFeeds } from "./calendar-feed.js";
 import { runLifecycleEmails } from "./lifecycle.js";
 import { runRetentionSweep } from "./retention.js";
@@ -97,6 +98,8 @@ export async function runMaintenance(
   // failure that is invisible from every screen.
   await step("unstick", () => unstickProspects(ctx.db, now));
   await step("recover-throttled", () => recoverThrottledProspects(ctx.db, now));
+  // A workspace that onboarded before agents existed still gets one.
+  await step("seed-agents", () => seedMissingAgents(ctx.db));
   await step("approved-drafts", () => sweepApprovedDrafts(ctx, queues, now));
   await step("acceptance-rates", () => flagPoorAcceptanceRates(ctx));
   await step("withdraw-stale", () => withdrawStaleInvites(ctx, now));

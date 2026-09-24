@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { HOOK_MAX_CHARS, PITCH_MAX_CHARS } from "@le/shared";
 import { FakeDb } from "./fake-db.js";
-import { seedWorkspaceAgent } from "../src/jobs/seed-agent.js";
+import { seedMissingAgents, seedWorkspaceAgent } from "../src/jobs/seed-agent.js";
 
 const WORKSPACE = "11111111-1111-4111-8111-111111111111";
 const USER = "22222222-2222-4222-8222-222222222222";
@@ -113,21 +113,6 @@ describe("the agent a workspace gets from onboarding", () => {
     expect(String(db.rows("pitches")[0]?.body).length).toBeLessThanOrEqual(PITCH_MAX_CHARS);
   });
 
-  it("uses the short clause when it does fit", async () => {
-    // Otherwise the guard above could be satisfied by never appending
-    // anything, and the opener would be the bare template for everybody.
-    const db = new FakeDb();
-
-    await seedWorkspaceAgent(db.asDb(), {
-      workspaceId: WORKSPACE,
-      userId: USER,
-      business: { ...BUSINESS, differentiators: ["referral tracking"] },
-      repName: "Tashfeen",
-    });
-
-    expect(String(db.rows("hooks")[0]?.body)).toContain("referral tracking");
-  });
-
   it("names the person and their company in the opener", async () => {
     // The line this product was asked for. A stranger recognises a person
     // naming their company faster than they recognise a clever sentence.
@@ -164,5 +149,150 @@ describe("the agent a workspace gets from onboarding", () => {
     expect(id).toBeNull();
     expect(db.rows("agents")).toHaveLength(1);
     expect(db.rows("hooks")).toHaveLength(0);
+  });
+});
+
+describe("giving an agent to workspaces that onboarded before agents existed", () => {
+  /*
+   * Seeding at the moment the Strategy Agent writes the business profile
+   * covers a workspace onboarding today and nobody else. Every workspace on
+   * this deployment onboarded before agents existed, so all of them would open
+   * the screen, find it empty, and be handed the blank form this was written
+   * to remove.
+   */
+  const OTHER = "99999999-9999-4999-8999-999999999999";
+
+  it("seeds one for every workspace with a profile and none", async () => {
+    const db = new FakeDb();
+    db.seed("business_profiles", [
+      { id: "bp1", workspace_id: WORKSPACE, spec: BUSINESS, created_by: USER },
+      { id: "bp2", workspace_id: OTHER, spec: { ...BUSINESS, companyName: "Virtual Pros" }, created_by: null },
+    ]);
+
+    expect(await seedMissingAgents(db.asDb())).toBe(2);
+    expect(db.rows("agents").map((a) => a.name).sort()).toEqual(["Referral Nova", "Virtual Pros"]);
+  });
+
+  it("skips a workspace that already has one", async () => {
+    // It runs at boot and again nightly. Running it twice has to cost two
+    // queries, not a second agent.
+    const db = new FakeDb();
+    db.seed("business_profiles", [
+      { id: "bp1", workspace_id: WORKSPACE, spec: BUSINESS, created_by: USER },
+    ]);
+
+    expect(await seedMissingAgents(db.asDb())).toBe(1);
+    expect(await seedMissingAgents(db.asDb())).toBe(0);
+    expect(db.rows("agents")).toHaveLength(1);
+  });
+
+  it("leaves a business profile the schema cannot read", async () => {
+    // An agent built on half a profile writes to real people from facts
+    // nobody checked.
+    const db = new FakeDb();
+    db.seed("business_profiles", [
+      { id: "bp1", workspace_id: WORKSPACE, spec: { companyName: "Half a row" }, created_by: USER },
+    ]);
+
+    expect(await seedMissingAgents(db.asDb())).toBe(0);
+    expect(db.rows("agents")).toHaveLength(0);
+  });
+});
+
+describe("the opener a real business actually gets", () => {
+  it("is the greeting, with no product claim in it", async () => {
+    /*
+     * A first version derived a question from the business's own
+     * differentiators. For the two real businesses on this deployment it
+     * produced "— AI-powered matching that scores pairs on seven factors?":
+     * a product claim with a question mark on it, inside a connection request.
+     * The invitation may not pitch (rule 40).
+     *
+     * The specific question belongs to the writer, which is the only thing
+     * that has seen this particular prospect.
+     */
+    const db = new FakeDb();
+
+    await seedWorkspaceAgent(db.asDb(), {
+      workspaceId: WORKSPACE,
+      userId: USER,
+      business: {
+        ...BUSINESS,
+        differentiators: [
+          "AI-powered matching that scores pairs on seven factors and surfaces a reason to meet.",
+        ],
+      },
+      repName: "Tashfeen",
+    });
+
+    const body = String(db.rows("hooks")[0]?.body);
+    expect(body.length).toBeLessThanOrEqual(HOOK_MAX_CHARS);
+    expect(body).not.toMatch(/AI-powered|scores pairs|seven factors/i);
+    // Ends as a finished sentence, never on a dangling dash.
+    expect(body.endsWith("—")).toBe(false);
+    expect(body.endsWith(".")).toBe(true);
+  });
+});
+
+describe("the offer a real business gets", () => {
+  /*
+   * Both live businesses on this deployment write one-liners well over the
+   * limit. The first version answered that with "Referral Nova — ask me what
+   * we do and I will tell you in one line", which dodges the question, and the
+   * offer is the one piece of copy in this product that actually sells the
+   * thing.
+   */
+  const offerFor = async (oneLiner: string, companyName: string) => {
+    const db = new FakeDb();
+    await seedWorkspaceAgent(db.asDb(), {
+      workspaceId: WORKSPACE,
+      userId: USER,
+      business: { ...BUSINESS, companyName, oneLiner },
+      repName: "Tashfeen",
+    });
+    return String(db.rows("pitches")[0]?.body);
+  };
+
+  it("says something true rather than dodging the question", async () => {
+    const offer = await offerFor(
+      "An AI-powered referral networking platform that matches small businesses, solo professionals and networking groups with complementary partners and delivers warm, trackable introductions.",
+      "Referral Nova",
+    );
+
+    expect(offer).toBe("An AI-powered referral networking platform that matches small businesses.");
+    expect(offer).not.toMatch(/ask me what we do/i);
+  });
+
+  it("never leaves a bracket open", async () => {
+    // Cutting inside an aside leaves "(RV & auto dealers, med spas, dentists."
+    // — a sentence holding a bracket open, which reads as a message that was
+    // interrupted.
+    const offer = await offerFor(
+      "AI-powered revenue systems for local businesses (RV & auto dealers, med spas, dentists, home services) that capture leads, automate follow-up and book appointments without adding headcount.",
+      "Virtual Pros",
+    );
+
+    expect(offer).toBe("AI-powered revenue systems for local businesses.");
+    const opens = (offer.match(/\(/g) ?? []).length;
+    const closes = (offer.match(/\)/g) ?? []).length;
+    expect(opens).toBe(closes);
+  });
+
+  it("keeps a one-liner that already fits, untouched", async () => {
+    const short = "We turn a chapter's referrals into tracked introductions.";
+    expect(await offerFor(short, "Referral Nova")).toBe(short);
+  });
+
+  it("never cuts a word in half", async () => {
+    const offer = await offerFor(
+      "Revenue systems for dealerships that capture leads and automate every single follow-up conversation reliably",
+      "Virtual Pros",
+    );
+
+    expect(offer.length).toBeLessThanOrEqual(PITCH_MAX_CHARS);
+    const last = offer.replace(/\.$/, "").split(" ").pop() ?? "";
+    expect(
+      "Revenue systems for dealerships that capture leads and automate every single follow-up conversation reliably",
+    ).toContain(last);
   });
 });

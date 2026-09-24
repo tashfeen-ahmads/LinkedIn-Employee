@@ -1061,11 +1061,29 @@ const MUTATIONS = [
     pkg: "@le/worker",
   },
   {
-    id: "agent/a-seeded-opener-fits-linkedins-limit",
-    rule: "A seeded opener never exceeds the invitation note limit",
+    // Repointed: the opener no longer derives a clause from the business, so
+    // there is no length to guard. The rule that replaced it is why.
+    id: "agent/a-seeded-opener-carries-no-product-claim",
+    rule: "A seeded opener is a greeting, never a line about our own product",
     file: "apps/worker/src/jobs/seed-agent.ts",
-    from: "  return line.length <= HOOK_MAX_CHARS ? line : DEFAULT_OPENER_TEMPLATE;",
-    to: "  return line;",
+    from: "  return DEFAULT_OPENER_TEMPLATE;\n}",
+    to: "  return _business.differentiators?.[0] ?? DEFAULT_OPENER_TEMPLATE;\n}",
+    pkg: "@le/worker",
+  },
+  {
+    id: "agent/a-seeded-offer-never-leaves-a-bracket-open",
+    rule: "An offer cut short never holds a bracket open",
+    file: "apps/worker/src/jobs/seed-agent.ts",
+    from: '  if (opened !== -1 && head.indexOf(")", opened) === -1) head = head.slice(0, opened);',
+    to: "  if (false) head = head.slice(0, opened);",
+    pkg: "@le/worker",
+  },
+  {
+    id: "agent/a-seeded-offer-says-something-true",
+    rule: "An over-length one-liner is cut to a real sentence, never replaced with a placeholder",
+    file: "apps/worker/src/jobs/seed-agent.ts",
+    from: "  const cut = clauseEnd > 24 ? clauseEnd : head.lastIndexOf(\" \");",
+    to: "  const cut = -1;",
     pkg: "@le/worker",
   },
   {

@@ -1,6 +1,6 @@
 import {
+  BusinessProfileSchema,
   DEFAULT_OPENER_TEMPLATE,
-  HOOK_MAX_CHARS,
   PITCH_MAX_CHARS,
   blankAgent,
   type BusinessProfile,
@@ -40,7 +40,7 @@ export async function seedWorkspaceAgent(
   db: Db,
   input: {
     workspaceId: string;
-    userId: string;
+    userId: string | null;
     business: BusinessProfile;
     /** The name a prospect reads. The rep's own, not the company's. */
     repName: string | null;
@@ -118,7 +118,7 @@ export async function seedWorkspaceAgent(
   await recordEvent(db, {
     workspaceId: input.workspaceId,
     name: "agent.seeded",
-    actorUserId: input.userId,
+    actorUserId: input.userId ?? undefined,
     subjectType: "agent",
     subjectId: agent.id,
     payload: { from: "onboarding" },
@@ -135,42 +135,136 @@ export async function seedWorkspaceAgent(
  * Truncation would leave a question with no question mark arriving from a
  * stranger, so the shipped shape is short enough that it cannot happen.
  */
-function openerFor(business: BusinessProfile): string {
-  const ask = firstPain(business);
-  const line = ask ? `${DEFAULT_OPENER_TEMPLATE} ${ask}` : DEFAULT_OPENER_TEMPLATE;
-  return line.length <= HOOK_MAX_CHARS ? line : DEFAULT_OPENER_TEMPLATE;
-}
-
-/** One short question drawn from what this business actually fixes. */
-function firstPain(business: BusinessProfile): string | null {
-  const source = business.differentiators?.[0] ?? business.oneLiner ?? "";
-  const trimmed = source.trim();
-  if (!trimmed) return null;
-  // A clause, not a paragraph: the note still has to say something specific
-  // about the person, and an opener that fills it leaves nothing for them.
-  const short = trimmed.split(/[.;]/)[0]?.trim() ?? "";
-  return short.length > 0 && short.length <= 60 ? `quick question about ${short.toLowerCase()}.` : null;
+function openerFor(_business: BusinessProfile): string {
+  /*
+   * The greeting, and nothing after it.
+   *
+   * A first version derived a question from the business's own
+   * differentiators, and what it produced for the two real businesses on this
+   * deployment was "— AI-powered matching that scores pairs on seven
+   * factors?": a product claim with a question mark on the end, inside a
+   * connection request. The invitation may not pitch (rule 40), and that is
+   * not a rule a clever derivation gets to route around.
+   *
+   * It was also the wrong question. The one this was asked for — "are you
+   * getting the referrals accordingly?" — is about the *prospect's* situation,
+   * and the only thing that knows that is the writer looking at their
+   * headline, title and company (rule 16). An opener is a shape to lean on,
+   * so the shape is the greeting and the specific line is written per person.
+   */
+  return DEFAULT_OPENER_TEMPLATE;
 }
 
 /**
  * The offer, in one line a person can read in a chat window on a phone.
  *
- * Built from the one-liner because that is the sentence onboarding already
- * asked for — "what the company sells and to whom" is exactly what a prospect
- * who asks "what is this?" wants. Over length it falls back to the company
- * name rather than being cut mid-clause, which would reach somebody as a
- * broken message under a real rep's name.
+ * Built from the one-liner, which is the sentence onboarding already asked
+ * for: "what the company sells and to whom" is exactly what somebody who asks
+ * "what is this?" wants to know.
+ *
+ * Both real businesses on this deployment write one-liners well over the
+ * limit, and the first version answered that with "Referral Nova — ask me what
+ * we do and I will tell you in one line." A placeholder that dodges the
+ * question is worse than a short true sentence, and it is the one piece of
+ * copy in the product that actually sells the thing.
+ *
+ * So it is cut at a clause boundary rather than a character count. A comma or
+ * a bracket is where a sentence stops being one idea, and stopping there
+ * leaves something true and readable — "An AI-powered referral networking
+ * platform that matches small businesses." Cutting at ninety characters
+ * instead leaves a word in half, arriving from a stranger as a broken send.
  */
 function offerFrom(business: BusinessProfile): string {
-  const line = business.oneLiner?.trim() ?? "";
-  if (line && line.length <= PITCH_MAX_CHARS) return line;
-  const name = business.companyName?.trim() || "We";
-  const fallback = `${name} — ask me what we do and I will tell you in one line.`;
-  return fallback.length <= PITCH_MAX_CHARS ? fallback : name.slice(0, PITCH_MAX_CHARS);
+  const line = (business.oneLiner ?? "").trim().replace(/\s+/g, " ");
+  if (!line) return (business.companyName ?? "").slice(0, PITCH_MAX_CHARS);
+  if (line.length <= PITCH_MAX_CHARS) return line;
+
+  let head = line.slice(0, PITCH_MAX_CHARS - 1);
+
+  // An aside that never closes. Cutting inside a bracket leaves "(RV & auto
+  // dealers, med spas, dentists." — a sentence holding a bracket open, which
+  // reads as a message that was interrupted.
+  const opened = head.lastIndexOf("(");
+  if (opened !== -1 && head.indexOf(")", opened) === -1) head = head.slice(0, opened);
+
+  // The last place this stops being one idea: a clause break, or failing that
+  // a word break. Never mid-word.
+  const clauseEnd = Math.max(head.lastIndexOf(","), head.lastIndexOf(";"));
+  const cut = clauseEnd > 24 ? clauseEnd : head.lastIndexOf(" ");
+  const body = (cut > 24 ? head.slice(0, cut) : head).trim().replace(/[,;]$/, "");
+  if (body.length <= 24) return (business.companyName ?? "").slice(0, PITCH_MAX_CHARS);
+  return `${body}.`;
 }
 
 /** How it writes: the shipped baseline, plus this business's own tone. */
 function voiceFrom(business: BusinessProfile, baseline: string): string {
   const tone = business.toneOfVoice?.trim();
   return tone ? `${baseline}\n\nHow this business sounds: ${tone}` : baseline;
+}
+
+/**
+ * Gives an agent to every workspace that has told us about its business and
+ * has not got one.
+ *
+ * Seeding at the moment the Strategy Agent writes the business profile covers
+ * a workspace onboarding today and nobody else. Every workspace that onboarded
+ * before agents existed — which on this deployment is all of them — would open
+ * the agents screen, find it empty, and be handed the blank form this was
+ * written to remove.
+ *
+ * So it is a sweep rather than a hook. It runs at boot and again in nightly
+ * maintenance, because repair must never depend on somebody finding a button
+ * (rule 8), and "run a strategy again to get an agent" is that button wearing
+ * a different hat.
+ *
+ * Idempotent by the same check the single seed uses, so a workspace that
+ * already has one is skipped and running this twice costs two queries.
+ */
+export async function seedMissingAgents(db: Db, limit = 500): Promise<number> {
+  const { data: profiles } = await db
+    .from("business_profiles")
+    .select("workspace_id, spec, created_by")
+    .limit(limit);
+  if (!profiles?.length) return 0;
+
+  let seeded = 0;
+  for (const profile of profiles) {
+    const business = BusinessProfileSchema.safeParse(profile.spec);
+    // A profile the schema cannot read is left alone rather than seeded from
+    // guesses. An agent built on half a business profile writes to real people
+    // from facts nobody checked.
+    if (!business.success) continue;
+
+    // The name a prospect reads. Falls back to null rather than to the company
+    // name: a message signed with a company reads as a mailshot, which is the
+    // one thing the opener exists to avoid.
+    let repName: string | null = null;
+    if (profile.created_by) {
+      const { data: owner } = await db
+        .from("profiles")
+        .select("full_name")
+        .eq("id", profile.created_by)
+        .maybeSingle();
+      repName = owner?.full_name ?? null;
+    }
+
+    try {
+      const id = await seedWorkspaceAgent(db, {
+        workspaceId: profile.workspace_id,
+        userId: profile.created_by ?? null,
+        business: business.data,
+        repName,
+      });
+      if (id) seeded += 1;
+    } catch (err) {
+      // One workspace's failure never stops the sweep. A shared maintenance
+      // pass that dies on the first awkward row leaves every workspace after
+      // it unseeded, and nothing says which.
+      console.error("could not seed an agent for a workspace", {
+        workspaceId: profile.workspace_id,
+        reason: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+  return seeded;
 }
