@@ -59,9 +59,18 @@ export function WarmupRamp() {
       </figcaption>
 
       <svg viewBox={`0 0 ${w} ${h}`} role="img" className="chart-svg" aria-labelledby="ramp-title">
+        {/*
+          One string, not eight children.
+          A `<title>` whose children are an array is the one piece of JSX React
+          cannot serialise the same way twice — the browser treats everything
+          inside the tag as a single text node, so the server's markup and the
+          client's differ, React throws away the whole page tree and rebuilds
+          it, and what a visitor sees is the landing page flickering on arrival.
+          It was reported as one hydration error on the site's most important
+          page and it came from this tag.
+        */}
         <title id="ramp-title">
-          Daily invitation cap rising from {LINKEDIN_LIMITS.invitesPerDayStart} to{" "}
-          {LINKEDIN_LIMITS.invitesPerDayMax} over {LINKEDIN_LIMITS.warmupDays} days, then flat.
+          {`Daily invitation cap rising from ${LINKEDIN_LIMITS.invitesPerDayStart} to ${LINKEDIN_LIMITS.invitesPerDayMax} over ${LINKEDIN_LIMITS.warmupDays} days, then flat.`}
         </title>
 
         {ticks.map((tick) => (

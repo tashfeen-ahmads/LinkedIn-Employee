@@ -1170,7 +1170,12 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 
 ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: none; }
 
-.plan { border-radius: var(--radius-lg); }
+/* Cards in a row are one object, so the buttons sit on one line.
+   The feature lists are different lengths, which put Solo's button 58px above
+   Teams' — three cards that read as three separate things rather than three
+   prices for the same thing. The list takes the slack instead. */
+.plan { border-radius: var(--radius-lg); height: 100%; }
+.plan .bullets { flex: 1; }
 .plan-featured { border-color: var(--accent-border); box-shadow: var(--shadow); }
 .price { font-size: 2.25rem; font-weight: 500; letter-spacing: -0.03em; line-height: 1; }
 .price .mono { font-size: inherit; }
@@ -1241,7 +1246,15 @@ ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: none; }
 .hero-wash::before {
   content: "";
   position: absolute;
-  inset: -20% -10% auto -10%;
+  /* Vertically it may bleed; horizontally it may not.
+     This was `-10%` on each side, which is a decorative gradient hanging 128px
+     past the right edge of a 1280px window — and an absolutely positioned box
+     outside the viewport is horizontal page scroll, so every page on the site
+     that opens with a hero scrolled sideways. On a phone it was 39px of drift
+     on the most important screen we have. The blobs inside are radial
+     gradients that fade to transparent well before their own edges, so
+     pulling the sides in costs nothing visible. */
+  inset: -20% 0 auto 0;
   height: 620px;
   z-index: -1;
   pointer-events: none;
@@ -1800,3 +1813,92 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
 }
 .nav-search input::placeholder { color: var(--text-muted); }
 .nav-empty { padding: 0 var(--space-3) var(--space-3); }
+
+/* ------------------------------------------------------------ product film
+
+   The looping demo under the hero. Every surface in here is the product's own
+   markup on the product's own tokens rather than a screen recording, so it is
+   sharp at any size, readable on a phone, legible to a screen reader, and it
+   restyles itself in dark mode instead of being a light-mode screenshot
+   sitting on a dark page. */
+
+.film { display: flex; flex-direction: column; gap: var(--space-3); }
+.film-card { display: flex; flex-direction: column; gap: var(--space-3); }
+.film-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
+.film-caption { color: var(--text-muted); margin: 0 0 var(--space-3); }
+
+/* Held by the tallest scene rather than animated, so the page below does not
+   jump every five seconds — which is the thing that makes a carousel feel
+   cheap and makes a reader lose their place mid-sentence. */
+.film-stage { min-height: 16rem; }
+@media (max-width: 720px) { .film-stage { min-height: 19rem; } }
+
+.film-rows { display: flex; flex-direction: column; gap: var(--space-2); }
+.film-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.film-row-main { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
+.film-score { color: var(--accent); font-weight: 600; }
+
+.film-note {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+.film-note p { margin: 0; }
+/* A draft is marked as a different kind of object, not just tinted: the whole
+   point of the scene is that this one was not sent. */
+.film-note-draft { border-style: dashed; border-color: var(--accent-border); background: var(--accent-soft); }
+
+.film-chips { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
+
+.film-rail { display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--space-2); }
+@media (max-width: 720px) { .film-rail { grid-template-columns: repeat(2, 1fr); } }
+
+.film-tab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: 0;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.8125rem;
+}
+.film-tab.is-active { color: var(--text); }
+.film-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: var(--radius-sm); }
+.film-tab-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.film-tab-track { height: 2px; background: var(--border); border-radius: var(--radius-pill); overflow: hidden; }
+.film-tab-fill { display: block; height: 100%; width: 0; background: var(--accent); }
+.film-tab.is-active .film-tab-fill { animation-name: film-progress; animation-timing-function: linear; animation-fill-mode: forwards; }
+
+@keyframes film-progress { from { width: 0; } to { width: 100%; } }
+
+/* Reduced motion gets every scene as a list rather than a frozen first frame:
+   hiding four fifths of the argument from the people least able to chase it is
+   not an accessibility accommodation. */
+.film-static { display: flex; flex-direction: column; gap: var(--space-4); }
+
+@media (prefers-reduced-motion: reduce) {
+  .film-tab-fill { animation: none; }
+}
+
+/* The column the reader is standing in, on the "what you are choosing between"
+   strip. One border, not a fill: the point is that it belongs to the same set
+   as the other two, and a coloured card would read as the advertisement it is
+   trying not to be. */
+.alt-here { border-color: var(--accent-border); }

@@ -3,6 +3,7 @@ import { LINKEDIN_LIMITS } from "@le/shared";
 import { Pipeline, ReplyGate, WarmupRamp } from "./diagrams";
 import { Forecast } from "./forecast";
 import { GateSimulator } from "./gate-simulator";
+import { ProductFilm } from "./product-film";
 import { Reveal, Stagger, StaggerItem } from "./reveal";
 import { Wordmark } from "./logo";
 import { AgentTimeline } from "./agent-timeline";
@@ -108,6 +109,28 @@ export function Hero() {
             </p>
           </figure>
         </Reveal>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * The film, in a band of its own directly under the hero.
+ *
+ * Under it rather than inside it on purpose. The hero's job is one sentence and
+ * one button, and a looping demo competing with them for the same eye halves
+ * both; the film's job is to answer "what is this, actually", which is the
+ * question somebody has the moment after they finish the headline.
+ */
+export function Film() {
+  return (
+    <section className="section">
+      <div className="container stack-5">
+        <div className="stack-3">
+          <p className="eyebrow">What it actually does</p>
+          <h2>Five things, in this order, every time.</h2>
+        </div>
+        <ProductFilm />
       </div>
     </section>
   );
@@ -440,13 +463,48 @@ const PLANS = [
   {
     name: "Teams",
     price: "$199",
+    // Cheaper than Pro and listed after it, which reads as a mistake unless the
+    // condition is on the card. It is a volume rate, not a smaller product.
+    note: "3 seats minimum",
     features: [
-      "Everything in Pro, three seats or more",
-      "Shared exclusion lists",
+      "Everything in Pro",
+      "Shared exclusion lists — no two reps contact the same person",
       "Per-rep funnel reporting",
       "Dedicated account manager",
     ],
     highlight: false,
+  },
+];
+
+/**
+ * What the buyer is actually choosing between.
+ *
+ * A price on its own is answered with "there is a tool at a third of that",
+ * and the honest reply is that the cheap tool does a different job: it
+ * performs actions, and somebody still has to decide who to write to and what
+ * to say. Said in the abstract that sounds like a sneer; said as three columns
+ * with the trade-off in each, it is the whole argument for the price.
+ *
+ * No competitor is named and no competitor's price is printed. We cannot
+ * verify either from here, and a number on a public page that turns out to be
+ * last year's is worth less than the comparison it was meant to win.
+ */
+const ALTERNATIVES = [
+  {
+    name: "A tool that sends",
+    cost: "Cheapest",
+    body: "Merge fields and a long list of actions on autopilot. It does not know who it is writing to, so someone still builds the list, writes the copy and reads every reply — and the volume it is sold on is the thing that gets accounts restricted.",
+  },
+  {
+    name: "A person to do it",
+    cost: "Most expensive",
+    body: "An SDR or an agency retainer, several thousand a month, ramping for a quarter before the first meeting. Good work, and the reason most small teams simply never do outbound at all.",
+  },
+  {
+    name: "This",
+    cost: "In between",
+    body: "The deciding and the sending, and every step of it on a screen: who it picked and why, what it wrote and what it wrote it from, what it sent and what it refused to send.",
+    here: true,
   },
 ];
 
@@ -458,6 +516,18 @@ export function Pricing() {
           <p className="eyebrow">Pricing</p>
           <h2>Per seat, per month.</h2>
           <p className="lede prose">Seven-day free trial on every plan. No card to start.</p>
+        </div>
+
+        <div className="grid grid-3">
+          {ALTERNATIVES.map((option) => (
+            <article key={option.name} className={`card stack-2${option.here ? " alt-here" : ""}`}>
+              <div className="between">
+                <h3 className="small">{option.name}</h3>
+                <span className="tiny subtle">{option.cost}</span>
+              </div>
+              <p className="small muted">{option.body}</p>
+            </article>
+          ))}
         </div>
 
         <div className="grid grid-2">
@@ -472,6 +542,7 @@ export function Pricing() {
                 <span className="mono">{plan.price}</span>
                 <span className="small muted"> / seat / mo</span>
               </p>
+              {plan.note ? <p className="tiny subtle">{plan.note}</p> : null}
 
               <ul className="small muted bullets">
                 {plan.features.map((feature) => (

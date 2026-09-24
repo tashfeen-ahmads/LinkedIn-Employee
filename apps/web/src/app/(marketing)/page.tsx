@@ -3,6 +3,7 @@ import {
   Extras,
   Faq,
   FAQ_ITEMS,
+  Film,
   Hero,
   HowItWorks,
   Pricing,
@@ -26,6 +27,7 @@ export default function HomePage() {
       <SoftwareSchema />
       <FaqSchema items={FAQ_ITEMS} />
       <Hero />
+      <Film />
       <HowItWorks />
       <TheGate />
       <Signals />
