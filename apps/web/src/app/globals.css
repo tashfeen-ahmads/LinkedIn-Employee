@@ -459,6 +459,25 @@ p  { margin: 0; }
  */
 .app .page-group { display: flex; flex-direction: column; gap: var(--app-gap); }
 
+/*
+ * A long list inside a form, scrolled rather than paged.
+ *
+ * Two hundred prospects is a page somebody has to scroll past to reach the
+ * button that submits them, and a submit button below the fold on a form whose
+ * whole point is choosing from that list is a button nobody finds. The list
+ * scrolls; the form does not.
+ *
+ * `overscroll-behavior` so reaching the end of the list does not then start
+ * scrolling the page underneath it, which reads as the page jumping.
+ */
+.app .scroll-box {
+  max-height: 60vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
 /* An empty list says why, and what to do. Never the word "None". */
 .app .empty {
   display: flex;

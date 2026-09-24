@@ -50,10 +50,16 @@ export default async function CampaignsPage() {
           eyebrow="Pipeline"
           title="Campaigns"
           lede="Built as drafts. You read every name and every message before anything sends."
+          actions={
+            <Link className="btn secondary" href="/app/campaigns/new">
+              New campaign
+            </Link>
+          }
         />
         <Empty title="No campaigns yet." action="Open strategies" href="/app/strategy">
           The Targeting Agent builds one from an approved strategy — the list, the copy, and a note
-          written for each person. It arrives as a draft.
+          written for each person. It arrives as a draft. You can also build one yourself from
+          prospects you already have.
         </Empty>
       </>
     );

@@ -41,6 +41,9 @@ async function createAgent() {
   // given the problem rather than a starting point.
   const seed = blankAgent(profile?.full_name ?? null);
 
+  // Asked before the insert, because the insert is what stops it being true.
+  const first = await isFirstAgent(supabase, session.workspaceId);
+
   const { data, error } = await supabase
     .from("agents")
     .insert({
@@ -54,7 +57,7 @@ async function createAgent() {
       // The first agent a workspace makes is the one new campaigns start with.
       // "Which agent" answered by row order is answered differently on
       // different days.
-      is_default: await isFirstAgent(supabase, session.workspaceId),
+      is_default: first,
     })
     .select("id")
     .single();
@@ -62,6 +65,32 @@ async function createAgent() {
   if (error || !data) {
     redirect(errorQuery("/app/agents", error?.message ?? "The agent could not be created."));
   }
+
+  /*
+   * The first agent adopts the openers and offer lines this workspace already
+   * approved.
+   *
+   * Those rows predate agents: they belong to the workspace, and until now that
+   * was the only place they could belong. A first agent that started empty
+   * would read to the person who wrote and approved them as though the rework
+   * had thrown their work away — and the openers are the part of this product
+   * somebody spends real time on.
+   *
+   * Only the first, and only rows nothing else claims. A second agent starts
+   * clean rather than taking the first one's lines, which would move copy out
+   * from under a campaign already running on it.
+   */
+  if (first) {
+    for (const table of ["hooks", "pitches"] as const) {
+      await supabase
+        .from(table)
+        .update({ agent_id: data.id })
+        .eq("workspace_id", session.workspaceId)
+        .is("agent_id", null)
+        .not("approved_at", "is", null);
+    }
+  }
+
   redirect(`/app/agents/${data.id}`);
 }
 
