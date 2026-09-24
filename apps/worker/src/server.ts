@@ -21,6 +21,7 @@ import { sendOneNow } from "./jobs/send-one.js";
 import { runAgentTest } from "./jobs/agent-test.js";
 import { writeWorkspacePitch } from "./jobs/write-pitch.js";
 import { writeWorkspaceHooks } from "./jobs/write-hooks.js";
+import { rewriteCampaignNotes } from "./jobs/rewrite-notes.js";
 import type IORedis from "ioredis";
 import type { WorkerContext } from "./context.js";
 import { bookFromLink, readBookingPage } from "./jobs/book.js";
@@ -61,6 +62,12 @@ const WritePitchRequest = z.object({
   // Which agent's set to write. Absent is the workspace's own, which is what
   // every caller meant before an agent could own copy.
   agentId: z.string().uuid().optional(),
+});
+
+const RewriteNotesRequest = z.object({
+  workspaceId: z.string().uuid(),
+  userId: z.string().uuid(),
+  campaignId: z.string().uuid(),
 });
 
 const StrategyRequest = z
@@ -457,6 +464,23 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
     }
     const result = await writeWorkspaceHooks(ctx, parsed.data);
     return c.json(result);
+  });
+
+  /*
+   * Write a campaign's connection notes again, for the people not yet invited.
+   *
+   * Synchronous for the same reason the writers above are: its output is the
+   * whole point of the click, and the page it returns to is the page showing
+   * the notes. 200 either way — "nobody on this campaign is still waiting" is
+   * a correct answer to the question.
+   */
+  app.post("/jobs/rewrite-notes", async (c) => {
+    const parsed = RewriteNotesRequest.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "invalid request" }, 400);
+    if (!(await assertMembership(ctx.db, parsed.data.workspaceId, parsed.data.userId))) {
+      return c.json({ error: "not a member of that workspace" }, 403);
+    }
+    return c.json(await rewriteCampaignNotes(ctx, parsed.data));
   });
 
   /*

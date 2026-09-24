@@ -50,11 +50,16 @@ async function saveCampaign(formData: FormData) {
   const note = String(formData.get("connectionNote") ?? "").trim();
   const cap = Number(formData.get("dailyInviteCap"));
   const replyMode = String(formData.get("replyMode"));
+  // Absent is not the same as cleared: a form that does not carry the field at
+  // all (no agents in this workspace) must leave the column alone rather than
+  // detaching the agent a campaign is already running on.
+  const agentField = formData.get("agentId");
 
   await supabase
     .from("campaigns")
     .update({
       connection_note: note,
+      ...(agentField === null ? {} : { agent_id: String(agentField) || null }),
       // Clamped rather than rejected: the caps are product rules, and a typo in
       // this box must not be able to raise them. Rule 2 in CLAUDE.md.
       daily_invite_cap: Math.max(1, Math.min(LINKEDIN_LIMITS.invitesPerDayMax, Math.round(cap) || 1)),
@@ -327,6 +332,51 @@ async function findMore(formData: FormData) {
 }
 
 /**
+ * Write the notes again, with whatever the agent says now.
+ *
+ * The notes are written once, when the campaign is built, and there was no way
+ * back to them — so a rep who fixed their agent's openers watched this page go
+ * on showing the copy written before the fix. That is the agent as a settings
+ * page that changes nothing, and the only alternative on offer was editing
+ * every note by hand, which is the work the agent exists to do.
+ *
+ * Queued people only, and the worker checks that again at the write: a note on
+ * somebody already invited is the record of what they were sent, not a draft.
+ */
+async function rewriteNotes(formData: FormData) {
+  "use server";
+  const campaignId = String(formData.get("campaignId"));
+  const session = await requireSession();
+  const here = `/app/campaigns/${campaignId}`;
+
+  // Ninety seconds, as the other writer routes take: the model runs on this
+  // request so the person who clicked sees the new notes, and a working agent
+  // cut off at ten seconds reads as a broken one.
+  const result = await callWorker<{ ok: boolean; reason?: string; rewritten?: number; unanswered?: number }>(
+    "/jobs/rewrite-notes",
+    { workspaceId: session.workspaceId, userId: session.userId, campaignId },
+    90_000,
+  );
+  if (!result.ok) redirect(errorQuery(here, result.error));
+  if (result.data && result.data.ok === false) {
+    redirect(errorQuery(here, result.data.reason ?? "The notes could not be rewritten."));
+  }
+
+  revalidatePath(here);
+  const unanswered = result.data?.unanswered ?? 0;
+  redirect(
+    noticeQuery(
+      here,
+      `Rewrote ${result.data?.rewritten ?? 0} notes.` +
+        (unanswered > 0
+          ? ` ${unanswered} kept the note they had — the writer did not answer for them.`
+          : "") +
+        " Read them before you launch.",
+    ),
+  );
+}
+
+/**
  * Puts failed prospects back in the queue.
  *
  * `failProspect` writes `status: "failed"` and `next_action_at: null`, and the
@@ -491,14 +541,14 @@ export default async function CampaignPage({
   const { data: campaign } = await supabase
     .from("campaigns")
     .select(
-      "id, name, status, connection_note, daily_invite_cap, reply_mode, launched_at, linkedin_account_id, rules, customer_profile_id, search_exhausted, searched_at, owner_user_id, cta_id, cta_kind, cta_label, cta_url",
+      "id, name, status, connection_note, daily_invite_cap, reply_mode, launched_at, linkedin_account_id, rules, customer_profile_id, search_exhausted, searched_at, owner_user_id, agent_id, cta_id, cta_kind, cta_label, cta_url",
     )
     .eq("id", id)
     .eq("workspace_id", session.workspaceId)
     .maybeSingle();
   if (!campaign) notFound();
 
-  const [{ data: steps }, { data: members }, { data: account }, { data: lastSearch }, { data: heartbeat }, { data: boot }, { data: owner }, { data: variantRows }] =
+  const [{ data: steps }, { data: members }, { data: account }, { data: lastSearch }, { data: heartbeat }, { data: boot }, { data: owner }, { data: variantRows }, { data: agents }] =
     await Promise.all([
     supabase
       .from("campaign_steps")
@@ -546,6 +596,16 @@ export default async function CampaignPage({
       .select("id, name, angle, pain_point, enabled")
       .eq("campaign_id", id)
       .order("created_at", { ascending: true }),
+    // Who writes this campaign's copy. A campaign built before agents existed
+    // carries none, and it kept behaving exactly as it did — which is what
+    // made the whole feature additive, and also what left those campaigns with
+    // no way ever to reach an agent.
+    supabase
+      .from("agents")
+      .select("id, name, is_default")
+      .eq("workspace_id", session.workspaceId)
+      .is("archived_at", null)
+      .order("is_default", { ascending: false }),
   ]);
 
   const rows = members ?? [];
@@ -799,9 +859,28 @@ export default async function CampaignPage({
         <section className="card">
           <h3>What gets sent</h3>
           <p className="small muted">
-            {"Read all of it. Only {{first_name}} is substituted; anything else stays literal."}
+            {"Read all of it. {{first_name}}, {{company}}, {{title}} and {{rep_name}} are filled in per person; anything else stays literal."}
             {running ? " Edits apply to everyone who has not been reached yet." : ""}
           </p>
+
+          {(agents ?? []).length > 0 ? (
+            <label className="field">
+              <span>Written by</span>
+              <select name="agentId" defaultValue={campaign.agent_id ?? ""}>
+                <option value="">No agent — the workspace&rsquo;s own copy</option>
+                {(agents ?? []).map((agent) => (
+                  <option key={agent.id} value={agent.id}>
+                    {agent.name}
+                    {agent.is_default ? " (default)" : ""}
+                  </option>
+                ))}
+              </select>
+              <span className="small muted">
+                The agent carries the openers, the offer and the voice. Changing it here does not
+                rewrite the notes below — press Rewrite notes for that.
+              </span>
+            </label>
+          ) : null}
 
           <label className="field">
             <span>
@@ -988,6 +1067,31 @@ export default async function CampaignPage({
               disabled={campaign.search_exhausted || !campaign.customer_profile_id}
             >
               Find {FIND_MORE_BATCH} more
+            </SubmitButton>
+          </div>
+        </form>
+
+        {/*
+          The way back to the copy. Without it the agent is a settings page
+          that changes nothing for anybody who already has a campaign: the
+          openers are fixed, the notes on this page stay as they were written,
+          and the only other route is editing every one of them by hand.
+        */}
+        <form action={rewriteNotes} className="card">
+          <div className="between">
+            <div>
+              <p className="small">
+                <strong>Rewrite the notes with your agent</strong>
+              </p>
+              <p className="tiny subtle">
+                Writes a new note for everybody still waiting to be invited, using whatever your
+                agent&rsquo;s openers say now. People already invited keep the note they were
+                actually sent.
+              </p>
+            </div>
+            <input type="hidden" name="campaignId" value={campaign.id} />
+            <SubmitButton className="btn ghost" pendingLabel="Writing…">
+              Rewrite notes
             </SubmitButton>
           </div>
         </form>
