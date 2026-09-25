@@ -7,7 +7,7 @@ import {
   type CampaignProspectStatus,
 } from "@le/shared";
 import { entitlementFor } from "@le/billing";
-import { checkAction, dailyInviteCap, nextGapMs } from "@le/linkedin";
+import { checkAction, dailyInviteCap, invitationCouldFollow, nextGapMs } from "@le/linkedin";
 import type { Db } from "@le/db";
 import { enqueueOnce, jobId } from "../queues.js";
 import type { Queues } from "../queues.js";
@@ -115,7 +115,7 @@ async function tick(db: Db, queues: Queues, now: Date): Promise<number> {
      * prospects already familiar with the name, rather than with six hours of
      * nothing to show.
      */
-    const warmed = await enqueueWarmUps(db, queues, campaign, usage, now);
+    const warmed = await enqueueWarmUps(db, queues, campaign, usage, loaded.account, now);
     enqueued += warmed.enqueued;
 
     const invites = await enqueueInvites(db, queues, campaign, usage, loaded.account, now);
@@ -218,9 +218,43 @@ async function enqueueWarmUps(
   queues: Queues,
   campaign: CampaignRow,
   usage: ReturnType<typeof toUsage>,
+  account: AccountRecord,
   now: Date,
 ): Promise<{ enqueued: number; reason: string | null }> {
   if (!campaign.warm_up) return { enqueued: 0, reason: null };
+
+  /*
+   * A view is only worth its allowance if the invitation can follow it.
+   *
+   * The warm-up ignores an invitation throttle on purpose, because a throttle
+   * stops invitations and not profile views — that is what lets a held
+   * campaign keep doing something useful. But "keep doing something useful"
+   * stops being true the moment the invitation cannot arrive while the view is
+   * still recent: eight people were viewed on a Friday afternoon against a
+   * hold that ran until the following afternoon, and every one of those views
+   * was spent twenty-three hours early.
+   *
+   * So the question is not "may I view somebody" but "will an invitation still
+   * be possible when this view matures". Waiting costs nothing — the people
+   * are not going anywhere, and the view will be spent later at full value
+   * rather than now at a fraction of it.
+   */
+  if (
+    !invitationCouldFollow(
+      {
+        usage,
+        pausedUntil: account.invites_paused_until ? new Date(account.invites_paused_until) : null,
+        maturesAfterMs: LINKEDIN_LIMITS.warmUpToInviteMinMs,
+        windowMs: LINKEDIN_LIMITS.warmUpToInviteMaxMs,
+      },
+      now,
+    )
+  ) {
+    return {
+      enqueued: 0,
+      reason: "holding the warm-up: no invitation could follow a view soon enough to be worth it",
+    };
+  }
 
   const decision = checkAction("profile_view", usage, now);
   if (!decision.allowed && decision.reason !== "too_soon") {

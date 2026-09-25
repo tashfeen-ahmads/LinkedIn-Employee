@@ -100,6 +100,82 @@ export function nextGapMs(random: () => number = Math.random): number {
  * The single gate every LinkedIn action passes through. Denies rather than
  * queues: the caller reschedules using retryAfterMs.
  */
+/**
+ * Could an invitation actually follow a view, inside the window that makes the
+ * view worth spending?
+ *
+ * The warm-up exists because a request arriving to a name somebody saw a few
+ * hours ago lands better than one from a stranger. That is a claim about
+ * *recency*, so a view is only worth its allowance if the invitation can
+ * plausibly follow it before the memory goes.
+ *
+ * Eight real people were viewed one Friday afternoon with their invitations
+ * due between four and six that evening — and LinkedIn was holding invitations
+ * from that account until two the following afternoon. Every one of those
+ * views was spent twenty-three hours early. Nothing was broken: the warm-up
+ * correctly ignored an invitation throttle, because a throttle stops
+ * invitations and not profile views, and that is exactly the behaviour that
+ * lets a held campaign keep working. What nobody had asked was whether the
+ * *invitation* would still be there when the view matured.
+ *
+ * Three ways it can fail, and only the first was obvious:
+ *
+ *  - the provider is holding invitations past the end of the window;
+ *  - today's invitation allowance is already spent, so the next one is
+ *    tomorrow;
+ *  - working hours end before the invitation could go, so the next one is
+ *    tomorrow morning.
+ *
+ * All three are answered by asking the limiter the question it already knows
+ * how to answer, at the moment the hold lifts rather than now. `too_soon` is
+ * the one refusal that does not count: it is the ordinary two-to-eleven minute
+ * gap between actions, which is minutes and always inside the window.
+ */
+export function invitationCouldFollow(
+  input: {
+    usage: AccountUsage;
+    /** When the provider stops refusing invitations, if it is refusing them. */
+    pausedUntil: Date | null;
+    /**
+     * The earliest the invitation may follow the view.
+     *
+     * Asking whether an invitation could go *now* is the wrong question and
+     * gives the wrong answer at the end of a working day: at half past five a
+     * send is still allowed, so warming looks fine — and the invitation is
+     * scheduled three quarters of an hour later, by which time the day is over
+     * and the real send is on Monday morning, sixty hours after the view.
+     */
+    maturesAfterMs: number;
+    /** How long a view stays worth having. */
+    windowMs: number;
+  },
+  now: Date = new Date(),
+): boolean {
+  const deadline = now.getTime() + input.windowMs;
+
+  const held = input.pausedUntil?.getTime() ?? 0;
+  if (Number.isFinite(held) && held > deadline) return false;
+
+  // From the moment the view has matured, or the moment invitations become
+  // possible again, whichever is later. A six hour hold with four hours left
+  // is still a window a view can live in.
+  const from = new Date(
+    Math.max(now.getTime() + input.maturesAfterMs, Number.isFinite(held) ? held : 0),
+  );
+  if (from.getTime() > deadline) return false;
+
+  const decision = checkAction("invite", input.usage, from);
+  if (decision.allowed) return true;
+
+  // Every refusal is treated the same way: could it clear before the view goes
+  // stale? There is deliberately no special case for `too_soon`, the ordinary
+  // two-to-eleven minute gap between actions — the arithmetic already answers
+  // it, because a two minute wait is always inside a window measured in hours.
+  // A branch for it looked prudent and could never change the answer, which
+  // makes it a guard no test can honestly cover.
+  return from.getTime() + decision.retryAfterMs <= deadline;
+}
+
 export function checkAction(kind: ActionKind, usage: AccountUsage, now: Date = new Date()): Decision {
   if (!isWithinWorkingHours(now, usage.workingHours, usage.timezone)) {
     return {

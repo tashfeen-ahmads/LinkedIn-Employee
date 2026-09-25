@@ -794,6 +794,22 @@ const MUTATIONS = [
     pkg: "@le/shared",
   },
   {
+    id: "warmup/a-view-the-invitation-cannot-follow-is-not-spent",
+    rule: "A profile view is only spent when an invitation could plausibly follow it while it is still recent",
+    file: "apps/worker/src/jobs/campaign-tick.ts",
+    from: "    !invitationCouldFollow(",
+    to: "    false && !invitationCouldFollow(",
+    pkg: "@le/worker",
+  },
+  {
+    id: "warmup/the-window-starts-when-the-view-matures",
+    rule: "The window is measured from when the view matures, not from now — at half past five a send is allowed and the invitation still lands on Monday",
+    file: "packages/linkedin/src/rate-limit.ts",
+    from: "    Math.max(now.getTime() + input.maturesAfterMs, Number.isFinite(held) ? held : 0),",
+    to: "    Math.max(now.getTime(), Number.isFinite(held) ? held : 0),",
+    pkg: "@le/linkedin",
+  },
+  {
     id: "warmup/a-view-never-spends-the-invitation-allowance",
     rule: "A profile view is counted on its own allowance; drawn from the invite budget, warming somebody would cost us the ability to write to them",
     file: "apps/worker/src/jobs/linkedin-action.ts",

@@ -59,7 +59,12 @@ function harness(overrides: { prospect?: Record<string, unknown>; cp?: Record<st
       profile_views_today: 0,
       counters_reset_on: "2026-09-25",
       last_action_at: null,
-      working_hours: { start: 8, end: 18, days: [1, 2, 3, 4, 5] },
+      // Every hour of every day, because none of these tests is about working
+      // hours and `runLinkedInAction` asks the limiter with the real clock.
+      // Pinned to office hours they passed in the afternoon and failed every
+      // evening and weekend — a test that depends on when it is run is a test
+      // that will fail CI at midnight for a reason nobody can reproduce.
+      working_hours: { start: 0, end: 24, days: [0, 1, 2, 3, 4, 5, 6] },
       invites_paused_until: null,
       invites_paused_reason: null,
       invite_throttle_streak: 0,
