@@ -12,6 +12,7 @@ import { readSetupState } from "@/lib/setup-state";
 import { readFunnelData } from "@/lib/funnel-data";
 import { StrategyStatus } from "@/components/strategy-status";
 
+import { DailyReportSection } from "./report-section";
 import { ResultsSection } from "./analytics-section";
 import { SpendSection } from "./usage-section";
 /**
@@ -88,6 +89,11 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
         two readings drift. Four figures here answer "is it working"; every
         other number lives on Results.
       */}
+      {/* First, above every chart. The funnel answers "how is it going",
+          which is a question about the month; this answers "what happened",
+          which is the question a person actually arrives with. */}
+      <DailyReportSection />
+
       <Section
         id="results"
         title="How it is going"
