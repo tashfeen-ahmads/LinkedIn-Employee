@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyProviderError, describeCooldown } from "../src/provider-errors.js";
+import { backOff, classifyProviderError, describeCooldown } from "../src/provider-errors.js";
 
 /** The exact strings this deployment has actually been handed by Unipile. */
 const LIVE = {
@@ -87,5 +87,51 @@ describe("reading a provider refusal", () => {
     expect(said).toMatch(/7 people are waiting/);
     expect(said).toMatch(/automatically/);
     expect(said).toMatch(/Nothing is lost/);
+  });
+});
+
+describe("how long to wait after being refused again", () => {
+  const SIX_HOURS = 6 * 60 * 60_000;
+
+  it("leaves the first refusal of a run exactly as it was", () => {
+    // The common case is one throttle and one wait, and this must not change
+    // it — an escalation that starts escalating immediately is just a longer
+    // flat cooldown.
+    expect(backOff(SIX_HOURS, 0)).toBe(SIX_HOURS);
+  });
+
+  it("doubles for each refusal in a row", () => {
+    expect(backOff(SIX_HOURS, 1)).toBe(12 * 60 * 60_000);
+    expect(backOff(SIX_HOURS, 2)).toBe(24 * 60 * 60_000);
+    expect(backOff(SIX_HOURS, 3)).toBe(48 * 60 * 60_000);
+  });
+
+  it("stops growing at three days, and never stops probing", () => {
+    // Capped rather than unbounded: a throttle that has lifted has to be
+    // discovered somehow, and repair must never wait for somebody to find a
+    // button. The knocking gets quieter; it does not stop.
+    const capped = backOff(SIX_HOURS, 40);
+    expect(capped).toBe(72 * 60 * 60_000);
+    expect(capped).toBeGreaterThan(0);
+  });
+
+  it("never returns a wait that has already expired", () => {
+    // `baseMs * 2 ** streak` overflows to Infinity and `1 << 31` is negative;
+    // either one is a hold in the past, which is the exact opposite of the
+    // rule and would release the account instantly on its worst day.
+    for (const streak of [31, 32, 64, 1000, Number.MAX_SAFE_INTEGER]) {
+      const ms = backOff(SIX_HOURS, streak);
+      expect(ms).toBeGreaterThan(0);
+      expect(Number.isFinite(ms)).toBe(true);
+      expect(ms).toBeLessThanOrEqual(72 * 60 * 60_000);
+    }
+  });
+
+  it("treats a missing or nonsense streak as the first refusal", () => {
+    // The column is new, so every account in the database has a null until it
+    // is first written — and reading that as a huge streak would freeze a
+    // healthy account for three days on its first ever throttle.
+    expect(backOff(SIX_HOURS, Number.NaN)).toBe(SIX_HOURS);
+    expect(backOff(SIX_HOURS, -5)).toBe(SIX_HOURS);
   });
 });

@@ -1,4 +1,4 @@
-import { checkAction, classifyProviderError } from "@le/linkedin";
+import { backOff, checkAction, classifyProviderError } from "@le/linkedin";
 import {
   canTransition,
   containsLink,
@@ -224,6 +224,18 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
       return;
     }
     await recordAction(db, accountRow.id, "invite");
+    /*
+     * The streak is cleared by a send that worked, and by nothing else.
+     *
+     * Not by time and not by a refusal that turned out to be about one
+     * recipient: the only evidence that LinkedIn is accepting invitations from
+     * this account again is LinkedIn accepting one. Clearing it on anything
+     * weaker walks the next throttle back to a six hour wait after two days of
+     * being refused.
+     */
+    if (accountRow.invite_throttle_streak) {
+      await db.from("linkedin_accounts").update({ invite_throttle_streak: 0 }).eq("id", accountRow.id);
+    }
     await db
       .from("campaign_prospects")
       .update({
@@ -852,7 +864,43 @@ async function handleInviteRefusal(
     return;
   }
 
-  const until = new Date(Date.now() + verdict.cooldownMs);
+  /*
+   * How long we have already been refused decides how long we wait next.
+   *
+   * The streak is read before the cooldown is computed, because a flat six
+   * hours is right the first time and wrong every time after it: this account
+   * was refused nine times in seventy-five minutes on one afternoon, then once
+   * every six hours for as long as the campaign stayed running. Each of those
+   * is a rejected request logged against an account LinkedIn has already
+   * decided to slow down.
+   *
+   * Only account-wide refusals count. "This recipient was invited recently" is
+   * a fact about one row and says nothing about whether LinkedIn is accepting
+   * invitations from this account.
+   */
+  /*
+   * One reading of "is this about the account", used everywhere below.
+   *
+   * It was written out four times, and the fourth was added by this change —
+   * which quietly moved what the mutation guarding this rule was flipping, so
+   * the guard passed while testing nothing. Two readings of a rule drift; four
+   * readings of it are a guard aimed at whichever one happens to be first in
+   * the file.
+   */
+  const accountWide = verdict.scope === "account";
+
+  let streak = 0;
+  if (accountWide) {
+    const { data: account } = await ctx.db
+      .from("linkedin_accounts")
+      .select("invite_throttle_streak")
+      .eq("id", input.accountId)
+      .maybeSingle();
+    streak = account?.invite_throttle_streak ?? 0;
+  }
+
+  const cooldownMs = accountWide ? backOff(verdict.cooldownMs, streak) : verdict.cooldownMs;
+  const until = new Date(Date.now() + cooldownMs);
 
   /*
    * Who the refusal is about decides who waits.
@@ -864,7 +912,7 @@ async function handleInviteRefusal(
    * silencing a campaign, which is the failure the account-wide pause was
    * built to prevent, pointed the wrong way.
    */
-  if (verdict.scope === "account") {
+  if (accountWide) {
     // Never shortened by a later refusal during the same throttle. A fifteen
     // minute network blip arriving inside a six hour invitation limit would
     // otherwise cut that limit short and walk the account straight back in.
@@ -874,12 +922,23 @@ async function handleInviteRefusal(
       .eq("id", input.accountId)
       .maybeSingle();
     const standing = held?.invites_paused_until ? Date.parse(held.invites_paused_until) : 0;
-    if (!Number.isFinite(standing) || standing < until.getTime()) {
-      await ctx.db
-        .from("linkedin_accounts")
-        .update({ invites_paused_until: until.toISOString(), invites_paused_reason: verdict.summary })
-        .eq("id", input.accountId);
-    }
+    const extendsHold = !Number.isFinite(standing) || standing < until.getTime();
+
+    // One statement, with the hold fields in it only when the hold actually
+    // moves. Written as two branches it had an arm reachable only by two jobs
+    // racing past the send-time check together — real, but not reproducible
+    // from this entry point, so it would have been a branch no test could
+    // honestly cover. The streak is counted either way: every refusal is
+    // another request LinkedIn logged, whether or not it pushed the hold out.
+    await ctx.db
+      .from("linkedin_accounts")
+      .update({
+        ...(extendsHold
+          ? { invites_paused_until: until.toISOString(), invites_paused_reason: verdict.summary }
+          : {}),
+        invite_throttle_streak: streak + 1,
+      })
+      .eq("id", input.accountId);
   }
 
   await ctx.db
@@ -895,7 +954,7 @@ async function handleInviteRefusal(
     .update({
       status: "queued",
       status_reason: input.error,
-      next_action_at: verdict.scope === "prospect" ? until.toISOString() : null,
+      next_action_at: accountWide ? null : until.toISOString(),
     })
     .eq("id", input.campaignProspectId);
 
@@ -909,6 +968,9 @@ async function handleInviteRefusal(
       scope: verdict.scope,
       reason: verdict.summary,
       provider: input.error,
+      // How many refusals in a row this is. One is a throttle; eleven is a
+      // different conversation, and the difference was in nobody's reach.
+      streak: accountWide ? streak + 1 : undefined,
     },
   });
 }

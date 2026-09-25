@@ -164,6 +164,17 @@ export type LinkedinAccountRow = {
    */
   invites_paused_until: string | null;
   invites_paused_reason: string | null;
+  /**
+   * How many account-wide refusals in a row, since the last accepted invitation.
+   *
+   * It doubles the cooldown. A flat wait is right the first time and wrong
+   * every time after it: an account LinkedIn keeps refusing was probed again
+   * on exactly the same schedule for ever, which is a constant knock on a door
+   * that has been shut. Reset by a send that works and by nothing else — the
+   * only evidence LinkedIn is accepting invitations again is LinkedIn
+   * accepting one.
+   */
+  invite_throttle_streak: number;
   created_at: string;
 };
 

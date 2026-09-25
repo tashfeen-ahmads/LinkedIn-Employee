@@ -70,6 +70,35 @@ const COOLDOWNS = {
   rateLimited: 2 * HOUR,
 } as const;
 
+/** Never wait longer than this, however many times running LinkedIn refuses. */
+const MAX_COOLDOWN_MS = 72 * HOUR;
+
+/**
+ * The wait after the nth consecutive account-wide refusal.
+ *
+ * Doubling, because a flat cooldown is right once and wrong for ever after.
+ * An account LinkedIn keeps refusing was probed again every six hours with no
+ * end — a constant knock on a door that has been shut, which is how a
+ * temporary limit becomes a permanent restriction. Six hours, twelve,
+ * twenty-four, forty-eight, then capped at three days.
+ *
+ * Capped rather than unbounded, and it never stops probing altogether: a
+ * throttle that has lifted has to be discovered somehow, and repair must never
+ * wait for somebody to find a button. The knocking gets quieter; it does not
+ * stop.
+ *
+ * `streak` is the number of refusals *before* this one, so the first refusal
+ * of a run passes 0 and gets the base cooldown unchanged. That keeps the
+ * common case — one throttle, one wait — exactly as it was.
+ */
+export function backOff(baseMs: number, streak: number): number {
+  const safe = Number.isFinite(streak) && streak > 0 ? Math.floor(streak) : 0;
+  // Bounded before the shift, because 1 << 31 is negative and a negative
+  // cooldown is a hold that has already expired — the opposite of the rule.
+  const doublings = Math.min(safe, 8);
+  return Math.min(baseMs * 2 ** doublings, MAX_COOLDOWN_MS);
+}
+
 /**
  * Matched on the provider's own error slugs first, its prose second.
  *

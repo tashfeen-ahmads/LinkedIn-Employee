@@ -1456,6 +1456,65 @@ describe("when LinkedIn refuses an invitation", () => {
     expect(account.invites_paused_reason).toMatch(/temporarily refusing/i);
   });
 
+  it("waits longer each time LinkedIn refuses again", async () => {
+    /*
+     * The flat six hours was right once and wrong for ever after.
+     *
+     * This account was refused nine times in seventy-five minutes on one
+     * afternoon, and then once every six hours for as long as the campaign
+     * stayed running — each one a rejected request logged against an account
+     * LinkedIn had already decided to slow down. That is how a temporary
+     * limit becomes a permanent restriction, and a restriction is the one
+     * failure this product cannot come back from.
+     */
+    const { db, ctx, linkedin } = harness({
+      trialEndsAt: new Date(NOW.getTime() + 30 * 86_400_000).toISOString(),
+    });
+    linkedin.invitationRefusal = THROTTLED;
+    db.find("linkedin_accounts", { id: ACCOUNT })!.invite_throttle_streak = 2;
+
+    await runLinkedInAction(ctx, { kind: "invite", workspaceId: WORKSPACE, campaignProspectId: CP });
+
+    const account = db.find("linkedin_accounts", { id: ACCOUNT })!;
+    // Two refusals already, so this one waits four times the base six hours.
+    expect(Date.parse(account.invites_paused_until as string)).toBeGreaterThan(
+      Date.now() + 23 * 60 * 60_000,
+    );
+    // And the run is counted, or the next refusal waits the same as this one.
+    expect(account.invite_throttle_streak).toBe(3);
+  });
+
+  it("clears the streak when an invitation actually goes out", async () => {
+    // The only evidence LinkedIn is accepting invitations from this account
+    // again is LinkedIn accepting one. Clearing it on anything weaker walks
+    // the next throttle back to a six hour wait after two days of refusals.
+    const { db, ctx } = harness({
+      trialEndsAt: new Date(NOW.getTime() + 30 * 86_400_000).toISOString(),
+    });
+    db.find("linkedin_accounts", { id: ACCOUNT })!.invite_throttle_streak = 4;
+
+    await runLinkedInAction(ctx, { kind: "invite", workspaceId: WORKSPACE, campaignProspectId: CP });
+
+    expect(db.find("campaign_prospects", { id: CP })?.status).toBe("invited");
+    expect(db.find("linkedin_accounts", { id: ACCOUNT })?.invite_throttle_streak).toBe(0);
+  });
+
+  it("does not count a refusal about one recipient against the account", async () => {
+    // "This recipient was invited recently" says nothing about whether
+    // LinkedIn is accepting invitations from this account, so counting it
+    // would lengthen every future hold over one awkward row.
+    const { db, ctx, linkedin } = harness({
+      trialEndsAt: new Date(NOW.getTime() + 30 * 86_400_000).toISOString(),
+    });
+    linkedin.invitationRefusal =
+      "Unipile POST /api/v1/users/invite failed with 422: Should delay new invitation to this recipient — An invitation has already been sent recently to this recipient. — errors/already_invited_recently";
+    db.find("linkedin_accounts", { id: ACCOUNT })!.invite_throttle_streak = 2;
+
+    await runLinkedInAction(ctx, { kind: "invite", workspaceId: WORKSPACE, campaignProspectId: CP });
+
+    expect(db.find("linkedin_accounts", { id: ACCOUNT })?.invite_throttle_streak).toBe(2);
+  });
+
   it("still fails permanently on a refusal that is not going to change", async () => {
     // "Cannot send invitation to this member" is an answer. Retrying it for
     // ever spends a capped daily allowance on a send that cannot work.

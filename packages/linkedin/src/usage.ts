@@ -36,6 +36,8 @@ export interface AccountRecord {
    */
   invites_paused_until?: string | null;
   invites_paused_reason?: string | null;
+  /** Consecutive account-wide refusals since the last accepted invitation. */
+  invite_throttle_streak?: number | null;
 }
 
 /**
@@ -44,7 +46,7 @@ export interface AccountRecord {
  * function that needs it rather than being retyped at each call site.
  */
 export const ACCOUNT_USAGE_COLUMNS =
-  "id, workspace_id, user_id, provider_account_id, status, connected_at, first_action_at, invites_today, invites_this_week, messages_today, counters_reset_on, last_action_at, working_hours, invites_paused_until, invites_paused_reason";
+  "id, workspace_id, user_id, provider_account_id, status, connected_at, first_action_at, invites_today, invites_this_week, messages_today, counters_reset_on, last_action_at, working_hours, invites_paused_until, invites_paused_reason, invite_throttle_streak";
 
 export function parseWorkingHours(value: unknown): WorkingHours {
   if (value && typeof value === "object") {
