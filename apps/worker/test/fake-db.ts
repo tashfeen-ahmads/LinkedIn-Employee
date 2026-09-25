@@ -72,10 +72,17 @@ export class FakeDb {
 
     const invite = args.p_kind === "invite" ? 1 : 0;
     const message = args.p_kind === "message" ? 1 : 0;
+    const view = args.p_kind === "profile_view" ? 1 : 0;
     account.invites_today = (account.invites_today as number) + invite;
     account.invites_this_week = (account.invites_this_week as number) + invite;
     account.messages_today = (account.messages_today as number) + message;
+    account.profile_views_today = ((account.profile_views_today as number) ?? 0) + view;
+    // A view moves the gap clock, because the minimum gap is between any two
+    // actions of any kind — but it does not start the invitation ramp, which
+    // is day zero for *sending*. Modelled here because a test that asserted
+    // the difference against a fake that ignored it would be asserting nothing.
     account.last_action_at = new Date().toISOString();
+    if (!view) account.first_action_at = (account.first_action_at as string | null) ?? new Date().toISOString();
 
     return {
       data: [

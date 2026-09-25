@@ -52,7 +52,7 @@ async function tick(db: Db, queues: Queues, now: Date): Promise<number> {
 
   const { data: campaigns } = await db
     .from("campaigns")
-    .select("id, workspace_id, linkedin_account_id, daily_invite_cap, owner_user_id")
+    .select("id, workspace_id, linkedin_account_id, daily_invite_cap, owner_user_id, warm_up")
     .eq("status", "running");
   if (!campaigns?.length) {
     await beat(db, now, { campaigns: 0, enqueued: 0 });
@@ -105,8 +105,28 @@ async function tick(db: Db, queues: Queues, now: Date): Promise<number> {
     // Follow-ups first: a conversation already started is worth more than a
     // new invitation, and both draw on the same daily message budget.
     enqueued += await enqueueFollowUps(db, queues, campaign, usage, now);
+
+    /*
+     * Warming runs before inviting and independently of it.
+     *
+     * Before, because the point is that the view lands first. Independently,
+     * because an invitation throttle stops invitations and nothing else — a
+     * campaign held for six hours should come out of it with its next fifty
+     * prospects already familiar with the name, rather than with six hours of
+     * nothing to show.
+     */
+    const warmed = await enqueueWarmUps(db, queues, campaign, usage, now);
+    enqueued += warmed.enqueued;
+
     const invites = await enqueueInvites(db, queues, campaign, usage, loaded.account, now);
     enqueued += invites.enqueued;
+
+    // Both reasons, not just the invitation's. During a throttle the
+    // invitation line reads "holding until 14:07" and the warm-up line reads
+    // "warmed 12 profile(s)" — one of those is the campaign doing nothing and
+    // the other is the campaign doing the only useful thing available, and
+    // reporting only the first makes the second invisible.
+    if (warmed.reason) say(campaign.id, warmed.reason);
     say(campaign.id, invites.reason);
   }
 
@@ -175,7 +195,71 @@ type CampaignRow = {
   linkedin_account_id: string;
   daily_invite_cap: number;
   owner_user_id: string;
+  warm_up: boolean;
 };
+
+/**
+ * Look at profiles, so the invitations that follow are not cold.
+ *
+ * Deliberately not gated on `invites_paused_until`, which is the whole reason
+ * it is a separate action. LinkedIn refusing connection requests is LinkedIn
+ * forming an opinion about how fast this account asks strangers to connect; it
+ * is not a ban on the account using LinkedIn. So a campaign that cannot invite
+ * anybody for six hours can still spend those six hours building the
+ * familiarity that makes the invitation land when it is finally allowed —
+ * which turns the worst thing that happens to a campaign into the best
+ * preparation for it.
+ *
+ * Its own allowance for the same reason. A view drawn from the invitation
+ * budget would mean warming somebody cost us the ability to write to them.
+ */
+async function enqueueWarmUps(
+  db: Db,
+  queues: Queues,
+  campaign: CampaignRow,
+  usage: ReturnType<typeof toUsage>,
+  now: Date,
+): Promise<{ enqueued: number; reason: string | null }> {
+  if (!campaign.warm_up) return { enqueued: 0, reason: null };
+
+  const decision = checkAction("profile_view", usage, now);
+  if (!decision.allowed && decision.reason !== "too_soon") {
+    return { enqueued: 0, reason: `warm-up limiter: ${decision.reason}` };
+  }
+
+  const budget = Math.max(0, LINKEDIN_LIMITS.profileViewsPerDay - usage.profileViewsToday);
+  if (budget === 0) return { enqueued: 0, reason: "warm-up allowance used up today" };
+
+  const { data: waiting } = await db
+    .from("campaign_prospects")
+    .select("id")
+    .eq("campaign_id", campaign.id)
+    .eq("status", "queued")
+    // Only people nobody has looked at yet. Viewing somebody twice spends a
+    // second allowance on a familiarity we already bought.
+    .is("warmed_at", null)
+    .limit(budget);
+
+  if (!waiting?.length) return { enqueued: 0, reason: null };
+
+  let delay = decision.allowed ? 0 : decision.retryAfterMs;
+  let added = 0;
+  let revived = 0;
+  for (const row of waiting) {
+    delay += nextGapMs();
+    const outcome = await enqueueOnce(
+      queues.linkedinAction,
+      "warm-up",
+      { kind: "warm_up", workspaceId: campaign.workspace_id, campaignProspectId: row.id },
+      { delay, jobId: jobId("warm-up", row.id) },
+    );
+    if (outcome === "added") added++;
+    else if (outcome === "revived") revived++;
+  }
+
+  if (added + revived === 0) return { enqueued: 0, reason: null };
+  return { enqueued: added + revived, reason: `warmed ${added + revived} profile(s)` };
+}
 
 async function enqueueInvites(
   db: Db,
@@ -220,11 +304,18 @@ async function enqueueInvites(
     };
   }
 
-  const { data: waiting } = await db
+  const warmFirst = db
     .from("campaign_prospects")
     .select("id, next_action_at")
     .eq("campaign_id", campaign.id)
-    .eq("status", "queued")
+    .eq("status", "queued");
+
+  // On a warm-up campaign, nobody is invited before they have been looked at.
+  //
+  // Without this the first tick after launch invites everybody cold and the
+  // warm-up becomes a setting that changes nothing — the exact failure mode
+  // every feature on this list has had at least once.
+  const { data: waiting } = await (campaign.warm_up ? warmFirst.not("warmed_at", "is", null) : warmFirst)
     // Read wider than the budget, because some of these are serving a hold of
     // their own and are filtered out below. Taking exactly `budget` rows first
     // would let a handful of held prospects fill the whole allowance and send
@@ -247,7 +338,9 @@ async function enqueueInvites(
       enqueued: 0,
       reason: waiting?.length
         ? `${waiting.length} waiting on a per-person hold from LinkedIn`
-        : "nobody left to invite",
+        : campaign.warm_up
+          ? "nobody warmed and waiting yet"
+          : "nobody left to invite",
     };
   }
 

@@ -8,6 +8,7 @@ import {
   type CampaignProspectStatus,
   INVITE_NOTE_MAX_CHARS,
   CTA_PLACEHOLDER,
+  LINKEDIN_LIMITS,
   renderPitch,
   usesPitch,
   renderMerge,
@@ -48,7 +49,7 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
   const { data: cp } = await db
     .from("campaign_prospects")
     .select(
-      "id, workspace_id, campaign_id, prospect_id, status, last_step_sent, invitation_id, invite_note, variant_id",
+      "id, workspace_id, campaign_id, prospect_id, status, last_step_sent, invitation_id, invite_note, variant_id, warmed_at",
     )
     .eq("id", job.campaignProspectId)
     .single();
@@ -110,7 +111,14 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
   // earlier than this one at which the question has a settled answer. An
   // invitation is a first contact by definition, so any contact at all is
   // already too much.
-  if (job.kind === "invite" && prospect.last_contacted_at) {
+  //
+  // Warming counts too, and it was not covered here at first. A profile view
+  // is visible to the person — LinkedIn notifies them — so looking up somebody
+  // this workspace has already written to is a second approach under a
+  // different pretext, which is the exact thing this rule exists to stop. It
+  // also spends the allowance twice over: once on the view, and again on the
+  // invitation that the check below would refuse anyway.
+  if ((job.kind === "invite" || job.kind === "warm_up") && prospect.last_contacted_at) {
     await closeProspect(ctx, cp.id, alreadyContactedReason(prospect.last_contacted_at));
     return;
   }
@@ -153,10 +161,81 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
 
   // Second limiter check, immediately before the call. The first was minutes
   // ago at scheduling time and the account may have been used since.
-  const kind = job.kind === "invite" ? "invite" : "message";
+  const kind = job.kind === "invite" ? "invite" : job.kind === "warm_up" ? "profile_view" : "message";
   const decision = checkAction(kind, usage, new Date());
   if (!decision.allowed) {
     throw new RescheduleError(decision.reason, decision.retryAfterMs);
+  }
+
+  if (job.kind === "warm_up") {
+    /*
+     * The first thing this product ever does that the prospect can see.
+     *
+     * A connection request arriving cold is a stranger's name among thirty
+     * that week. The same request, to somebody who saw this account view their
+     * profile a few hours earlier, arrives to a name they half recognise, and
+     * the published benchmarks put that at roughly a third more acceptances.
+     *
+     * Everything above this line already applied — do-not-contact, the shared
+     * exclusion list, never-contacted-twice — because a view is visible to the
+     * person and "never contact this account" is a promise a colleague made to
+     * a customer. A view is not a message, but it is not nothing either.
+     */
+    if (cp.status !== "queued") return;
+    if (cp.warmed_at) return;
+    if (!prospect.provider_id) {
+      await failProspect(ctx, cp.id, "no provider id for prospect");
+      return;
+    }
+
+    const viewed = await ctx.linkedin.viewProfile({
+      accountId: accountRow.provider_account_id,
+      providerId: prospect.provider_id,
+    });
+    if (!viewed.ok) {
+      /*
+       * A refused view is not a refused person.
+       *
+       * It costs nothing and proves nothing, so the prospect goes back in the
+       * queue unwarmed and the invitation is simply sent cold when its turn
+       * comes. Failing them here would spend a real name on a request that
+       * was never made — and warming is an improvement to the invitation, not
+       * a precondition for it.
+       */
+      console.error("could not warm a prospect", { campaignProspectId: cp.id, error: viewed.error });
+      return;
+    }
+
+    await recordAction(db, accountRow.id, "profile_view");
+
+    /*
+     * Then the invitation, but not yet.
+     *
+     * A view and a connection request in the same minute is one automated
+     * burst wearing two hats, and it is the pattern LinkedIn's own heuristics
+     * watch for. Three quarters of an hour to four hours later is a person who
+     * looked somebody up, thought about it, and got round to reaching out. The
+     * working-hours check and the ordinary gap still apply on top: this is the
+     * earliest the invitation may go, not a promise that it goes then.
+     */
+    const wait =
+      LINKEDIN_LIMITS.warmUpToInviteMinMs +
+      Math.random() * (LINKEDIN_LIMITS.warmUpToInviteMaxMs - LINKEDIN_LIMITS.warmUpToInviteMinMs);
+    await db
+      .from("campaign_prospects")
+      .update({
+        warmed_at: new Date().toISOString(),
+        next_action_at: new Date(Date.now() + wait).toISOString(),
+      })
+      .eq("id", cp.id);
+
+    await recordEvent(db, {
+      workspaceId: cp.workspace_id,
+      name: "prospect.warmed",
+      subjectType: "campaign_prospect",
+      subjectId: cp.id,
+    });
+    return;
   }
 
   if (job.kind === "invite") {

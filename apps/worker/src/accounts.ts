@@ -20,7 +20,11 @@ import { trySend } from "./email.js";
  * counters exist to prevent. Doing it in SQL also removes the standing rule
  * that the worker may never run as more than one instance.
  */
-export async function recordAction(db: Db, accountId: string, kind: "invite" | "message"): Promise<void> {
+export async function recordAction(
+  db: Db,
+  accountId: string,
+  kind: "invite" | "message" | "profile_view",
+): Promise<void> {
   const { error } = await db.rpc("record_linkedin_action", { p_account_id: accountId, p_kind: kind });
   // Loudly: an uncounted action is an account creeping past its daily cap, and
   // the next check would happily allow another.
@@ -310,6 +314,11 @@ export async function resetCountersIfNeeded(db: Db, account: AccountRecord, toda
   const update = {
     invites_today: 0,
     messages_today: 0,
+    // Reset with the rest of them. Left out, the warm-up allowance is spent
+    // once and never refilled — a campaign that warms forty people on its
+    // first day would never look at anybody again, and the screen would say
+    // the allowance was used up for ever.
+    profile_views_today: 0,
     counters_reset_on: today,
     ...(newWeek ? { invites_this_week: 0 } : {}),
   };

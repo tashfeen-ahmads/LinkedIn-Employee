@@ -48,6 +48,7 @@ async function createCampaign(formData: FormData) {
   const ctaId = String(formData.get("cta") ?? "").trim();
   const accountId = String(formData.get("account") ?? "").trim();
   const followUpDays = Number(formData.get("follow_up_days") ?? 3);
+  const warmUp = formData.get("warm_up") === "on";
   const chosen = formData.getAll("prospect").map(String).filter(Boolean);
 
   if (!name) redirect(errorQuery(here, "Give the campaign a name you will recognise."));
@@ -117,6 +118,7 @@ async function createCampaign(formData: FormData) {
       cta_kind: (cta?.kind as "meeting" | "link" | "reply") ?? "reply",
       cta_label: cta?.label ?? null,
       cta_url: cta?.url ?? null,
+      warm_up: warmUp,
       daily_invite_cap: LINKEDIN_LIMITS.invitesPerDayStart,
       stop_conditions: ["prospect replies", "prospect opts out"] as never,
       rules: { builtFrom: "prospect list" } as never,
@@ -302,6 +304,27 @@ export default async function NewCampaignPage({
                 </select>
               </label>
             )}
+          </Section>
+
+          <Section
+            title="Before the request"
+            description="Look at each person's profile a few hours before asking to connect."
+          >
+            <label className="inline-check">
+              <input type="checkbox" name="warm_up" defaultChecked />
+              <span>Warm each prospect up first</span>
+            </label>
+            <p className="small muted">
+              LinkedIn tells people who looked at their profile, so the request arrives to a name
+              they have already seen once rather than to a stranger. Published benchmarks put that
+              at roughly a third more acceptances.
+            </p>
+            <p className="tiny subtle">
+              Views have their own daily allowance — {LINKEDIN_LIMITS.profileViewsPerDay} a day,
+              well under what LinkedIn tolerates — and they never come out of your invitation
+              allowance. They also keep running while LinkedIn is throttling invitations, which is
+              exactly when a campaign otherwise has nothing to do.
+            </p>
           </Section>
 
           <Section

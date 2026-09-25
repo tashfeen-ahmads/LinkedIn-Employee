@@ -22,13 +22,22 @@ export interface AccountUsage {
   invitesToday: number;
   invitesThisWeek: number;
   messagesToday: number;
+  /**
+   * Profile views spent today, on its own counter.
+   *
+   * A view is not an invitation: it has its own allowance, it does not come
+   * off the invite ramp, and LinkedIn throttling invitations does not stop
+   * one. Sharing a counter would mean warming a prospect cost us the ability
+   * to write to them.
+   */
+  profileViewsToday: number;
   lastActionAt: Date | null;
   workingHours: WorkingHours;
   /** IANA zone used to evaluate workingHours. */
   timezone: string;
 }
 
-export type ActionKind = "invite" | "message";
+export type ActionKind = "invite" | "message" | "profile_view";
 
 export type Decision =
   | { allowed: true }
@@ -38,6 +47,7 @@ export type DenyReason =
   | "daily_invite_cap"
   | "weekly_invite_cap"
   | "daily_message_cap"
+  | "daily_profile_view_cap"
   | "outside_working_hours"
   | "too_soon";
 
@@ -114,6 +124,21 @@ export function checkAction(kind: ActionKind, usage: AccountUsage, now: Date = n
     }
     if (usage.invitesToday >= dailyInviteCap(usage.firstActionAt, now)) {
       return { allowed: false, reason: "daily_invite_cap", retryAfterMs: untilTomorrow };
+    }
+    return { allowed: true };
+  }
+
+  if (kind === "profile_view") {
+    /*
+     * Its own ceiling, and deliberately below the field consensus.
+     *
+     * A view is the cheapest action on LinkedIn and therefore the easiest to
+     * do far too many of — which is exactly how an account that never sent a
+     * single risky message ends up throttled. It gets no share of the
+     * invitation ramp and grants none.
+     */
+    if (usage.profileViewsToday >= LINKEDIN_LIMITS.profileViewsPerDay) {
+      return { allowed: false, reason: "daily_profile_view_cap", retryAfterMs: untilTomorrow };
     }
     return { allowed: true };
   }

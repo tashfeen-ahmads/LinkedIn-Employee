@@ -54,11 +54,13 @@ async function saveCampaign(formData: FormData) {
   // all (no agents in this workspace) must leave the column alone rather than
   // detaching the agent a campaign is already running on.
   const agentField = formData.get("agentId");
+  const warmUp = formData.get("warm_up") === "on";
 
   await supabase
     .from("campaigns")
     .update({
       connection_note: note,
+      warm_up: warmUp,
       ...(agentField === null ? {} : { agent_id: String(agentField) || null }),
       // Clamped rather than rejected: the caps are product rules, and a typo in
       // this box must not be able to raise them. Rule 2 in CLAUDE.md.
@@ -541,7 +543,7 @@ export default async function CampaignPage({
   const { data: campaign } = await supabase
     .from("campaigns")
     .select(
-      "id, name, status, connection_note, daily_invite_cap, reply_mode, launched_at, linkedin_account_id, rules, customer_profile_id, search_exhausted, searched_at, owner_user_id, agent_id, cta_id, cta_kind, cta_label, cta_url",
+      "id, name, status, connection_note, daily_invite_cap, reply_mode, launched_at, linkedin_account_id, rules, customer_profile_id, search_exhausted, searched_at, owner_user_id, agent_id, warm_up, cta_id, cta_kind, cta_label, cta_url",
     )
     .eq("id", id)
     .eq("workspace_id", session.workspaceId)
@@ -861,6 +863,16 @@ export default async function CampaignPage({
           <p className="small muted">
             {"Read all of it. {{first_name}}, {{company}}, {{title}} and {{rep_name}} are filled in per person; anything else stays literal."}
             {running ? " Edits apply to everyone who has not been reached yet." : ""}
+          </p>
+
+          <label className="inline-check">
+            <input type="checkbox" name="warm_up" defaultChecked={campaign.warm_up} />
+            <span>Look at each profile a few hours before inviting</span>
+          </label>
+          <p className="tiny subtle">
+            LinkedIn tells them who viewed their profile, so the request reaches a name they have
+            already seen. Its own daily allowance, never taken from your invitations — and it keeps
+            running while LinkedIn is holding invitations back.
           </p>
 
           {(agents ?? []).length > 0 ? (

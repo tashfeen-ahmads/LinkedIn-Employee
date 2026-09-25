@@ -78,6 +78,14 @@ export interface CampaignTickJob {
 }
 
 export type LinkedInActionJob =
+  /**
+   * Look at this prospect's profile, so the invitation that follows reaches a
+   * name they have already seen. Its own kind rather than a flag on `invite`
+   * because it has its own allowance, its own pacing, and — the part that
+   * matters — it runs while LinkedIn is refusing invitations, which is exactly
+   * when a campaign otherwise has nothing to do.
+   */
+  | { kind: "warm_up"; workspaceId: string; campaignProspectId: string }
   | { kind: "invite"; workspaceId: string; campaignProspectId: string }
   | { kind: "follow_up"; workspaceId: string; campaignProspectId: string; stepNumber: number }
   | { kind: "reply"; workspaceId: string; conversationId: string; draftId: string };

@@ -162,6 +162,8 @@ export type LinkedinAccountRow = {
    * is the platform refusing outright, and it belongs to the account because
    * that is what LinkedIn is forming an opinion about.
    */
+  /** Profile views spent today; its own allowance, reset with the daily ones. */
+  profile_views_today: number;
   invites_paused_until: string | null;
   invites_paused_reason: string | null;
   /**
@@ -274,6 +276,14 @@ export type CampaignRow = {
    */
   cta_id: string | null;
   daily_invite_cap: number;
+  /**
+   * Look at each prospect's profile before inviting them.
+   *
+   * Per campaign rather than per workspace, because it is a decision about a
+   * list: a campaign built from people who already know the rep does not need
+   * it, and it spends a real daily allowance.
+   */
+  warm_up: boolean;
   reply_mode: ReplyModeDb;
   rules: Json;
   stop_conditions: Json;
@@ -343,6 +353,8 @@ export type CampaignProspectRow = {
   status_reason: string | null;
   invitation_id: string | null;
   invited_at: string | null;
+  /** When this prospect's profile was viewed, or null if it was not. */
+  warmed_at: string | null;
   accepted_at: string | null;
   last_step_sent: number;
   next_action_at: string | null;
@@ -758,7 +770,7 @@ export type Database = {
     Views: { [_ in never]: never };
     Functions: {
       record_linkedin_action: {
-        Args: { p_account_id: string; p_kind: "invite" | "message" };
+        Args: { p_account_id: string; p_kind: "invite" | "message" | "profile_view" };
         Returns: { invites_today: number; invites_this_week: number; messages_today: number }[];
       };
       /**

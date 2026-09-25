@@ -19,6 +19,23 @@ export const LINKEDIN_LIMITS = {
   invitesPerWeek: 100,
   /** Messages per day (follow-ups + replies). */
   messagesPerDay: 50,
+  /**
+   * Profile views per day, as a warm-up before the invitation.
+   *
+   * Deliberately below the field consensus rather than at it. Practitioners
+   * report 80 to 150 a day without trouble and some tools will do 500; the
+   * conservative end of the published guidance is under 50, and that is the
+   * end this product sits at — a view is the cheapest action on LinkedIn and
+   * the easiest to do far too many of, and the whole promise here is that we
+   * stay well under the line rather than finding it.
+   *
+   * It is its own allowance, counted separately from invitations. A view is
+   * not a connection request: it costs nothing from the capped daily invite
+   * ramp, it is not refused when LinkedIn throttles invitations, and spending
+   * one from the invite budget would mean warming a prospect cost us the
+   * ability to write to them.
+   */
+  profileViewsPerDay: 40,
   /** Minimum gap between two actions on one account, milliseconds. */
   minGapMs: 2 * 60_000,
   /** Maximum gap added as random jitter, milliseconds. */
@@ -38,6 +55,22 @@ export const LINKEDIN_LIMITS = {
    */
   acceptFollowUpMinMs: 20 * 60_000,
   acceptFollowUpMaxMs: 90 * 60_000,
+  /**
+   * How long after looking at somebody's profile the invitation goes out.
+   *
+   * The point of the warm-up is that the request arrives to a name they have
+   * already seen, so the view has to land *before* it and far enough before
+   * that the two do not read as one automated burst. A view and an invitation
+   * in the same minute is a robot announcing itself; a view four hours earlier
+   * is a person who looked somebody up, thought about it, and got round to
+   * reaching out.
+   *
+   * Still inside working hours, and still behind the ordinary gap between two
+   * actions — this is the earliest the invitation may go, not a promise that
+   * it goes then.
+   */
+  warmUpToInviteMinMs: 45 * 60_000,
+  warmUpToInviteMaxMs: 4 * 60 * 60_000,
   /**
    * Withdraw pending invites older than this many days. LinkedIn permits one
    * withdrawal pass per week and only on invites at least 14 days old, so the

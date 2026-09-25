@@ -161,6 +161,26 @@ export interface LinkedInProvider {
     tier?: SearchTier;
   }): Promise<ProspectPage>;
   getProfile(input: { accountId: string; providerId: string }): Promise<ProviderProfile>;
+  /**
+   * Look at somebody's profile, the way a person would.
+   *
+   * The whole point is the notification: LinkedIn tells the member who viewed
+   * them, so a connection request arriving a few hours later reaches a name
+   * they have already seen once. Published benchmarks put that at roughly a
+   * third more acceptances than the same request sent cold.
+   *
+   * Separate from `getProfile` even though both read a profile, because they
+   * are different acts with different costs. `getProfile` is research — we
+   * call it to find out whether somebody is worth contacting, and it is spent
+   * off the seat the rep pays for. This is outreach: it is visible to the
+   * person, it counts against a daily allowance of its own, and it is the
+   * first thing this product ever does that the prospect can see.
+   *
+   * Returns an `ActionResult` rather than the profile for that reason: the
+   * caller is not asking who this person is, it is asking whether the view
+   * landed.
+   */
+  viewProfile(input: { accountId: string; providerId: string }): Promise<ActionResult>;
   sendInvitation(input: { accountId: string; providerId: string; note?: string }): Promise<ActionResult>;
   withdrawInvitation(input: { accountId: string; invitationId: string }): Promise<ActionResult>;
   sendMessage(input: { accountId: string; chatId?: string; providerId?: string; text: string }): Promise<ActionResult>;

@@ -22,6 +22,8 @@ export interface AccountRecord {
   invites_today: number;
   invites_this_week: number;
   messages_today: number;
+  /** Profile views spent today, reset with the other daily counters. */
+  profile_views_today?: number | null;
   counters_reset_on: string | null;
   last_action_at: string | null;
   working_hours: unknown;
@@ -46,7 +48,7 @@ export interface AccountRecord {
  * function that needs it rather than being retyped at each call site.
  */
 export const ACCOUNT_USAGE_COLUMNS =
-  "id, workspace_id, user_id, provider_account_id, status, connected_at, first_action_at, invites_today, invites_this_week, messages_today, counters_reset_on, last_action_at, working_hours, invites_paused_until, invites_paused_reason, invite_throttle_streak";
+  "id, workspace_id, user_id, provider_account_id, status, connected_at, first_action_at, invites_today, invites_this_week, messages_today, counters_reset_on, last_action_at, working_hours, profile_views_today, invites_paused_until, invites_paused_reason, invite_throttle_streak";
 
 export function parseWorkingHours(value: unknown): WorkingHours {
   if (value && typeof value === "object") {
@@ -65,6 +67,11 @@ export function toUsage(account: AccountRecord, timezone: string): AccountUsage 
     invitesToday: account.invites_today,
     invitesThisWeek: account.invites_this_week,
     messagesToday: account.messages_today,
+    // Null until the column has been written once, which is every account on
+    // the deployment the day this ships. Reading that as "unknown, so refuse"
+    // would stop every warm-up; reading it as zero is the truth — nobody had
+    // spent a view before there was a counter for it.
+    profileViewsToday: account.profile_views_today ?? 0,
     lastActionAt: account.last_action_at ? new Date(account.last_action_at) : null,
     workingHours: parseWorkingHours(account.working_hours),
     timezone,

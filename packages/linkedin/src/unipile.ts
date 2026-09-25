@@ -443,6 +443,29 @@ export class UnipileProvider implements LinkedInProvider {
     };
   }
 
+  /**
+   * Fetch the profile through the rep's own session, which is what registers
+   * the view.
+   *
+   * The same endpoint `getProfile` uses, deliberately: there is no separate
+   * "view" call because on LinkedIn there is no separate act — opening
+   * somebody's profile is what notifies them, and this is that request made
+   * on purpose rather than as a side effect of research.
+   *
+   * The profile it returns is thrown away. The caller wants to know the view
+   * happened, and handing back a profile here would invite somebody to use
+   * this in place of `getProfile` and spend a visible action on research.
+   */
+  async viewProfile(input: { accountId: string; providerId: string }): Promise<ActionResult> {
+    try {
+      const params = new URLSearchParams({ account_id: input.accountId });
+      await this.request(`${ROUTES.profile(input.providerId)}?${params.toString()}`);
+      return { ok: true };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  }
+
   async sendInvitation(input: { accountId: string; providerId: string; note?: string }): Promise<ActionResult> {
     try {
       const res = await this.request<{ invitation_id?: string }>(ROUTES.invite, {

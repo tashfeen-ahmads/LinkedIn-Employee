@@ -95,6 +95,17 @@ export class MockLinkedInProvider implements LinkedInProvider {
   profiles = new Map<string, ProviderProfile>();
   profileError: Error | null = null;
 
+  /** Every profile this account has looked at, newest last, for assertions. */
+  viewedProfiles: string[] = [];
+  /** Set to make a view fail, the way the provider would. */
+  viewRefusal: string | null = null;
+
+  async viewProfile(input: { accountId: string; providerId: string }): Promise<ActionResult> {
+    if (this.viewRefusal) return { ok: false, error: this.viewRefusal };
+    this.viewedProfiles.push(input.providerId);
+    return { ok: true };
+  }
+
   async getProfile(input: { accountId: string; providerId: string }): Promise<ProviderProfile> {
     if (this.profileError) throw this.profileError;
     const known = this.profiles.get(input.providerId);
