@@ -1,6 +1,7 @@
 import type {
   AccountHealth,
   ActionResult,
+  PendingInvitation,
   HostedAuthLink,
   InboundMessage,
   LinkedInProvider,
@@ -141,6 +142,13 @@ export class MockLinkedInProvider implements LinkedInProvider {
     if (this.invitationRefusal) return { ok: false, error: this.invitationRefusal };
     this.sentInvitations.push(input);
     return { ok: true, providerId: `inv_${this.sentInvitations.length}` };
+  }
+
+  /** What the provider would say this account still has outstanding. */
+  pendingInvitations: PendingInvitation[] = [];
+
+  async listPendingInvitations(): Promise<{ invitations: PendingInvitation[]; raw: unknown }> {
+    return { invitations: this.pendingInvitations, raw: { items: this.pendingInvitations } };
   }
 
   async withdrawInvitation(): Promise<ActionResult> {

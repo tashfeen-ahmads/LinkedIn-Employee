@@ -12,6 +12,7 @@ import type {
   ProviderProfile,
   ProviderRelation,
   SearchQuery,
+  PendingInvitation,
 } from "./provider.js";
 import type { ClassicPosition } from "./cursor.js";
 import { decodeClassicCursor, encodeClassicCursor, isClassicCursor } from "./cursor.js";
@@ -480,6 +481,52 @@ export class UnipileProvider implements LinkedInProvider {
     } catch (err) {
       return toActionError(err);
     }
+  }
+
+  /**
+   * The invitations LinkedIn still has outstanding for this account.
+   *
+   * Mapped defensively and handed back with the raw payload, because this
+   * product cannot read Unipile's documentation from its build environment and
+   * a field name guessed wrong here reports "0 pending" for an account
+   * drowning in them — which is worse than reporting nothing at all.
+   */
+  async listPendingInvitations(input: {
+    accountId: string;
+    limit?: number;
+  }): Promise<{ invitations: PendingInvitation[]; raw: unknown }> {
+    const params = new URLSearchParams({ account_id: input.accountId });
+    if (input.limit) params.set("limit", String(input.limit));
+    const raw = await this.request<unknown>(`${ROUTES.invitationsSent}?${params.toString()}`);
+
+    // The list is under `items` on every Unipile collection this product
+    // already reads; an array at the top level is accepted too rather than
+    // assumed away.
+    const container = raw as { items?: unknown } | unknown[] | null;
+    const rows = Array.isArray(container)
+      ? container
+      : Array.isArray((container as { items?: unknown })?.items)
+        ? ((container as { items: unknown[] }).items)
+        : [];
+
+    const invitations = rows.map((row) => {
+      const r = (row ?? {}) as Record<string, unknown>;
+      const str = (...keys: string[]): string | null => {
+        for (const key of keys) {
+          const value = r[key];
+          if (typeof value === "string" && value.trim()) return value;
+        }
+        return null;
+      };
+      return {
+        invitationId: str("invitation_id", "id"),
+        providerId: str("provider_id", "member_id", "user_id", "recipient_id"),
+        name: str("name", "full_name", "display_name"),
+        sentAt: str("sent_at", "created_at", "date", "invited_at"),
+      };
+    });
+
+    return { invitations, raw };
   }
 
   async withdrawInvitation(input: { accountId: string; invitationId: string }): Promise<ActionResult> {

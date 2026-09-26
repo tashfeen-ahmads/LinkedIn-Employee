@@ -45,6 +45,25 @@ export interface DiagnosticsReport {
   checks: Check[];
 }
 
+/**
+ * Outstanding invitations past which LinkedIn starts refusing new ones.
+ *
+ * There is no published number and there never will be — this is the
+ * conservative end of what practitioners report, chosen so the screen says
+ * something before the sending stops rather than after.
+ */
+const PENDING_CROWDED = 200;
+
+/** The provider's own field names, so a wrong mapping cannot report a confident zero. */
+function describeShape(raw: unknown): string {
+  if (Array.isArray(raw)) return `an array of ${raw.length}`;
+  if (raw && typeof raw === "object") {
+    const keys = Object.keys(raw as Record<string, unknown>);
+    return keys.length ? `an object with ${keys.slice(0, 8).join(", ")}` : "an empty object";
+  }
+  return `${typeof raw}`;
+}
+
 const STAGES = {
   setup: "Deployment",
   onboarding: "Onboarding",
@@ -195,6 +214,72 @@ export async function runDiagnostics(
   // ---- Can we actually search? -----------------------------------------
   const searchCheck = await probeSearch(ctx, account?.provider_account_id ?? null, providerCheck.state);
   add({ ...searchCheck, stage: STAGES.targeting, key: "search" });
+
+  /*
+   * How many invitations LinkedIn still has outstanding for this account.
+   *
+   * The question nobody was asking, and the one that explains a fortnight.
+   * LinkedIn caps *pending* invitations — every request sent and never
+   * answered — and past that ceiling it refuses new ones outright. Our own
+   * records only know the invitations this product issued, so an account that
+   * arrives carrying hundreds from before it ever signed up looks, from every
+   * screen here, like a mysterious throttle: seven sent, an eighth refused,
+   * and a cheerful "temporary provider limit, try again later" that never
+   * comes right however long anybody waits.
+   *
+   * The endpoint to ask has been in `unipile.ts` since the first week and
+   * nothing ever called it. Asked rather than inferred, for the reason rule 17
+   * gives: a check that passes because it could not look costs the same week
+   * every time.
+   */
+  if (account?.provider_account_id) {
+    const provider = ctx.linkedin as {
+      listPendingInvitations?: (input: { accountId: string; limit?: number }) => Promise<{
+        invitations: Array<{ sentAt: string | null }>;
+        raw: unknown;
+      }>;
+    };
+    if (typeof provider.listPendingInvitations === "function") {
+      try {
+        const { invitations, raw } = await provider.listPendingInvitations({
+          accountId: account.provider_account_id,
+          limit: 500,
+        });
+        const count = invitations.length;
+        // The provider's own field names, when the list came back empty. A
+        // mapping that is wrong reports a confident zero, and a confident zero
+        // here is the difference between "your account is fine" and "your
+        // account cannot send" (rule 17's disease, one layer down).
+        const shape =
+          count === 0
+            ? ` The provider returned ${describeShape(raw)}.`
+            : "";
+        add({
+          key: "pending-invitations",
+          stage: STAGES.account,
+          label: "Invitations LinkedIn is still holding",
+          state: count >= PENDING_CROWDED ? "blocked" : "ok",
+          detail:
+            count >= PENDING_CROWDED
+              ? `${count} invitations are still waiting for an answer. LinkedIn refuses new ones once too many are outstanding, and this is the most common reason an account that has sent almost nothing through us cannot send at all.`
+              : `${count} invitation${count === 1 ? "" : "s"} outstanding, which is well inside what LinkedIn tolerates.${shape}`,
+          fix:
+            count >= PENDING_CROWDED
+              ? "Withdraw the oldest ones to make room. Nothing else this product does will clear it."
+              : undefined,
+          href: "/app/team",
+        });
+      } catch (err) {
+        add({
+          key: "pending-invitations",
+          stage: STAGES.account,
+          label: "Invitations LinkedIn is still holding",
+          state: "unknown",
+          detail: `Could not ask the provider: ${err instanceof Error ? err.message : String(err)}`,
+        });
+      }
+    }
+  }
 
   // A search that runs and finds nobody, at the widest setting this product
   // will go to, is not an answer LinkedIn really gives — it means a field in

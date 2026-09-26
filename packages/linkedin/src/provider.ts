@@ -111,6 +111,17 @@ export interface ActionResult {
  * reach LinkedIn (a hosted API today, our own browser workers later); the agents
  * and the worker only ever see this interface.
  */
+/** One invitation this account has sent and nobody has answered. */
+export interface PendingInvitation {
+  /** What `withdrawInvitation` needs. Null when the provider did not give one. */
+  invitationId: string | null;
+  /** Who it went to, when the provider says. */
+  providerId: string | null;
+  name: string | null;
+  /** ISO, when the provider says. Null is common and not an error. */
+  sentAt: string | null;
+}
+
 export interface LinkedInProvider {
   readonly name: string;
   /** Start the hosted login flow. The rep's password never reaches our servers. */
@@ -182,6 +193,31 @@ export interface LinkedInProvider {
    */
   viewProfile(input: { accountId: string; providerId: string }): Promise<ActionResult>;
   sendInvitation(input: { accountId: string; providerId: string; note?: string }): Promise<ActionResult>;
+  /**
+   * What LinkedIn actually has outstanding for this account.
+   *
+   * Not what *we* sent. That distinction is the whole reason this exists: our
+   * own records only know the invitations this product issued, and an account
+   * arrives with a history — invitations the rep sent by hand, invitations
+   * another tool sent, invitations from two years ago that were never accepted
+   * and never withdrawn. LinkedIn counts all of them, and past its ceiling it
+   * refuses new ones.
+   *
+   * Which looks, from inside this product, exactly like a mysterious
+   * throttle. An account that has sent seven invitations through us and cannot
+   * send an eighth is not being rate-limited by anything we did; it is holding
+   * a backlog we never asked about. The endpoint to ask has been in this file
+   * since the first week and nothing ever called it.
+   *
+   * `raw` carries the provider's own field names back untouched, for the same
+   * reason `describeAccountFields` does: a mapping that is wrong reports a
+   * confident zero, and a confident zero here is the difference between
+   * "your account is fine" and "your account cannot send".
+   */
+  listPendingInvitations(input: {
+    accountId: string;
+    limit?: number;
+  }): Promise<{ invitations: PendingInvitation[]; raw: unknown }>;
   withdrawInvitation(input: { accountId: string; invitationId: string }): Promise<ActionResult>;
   sendMessage(input: { accountId: string; chatId?: string; providerId?: string; text: string }): Promise<ActionResult>;
   listNewMessages(input: { accountId: string; since: string }): Promise<InboundMessage[]>;
