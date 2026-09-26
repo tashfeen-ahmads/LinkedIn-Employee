@@ -549,7 +549,7 @@ const MUTATIONS = [
     id: "health/the-worker-says-it-started",
     rule: "The worker records its own boot straight to the database, because every other report it makes travels through the queue",
     file: "apps/worker/src/jobs/diagnostics.ts",
-    from: '    state: boot ? (bootDetail.queueReachable === false ? "blocked" : "ok") : "unknown",',
+    from: '    state: boot ? (queueDown ? "blocked" : "ok") : "unknown",',
     to: '    state: "ok",',
     pkg: "@le/worker",
   },
