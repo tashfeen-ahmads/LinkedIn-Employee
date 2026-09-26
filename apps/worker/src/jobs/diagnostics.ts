@@ -237,15 +237,17 @@ export async function runDiagnostics(
       listPendingInvitations?: (input: { accountId: string; limit?: number }) => Promise<{
         invitations: Array<{ sentAt: string | null }>;
         raw: unknown;
+        truncated?: boolean;
       }>;
     };
     if (typeof provider.listPendingInvitations === "function") {
       try {
-        const { invitations, raw } = await provider.listPendingInvitations({
+        const { invitations, raw, truncated } = await provider.listPendingInvitations({
           accountId: account.provider_account_id,
           limit: 500,
         });
         const count = invitations.length;
+        const atLeast = truncated ? "at least " : "";
         // The provider's own field names, when the list came back empty. A
         // mapping that is wrong reports a confident zero, and a confident zero
         // here is the difference between "your account is fine" and "your
@@ -261,8 +263,8 @@ export async function runDiagnostics(
           state: count >= PENDING_CROWDED ? "blocked" : "ok",
           detail:
             count >= PENDING_CROWDED
-              ? `${count} invitations are still waiting for an answer. LinkedIn refuses new ones once too many are outstanding, and this is the most common reason an account that has sent almost nothing through us cannot send at all.`
-              : `${count} invitation${count === 1 ? "" : "s"} outstanding, which is well inside what LinkedIn tolerates.${shape}`,
+              ? `${atLeast}${count} invitations are still waiting for an answer. LinkedIn refuses new ones once too many are outstanding, and this is the most common reason an account that has sent almost nothing through us cannot send at all.`
+              : `${atLeast}${count} invitation${count === 1 ? "" : "s"} outstanding, which is well inside what LinkedIn tolerates.${shape}`,
           fix:
             count >= PENDING_CROWDED
               ? "Withdraw the oldest ones to make room. Nothing else this product does will clear it."

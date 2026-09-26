@@ -42,6 +42,11 @@ const ROUTES = {
   relations: "/api/v1/users/relations",
 } as const;
 
+/** Unipile's own ceiling for a page of results; larger is a 400. */
+const PAGE_MAX = 100;
+/** How many pages of pending invitations are worth reading before the answer stops changing. */
+const MAX_PAGES = 5;
+
 export interface UnipileConfig {
   /** e.g. https://api1.unipile.com:13111 */
   dsn: string;
@@ -494,20 +499,46 @@ export class UnipileProvider implements LinkedInProvider {
   async listPendingInvitations(input: {
     accountId: string;
     limit?: number;
-  }): Promise<{ invitations: PendingInvitation[]; raw: unknown }> {
-    const params = new URLSearchParams({ account_id: input.accountId });
-    if (input.limit) params.set("limit", String(input.limit));
-    const raw = await this.request<unknown>(`${ROUTES.invitationsSent}?${params.toString()}`);
+  }): Promise<{ invitations: PendingInvitation[]; raw: unknown; truncated: boolean }> {
+    /*
+     * A hundred at a time, because that is Unipile's ceiling.
+     *
+     * Asking for five hundred is a 400 — "the value can be set between 1 and
+     * 100" — and this product spent an afternoon reading that rejection as a
+     * mysterious failure rather than as the schema it literally contains.
+     *
+     * Paged rather than capped at one request, because the question is "is
+     * this account carrying a backlog", and a backlog is precisely the case
+     * where one page is not the answer. Bounded all the same: five pages is
+     * five hundred invitations, which is far past the point where the answer
+     * stops being interesting and the recommendation stops changing.
+     */
+    const wanted = Math.min(Math.max(input.limit ?? PAGE_MAX, 1), PAGE_MAX * MAX_PAGES);
+    const rows: unknown[] = [];
+    let cursor: string | null = null;
+    let raw: unknown = null;
+    let truncated = false;
 
-    // The list is under `items` on every Unipile collection this product
-    // already reads; an array at the top level is accepted too rather than
-    // assumed away.
-    const container = raw as { items?: unknown } | unknown[] | null;
-    const rows = Array.isArray(container)
-      ? container
-      : Array.isArray((container as { items?: unknown })?.items)
-        ? ((container as { items: unknown[] }).items)
-        : [];
+    for (let page = 0; page < MAX_PAGES && rows.length < wanted; page += 1) {
+      const params = new URLSearchParams({ account_id: input.accountId });
+      params.set("limit", String(Math.min(PAGE_MAX, wanted - rows.length)));
+      if (cursor) params.set("cursor", cursor);
+
+      const body = await this.request<{ items?: unknown[]; cursor?: string | null }>(
+        `${ROUTES.invitationsSent}?${params.toString()}`,
+      );
+      if (page === 0) raw = body;
+
+      const items = Array.isArray(body) ? body : Array.isArray(body?.items) ? body.items : [];
+      rows.push(...items);
+
+      cursor = (body as { cursor?: string | null })?.cursor ?? null;
+      if (!cursor || items.length === 0) break;
+      // More to read than we were willing to ask for. Said out loud rather
+      // than rounded down: "500" and "at least 500" are different answers to
+      // "is this account crowded".
+      if (page === MAX_PAGES - 1) truncated = true;
+    }
 
     const invitations = rows.map((row) => {
       const r = (row ?? {}) as Record<string, unknown>;
@@ -526,7 +557,7 @@ export class UnipileProvider implements LinkedInProvider {
       };
     });
 
-    return { invitations, raw };
+    return { invitations, raw, truncated };
   }
 
   async withdrawInvitation(input: { accountId: string; invitationId: string }): Promise<ActionResult> {

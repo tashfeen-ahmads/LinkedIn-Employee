@@ -217,7 +217,7 @@ export interface LinkedInProvider {
   listPendingInvitations(input: {
     accountId: string;
     limit?: number;
-  }): Promise<{ invitations: PendingInvitation[]; raw: unknown }>;
+  }): Promise<{ invitations: PendingInvitation[]; raw: unknown; truncated: boolean }>;
   withdrawInvitation(input: { accountId: string; invitationId: string }): Promise<ActionResult>;
   sendMessage(input: { accountId: string; chatId?: string; providerId?: string; text: string }): Promise<ActionResult>;
   listNewMessages(input: { accountId: string; since: string }): Promise<InboundMessage[]>;

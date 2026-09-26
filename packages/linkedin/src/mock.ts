@@ -147,8 +147,16 @@ export class MockLinkedInProvider implements LinkedInProvider {
   /** What the provider would say this account still has outstanding. */
   pendingInvitations: PendingInvitation[] = [];
 
-  async listPendingInvitations(): Promise<{ invitations: PendingInvitation[]; raw: unknown }> {
-    return { invitations: this.pendingInvitations, raw: { items: this.pendingInvitations } };
+  async listPendingInvitations(): Promise<{
+    invitations: PendingInvitation[];
+    raw: unknown;
+    truncated: boolean;
+  }> {
+    return {
+      invitations: this.pendingInvitations,
+      raw: { items: this.pendingInvitations },
+      truncated: false,
+    };
   }
 
   async withdrawInvitation(): Promise<ActionResult> {

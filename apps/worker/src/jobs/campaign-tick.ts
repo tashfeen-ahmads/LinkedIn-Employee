@@ -240,6 +240,7 @@ async function sampleInviteCapacity(
     listPendingInvitations?: (input: { accountId: string; limit?: number }) => Promise<{
       invitations: Array<{ sentAt: string | null }>;
       raw: unknown;
+      truncated?: boolean;
     }>;
   };
   if (typeof provider.listPendingInvitations !== "function") return;
@@ -270,11 +271,8 @@ async function sampleInviteCapacity(
      * seconds is generous for a list endpoint and short enough that a bad
      * minute at the provider is invisible to sending.
      */
-    const { invitations, raw } = await withDeadline(
-      provider.listPendingInvitations({
-        accountId: account.provider_account_id,
-        limit: 500,
-      }),
+    const { invitations, raw, truncated } = await withDeadline(
+      provider.listPendingInvitations({ accountId: account.provider_account_id, limit: 500 }),
       CAPACITY_DEADLINE_MS,
     );
     const dates = invitations
@@ -286,6 +284,9 @@ async function sampleInviteCapacity(
       {
         account: account.id,
         pending: invitations.length,
+        // "500" and "at least 500" are different answers to "is this account
+        // crowded", and the second is the one that matters.
+        atLeast: truncated || undefined,
         oldest: dates.length ? new Date(Math.min(...dates)).toISOString() : null,
         // The provider's own field names when the list is empty, so a mapping
         // that is wrong cannot report a confident zero.
