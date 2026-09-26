@@ -3,6 +3,8 @@ import { funnelReport, isReadyToSend } from "@le/shared";
 import { requireSession } from "@/lib/workspace";
 import { SetupChecklist } from "@/components/setup-checklist";
 import { NextStep } from "@/components/next-step";
+import { NeedsYou } from "@/components/needs-you";
+import { loadNeedsYou } from "@/lib/needs-you-data";
 import { Kpi } from "@/components/charts";
 import { PageHeader, PageGroup, Section, Empty } from "@/components/page";
 import { createClient } from "@/lib/supabase-server";
@@ -43,12 +45,18 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
   // "which step is this workspace on" and has its own panel.
   const strategy = await readStrategyState(supabase, session.workspaceId, setup.hasBusinessProfile);
 
-  const { count: waitingCount } = await supabase
-    .from("reply_drafts")
-    .select("id", { count: "exact", head: true })
-    .eq("workspace_id", session.workspaceId)
-    .eq("status", "pending");
-  const waiting = waitingCount ?? 0;
+  /*
+   * What needs a person, from the one function the nav also reads.
+   *
+   * This page used to count `reply_drafts` with `status = "pending"` — which is
+   * not what the inbox lists. Rule 10 is explicit that a conversation can be
+   * flagged with no draft at all, so a held conversation with nothing drafted
+   * was shown in the inbox and counted by neither this screen nor the sidebar
+   * badge. Two readings of one question, and the one somebody believes is
+   * whichever they looked at.
+   */
+  const { items: needs, facts: needsFacts } = await loadNeedsYou(supabase, session.workspaceId);
+  const waiting = needsFacts.heldReplies + needsFacts.heldBookings + needsFacts.heldForCopy;
 
   const report = funnelReport(funnel.rows, funnel.goals);
   const byProfile = new Map<string, number>();
@@ -72,9 +80,19 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
       />
 
       {/*
-        One action first, and the whole width of the page. The checklist below
-        is the second reading: a reference for somebody who already knows the
-        product, where this is the instruction for somebody who does not.
+        Q1, and nothing above it.
+        "What is stopped until I do something" is the question somebody arrives
+        with, and it used to be spread across a next-step card, a strategy
+        panel, a checklist, a counter and a table. A screen where five things
+        have equal weight answers nothing.
+      */}
+      <NeedsYou items={needs} />
+
+      {/*
+        Onboarding, below the queue rather than above it.
+        The next step matters enormously on day one and not at all on day
+        thirty, whereas a held reply matters every day — so the ordering follows
+        the daily case and `NextStep` keeps saying the same thing it did.
       */}
       <NextStep step={next} ready={isReadyToSend(setup)} />
 
@@ -116,12 +134,20 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
           />
           <Kpi label="Accepted" value={report.counts.accepted.toLocaleString()} />
           <Kpi label="Replied" value={report.counts.replied.toLocaleString()} />
-          <Kpi
-            label="Waiting on you"
-            value={waiting.toLocaleString()}
-            tone={waiting > 0 ? "warning" : "neutral"}
-            note={waiting > 0 ? "In the Inbox." : "Nothing held for a human."}
-          />
+          {/*
+            "Waiting on you" is not a result, and it was the second reading of a
+            question the list at the top of this page already answers — a
+            counter that disagrees with the list above it is worse than none.
+
+            Meetings takes the slot only when a campaign here can actually reach
+            that stage. `report.stages` already knows (rule 29): a workspace
+            whose campaigns all ask for a sign-up would otherwise get a
+            permanent zero, which reports a working campaign as a failed one
+            every day for ever.
+          */}
+          {report.stages.some((stage) => stage.key === "meetings") ? (
+            <Kpi label="Meetings" value={report.counts.meetings.toLocaleString()} />
+          ) : null}
         </div>
       </Section>
 

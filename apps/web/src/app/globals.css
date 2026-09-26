@@ -1903,6 +1903,52 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
    trying not to be. */
 .alt-here { border-color: var(--accent-border); }
 
+/* ------------------------------------------------------------ what needs you
+
+   The first thing on the overview, and the largest. Rows rather than cards:
+   this is a list of work, and a card each would make six things look like six
+   separate features rather than one queue. Scoped under `.app` like the rest
+   of the frame (rule 38) — the marketing site has no such list, and an
+   unscoped name is one collision away from mattering. */
+
+.app .needs-you { display: flex; flex-direction: column; gap: var(--space-3); }
+.app .needs-you-heading { margin: 0; }
+
+.app .needs-you-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.app .needs-you-item {
+  display: flex;
+  align-items: center;
+  /* The button drops under the text on a phone rather than squeezing it. */
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+/* The text takes the slack so the button keeps its own width. */
+.app .needs-you-text { flex: 1 1 18rem; display: flex; flex-direction: column; gap: 0.2rem; }
+.app .needs-you-title { margin: 0; font-weight: 500; }
+.app .needs-you-text p:last-child { margin: 0; }
+
+/* Severity as a left rail rather than a filled row: a wash of colour behind
+   running text costs contrast, and the rail reads at a glance without it. */
+.app .needs-you-item.warning { border-left: 3px solid var(--warning); }
+.app .needs-you-item.blocker { border-left: 3px solid var(--danger); background: var(--danger-soft); }
+
+/* Nothing waiting is a result, not an empty state. Bordered like the
+   set-up-complete card so the good day looks deliberate. */
+.app .needs-you-clear { gap: var(--space-2); border-color: var(--positive); }
+.app .needs-you-clear h2 { margin: 0; }
+
 /* ------------------------------------------------------------ daily report
 
    What the agent did, in words. Set as prose rather than as a metric block:

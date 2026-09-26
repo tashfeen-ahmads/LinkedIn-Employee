@@ -388,7 +388,16 @@ export type ConversationRow = {
   needs_human: boolean;
   needs_human_reason: string | null;
   /** Why it is waiting: a reply to approve, or a meeting to book by hand. */
-  needs_human_kind: "reply" | "booking" | null;
+  /*
+   * A third kind, because there are three acts.
+   *
+   * `copy` is a hold that is not about this conversation: a follow-up built from
+   * {{pitch}} with no approved pitch behind it (rule 40). It used to be flagged
+   * as a reply, so it appeared in the inbox as a conversation needing an answer
+   * with no draft in it — and `clearHold(id, "reply")` matched it, so sending a
+   * manual reply cleared a hold that was never about replying.
+   */
+  needs_human_kind: "reply" | "booking" | "copy" | null;
   created_at: string;
 };
 

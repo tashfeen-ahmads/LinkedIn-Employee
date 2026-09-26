@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase-server";
 import { AppNav, type NavGroup } from "@/components/app-nav";
 import { readSetupState } from "@/lib/setup-state";
 import { markFor, type NavMarks } from "@/lib/nav-marks";
+import { loadNeedsYou } from "@/lib/needs-you-data";
 import { entitlementFor, entitlementMessage } from "@le/billing";
 
 /**
@@ -100,13 +101,20 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const session = await requireSession();
   const supabase = await createClient();
 
-  // The inbox count is the number that decides whether a rep opens the app, so
-  // it lives in the nav rather than behind a click.
-  const { count: waiting } = await supabase
-    .from("reply_drafts")
-    .select("id", { count: "exact", head: true })
-    .eq("workspace_id", session.workspaceId)
-    .eq("status", "pending");
+  /*
+   * The count that decides whether a rep opens the app, so it lives in the nav
+   * rather than behind a click — and it is now the same reading the overview
+   * shows.
+   *
+   * It used to count `reply_drafts` with `status = "pending"`, which is not what
+   * the inbox lists. Rule 10 says a conversation can be flagged with no draft at
+   * all: those appeared in the inbox and were counted here by nothing, so the
+   * badge read 0 while a real prospect sat waiting. The reverse happened too — a
+   * draft left pending on a conversation whose hold had been cleared was counted
+   * and appeared nowhere.
+   */
+  const { facts: needs } = await loadNeedsYou(supabase, session.workspaceId);
+  const waiting = needs.heldReplies + needs.heldBookings + needs.heldForCopy;
 
   const { data: workspace } = await supabase
     .from("workspaces")
@@ -144,7 +152,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
 
         <AppNav
-          groups={navGroups(waiting ?? 0, {
+          groups={navGroups(waiting, {
             nextHref: next?.href ?? null,
             linkedInNeedsYou,
           })}

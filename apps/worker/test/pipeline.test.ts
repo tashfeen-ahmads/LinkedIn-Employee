@@ -707,6 +707,21 @@ describe("campaign pipeline", () => {
     expect(linkedin.sentMessages).toHaveLength(0);
     // Visible, per rule 10: nothing held for a human is invisible.
     expect(db.rows("conversations")[0]?.needs_human).toBe(true);
+    /*
+     * And held as `copy`, not as a reply.
+     *
+     * Flagged as a reply this appeared in the inbox as a conversation needing an
+     * answer, with no draft in it — the message was never rendered — so the only
+     * useful action was on the Agents screen and nothing said so. It also meant
+     * `clearHold(id, "reply")` matched: a rep typing a manual reply cleared a
+     * hold that was never about replying, and every screen reported the
+     * conversation dealt with until the next tick re-held it.
+     *
+     * Asserted here, on the real send path, rather than against `flagForHuman`
+     * on its own. Rule 39's lesson: the bug lived in the call site, and a test
+     * of the helper passes throughout.
+     */
+    expect(db.rows("conversations")[0]?.needs_human_kind).toBe("copy");
     // And still due, so approving a pitch is all it takes.
     expect(db.find("campaign_prospects", { id: CP })?.status).toBe("accepted");
   });
@@ -1325,6 +1340,34 @@ describe("holds on a conversation", () => {
     const conversation = db.find("conversations", { id: CONVERSATION })!;
     expect(conversation.needs_human).toBe(false);
     expect(conversation.needs_human_kind).toBeNull();
+  });
+
+  it("keeps a copy hold when a reply is sent, because a reply does not approve a pitch", async () => {
+    /*
+     * The third kind, and the reason it had to exist.
+     *
+     * A follow-up built from {{pitch}} with no approved pitch behind it is held
+     * rather than failed (rule 40) — and it was flagged as a *reply*. So it
+     * appeared in the inbox as a conversation needing an answer, with no draft
+     * in it, because the message was never rendered; the only useful action was
+     * on another screen and nothing said so. Worse, this exact call matched it:
+     * a rep typing a manual reply cleared a hold that was never about replying,
+     * and every screen then reported the conversation dealt with until the next
+     * tick re-held it.
+     */
+    const db = conversationHarness();
+    const { clearHold, flagForHuman } = await import("../src/holds.js");
+
+    await flagForHuman(db.asDb(), CONVERSATION, "there is no approved pitch to put in it", "copy");
+    await clearHold(db.asDb(), CONVERSATION, "reply");
+
+    const conversation = db.find("conversations", { id: CONVERSATION })!;
+    expect(conversation.needs_human).toBe(true);
+    expect(conversation.needs_human_kind).toBe("copy");
+
+    // And approving the copy is what releases it.
+    await clearHold(db.asDb(), CONVERSATION, "copy");
+    expect(db.find("conversations", { id: CONVERSATION })!.needs_human).toBe(false);
   });
 });
 

@@ -433,7 +433,10 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
      * real person on a piece of copy that had not been written yet, and there
      * is no second chance at a first follow-up.
      */
-    await flagForHuman(db, conversation.id, withPitch.reason);
+    // Flagged as `copy`, not as a reply: there is no draft to read here, and
+    // the act that releases it is approving a line on the Agents screen. Sending
+    // a manual reply must not clear it.
+    await flagForHuman(db, conversation.id, withPitch.reason, "copy");
     console.error("a follow-up is waiting for an approved pitch", {
       campaignProspectId: cp.id,
       workspaceId: cp.workspace_id,

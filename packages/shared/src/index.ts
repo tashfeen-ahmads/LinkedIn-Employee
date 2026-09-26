@@ -13,6 +13,7 @@ export * from "./html.js";
 export * from "./onboarding.js";
 export * from "./pitch.js";
 export * from "./merge-fields.js";
+export * from "./needs-you.js";
 export * from "./headline.js";
 export * from "./pricing.js";
 export * from "./tour.js";

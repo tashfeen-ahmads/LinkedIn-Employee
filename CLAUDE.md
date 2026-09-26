@@ -1102,6 +1102,57 @@ tests that were verified by deliberately breaking the code.
     recorded instead of turned into a quiet "nothing to do".
 
 
+50. **One list answers "what needs me", and one function produces it.** The
+    overview opened with a next-step card, a strategy panel, a six-item
+    checklist, a row of counters and a table — five sections of equal weight,
+    with the answer to "what is stopped until I do something" distributed
+    across all of them plus the sidebar's single dot. Every fact was already in
+    the database. Nobody had assembled them into a list.
+
+    `needsYou` (`packages/shared/src/needs-you.ts`) is pure for the reason
+    `report.ts` is: three callers read it — the overview, the nav's count, and
+    the weekly email later — and three assemblies of one question disagree,
+    with the rep believing whichever they looked at.
+
+    A blocker sorts first: while the loop is down or the account is
+    disconnected, every row under it is a job that cannot finish. But **nothing
+    is hidden**. Rule 32 lets a disconnected account silence every other *mark*,
+    because a sidebar with six dots has no dots — this is a to-do list, and
+    dropping work from one because other work exists is how something waits a
+    fortnight. Ordered, never filtered. Within a tone the order is fixed rather
+    than by count, because a list that re-sorts as numbers move is one somebody
+    has to read from the top every time.
+
+    Zero rows is the good day and gets a sentence, not an apology: a dashboard
+    that looks broken when everything is fine teaches people to stop opening it.
+    Every row names **what happens if nobody does it** — "1 strategy needs
+    review" is a chore, "nothing is searched for until one is approved" is a
+    reason.
+
+    The nav badge counts **rows, not instances**. Eleven held replies is one
+    visit to the inbox, and a badge reading 11 beside one reading 3 invites
+    arithmetic nobody wants to do.
+
+    Two readings were already live and wrong. The inbox lists *conversations*
+    (rule 10), while the badge and the overview's "Waiting on you" counter both
+    read `reply_drafts` where `status = 'pending'` — so a conversation flagged
+    with no draft, which rule 10 says happens, was shown in the inbox and
+    counted by neither, and a stale draft on a cleared conversation was counted
+    by both and appeared in neither.
+
+    **A hold has three kinds, not two** (migration 0035). A follow-up built from
+    `{{pitch}}` with no approved pitch is held rather than failed (rule 40) and
+    was flagged as a *reply* — so it appeared in the inbox as a conversation
+    needing an answer, with no draft in it, because the message was never
+    rendered; the only useful action was on another screen and nothing said so.
+    `clearHold(id, "reply")` matched it too, so a manual reply cleared a hold
+    that was never about replying and every screen reported the conversation
+    dealt with until the next tick re-held it. `copy` is that third act:
+    approving a line, not writing one. Asserted on the real send path rather
+    than against `flagForHuman` — rule 39's lesson, that the bug lives in the
+    call site and a test of the helper passes throughout.
+
+
 ## Conventions
 
 - Agent output is validated against a zod schema before it touches the
