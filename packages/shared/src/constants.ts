@@ -195,6 +195,25 @@ export const MAINTENANCE_BEAT = "maintenance";
 export const MESSAGE_WEBHOOK_BEAT = "webhook:messages";
 
 /**
+ * How many invitations LinkedIn is still holding for an account, sampled.
+ *
+ * A tracked number rather than one somebody has to go and look for. LinkedIn
+ * caps *pending* invitations — every request sent and never answered — and
+ * past that ceiling it refuses new ones outright, which from inside this
+ * product is indistinguishable from an unexplained throttle. An account that
+ * has sent seven invitations here and cannot send an eighth is usually
+ * carrying a backlog from long before it signed up.
+ *
+ * Stamped rather than asked on demand because the shape of the problem is a
+ * trend: a number that climbs towards the ceiling is a warning, and the same
+ * number read once by whoever happened to open a screen is an anecdote.
+ */
+export const INVITE_CAPACITY_BEAT = "invite-capacity";
+
+/** How often to ask. A read, not an action — but still somebody's account. */
+export const INVITE_CAPACITY_EVERY_MS = 60 * 60_000;
+
+/**
  * How long maintenance may go unheard before a screen says so.
  *
  * It runs once a night, so two missed nights is the first gap that cannot be a

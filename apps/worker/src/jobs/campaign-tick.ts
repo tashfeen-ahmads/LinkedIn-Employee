@@ -1,5 +1,7 @@
 import {
   canTransition,
+  INVITE_CAPACITY_BEAT,
+  INVITE_CAPACITY_EVERY_MS,
   LINKEDIN_LIMITS,
   PACING_LAST_ACTION,
   PACING_LAST_FAILURE,
@@ -22,7 +24,18 @@ import { recordBeat } from "../heartbeat.js";
  * The limiter is consulted here AND again immediately before each action is
  * sent, because minutes pass in between and a rep may act manually meanwhile.
  */
-export async function runCampaignTick(db: Db, queues: Queues, now: Date = new Date()): Promise<number> {
+export async function runCampaignTick(
+  db: Db,
+  queues: Queues,
+  now: Date = new Date(),
+  /**
+   * The provider, so the loop can ask how many invitations LinkedIn is still
+   * holding. Optional because every existing caller and every existing test
+   * passes three arguments, and a loop that refuses to run without a provider
+   * would be a worse failure than one that skips a sample.
+   */
+  linkedin?: unknown,
+): Promise<number> {
   // The heartbeat used to be written at the end of the run, which meant a run
   // that threw wrote nothing — and "threw" and "never ran" are the same absence
   // from every screen. That is not a hypothetical: the first tick with actual
@@ -31,7 +44,7 @@ export async function runCampaignTick(db: Db, queues: Queues, now: Date = new Da
   // minutes. A report you only get when the work succeeded is a report about
   // the times you did not need it.
   try {
-    return await tick(db, queues, now);
+    return await tick(db, queues, now, linkedin);
   } catch (err) {
     const reason = (err as { message?: string })?.message ?? "unknown";
     console.error("campaign tick failed", { reason });
@@ -47,7 +60,7 @@ export async function runCampaignTick(db: Db, queues: Queues, now: Date = new Da
   }
 }
 
-async function tick(db: Db, queues: Queues, now: Date): Promise<number> {
+async function tick(db: Db, queues: Queues, now: Date, linkedin?: unknown): Promise<number> {
   const today = now.toISOString().slice(0, 10);
 
   const { data: campaigns } = await db
@@ -99,6 +112,11 @@ async function tick(db: Db, queues: Queues, now: Date): Promise<number> {
       say(campaign.id, "linkedin account is not active");
       continue;
     }
+
+    // Once an hour, and before anything else decides it cannot send: the most
+    // common reason an account is refused is a backlog nothing here was
+    // looking at.
+    if (linkedin) await sampleInviteCapacity({ db, linkedin }, loaded.account, now);
 
     const usage = toUsage(loaded.account, loaded.timezone);
 
@@ -185,6 +203,87 @@ async function jobCounts(queues: Queues): Promise<Record<string, unknown>> {
  * only appeared on a productive run would be missing during exactly the quiet
  * stretch it exists to explain.
  */
+/**
+ * Ask LinkedIn how many invitations it is still holding, at most hourly.
+ *
+ * The question that explained four days of refusals in the first live
+ * workspace, and that nothing in this product had ever asked. Our own records
+ * only know the invitations we issued; LinkedIn counts every one this account
+ * has ever sent and nobody answered, including the ones from before it signed
+ * up, and past its ceiling it refuses new ones outright.
+ *
+ * Stamped rather than asked on demand, because the useful shape is a trend. A
+ * count climbing towards the ceiling is a warning somebody can act on; the
+ * same count read once, by whoever happened to open a screen, is an anecdote.
+ *
+ * Failure is recorded, not swallowed. "We could not ask" and "there is nothing
+ * outstanding" are the two answers that must never look alike — a confident
+ * zero here is the difference between "your account is fine" and "your account
+ * cannot send".
+ */
+async function sampleInviteCapacity(
+  ctx: { db: Db; linkedin: unknown },
+  account: AccountRecord,
+  now: Date,
+): Promise<void> {
+  const provider = ctx.linkedin as {
+    listPendingInvitations?: (input: { accountId: string; limit?: number }) => Promise<{
+      invitations: Array<{ sentAt: string | null }>;
+      raw: unknown;
+    }>;
+  };
+  if (typeof provider.listPendingInvitations !== "function") return;
+  if (!account.provider_account_id) return;
+
+  const { data: last } = await ctx.db
+    .from("worker_heartbeats")
+    .select("beat_at")
+    .eq("name", INVITE_CAPACITY_BEAT)
+    .maybeSingle();
+  const since = last?.beat_at ? now.getTime() - Date.parse(last.beat_at) : Number.POSITIVE_INFINITY;
+  if (Number.isFinite(since) && since < INVITE_CAPACITY_EVERY_MS) return;
+
+  try {
+    const { invitations, raw } = await provider.listPendingInvitations({
+      accountId: account.provider_account_id,
+      limit: 500,
+    });
+    const dates = invitations
+      .map((row) => (row.sentAt ? Date.parse(row.sentAt) : Number.NaN))
+      .filter((ms) => Number.isFinite(ms));
+    await recordBeat(
+      ctx.db,
+      INVITE_CAPACITY_BEAT,
+      {
+        account: account.id,
+        pending: invitations.length,
+        oldest: dates.length ? new Date(Math.min(...dates)).toISOString() : null,
+        // The provider's own field names when the list is empty, so a mapping
+        // that is wrong cannot report a confident zero.
+        shape: invitations.length === 0 ? describePayload(raw) : undefined,
+      },
+      now,
+    );
+  } catch (err) {
+    await recordBeat(
+      ctx.db,
+      INVITE_CAPACITY_BEAT,
+      { account: account.id, pending: null, failed: (err as { message?: string })?.message ?? "unknown" },
+      now,
+    );
+  }
+}
+
+/** The provider's own keys, so an empty list is never mistaken for a zero. */
+function describePayload(raw: unknown): string {
+  if (Array.isArray(raw)) return `array(${raw.length})`;
+  if (raw && typeof raw === "object") {
+    const keys = Object.keys(raw as Record<string, unknown>);
+    return keys.length ? `object{${keys.slice(0, 10).join(",")}}` : "empty object";
+  }
+  return typeof raw;
+}
+
 async function beat(db: Db, now: Date, detail: Record<string, unknown>): Promise<void> {
   await recordBeat(db, PACING_LOOP, detail, now);
 }

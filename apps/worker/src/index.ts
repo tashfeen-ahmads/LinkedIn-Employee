@@ -106,7 +106,7 @@ const workers = [
     connection,
     concurrency: 2,
   }),
-  new Worker<CampaignTickJob>(QUEUE_NAMES.campaignTick, () => runCampaignTick(ctx.db, queues), {
+  new Worker<CampaignTickJob>(QUEUE_NAMES.campaignTick, () => runCampaignTick(ctx.db, queues, new Date(), ctx.linkedin), {
     connection,
     concurrency: 1,
   }),
