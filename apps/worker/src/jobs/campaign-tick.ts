@@ -415,6 +415,29 @@ async function enqueueWarmUps(
       now,
     )
   ) {
+    /*
+     * ...but say so only if there is somebody it would have warmed.
+     *
+     * This gate is evaluated before anything asks whether anyone is left, so a
+     * campaign that had warmed its whole list reported "holding the warm-up: no
+     * invitation could follow a view" on every tick for ever — a sentence about
+     * a throttle, on a campaign with nothing to throttle. That sends somebody to
+     * investigate the account when the answer is "this campaign is finished
+     * warming", which is rule 21's disease exactly: a reason that is true of one
+     * situation, printed during another.
+     *
+     * Asked here rather than at the top so the ordinary sending path still does
+     * one query. The refusing path can afford a second.
+     */
+    const { data: anyone } = await db
+      .from("campaign_prospects")
+      .select("id")
+      .eq("campaign_id", campaign.id)
+      .eq("status", "queued")
+      .is("warmed_at", null)
+      .limit(1);
+    if (!anyone?.length) return { enqueued: 0, reason: null };
+
     return {
       enqueued: 0,
       reason: "holding the warm-up: no invitation could follow a view soon enough to be worth it",

@@ -151,6 +151,29 @@ describe("the loop deciding whether to warm", () => {
     expect(warmUps(added)).toHaveLength(0);
   });
 
+  it("does not blame a throttle on a campaign that has nobody left to warm", async () => {
+    /*
+     * The gate is evaluated before anything asks whether anyone is left, so a
+     * campaign that had warmed its whole list said "holding the warm-up: no
+     * invitation could follow a view" on every tick for ever — a sentence about
+     * a throttle, on a campaign with nothing to throttle, sending somebody to
+     * investigate an account that was fine. Rule 21's disease: a reason true of
+     * one situation, printed during another.
+     */
+    const db = harness({ pausedUntil: "2026-09-26T14:07:00Z" });
+    // Everybody on this campaign has already been looked at.
+    db.rows("campaign_prospects").forEach((row) => {
+      row.warmed_at = "2026-09-24T10:00:00Z";
+    });
+    const { queues } = fakeQueues();
+
+    await runCampaignTick(db.asDb(), queues, NOW);
+
+    const beat = db.rows("worker_heartbeats").find((b) => b.name === "campaign-tick");
+    const said = JSON.stringify(beat?.detail ?? {});
+    expect(said).not.toContain("holding the warm-up");
+  });
+
   it("says why it is holding back, rather than looking idle", async () => {
     // A loop that declines silently is indistinguishable from one that is
     // broken, which is the disease this whole file exists to avoid.

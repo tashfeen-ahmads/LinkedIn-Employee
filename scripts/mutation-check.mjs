@@ -2706,6 +2706,14 @@ const MUTATIONS = [
     pkg: "@le/web",
   },
   {
+    id: "pacing/a-finished-warm-up-is-not-a-throttle",
+    rule: "A campaign that has warmed its whole list reported a throttle on every tick for ever, sending somebody to investigate an account that was fine",
+    file: "apps/worker/src/jobs/campaign-tick.ts",
+    from: "    if (!anyone?.length) return { enqueued: 0, reason: null };",
+    to: "",
+    pkg: "@le/worker",
+  },
+  {
     id: "pacing/a-day-is-spread-across-the-day",
     rule: "A day's invitation allowance is paced across the working day, never fired consecutively — a daily ceiling with no pacing underneath it is a burst with a maximum size, and it is what got the first live account throttled for five days",
     file: "apps/worker/src/jobs/campaign-tick.ts",
