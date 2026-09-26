@@ -7,7 +7,7 @@ import {
 } from "@le/agents";
 import {
   BusinessProfileSchema,
-  CustomerProfileSchema,
+  parseCustomerProfile,
   RulesOfEngagementSchema,
   canTransition,
   draftLinkCheck,
@@ -467,7 +467,7 @@ async function loadBusinessProfile(ctx: WorkerContext, workspaceId: string) {
 async function loadCustomerProfile(ctx: WorkerContext, id: string) {
   const { data } = await ctx.db.from("customer_profiles").select("spec").eq("id", id).maybeSingle();
   if (!data) return undefined;
-  const parsed = CustomerProfileSchema.safeParse(data.spec);
+  const parsed = parseCustomerProfile(data.spec);
   return parsed.success ? parsed.data : undefined;
 }
 

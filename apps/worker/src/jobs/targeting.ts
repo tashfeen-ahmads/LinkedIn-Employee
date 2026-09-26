@@ -2,7 +2,7 @@ import { buildCampaign, personalizeInvites, scoreProspects } from "@le/agents";
 import type { ProspectCandidate } from "@le/shared";
 import {
   BusinessProfileSchema,
-  CustomerProfileSchema,
+  parseCustomerProfile,
   FIRST_STEP_DELAY_DAYS,
   LINKEDIN_LIMITS,
   assignVariants,
@@ -155,7 +155,17 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
     return giveUp(ctx, job, "That customer profile has not been approved yet.");
   }
 
-  const profile = CustomerProfileSchema.parse(profileRow.spec);
+  /*
+   * Tolerant of a strategy written before `whatTheyBuy` existed — and only of
+   * that. A bare parse here would have thrown on every row this deployment
+   * already had, which is prospecting stopped on every workspace to gain a
+   * field; a spec still unreadable once those two keys are filled is genuinely
+   * broken, and throwing is what gets it retried and recorded with `threw`
+   * rather than turned into a quiet "nothing to do".
+   */
+  const parsedProfile = parseCustomerProfile(profileRow.spec);
+  if (!parsedProfile.success) throw parsedProfile.error;
+  const profile = parsedProfile.data;
 
   const { data: businessRow } = await db
     .from("business_profiles")
@@ -303,7 +313,12 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
     });
   }
 
-  const ranked = await scoreProspects(ctx.agentsFor(job.workspaceId), { profile, candidates: verified });
+  const ranked = await scoreProspects(ctx.agentsFor(job.workspaceId), {
+    profile,
+    candidates: verified,
+    // So "disqualify a competitor" is a rule the scorer can actually apply.
+    business: { oneLiner: business.oneLiner, competitors: business.competitors },
+  });
   const shortlist = ranked.filter((r) => !r.disqualified && r.fitScore >= MIN_FIT_TO_QUEUE);
   if (shortlist.length === 0) {
     return giveUp(ctx, job, `Nobody scored above the minimum fit of ${MIN_FIT_TO_QUEUE}.`, {

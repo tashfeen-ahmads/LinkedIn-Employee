@@ -1,4 +1,9 @@
-import { CustomerProfileSchema, SalesNavFiltersSchema, type CustomerProfile } from "@le/shared";
+import {
+  CustomerProfileSchema,
+  SalesNavFiltersSchema,
+  parseCustomerProfile,
+  type CustomerProfile,
+} from "@le/shared";
 
 /**
  * Turning a Sales Navigator filter set into something a person can edit in a
@@ -46,7 +51,7 @@ export type EditResult =
  * output had to satisfy — one definition of a valid profile, whoever wrote it.
  */
 export function applyProfileEdits(currentSpec: unknown, edits: ProfileEdits): EditResult {
-  const parsed = CustomerProfileSchema.safeParse(currentSpec);
+  const parsed = parseCustomerProfile(currentSpec);
   if (!parsed.success) {
     return { ok: false, error: "This profile is not readable; regenerate it rather than editing." };
   }

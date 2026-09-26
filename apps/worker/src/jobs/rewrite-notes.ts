@@ -1,7 +1,7 @@
 import { personalizeInvites } from "@le/agents";
 import {
   BusinessProfileSchema,
-  CustomerProfileSchema,
+  parseCustomerProfile,
   type ProspectCandidate,
 } from "@le/shared";
 import type { WorkerContext } from "../context.js";
@@ -101,7 +101,7 @@ export async function rewriteCampaignNotes(
         .eq("workspace_id", input.workspaceId)
         .maybeSingle()
     : { data: null };
-  const customer = CustomerProfileSchema.safeParse(customerRow?.spec);
+  const customer = parseCustomerProfile(customerRow?.spec);
   if (!customer.success) {
     // Named rather than guessed at: a note written without the segment is
     // written for nobody in particular, which is the generic copy this exists

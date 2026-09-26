@@ -44,7 +44,21 @@ const NOTE_BATCH_SIZE = 10;
  */
 export async function scoreProspects(
   ctx: AgentContext,
-  input: { profile: CustomerProfile; candidates: ProspectCandidate[] },
+  input: {
+    profile: CustomerProfile;
+    candidates: ProspectCandidate[];
+    /**
+     * What the company sells, and who it competes with.
+     *
+     * The scorer's own rule has always said to disqualify a competitor, and
+     * until now it was told nothing about the company — so "is this person a
+     * competitor" was a question it had no way to answer, and it answered by
+     * matching job titles against the profile instead. Nullable because one
+     * caller scores against a profile with no business row loaded, and a scorer
+     * that refused to run without it would stop prospecting to gain a hint.
+     */
+    business?: { oneLiner: string; competitors: string[] } | null;
+  },
 ): Promise<RankedProspect[]> {
   const candidates = dedupeCandidates(input.candidates);
   if (candidates.length === 0) return [];
@@ -59,10 +73,24 @@ export async function scoreProspects(
       companySize: input.profile.companySize,
       geography: input.profile.geography,
       pains: input.profile.pains,
+      // The two fields that make this a question about need rather than about
+      // resemblance. Without them the scorer sees a list of titles and an
+      // industry, which a competitor matches perfectly — they have the same
+      // titles in the same industry, and they are the last people to write to.
+      whatTheyBuy: input.profile.whatTheyBuy,
+      insteadOfToday: input.profile.insteadOfToday,
     },
     null,
     2,
   );
+
+  const businessText = input.business
+    ? JSON.stringify(
+        { sells: input.business.oneLiner, competesWith: input.business.competitors },
+        null,
+        2,
+      )
+    : null;
 
   const batches: ProspectCandidate[][] = [];
   for (let i = 0; i < candidates.length; i += FIT_BATCH_SIZE) {
@@ -78,8 +106,12 @@ export async function scoreProspects(
         schema: FitScoreBatchSchema,
         system: [
           { text: FIT_SCORE_SYSTEM },
-          // The ICP is constant across every batch in this run, so it is worth
-          // a cache breakpoint: only the prospect list varies.
+          // The ICP and the business are constant across every batch in this
+          // run, so they are worth a cache breakpoint: only the prospect list
+          // varies.
+          ...(businessText
+            ? [{ text: `The company you are prospecting for:\n${businessText}`, cached: true }]
+            : []),
           { text: `Ideal customer profile:\n${profileText}`, cached: true },
         ],
         userContent: `Score every prospect below. Return one entry per providerId, no more, no fewer.\n\n${JSON.stringify(

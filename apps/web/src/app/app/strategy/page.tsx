@@ -1,7 +1,12 @@
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { BusinessProfileSchema, CustomerProfileSchema } from "@le/shared";
+import {
+  BusinessProfileSchema,
+  competitorTargeting,
+  describeCompetitorTargeting,
+  parseCustomerProfile,
+} from "@le/shared";
 import { PageNotice } from "@/components/page-notice";
 import { PageHeader } from "@/components/page";
 import { requireSession } from "@/lib/workspace";
@@ -307,7 +312,7 @@ export default async function StrategyPage({
   const business = BusinessProfileSchema.safeParse(businessRow.spec);
   const profiles = (profileRows ?? []).map((row) => ({
     row,
-    spec: CustomerProfileSchema.safeParse(row.spec),
+    spec: parseCustomerProfile(row.spec),
   }));
   const connected = account?.status === "active";
 
@@ -387,6 +392,20 @@ export default async function StrategyPage({
           }
           const profile = spec.data;
           const approved = Boolean(row.approved_at);
+          /*
+           * Is this segment made of the company's own competitors?
+           *
+           * Asked here because this is the only screen where approval happens
+           * (rule 9), and because the agent contradicted itself on exactly this
+           * point and nobody was told: it listed BNI as a competitor and made
+           * BNI chapter presidents the priority-1 segment, which was then
+           * approved. A question rather than a refusal — selling to the groups
+           * you compete with is a real go-to-market, and the cost of asking is
+           * one sentence read.
+           */
+          const rivals = business.success
+            ? describeCompetitorTargeting(competitorTargeting(profile, business.data))
+            : null;
 
           return (
             <article key={row.id} className="card" style={row.do_not_pursue ? { opacity: 0.6 } : undefined}>
@@ -460,6 +479,38 @@ export default async function StrategyPage({
               </header>
 
               <p>{profile.summary}</p>
+
+              {rivals ? (
+                <div className="notice warning">
+                  <p>
+                    <strong>Check this is who you meant.</strong> {rivals}
+                  </p>
+                </div>
+              ) : null}
+
+              {/*
+                Why this segment would pay, stated rather than assumed.
+
+                Everything else on this card reads the same whether the segment
+                buys what you sell or sells it themselves — a title is a title.
+                These two are the ones a competitor cannot answer, so they are
+                the two worth reading before approving. Named as unsaid when the
+                strategy predates them, never left blank: a missing fact
+                presented as no fact reads as agreement.
+              */}
+              <div className="grid grid-2">
+                <Facts
+                  label="What they buy"
+                  values={[profile.whatTheyBuy ?? "The agent did not say — written before this was asked for."]}
+                />
+                <Facts
+                  label="What they do today instead"
+                  values={[
+                    profile.insteadOfToday ?? "The agent did not say — written before this was asked for.",
+                  ]}
+                />
+              </div>
+
               <div className="grid grid-3"
               >
                 <Facts label="What hurts" values={profile.pains} />

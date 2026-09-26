@@ -1043,6 +1043,65 @@ tests that were verified by deliberately breaking the code.
     believes, so what they conclude three quarters of an hour later is that the
     product does not work.
 
+49. **A customer is somebody who would pay, not somebody who resembles the
+    company.** The Strategy Agent reads what a company publishes about itself,
+    and a website describes that company's world — its vocabulary, its thesis,
+    the problem it was founded on. Asked for "Customer Profiles" from that
+    material, a model returns the segments that share the worldview, and the
+    people who share a company's founding insight are the other people building
+    the same thing. Its customers are the ones who *have* the problem, and they
+    usually do not talk about it in the company's language at all.
+
+    This deployment did it inside one response. The business profile listed
+    `competitors: ["LinkedIn", "BNI and traditional in-person networking
+    groups", "Manual referral tracking"]` and the priority-1 customer profile,
+    which a person then approved, was "Networking group leaders & organizations
+    (BNI chapters, Chambers, masterminds)". Two fields of one answer
+    contradicting each other, and nothing compared them.
+
+    **The fit scorer cannot rescue it, and that is the part to understand.** It
+    scores each prospect *against the customer profile*, so a peer-shaped
+    profile makes peers high-fit by definition — its own "disqualify a
+    competitor" rule is measured against the very thing that is wrong. A bad
+    strategy is not a strategy the filter can save; it is the filter's
+    definition of good. So the fix is at the strategy, and the check is before
+    approval.
+
+    Three things carry it. The prompt names the trap rather than hoping: a
+    competitor matches an ideal customer profile almost perfectly — same titles,
+    same industry, same size, often the same headline — so on title match they
+    are the best prospects in the list and the last people who should be
+    written to. `whatTheyBuy` and `insteadOfToday` are the two fields a peer
+    cannot fill honestly, which is why they exist; everything else on that
+    schema reads identically either way. And `competitorTargeting`
+    (`packages/shared/src/audience.ts`) compares the segment's identity against
+    the company's own named competitors, on the approval screen.
+
+    It searches the **identity** fields and never the `pains`. A competitor
+    named as a pain is not a mistake, it is the point — "they track it in a
+    spreadsheet" is precisely why somebody buys — and flagging it would train
+    people to click past the warning, which is worse than having none. Naming
+    what a segment uses today is targeting by need; naming a segment *as* that
+    thing is targeting by resemblance.
+
+    It **reports and never refuses**. Licensing a white-label engine to the
+    chambers you also compete with is a real go-to-market, and a check that
+    blocked it would be wrong about a business it knows nothing about. What is
+    never acceptable is that it was approved with nobody told — rule 12's
+    principle exactly.
+
+    `parseCustomerProfile` is how the two new fields shipped without stopping
+    the product. `targeting.ts` parsed a stored spec outright, so a new required
+    key would have thrown on all seven strategies this deployment already had —
+    prospecting stopped on every workspace to gain a field. A backfill alone
+    leaves the window between migration and deploy, where old code writes an
+    old-shaped row that new code refuses to read. Defaulting at the read closes
+    both, for ever, and a null is reported on screen as unsaid rather than
+    rendered as agreement. A spec still unreadable once those keys are filled is
+    genuinely broken and still throws, because that is what gets it retried and
+    recorded instead of turned into a quiet "nothing to do".
+
+
 ## Conventions
 
 - Agent output is validated against a zod schema before it touches the

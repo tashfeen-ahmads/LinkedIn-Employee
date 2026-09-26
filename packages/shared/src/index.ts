@@ -1,6 +1,7 @@
 export * from "./schemas.js";
 export * from "./constants.js";
 export * from "./agent.js";
+export * from "./audience.js";
 export * from "./cta.js";
 export * from "./events.js";
 export * from "./exclusions.js";

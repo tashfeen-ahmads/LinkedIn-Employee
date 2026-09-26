@@ -797,6 +797,41 @@ describe("when the job throws", () => {
 
     await expect(runTargetingJob(ctx, job)).rejects.toThrow();
   });
+
+  it("reads a strategy written before the newest questions were asked", async () => {
+    /*
+     * The other half of the same coin, and the more dangerous one.
+     * `whatTheyBuy` and `insteadOfToday` arrived after seven live strategies
+     * had already been written and approved — so a parse that required them
+     * would have turned every one of those rows into the throw above, and
+     * prospecting would have stopped on every workspace at once to gain a
+     * field. Old is not broken.
+     */
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    const spec = db.rows("customer_profiles")[0]!.spec as Record<string, unknown>;
+    delete spec.whatTheyBuy;
+    delete spec.insteadOfToday;
+    linkedin.candidates = {
+      items: [candidate("p1", "https://www.linkedin.com/in/jane-one")],
+      cursor: null,
+      droppedFilters: [],
+    };
+    scoreMock.mockResolvedValue([ranked("https://www.linkedin.com/in/jane-one", "p1", 90)]);
+
+    await expect(runTargetingJob(ctx, job)).resolves.not.toThrow();
+    expect(db.rows("events").some((e) => e.name === "targeting.stopped" && e.payload?.threw)).toBe(
+      false,
+    );
+
+    // And the missing answers reach the scorer as nulls rather than as absent
+    // keys, so it can tell "not asked" from "answered".
+    const scored = scoreMock.mock.calls[0]?.[1] as {
+      profile: { whatTheyBuy: unknown; insteadOfToday: unknown };
+    };
+    expect(scored.profile.whatTheyBuy).toBeNull();
+    expect(scored.profile.insteadOfToday).toBeNull();
+  });
 });
 
 /**

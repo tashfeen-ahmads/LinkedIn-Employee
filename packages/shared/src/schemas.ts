@@ -45,6 +45,38 @@ export const CustomerProfileSchema = z.object({
   triggerEvents: z.array(z.string()).describe("Observable events that make them ready to buy."),
   pains: z.array(z.string()),
   valueProposition: z.string(),
+  /**
+   * What this segment pays for, and what they do instead today.
+   *
+   * Two fields that a peer cannot fill honestly, which is the whole reason they
+   * exist. Everything else on this schema reads identically whether the segment
+   * buys this product or sells it: a title is a title, an industry is an
+   * industry, and "referrals fall through the cracks" is a pain shared by the
+   * people who need a referral engine and by the people building one. Asked for
+   * "Customer Profiles" from a company's own website — which describes that
+   * company's world in that company's vocabulary — a model returns the segments
+   * that share the worldview, and those are the peers.
+   *
+   * Naming the purchase is the question a competitor fails. Somebody who sells
+   * this does not buy it, and has nothing they do instead.
+   *
+   * `.nullable()` because a strategy written before these existed is still a
+   * strategy a person approved, and refusing to read one would stop targeting
+   * dead on every workspace. A null is reported on the screen as unsaid rather
+   * than rendered as agreement — the same habit as rule 33.
+   */
+  whatTheyBuy: z
+    .string()
+    .nullable()
+    .describe(
+      "What this segment pays this company for, in the segment's own words. If they would sell this rather than buy it, they are a competitor and do not belong here.",
+    ),
+  insteadOfToday: z
+    .string()
+    .nullable()
+    .describe(
+      "What this segment does about this problem today: a tool they pay for, a manual process, somebody they hired, or nothing at all. This is the thing the purchase replaces.",
+    ),
   salesNavFilters: SalesNavFiltersSchema,
   hooks: z
     .array(z.string())
@@ -61,6 +93,30 @@ export const CustomerProfileSchema = z.object({
   priority: z.number().int().min(1).max(5).describe("1 = pursue first."),
 });
 export type CustomerProfile = z.infer<typeof CustomerProfileSchema>;
+
+/**
+ * Read a stored customer profile, whatever version of the schema wrote it.
+ *
+ * `whatTheyBuy` and `insteadOfToday` arrived after seven live strategies had
+ * already been written and approved, and `targeting.ts` parses this spec with a
+ * bare `.parse()` — so a new required key would have thrown on every existing
+ * row and stopped prospecting on every workspace at once. A backfill would have
+ * fixed the rows already there and left the window between the migration and
+ * the deploy, where old code writes an old-shaped row that new code then
+ * refuses to read.
+ *
+ * Defaulting at the read closes both. The spread order matters: a stored value
+ * always wins, and the nulls only fill what was never written.
+ */
+export function parseCustomerProfile(
+  spec: unknown,
+): ReturnType<typeof CustomerProfileSchema.safeParse> {
+  const filled =
+    spec && typeof spec === "object"
+      ? { whatTheyBuy: null, insteadOfToday: null, ...(spec as Record<string, unknown>) }
+      : spec;
+  return CustomerProfileSchema.safeParse(filled);
+}
 
 export const StrategyOutputSchema = z.object({
   businessProfile: BusinessProfileSchema,

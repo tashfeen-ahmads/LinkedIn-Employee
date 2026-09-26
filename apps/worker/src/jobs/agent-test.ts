@@ -1,7 +1,7 @@
 import {
   AgentPlaybookSchema,
   BusinessProfileSchema,
-  CustomerProfileSchema,
+  parseCustomerProfile,
   CustomFieldSchema,
   type Agent,
   type CustomField,
@@ -131,7 +131,7 @@ export async function runAgentTest(
   if (!businessSpec.success) {
     return refuse("Add your business profile first — the agent writes from it.");
   }
-  const profileSpec = CustomerProfileSchema.safeParse(profiles?.[0]?.spec);
+  const profileSpec = parseCustomerProfile(profiles?.[0]?.spec);
   if (!profileSpec.success) {
     return refuse("Approve a strategy first, so the agent knows who it is writing to.");
   }
