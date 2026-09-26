@@ -6,6 +6,7 @@ import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { errorQuery, noticeQuery } from "@/lib/worker";
 import { PageNotice, type NoticeParams } from "@/components/page-notice";
+import { AgentKnows } from "@/components/agent-knows";
 import { PageHeader, Section, Empty } from "@/components/page";
 import { SubmitButton } from "@/components/submit-button";
 
@@ -116,6 +117,54 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
     campaignCounts.set(row.agent_id, (campaignCounts.get(row.agent_id) ?? 0) + 1);
   }
 
+  /*
+   * What this workspace has accumulated, counted across the whole workspace
+   * rather than per agent.
+   *
+   * Per agent it would be a feature breakdown; the claim being made is about
+   * the workspace, because that is what somebody would be walking away from.
+   * `peopleContacted` is the expensive one — it is the dedupe record rule 24
+   * depends on, and leaving means losing the only list of who must never be
+   * approached again.
+   */
+  const head = { count: "exact" as const, head: true };
+  const [ws, allOpeners, allOffers, variants, docs, sentReplies] = await Promise.all([
+    supabase
+      .from("prospects")
+      .select("id", head)
+      .eq("workspace_id", session.workspaceId)
+      .not("last_contacted_at", "is", null),
+    supabase
+      .from("hooks")
+      .select("id", head)
+      .eq("workspace_id", session.workspaceId)
+      .not("approved_at", "is", null),
+    supabase
+      .from("pitches")
+      .select("id", head)
+      .eq("workspace_id", session.workspaceId)
+      .not("approved_at", "is", null),
+    supabase
+      .from("campaign_variants")
+      .select("id", head)
+      .eq("workspace_id", session.workspaceId),
+    supabase.from("knowledge_documents").select("id", head).eq("workspace_id", session.workspaceId),
+    supabase
+      .from("reply_drafts")
+      .select("id", head)
+      .eq("workspace_id", session.workspaceId)
+      .eq("status", "sent"),
+  ]);
+
+  const knowledge = {
+    openers: allOpeners.count ?? 0,
+    offers: allOffers.count ?? 0,
+    anglesTested: variants.count ?? 0,
+    peopleContacted: ws.count ?? 0,
+    knowledgeDocuments: docs.count ?? 0,
+    repliesSent: sentReplies.count ?? 0,
+  };
+
   return (
     <>
       <PageHeader
@@ -138,6 +187,8 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
       />
 
       <PageNotice error={params.error} notice={params.notice} />
+
+      <AgentKnows knowledge={knowledge} />
 
       <Section
         id="agents"

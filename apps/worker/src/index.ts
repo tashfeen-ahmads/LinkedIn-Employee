@@ -19,6 +19,7 @@ import { recoverThrottledProspects, unstickProspects } from "./jobs/unstick.js";
 import { runMaintenance } from "./jobs/maintenance.js";
 import { seedMissingAgents } from "./jobs/seed-agent.js";
 import { runDailyDigest } from "./jobs/digest.js";
+import { runWeeklyReport } from "./jobs/weekly-report.js";
 import { createServer } from "./server.js";
 
 initObservability();
@@ -156,7 +157,18 @@ const workers = [
         : runMaintenance(ctx, queues),
     { connection, concurrency: 1 },
   ),
-  new Worker(QUEUE_NAMES.digest, () => runDailyDigest(ctx), { connection, concurrency: 1 }),
+  /*
+   * Two schedulers, one queue, and the job's own name decides which runs.
+   *
+   * A second queue would mean a second worker, a second connection and a second
+   * thing to notice has stopped. These are the same kind of work — write an
+   * email about what happened — differing only in the window they describe.
+   */
+  new Worker(
+    QUEUE_NAMES.digest,
+    (job) => (job.name === "weekly-report" ? runWeeklyReport(ctx) : runDailyDigest(ctx)),
+    { connection, concurrency: 1 },
+  ),
 ];
 
 for (const worker of workers) {

@@ -7,6 +7,7 @@ export * from "./events.js";
 export * from "./exclusions.js";
 export * from "./funnel.js";
 export * from "./report.js";
+export * from "./knows.js";
 export * from "./kpi.js";
 export * from "./links.js";
 export * from "./html.js";

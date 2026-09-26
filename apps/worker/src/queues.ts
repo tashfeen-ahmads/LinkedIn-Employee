@@ -208,6 +208,19 @@ export async function scheduleRepeatables(queues: Queues): Promise<void> {
     { pattern: "0 7 * * 1-5" },
     { name: "digest", data: {} },
   );
+  /*
+   * The week, on Monday morning, on the same queue.
+   *
+   * Monday rather than Friday: a report about last week arriving on Friday
+   * afternoon is read after the decisions it should have informed. And it is
+   * deliberately an hour after the daily digest rather than beside it — two
+   * emails landing in the same minute are one email nobody opens twice.
+   */
+  await queues.digest.upsertJobScheduler(
+    "weekly-report",
+    { pattern: "0 8 * * 1" },
+    { name: "weekly-report", data: {} },
+  );
 }
 
 /** What `enqueueOnce` did, so the caller can say it on a screen. */

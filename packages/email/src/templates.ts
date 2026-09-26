@@ -315,3 +315,83 @@ function listInWords(items: string[]): string {
   if (items.length <= 1) return items[0] ?? "";
   return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
 }
+
+/**
+ * The week, in the same words the overview uses.
+ *
+ * This is the email a rep forwards to whoever signs off the subscription, so
+ * it has one job: say what the agent did in sentences a person who has never
+ * opened the product can read. The daily digest is a working tool — counters
+ * and the number waiting — and it is the wrong thing to forward.
+ *
+ * `lines` arrives already assembled by `dailyReport` in @le/shared, deliberately.
+ * The words are the part that must not drift: the screen reads that function
+ * today and this reads it weekly, and if the email wrote its own prose the two
+ * would describe the same week differently, with the rep believing whichever
+ * they happened to open. `knowledge` is the other half — what has accumulated
+ * that could not be handed to a new tool on day one — and it is the sentence
+ * that answers "why are we still paying for this".
+ */
+export interface WeeklyReportInput {
+  to: string;
+  repName?: string | null;
+  appUrl: string;
+  /** From `dailyReport`, over a seven-day window. */
+  lines: string[];
+  /** From `knowledgeSentences`. Omitted when the workspace has accumulated nothing. */
+  knowledge: string[];
+  /** For the subject line: the week's invitations and acceptances. */
+  invited: number;
+  accepted: number;
+}
+
+export function weeklyReportEmail(input: WeeklyReportInput): EmailMessage {
+  const greeting = input.repName ? `${input.repName.split(" ")[0]}, here is your week.` : "Here is your week.";
+
+  /*
+   * The subject carries the outcome, never the activity.
+   *
+   * "12 invitations sent" is a sentence about effort and it is what every tool
+   * in this category puts in a subject line. Acceptances are the first thing
+   * that happened *to* somebody, so they are the first thing worth opening for.
+   */
+  const subject =
+    input.accepted > 0
+      ? `${input.accepted} ${input.accepted === 1 ? "person" : "people"} accepted this week`
+      : input.invited > 0
+        ? `Your week: ${input.invited} ${input.invited === 1 ? "invitation" : "invitations"}`
+        : "Your week on LinkedIn Employee";
+
+  const blocks = [
+    paragraph(greeting),
+    ...input.lines.map((line) => paragraph(line)),
+    input.knowledge.length
+      ? `<p style="margin:24px 0 8px;font-weight:600">What your agent knows</p>${input.knowledge
+          .map((line) => paragraph(line))
+          .join("")}`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("");
+
+  const textLines = [
+    greeting,
+    "",
+    ...input.lines,
+    ...(input.knowledge.length ? ["", "What your agent knows:", ...input.knowledge] : []),
+    "",
+    `${input.appUrl}/app`,
+  ];
+
+  return {
+    to: input.to,
+    subject,
+    html: layout({
+      title: subject,
+      body: blocks,
+      cta: { label: "Open your dashboard", url: `${input.appUrl}/app` },
+      footer: "You are receiving this because you use LinkedIn Employee. Turn it off in your settings.",
+    }),
+    text: textLines.join("\n"),
+  };
+}
