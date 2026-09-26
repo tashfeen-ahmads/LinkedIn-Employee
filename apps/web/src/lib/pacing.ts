@@ -1,5 +1,12 @@
 import { LINKEDIN_LIMITS, PACING_STALE_MS } from "@le/shared";
-import { checkAction, dailyInviteCap, toUsage, type AccountRecord } from "@le/linkedin";
+import {
+  checkAction,
+  dailyInviteCap,
+  invitePaceMs,
+  toUsage,
+  workingMsLeftToday,
+  type AccountRecord,
+} from "@le/linkedin";
 
 /**
  * What the sending loop is doing, said on the screen that started it.
@@ -31,6 +38,13 @@ export function describePacing(input: {
   lastBeatAt: string | null;
   /** The worker's boot stamp: when it started, and what it could see. */
   boot?: { beat_at: string; detail: unknown } | null;
+  /**
+   * This campaign's own daily cap, so the pace quoted here is the pace the
+   * loop will actually keep. The loop's budget is the lowest of the account
+   * ramp, the week and this; quoting only the ramp would state a faster pace
+   * than the campaign is allowed and turn a correct wait into a broken screen.
+   */
+  dailyCap?: number;
   now?: Date;
 }): PacingState | null {
   const now = input.now ?? new Date();
@@ -112,7 +126,11 @@ export function describePacing(input: {
         return {
           tone: "accent",
           title: `Sending. ${input.queued} ${input.queued === 1 ? "person" : "people"} still to invite.`,
-          body: `The next invitation goes out ${inWords(decision.retryAfterMs)}.`,
+          // The limiter's floor, or the day's pace if that is wider. On its own
+          // the floor promised three minutes while the pace put the next one
+          // three quarters of an hour out, and the screen's number is the one
+          // somebody believes.
+          body: `The next invitation goes out ${inWords(Math.max(decision.retryAfterMs, paceMs(input, usage, now) ?? 0))}.`,
         };
       default:
         return {
@@ -124,13 +142,25 @@ export function describePacing(input: {
   }
 
   const left = Math.max(0, dailyInviteCap(usage.firstActionAt, now) - usage.invitesToday);
+  const pace = paceMs(input, usage, now);
   return {
     tone: "accent",
     title: `Sending. ${input.queued} ${input.queued === 1 ? "person" : "people"} still to invite.`,
-    // The number people actually need, because the absence of it is what makes
-    // a working campaign look like a broken one: they open LinkedIn expecting
-    // five invitations and find none, a minute after pressing Launch.
-    body: `Invitations go out ${Math.round(LINKEDIN_LIMITS.minGapMs / 60_000)}–${Math.round(LINKEDIN_LIMITS.maxGapMs / 60_000)} minutes apart, never two together, up to ${left} more today. The first can take up to a quarter of an hour to appear.`,
+    /*
+     * The number people actually need, because the absence of it is what makes
+     * a working campaign look like a broken one: they open LinkedIn expecting
+     * five invitations and find none, a minute after pressing Launch.
+     *
+     * And the day's pace rather than the floor, now that the allowance is
+     * spread across the working day instead of sent consecutively. "Two to
+     * nine minutes apart" was the honest sentence when the loop fired them one
+     * after another; said about a day that now places them three quarters of
+     * an hour apart, it is the screen telling somebody to expect a burst and
+     * then not delivering one.
+     */
+    body: pace
+      ? `Invitations go out about ${Math.round(pace / 60_000)} minutes apart, spread across the rest of your sending hours so the account never sends in a burst — up to ${left} more today. The first can take up to a quarter of an hour to appear.`
+      : `Invitations go out ${Math.round(LINKEDIN_LIMITS.minGapMs / 60_000)}–${Math.round(LINKEDIN_LIMITS.maxGapMs / 60_000)} minutes apart, never two together, up to ${left} more today. The first can take up to a quarter of an hour to appear.`,
   };
 }
 
@@ -181,6 +211,32 @@ function notSending(
     title: "The sending loop has stopped.",
     body: `It last ran ${minutesAgo(now.getTime() - beat!)} and should run every five minutes. Nothing will go out until it is back — this is a problem with the deployment, not with your campaign.`,
   };
+}
+
+/**
+ * The pace the loop will keep today, from the same function it paces by.
+ *
+ * Bounded by whichever of the three budgets is smallest, because that is what
+ * the loop divides the day among — and by how many people are actually queued,
+ * since a pace computed for ten invitations is a lie on a campaign with two
+ * people left on it.
+ */
+function paceMs(
+  input: { queued: number; dailyCap?: number },
+  usage: ReturnType<typeof toUsage>,
+  now: Date,
+): number | null {
+  const remaining = Math.min(
+    Math.max(0, dailyInviteCap(usage.firstActionAt, now) - usage.invitesToday),
+    Math.max(0, LINKEDIN_LIMITS.invitesPerWeek - usage.invitesThisWeek),
+    input.dailyCap ?? Number.POSITIVE_INFINITY,
+    input.queued,
+  );
+  if (remaining <= 0) return null;
+  return invitePaceMs({
+    remaining,
+    windowMs: workingMsLeftToday(now, usage.workingHours, usage.timezone),
+  });
 }
 
 function minutesAgo(ms: number): string {

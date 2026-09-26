@@ -63,3 +63,28 @@ export function msUntilNextLocalMidnight(now: Date, timezone: string): number {
   const { hour, minute, second } = zonedParts(now, timezone);
   return 86_400_000 - (hour * 3_600_000 + minute * 60_000 + second * 1000);
 }
+
+/**
+ * How much of today's working window is still ahead, in the given zone.
+ *
+ * Exists so a day's allowance can be *spread* rather than merely capped. The
+ * ramp says how many invitations an account may send today and nothing said
+ * when — so the pacing loop placed the whole day's worth two to nine minutes
+ * apart and a brand-new account's first ten connection requests went out
+ * inside an hour and a quarter, at five in the afternoon. LinkedIn throttled
+ * it and kept throttling it for five days. A daily ceiling with no pacing
+ * underneath it is a burst with a maximum size.
+ *
+ * Zero outside the window, and zero on a non-working day, because there is no
+ * room to spread into. Callers fall back to the ordinary gap there rather than
+ * dividing by nothing.
+ */
+export function workingMsLeftToday(now: Date, hours: WorkingHours, timezone: string): number {
+  const { hour, minute, second, weekday } = zonedParts(now, timezone);
+  if (!hours.days.includes(weekday)) return 0;
+  const intoDay = hour * 3_600_000 + minute * 60_000 + second * 1000;
+  const end = hours.end * 3_600_000;
+  if (intoDay >= end) return 0;
+  // Before the window opens, the whole of it is ahead; inside it, what is left.
+  return end - Math.max(intoDay, hours.start * 3_600_000);
+}

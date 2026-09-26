@@ -2,6 +2,7 @@ import {
   LINKEDIN_LIMITS,
   isWithinWorkingHours as sharedIsWithinWorkingHours,
   msUntilNextLocalMidnight as sharedMsUntilNextLocalMidnight,
+  workingMsLeftToday as sharedWorkingMsLeftToday,
   zonedParts as sharedZonedParts,
   type WorkingHours,
 } from "@le/shared";
@@ -80,6 +81,7 @@ export function dailyInviteCap(firstActionAt: Date | null, now: Date = new Date(
 export const zonedParts = sharedZonedParts;
 export const isWithinWorkingHours = sharedIsWithinWorkingHours;
 export const msUntilNextLocalMidnight = sharedMsUntilNextLocalMidnight;
+export const workingMsLeftToday = sharedWorkingMsLeftToday;
 
 /** Milliseconds until the next working-hours window opens. */
 export function msUntilWorkingHours(now: Date, hours: WorkingHours, timezone: string): number {
@@ -94,6 +96,94 @@ export function msUntilWorkingHours(now: Date, hours: WorkingHours, timezone: st
 export function nextGapMs(random: () => number = Math.random): number {
   const { minGapMs, maxGapMs } = LINKEDIN_LIMITS;
   return Math.round(minGapMs + random() * (maxGapMs - minGapMs));
+}
+
+/**
+ * How wide the jitter around a spread gap is, as a fraction of the target.
+ *
+ * Not a cap and not in `constants.ts` for that reason (rule 4): it is the
+ * shape of the randomness, not a limit anybody may raise. Wide enough that
+ * consecutive gaps are visibly different, narrow enough that the day's
+ * allowance still lands inside the day.
+ */
+const SPREAD_JITTER_LOW = 0.6;
+const SPREAD_JITTER_HIGH = 1.4;
+
+/**
+ * The gap before the next invitation when a whole day's allowance is being
+ * placed at once.
+ *
+ * The ramp (rule 3) decides how many invitations an account may send today.
+ * Nothing decided *when*, so the pacing loop placed all of them two to nine
+ * minutes apart and the day's allowance was spent in a single unbroken run —
+ * for a ten-invitation cap, under an hour and a quarter, starting whenever the
+ * tick happened to fire. That is what this deployment did on its first day:
+ * seven connection requests between 16:52 and 17:19 from an account whose
+ * first ever action was the first of them. LinkedIn throttled invitations from
+ * it and was still refusing five days later, with five invitations outstanding
+ * and seven sent all week. A daily ceiling with no pacing underneath it is a
+ * burst with a maximum size, and the burst is the thing LinkedIn watches for.
+ *
+ * So the gap is the day's remaining working time divided among the
+ * invitations still to place, jittered, and never below the ordinary gap
+ * between two actions. `nextGapMs` remains the floor rather than being
+ * replaced: a large allowance in a narrow window — a campaign launched at
+ * half past four — collapses back to the old behaviour, which is correct,
+ * because the alternative is placing invitations after the rep's day ends.
+ *
+ * The divisor carries the jitter's own ceiling, which is what makes the fit a
+ * guarantee rather than an average. Dividing the window by the count alone
+ * puts the *expected* last invitation on its edge — so half of all days push
+ * their last few past the end of the rep's hours, where the send path defers
+ * them and the allowance is quietly not spent. Dividing by the count times the
+ * widest the jitter can go means even a day that draws high every single time
+ * fits exactly.
+ */
+export interface InvitePace {
+  /** Invitations still to place today. */
+  remaining: number;
+  /** Working milliseconds left today. */
+  windowMs: number;
+}
+
+/**
+ * The spacing the day's allowance works out to, before jitter — or null when
+ * there is no day left to spread across.
+ *
+ * Its own function because two things read it and they must not disagree. The
+ * loop jitters it into an actual delay; the campaign screen states it as the
+ * wait somebody is about to sit through. Rule 21 is explicit that the screen
+ * reads the rule the sender obeys rather than a second copy written for the
+ * screen, and the drift here is not subtle: `checkAction` alone knows only the
+ * two-minute floor, so the page would promise the next invitation in three
+ * minutes while the pace put it three quarters of an hour out. A reassuring
+ * sentence that turns out to be wrong is worse than no sentence, because the
+ * next thing somebody does is conclude the product is broken.
+ */
+export function invitePaceMs(input: InvitePace): number | null {
+  if (!Number.isFinite(input.windowMs) || input.windowMs <= 0) return null;
+  const remaining = Math.max(1, Math.floor(input.remaining));
+  return input.windowMs / (remaining * SPREAD_JITTER_HIGH);
+}
+
+export function spreadGapMs(input: InvitePace & { random?: () => number }): number {
+  const random = input.random ?? Math.random;
+  const floor = nextGapMs(random);
+  /*
+   * A window that is not a number is the ordinary gap, not a gap of nothing.
+   *
+   * Zero needs no guard — the floor below already wins that one. What does is
+   * a window that arrived as NaN, because every step after this multiplies it
+   * and `Math.max(floor, NaN)` is NaN: a delay of NaN put on the queue is a
+   * job with no delay at all, and the whole allowance goes out at once. That
+   * is the exact burst this function exists to prevent, arriving through the
+   * function meant to prevent it.
+   */
+  const target = invitePaceMs(input);
+  if (target === null) return floor;
+
+  const jittered = target * (SPREAD_JITTER_LOW + random() * (SPREAD_JITTER_HIGH - SPREAD_JITTER_LOW));
+  return Math.round(Math.max(floor, jittered));
 }
 
 /**

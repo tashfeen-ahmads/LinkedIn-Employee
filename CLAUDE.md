@@ -1003,6 +1003,46 @@ tests that were verified by deliberately breaking the code.
     that merged something (rule 34), and it takes the page's own `--app-gap` so
     a group is transparent to the rhythm instead of inventing a second one.
 
+48. **A daily cap says how many; something has to say when.** The ramp (rule 3)
+    decides an account's allowance for today and nothing decided how that
+    allowance was spread, so the pacing loop enqueued the whole of it in one
+    run at `nextGapMs` apart — two to nine minutes. Ten invitations therefore
+    went out inside an hour and a quarter, starting whenever the tick happened
+    to fire. This deployment's first live account sent seven connection
+    requests between 16:52 and 17:19 on the day it sent its first ever action,
+    LinkedIn began refusing invitations from it, and was still refusing five
+    days later with five outstanding and seven sent all week. A daily ceiling
+    with no pacing underneath it is a burst with a maximum size, and the burst
+    is what the platform watches for.
+
+    `spreadGapMs` divides the working time left today among the day's
+    allowance. Three things about the arithmetic are load-bearing. The divisor
+    is the **allowance**, never however many prospects happen to be eligible in
+    this tick — a warmed prospect becomes invitable in its own 45-minute-to-4-hour
+    window, so most ticks see one or two, and dividing by the trickle would
+    place a single invitation hours out while the next tick queued its own on
+    top at a rate nobody chose. `nextGapMs` stays the **floor**, so a campaign
+    launched at twenty to five collapses back to the old cadence rather than
+    placing invitations seconds apart. And the jitter's own ceiling is **in the
+    divisor**, which is what makes the day's fit a guarantee instead of an
+    average: dividing by the count alone puts the *expected* last invitation on
+    the edge of the window, so every second day pushes its last few past the
+    end of the rep's hours where the send path defers them and the allowance is
+    quietly not spent.
+
+    Warm-up views are deliberately **not** spread this way. A view is only
+    worth its allowance if the invitation can still follow it inside the four
+    hours that make it a warm-up, and the spacing that matters there is the
+    per-prospect wait stamped after the view, not the gap between two views.
+
+    `invitePaceMs` is one definition with two readers, for rule 21's reason.
+    The loop jitters it into a delay; `describePacing` states it as the wait
+    somebody is about to sit through. Read off `checkAction` alone the campaign
+    page promised the next invitation in three minutes while the loop had
+    placed it forty-five out — and the screen's number is the one somebody
+    believes, so what they conclude three quarters of an hour later is that the
+    product does not work.
+
 ## Conventions
 
 - Agent output is validated against a zod schema before it touches the

@@ -679,6 +679,7 @@ export default async function CampaignPage({
     timezone: owner?.timezone ?? "UTC",
     lastBeatAt: heartbeat?.beat_at ?? null,
     boot: boot ?? null,
+    dailyCap: campaign.daily_invite_cap,
   });
 
   return (

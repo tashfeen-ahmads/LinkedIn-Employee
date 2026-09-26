@@ -9,7 +9,14 @@ import {
   type CampaignProspectStatus,
 } from "@le/shared";
 import { entitlementFor } from "@le/billing";
-import { checkAction, dailyInviteCap, invitationCouldFollow, nextGapMs } from "@le/linkedin";
+import {
+  checkAction,
+  dailyInviteCap,
+  invitationCouldFollow,
+  nextGapMs,
+  spreadGapMs,
+  workingMsLeftToday,
+} from "@le/linkedin";
 import type { Db } from "@le/db";
 import { enqueueOnce, jobId } from "../queues.js";
 import type { Queues } from "../queues.js";
@@ -536,12 +543,47 @@ async function enqueueInvites(
     };
   }
 
-  let delay = decision.allowed ? 0 : decision.retryAfterMs;
+  /*
+   * Spread across the rest of the day rather than fired consecutively.
+   *
+   * One tick places the whole of today's allowance, so the gap between two of
+   * them is the only thing deciding whether this account looks like a person
+   * working or a script running — see `spreadGapMs`, which is where the cost of
+   * getting it wrong is written down.
+   *
+   * The window is measured from where the *first* invitation will actually
+   * land, not from now: a `too_soon` refusal means the account acted a minute
+   * ago, and the day it has left starts when that gap is served.
+   *
+   * Warm-ups are deliberately *not* spread this way. A view is only worth its
+   * allowance if the invitation can still follow it inside the four hours that
+   * make it a warm-up, so those stay clustered on `nextGapMs` and the spacing
+   * that matters for them is the per-prospect wait stamped after the view.
+   */
+  const startDelay = decision.allowed ? 0 : decision.retryAfterMs;
+  const windowMs = workingMsLeftToday(
+    new Date(now.getTime() + startDelay),
+    usage.workingHours,
+    usage.timezone,
+  );
+
+  let delay = startDelay;
   let added = 0;
   let revived = 0;
   let pending = 0;
   for (const row of queued) {
-    delay += nextGapMs();
+    /*
+     * Paced against the day's whole allowance, not against however many
+     * happen to be eligible in this one tick.
+     *
+     * A warmed prospect becomes invitable in its own 45-minute-to-4-hour
+     * window, so most ticks see a trickle rather than the full list. Divided
+     * by the trickle, two eligible people would be placed four hours apart
+     * and the next tick would queue its own two on top of them — a rate
+     * nobody chose. Divided by the allowance, the rate is the same whether a
+     * tick finds ten or one, which is what makes it a pace.
+     */
+    delay += spreadGapMs({ remaining: budget, windowMs });
     // The id is what stops a second tick queueing the same invitation five
     // minutes later — and what strands a prospect for ever when the job that
     // holds it has already finished without sending. enqueueOnce keeps the

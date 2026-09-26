@@ -53,6 +53,71 @@ describe("describePacing", () => {
     expect(state?.title).toContain("5 people");
   });
 
+  it("quotes the day's pace, not the two-minute floor", () => {
+    /*
+     * Rule 21, one layer down. The loop spreads a day's allowance across the
+     * working day; `checkAction` knows only the gap between two actions. Read
+     * off the limiter alone this screen promised the next invitation in three
+     * minutes while the loop had placed it three quarters of an hour out — and
+     * the screen's number is the one somebody believes, so what they conclude
+     * forty minutes later is that the product does not work.
+     */
+    const state = describePacing({
+      ...live,
+      // Ten in the morning, a day to six: eight hours for ten invitations.
+      now: new Date("2026-09-17T10:00:00Z"),
+      queued: 10,
+      dailyCap: 10,
+      lastBeatAt: "2026-09-17T09:58:00Z",
+      account: account({ first_action_at: "2026-07-01T09:00:00Z" }),
+    });
+
+    expect(state?.body).toMatch(/about \d+ minutes apart/);
+    expect(state?.body).toContain("spread across the rest of your sending hours");
+    // Tens of minutes, not the old two-to-nine.
+    const quoted = Number(/about (\d+) minutes apart/.exec(state?.body ?? "")?.[1]);
+    expect(quoted).toBeGreaterThan(20);
+  });
+
+  it("paces a nearly-finished campaign by what is left on it", () => {
+    // Two people left is not a tenth of the day each. A pace computed from the
+    // allowance rather than the list would quote a wait nobody will sit
+    // through, which is the same lie in the other direction.
+    const wide = describePacing({
+      ...live,
+      now: new Date("2026-09-17T10:00:00Z"),
+      queued: 2,
+      dailyCap: 10,
+      lastBeatAt: "2026-09-17T09:58:00Z",
+      account: account({ first_action_at: "2026-07-01T09:00:00Z" }),
+    });
+    const narrow = describePacing({
+      ...live,
+      now: new Date("2026-09-17T10:00:00Z"),
+      queued: 10,
+      dailyCap: 10,
+      lastBeatAt: "2026-09-17T09:58:00Z",
+      account: account({ first_action_at: "2026-07-01T09:00:00Z" }),
+    });
+    const read = (body: string | undefined) =>
+      Number(/about (\d+) minutes apart/.exec(body ?? "")?.[1]);
+    expect(read(wide?.body)).toBeGreaterThan(read(narrow?.body));
+  });
+
+  it("falls back to the old sentence once the sending hours are over", () => {
+    // No window to spread across, so there is no pace to quote — and inventing
+    // one from a day that has ended is a number about nothing.
+    const state = describePacing({
+      ...live,
+      // Half past six, a day ending at six.
+      now: new Date("2026-09-17T18:30:00Z"),
+      lastBeatAt: "2026-09-17T18:28:00Z",
+    });
+    // The limiter takes this one: it is outside working hours, which is its own
+    // sentence and the right one.
+    expect(state?.title).toContain("Waiting for your sending hours");
+  });
+
   it("says when LinkedIn itself is holding the account", () => {
     /*
      * The limiter only knows the caps this product chose, so it is perfectly
