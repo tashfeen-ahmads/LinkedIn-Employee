@@ -1129,9 +1129,11 @@ tests that were verified by deliberately breaking the code.
     review" is a chore, "nothing is searched for until one is approved" is a
     reason.
 
-    The nav badge counts **rows, not instances**. Eleven held replies is one
-    visit to the inbox, and a badge reading 11 beside one reading 3 invites
-    arithmetic nobody wants to do.
+    The nav keeps **one** number, which is the Inbox badge. The plan called for
+    a second carrying "how many things need you", and writing it made the
+    argument against it: 8 beside 3 invites arithmetic nobody wants to do, and
+    the two answer different questions that do not sum. Rule 32's point about
+    marks, applied to counts.
 
     Two readings were already live and wrong. The inbox lists *conversations*
     (rule 10), while the badge and the overview's "Waiting on you" counter both

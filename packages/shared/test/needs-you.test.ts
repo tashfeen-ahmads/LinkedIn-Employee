@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { NOTHING_NEEDS_YOU, needsYou, needsYouCount, type NeedsYouFacts } from "../src/needs-you.js";
+import { NOTHING_NEEDS_YOU, needsYou, type NeedsYouFacts } from "../src/needs-you.js";
 
 /**
  * What needs a person, as one ordered list.
@@ -169,18 +169,5 @@ describe("every row", () => {
     expect(needsYou({ ...CALM, heldReplies: 2 })[0]?.title).toBe("2 replies are waiting for you.");
     expect(needsYou({ ...CALM, strategiesUnapproved: 1 })[0]?.title).toContain("1 strategy is");
     expect(needsYou({ ...CALM, strategiesUnapproved: 2 })[0]?.title).toContain("2 strategies are");
-  });
-});
-
-describe("needsYouCount", () => {
-  it("counts errands, not instances", () => {
-    /*
-     * Eleven held replies is one visit to the inbox. A badge reading 11 beside
-     * one reading 3 invites arithmetic nobody wants to do, and the nav's job is
-     * to say whether to open the app at all.
-     */
-    expect(needsYouCount(needsYou({ ...CALM, heldReplies: 11 }))).toBe(1);
-    expect(needsYouCount(needsYou({ ...CALM, heldReplies: 11, strategiesUnapproved: 4 }))).toBe(2);
-    expect(needsYouCount(needsYou(CALM))).toBe(0);
   });
 });

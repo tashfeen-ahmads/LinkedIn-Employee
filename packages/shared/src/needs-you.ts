@@ -284,17 +284,20 @@ export function needsYou(facts: NeedsYouFacts): NeedsYouItem[] {
   return items;
 }
 
-/**
- * How many things need you — the one number the nav shows.
+/*
+ * There is no `needsYouCount`, deliberately.
  *
- * Rows rather than instances, because the nav badge answers "how many things do
- * I have to deal with" and eleven held replies is one visit to the inbox. A
- * badge reading 11 next to a badge reading 3 invites arithmetic nobody wants to
- * do.
+ * The plan called for the nav to carry "how many things need you", and writing
+ * it made the argument against it: the nav already has exactly one number, the
+ * Inbox badge, and a second badge reading 8 beside it reading 3 invites
+ * arithmetic nobody wants to do — which is rule 32's point about marks applied
+ * to counts. The two answer different questions and neither sums with the
+ * other.
+ *
+ * `items.length` is one expression at the one call site that wants it. A
+ * function wrapping it, exported and tested, would have been a thing that
+ * exists and changes nothing.
  */
-export function needsYouCount(items: NeedsYouItem[]): number {
-  return items.length;
-}
 
 /** The sentence for a day with nothing on the list. Never the word "None". */
 export const NOTHING_NEEDS_YOU = "Nothing needs you. Here is what your agent did.";

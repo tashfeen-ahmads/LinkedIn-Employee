@@ -2522,14 +2522,6 @@ const MUTATIONS = [
     pkg: "@le/shared",
   },
   {
-    id: "needs-you/the-nav-counts-errands-not-instances",
-    rule: "Eleven held replies is one visit to the inbox; a badge reading 11 beside one reading 3 invites arithmetic nobody wants to do",
-    file: "packages/shared/src/needs-you.ts",
-    from: "  return items.length;",
-    to: "  return items.reduce((sum, item) => sum + item.count, 0);",
-    pkg: "@le/shared",
-  },
-  {
     id: "needs-you/a-copy-hold-survives-a-sent-reply",
     rule: "Sending a manual reply must not clear a hold that was waiting for approved copy — it did, and every screen then reported the conversation dealt with",
     file: "apps/worker/src/jobs/linkedin-action.ts",
