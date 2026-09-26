@@ -1,5 +1,6 @@
 import { revalidatePath } from "next/cache";
 import { PageHeader } from "@/components/page";
+import { Sequence, sequenceFor } from "@/components/sequence";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import {
@@ -950,6 +951,35 @@ export default async function CampaignPage({
           </p>
         </section>
       </form>
+
+      {/*
+        What a prospect actually receives, in order.
+
+        Every competitor ships a drag-and-drop canvas, and the canvas is the
+        demo — it is the one screen that makes "an automated sequence" something
+        a person can picture. This had the same sequence as a table of rows with
+        a delay column, which reads as configuration rather than as a
+        conversation. Drawn rather than dragged: most arrangements a canvas
+        offers are ones this product refuses to send, and a refusal that arrives
+        after the work is worse than never offering it.
+      */}
+      <section className="stack-4">
+        <div className="between">
+          <h2>What they receive</h2>
+          <p className="tiny subtle">Edit the words above; the timing is a product rule.</p>
+        </div>
+        <Sequence
+          steps={sequenceFor({
+            warmUp: Boolean(campaign.warm_up),
+            connectionNote: campaign.connection_note,
+            steps: (steps ?? []).map((step) => ({
+              step_number: step.step_number,
+              delay_days: step.delay_days,
+              message: step.message,
+            })),
+          })}
+        />
+      </section>
 
       {variantStandings.length > 0 ? (
         <section className="stack-4">

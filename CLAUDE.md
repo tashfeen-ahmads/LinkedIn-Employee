@@ -1155,6 +1155,60 @@ tests that were verified by deliberately breaking the code.
     call site and a test of the helper passes throughout.
 
 
+51. **The guardrails are the product, so they are on the screen every day.**
+    Caps as product rules, the ramp from first action, the escalating backoff,
+    the warm-up on its own allowance, a day's work spread across the day — all
+    of it is invisible unless it fails. The category's dirty number is that a
+    third of one competitor's reviewers report being restricted inside ninety
+    days, and a customer who cannot see the guardrails has no way to tell this
+    product from the one that got them banned.
+
+    `AllowanceMeter` draws each allowance against **its cap**, never against the
+    largest value seen: a meter scaled to its own data always looks full, and 12
+    of 35 and 12 of 12 are then the same picture. Colour is earned above four
+    fifths, because a bar that is amber at 40% teaches somebody to ignore amber
+    — rule 32's argument about marks, applied to a chart. The ramp's day is said
+    in words, since rule 3 measures it from an account's first action and
+    nothing on any screen could explain why a three-week-old connection still
+    sits at the starting cap.
+
+    `StackedDays` answers "are we sending" and "is it working" in one column per
+    day, because reading them off two charts means eyeballing one date against
+    another. The empty days keep their slots: dropping them joins Friday to
+    Monday and draws a weekend that looks like steady sending.
+
+52. **The sequence is drawn, not dragged.** Every competitor ships a
+    drag-and-drop canvas and the canvas is the demo — it is the one screen that
+    makes "an automated sequence" something a person can picture. This product
+    had the same sequence as a table of rows with a `delay_days` column, which
+    reads as configuration rather than as a conversation.
+
+    Drawn rather than dragged **deliberately**. A canvas implies every
+    arrangement is available and most are not: a link may never appear in a
+    connection request (rule 29), the first message after an acceptance is not
+    on a schedule anybody sets (rule 43), and a warm-up view has to land before
+    the invitation rather than wherever it was dropped. A builder offering those
+    would be offering a campaign this product refuses to send — and a refusal
+    that arrives after the work is worse than never offering it. The value of
+    the canvas was always the picture. So the steps a person owns are theirs to
+    edit, and the ones the product owns carry the reason they are not.
+
+53. **A scoped rule is not a safe rule.** Rule 38's check compares whole
+    selectors, and the expensive collision is not a whole selector.
+    `.meter` is a 4px progress bar with `overflow: hidden`; a new component
+    declared `.app .meter` for a labelled allowance with a value and a note.
+    Both applied — the scoped rule won on specificity for the properties it
+    set, and the properties it did *not* set came from the older rule, so the
+    component rendered as a 4px sliver with its label clipped away. Two
+    different selector strings, so the check said nothing.
+
+    A scope makes a collision look deliberate, which is worse than an unscoped
+    one. `.app .section` is the frame knowingly redefining a word it shares, and
+    those are listed by name in the test; everything else sharing a final class
+    name with an unscoped rule is an accident. The fix is a different word for a
+    different thing, never more specificity.
+
+
 ## Conventions
 
 - Agent output is validated against a zod schema before it touches the

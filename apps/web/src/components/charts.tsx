@@ -268,3 +268,148 @@ export function Sparkline({ points, height = 26 }: { points: SeriesPoint[]; heig
     </svg>
   );
 }
+
+export interface Allowance {
+  label: string;
+  used: number;
+  cap: number;
+  /** What the cap means, said rather than implied. */
+  note?: string;
+}
+
+/**
+ * An allowance as a meter: what was spent, against what is permitted.
+ *
+ * The competitors put a number here. A number alone answers "how many" and the
+ * question a person actually has is "how close am I to the line" — which is the
+ * whole anxiety this category runs on, given that a third of one competitor's
+ * reviewers report being restricted inside ninety days.
+ *
+ * The bar is the *cap*, never the maximum of what happened to be sent. A meter
+ * scaled to its own data always looks full, which is precisely the reading this
+ * exists to prevent: 12 of 35 and 12 of 12 are the same picture if the scale
+ * moves.
+ *
+ * Colour is earned, not decorative. Under four fifths it stays neutral, because
+ * a bar that is amber at 40% teaches somebody to ignore amber — which is rule
+ * 32's argument about marks, applied to a chart.
+ */
+export function AllowanceMeter({ label, used, cap, note }: Allowance) {
+  const safeCap = Math.max(1, cap);
+  const share = Math.min(1, used / safeCap);
+  // Over the cap is drawn full and said in words. A bar longer than its track
+  // is a rendering bug; a bar at 100% beside "16 of 14" is a fact.
+  const tone = used >= cap ? "spent" : share >= 0.8 ? "close" : "clear";
+
+  return (
+    <div className="allowance" data-tone={tone}>
+      <div className="allowance-head">
+        <span className="tiny subtle">{label}</span>
+        <span className="nums allowance-value">
+          {used.toLocaleString()} <span className="subtle">of {cap.toLocaleString()}</span>
+        </span>
+      </div>
+      <div
+        className="allowance-track"
+        role="meter"
+        aria-valuenow={used}
+        aria-valuemin={0}
+        aria-valuemax={cap}
+        aria-label={`${label}: ${used} of ${cap}`}
+      >
+        <div className="allowance-fill" style={{ width: `${share * 100}%` }} />
+      </div>
+      {note ? <p className="tiny subtle allowance-note">{note}</p> : null}
+    </div>
+  );
+}
+
+export interface StackedDay {
+  /** ISO date, for the axis label and the key. */
+  date: string;
+  /** In fixed series order. Missing entries are zero, never absent. */
+  values: number[];
+}
+
+/**
+ * Days as stacked columns: what went out, and what came back, per day.
+ *
+ * The single trend line answered "are we sending" and never "is it working",
+ * which are the two halves of the same worry — and reading them from two
+ * separate charts means eyeballing one date against another. Stacked, a day is
+ * one column and the proportions are the answer.
+ *
+ * Stacked rather than grouped because the series are parts of one day's work
+ * rather than competitors for the same space, and because a grouped chart of
+ * thirty days on a phone is sixty bars two pixels wide.
+ *
+ * Every segment keeps a 2px gap of surface, so two adjacent values never read
+ * as one taller block. A day with nothing at all still gets its slot: dropping
+ * the empty days would join Friday to Monday and draw a weekend that looks like
+ * steady sending, and "did anything leave yesterday" is the question this chart
+ * exists to answer.
+ */
+export function StackedDays({
+  days,
+  series,
+  height = 120,
+}: {
+  days: StackedDay[];
+  /** Fixed order, and the legend's order. Never more than four. */
+  series: string[];
+  height?: number;
+}) {
+  const totals = days.map((d) => d.values.reduce((sum, v) => sum + v, 0));
+  const top = Math.max(1, ...totals);
+  const width = Math.max(1, days.length) * 12;
+
+  return (
+    <figure className="viz">
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        preserveAspectRatio="none"
+        className="viz-svg viz-bars"
+        role="img"
+        aria-label={`${series.join(", ")} per day over ${days.length} days`}
+      >
+        {days.map((day, i) => {
+          let y = height;
+          return (
+            <g key={day.date}>
+              {day.values.map((value, s) => {
+                if (value <= 0) return null;
+                const h = (value / top) * (height - 2);
+                y -= h;
+                return (
+                  <rect
+                    key={s}
+                    x={i * 12 + 2}
+                    y={y}
+                    width={8}
+                    height={Math.max(1, h - 2)}
+                    fill={seriesColor(s)}
+                    rx={1}
+                  />
+                );
+              })}
+            </g>
+          );
+        })}
+      </svg>
+      {/*
+        A legend is always present for two or more series (rule 35): identity
+        must never rest on colour alone. `.viz-legend` rather than a second
+        caption class, because this is the same object the line chart captions —
+        one name per thing, or the stylesheet grows two words for one idea.
+      */}
+      <figcaption className="viz-caption viz-legend tiny subtle">
+        {series.map((name, i) => (
+          <span key={name} className="viz-key">
+            <span className="viz-swatch" style={{ background: seriesColor(i) }} aria-hidden />
+            {name}
+          </span>
+        ))}
+      </figcaption>
+    </figure>
+  );
+}

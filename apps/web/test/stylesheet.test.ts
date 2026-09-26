@@ -83,6 +83,52 @@ describe("globals.css", () => {
     ).toEqual([]);
   });
 
+  it("does not let a scoped rule land on a name the sheet already owns", () => {
+    /*
+     * The collision above only sees identical selectors, and the expensive one
+     * is not identical.
+     *
+     * `.meter` is a 4px progress bar with `overflow: hidden`. A new component
+     * declared `.app .meter` for something else entirely: a labelled allowance
+     * with a value and a note. Both rules applied — the scoped one won on
+     * specificity for the properties it set, and the properties it did *not*
+     * set came from the older rule, so the whole component rendered as a 4px
+     * sliver with its label clipped away. The check above saw two different
+     * selector strings and said nothing.
+     *
+     * A scope makes a collision look deliberate, which is worse than an
+     * unscoped one: `.app .section` is the frame intentionally redefining a
+     * word it shares, and those are listed here. Everything else sharing a
+     * final class name with an unscoped rule is an accident.
+     */
+    const DELIBERATE = new Set([".section", ".page-header", ".empty", ".card", ".btn", ".pill"]);
+
+    const lastClass = (selector: string): string | null => {
+      const parts = selector.trim().split(/\s+/);
+      const last = parts[parts.length - 1] ?? "";
+      const match = /\.([a-zA-Z0-9_-]+)/.exec(last);
+      // Only a bare `.thing` counts as the unscoped owner of a name; `.thing.x`
+      // and `.thing[data-y]` are modifiers of one that already exists.
+      return match && last === `.${match[1]}` ? `.${match[1]}` : null;
+    };
+
+    const selectors = topLevelSelectors(CSS).filter((sel) => !sel.includes(","));
+    const unscoped = new Set(
+      selectors.filter((sel) => !sel.includes(" ")).map(lastClass).filter(Boolean) as string[],
+    );
+
+    const collisions = selectors
+      .filter((sel) => sel.startsWith(".app "))
+      .map((sel) => ({ sel, name: lastClass(sel) }))
+      .filter((r) => r.name && unscoped.has(r.name) && !DELIBERATE.has(r.name))
+      .map((r) => `${r.sel} collides with ${r.name}`);
+
+    expect(
+      collisions,
+      "a scoped rule inherits what the unscoped one sets and it does not set",
+    ).toEqual([]);
+  });
+
   it("keeps the app's frame scoped to the app", () => {
     // The marketing pages and the application share one stylesheet and two of
     // these names. Unscoped, the app's meaning wins everywhere.

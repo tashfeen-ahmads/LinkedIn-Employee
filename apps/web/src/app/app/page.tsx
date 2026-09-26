@@ -15,6 +15,7 @@ import { readFunnelData } from "@/lib/funnel-data";
 import { StrategyStatus } from "@/components/strategy-status";
 
 import { DailyReportSection } from "./report-section";
+import { LimitsSection } from "./limits-section";
 import { ResultsSection } from "./analytics-section";
 import { SpendSection } from "./usage-section";
 /**
@@ -120,6 +121,17 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
           which is a question about the month; this answers "what happened",
           which is the question a person actually arrives with. */}
       <DailyReportSection />
+
+      {/*
+        The guardrails, on the screen somebody opens daily.
+
+        Every advantage this product has over the category lives in caps, a
+        ramp, a backoff and a spread — and all of it is invisible unless it
+        fails. A customer who cannot see the guardrails has no way to tell this
+        apart from the tool that got them restricted, which is the one thing
+        they are actually afraid of.
+      */}
+      <LimitsSection />
 
       <Section
         id="results"

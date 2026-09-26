@@ -1730,6 +1730,53 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
 .viz-svg { width: 100%; height: auto; display: block; overflow: visible; }
 .viz-caption { display: flex; justify-content: space-between; gap: var(--space-3); }
 .viz-peak { font-variant-numeric: tabular-nums; }
+/* A legend sits left-to-right rather than pushed to the edges, because its
+   items are a set and not a range. Same element as the caption, so spacing and
+   colour stay in one place. */
+.viz-legend { justify-content: flex-start; flex-wrap: wrap; }
+.viz-key { display: inline-flex; align-items: center; gap: 0.4rem; }
+.viz-swatch { width: 0.6rem; height: 0.6rem; border-radius: 2px; display: inline-block; }
+
+/* An allowance, drawn against its cap.
+
+   `allowance` rather than `meter`, because `.meter` is already a 4px progress
+   bar with `overflow: hidden` two hundred lines above. Scoping this as
+   `.app .meter` did not avoid that: the properties I set won on specificity and
+   the ones I did not — the height and the clipping — came from the older rule,
+   so the whole component rendered as a 4px sliver with its label cut off. Rule
+   38's collision, wearing a scope that made it look safe. A different thing
+   gets a different word.
+
+   The track is the cap and never the largest value seen, or the bar always
+   looks full and 12 of 35 draws the same picture as 12 of 12. Colour is earned
+   above four fifths: one that is amber at 40% teaches somebody to ignore amber. */
+.app .allowance { display: flex; flex-direction: column; gap: 0.35rem; }
+.app .allowance-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3); }
+.app .allowance-value { font-size: 0.9375rem; font-weight: 500; }
+.app .allowance-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+.app .allowance-fill { height: 100%; background: var(--viz-1); border-radius: 3px; }
+.app .allowance[data-tone="close"] .allowance-fill { background: var(--warning); }
+.app .allowance[data-tone="spent"] .allowance-fill { background: var(--danger); }
+.app .allowance-note { margin: 0; }
+.app .allowance-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: var(--space-4) var(--space-5);
+}
+
+/* Bars stretch where a line does not.
+
+   `.viz-svg` is 100% wide with `preserveAspectRatio="none"`, which is right for
+   a line — it has no width of its own to distort. Rectangles do: at 1280px the
+   30-day chart rendered 331px tall with bars four times their intended width
+   and the 2px gaps opened to eight. An explicit height is what keeps the
+   geometry the code describes. */
+.app .viz-bars { height: 140px; }
 
 .funnel-chart { display: flex; flex-direction: column; gap: var(--space-4); }
 .funnel-row { display: flex; flex-direction: column; gap: var(--space-1); }
@@ -1902,6 +1949,42 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
    as the other two, and a coloured card would read as the advertisement it is
    trying not to be. */
 .alt-here { border-color: var(--accent-border); }
+
+/* ------------------------------------------------------------ the sequence
+
+   What a prospect receives, drawn down a rail. Every competitor ships a
+   drag-and-drop canvas and the canvas is the demo — it is the one screen that
+   makes "an automated sequence" something a person can picture. Drawn rather
+   than dragged, because most arrangements a canvas offers are ones this product
+   refuses to send, and a refusal that arrives after the work is worse than
+   never offering it. */
+
+.app .sequence { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.app .sequence-step { display: flex; gap: var(--space-4); }
+/* The rail is one column wide and its line runs between the dots rather than
+   beside them, so the steps read as one thread and not as separate cards. */
+.app .sequence-rail { display: flex; flex-direction: column; align-items: center; width: 0.75rem; }
+.app .sequence-dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background: var(--accent);
+  margin-top: 0.45rem;
+  flex: none;
+}
+.app .sequence-line { width: 2px; flex: 1; background: var(--border); margin: 0.3rem 0; }
+.app .sequence-body { flex: 1; padding-bottom: var(--space-5); display: flex; flex-direction: column; gap: 0.35rem; }
+.app .sequence-head { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem; }
+.app .sequence-label { font-weight: 500; }
+/* Copy, quoted. A textarea would make the thing a prospect reads look like a
+   configuration field. */
+.app .sequence-message {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  background: var(--surface-sunken);
+  border-radius: var(--radius-sm);
+  white-space: pre-wrap;
+}
 
 /* ------------------------------------------------------------ what needs you
 
