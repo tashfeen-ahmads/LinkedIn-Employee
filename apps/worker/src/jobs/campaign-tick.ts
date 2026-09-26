@@ -113,11 +113,6 @@ async function tick(db: Db, queues: Queues, now: Date, linkedin?: unknown): Prom
       continue;
     }
 
-    // Once an hour, and before anything else decides it cannot send: the most
-    // common reason an account is refused is a backlog nothing here was
-    // looking at.
-    if (linkedin) await sampleInviteCapacity({ db, linkedin }, loaded.account, now);
-
     const usage = toUsage(loaded.account, loaded.timezone);
 
     // Follow-ups first: a conversation already started is worth more than a
@@ -146,6 +141,21 @@ async function tick(db: Db, queues: Queues, now: Date, linkedin?: unknown): Prom
     // reporting only the first makes the second invisible.
     if (warmed.reason) say(campaign.id, warmed.reason);
     say(campaign.id, invites.reason);
+  }
+
+  /*
+   * The capacity sample runs after every campaign has been dealt with, never
+   * before one.
+   *
+   * It is a diagnostic. Diagnostics do not get to delay the thing they are
+   * diagnosing, and putting this ahead of the sending decisions meant a slow
+   * provider call stopped the loop before it had done any work at all. Behind
+   * them, the worst a bad ten seconds costs is a late heartbeat.
+   */
+  if (linkedin) {
+    for (const loaded of accounts.values()) {
+      if (loaded) await sampleInviteCapacity({ db, linkedin }, loaded.account, now);
+    }
   }
 
   await beat(db, now, {
@@ -244,10 +254,29 @@ async function sampleInviteCapacity(
   if (Number.isFinite(since) && since < INVITE_CAPACITY_EVERY_MS) return;
 
   try {
-    const { invitations, raw } = await provider.listPendingInvitations({
-      accountId: account.provider_account_id,
-      limit: 500,
-    });
+    /*
+     * A deadline, and the deadline is the whole mechanism.
+     *
+     * This call has no business stopping anybody's campaign, and without a
+     * timeout that is exactly what it does: the pacing loop runs at
+     * concurrency one, so a provider endpoint that hangs takes the sending
+     * loop with it — and a stopped loop is silent from every screen, which is
+     * the failure this repo has the most rules about. It happened on the first
+     * run, in production, and the tick did not stamp again for six minutes
+     * because it never returned.
+     *
+     * The same lesson as `/health` and its queue ping (rule 22): a check that
+     * can wait for ever tells you nothing and costs you everything. Ten
+     * seconds is generous for a list endpoint and short enough that a bad
+     * minute at the provider is invisible to sending.
+     */
+    const { invitations, raw } = await withDeadline(
+      provider.listPendingInvitations({
+        accountId: account.provider_account_id,
+        limit: 500,
+      }),
+      CAPACITY_DEADLINE_MS,
+    );
     const dates = invitations
       .map((row) => (row.sentAt ? Date.parse(row.sentAt) : Number.NaN))
       .filter((ms) => Number.isFinite(ms));
@@ -272,6 +301,35 @@ async function sampleInviteCapacity(
       now,
     );
   }
+}
+
+/** How long to wait for the provider before giving up and carrying on. */
+const CAPACITY_DEADLINE_MS = 10_000;
+
+/**
+ * Resolve, or give up.
+ *
+ * The rejected promise is deliberately not awaited anywhere: an HTTP call that
+ * eventually fails after we stopped caring must not surface as an unhandled
+ * rejection and take the process down.
+ */
+function withDeadline<T>(work: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(
+      () => reject(new Error(`the provider did not answer within ${Math.round(ms / 1000)}s`)),
+      ms,
+    );
+    work.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
 }
 
 /** The provider's own keys, so an empty list is never mistaken for a zero. */
