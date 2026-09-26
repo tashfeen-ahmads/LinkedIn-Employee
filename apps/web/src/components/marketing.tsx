@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Sequence, sequenceFor } from "@/components/sequence";
 import { LINKEDIN_LIMITS } from "@le/shared";
 import { Pipeline, ReplyGate, WarmupRamp } from "./diagrams";
 import { Forecast } from "./forecast";
@@ -230,6 +231,71 @@ export function HowItWorks() {
 }
 
 /** The reply gate, given a section of its own because it is the whole argument. */
+/**
+ * What a prospect actually receives, on the page that has to sell it.
+ *
+ * The competitors' whole proposition is the drag-and-drop canvas: "look how
+ * easy the sequence is to assemble". It is the most effective thing on their
+ * sites and it was the one thing of ours buried behind a login — a visitor had
+ * to take on faith that there was a sequence at all.
+ *
+ * The same component the campaign screen draws, with a worked example in it.
+ * Not a second copy dressed for marketing: a landing page that renders its own
+ * idealised version of a product screen is how a site comes to promise
+ * something the product does not do, and this one is rendered from the same
+ * function with the same rules, including the two steps a person may not move.
+ *
+ * And it is a better argument than a canvas. Their picture shows how easy it is
+ * to build a sequence; this one shows what a stranger reads, which is the thing
+ * the buyer is actually nervous about.
+ */
+export function TheSequence() {
+  return (
+    <section className="section" id="the-sequence">
+      <div className="container stack-6">
+        <Reveal>
+          <div className="stack-3 measure">
+            <p className="eyebrow">What they receive</p>
+            <h2>A conversation, not a blast.</h2>
+            <p className="lede prose">
+              Every campaign runs the same shape. You write the words; the timing is a product rule,
+              because the timing is what gets accounts restricted.
+            </p>
+          </div>
+        </Reveal>
+        <Reveal delay={0.1}>
+          {/* A plain card. The first attempt wrapped this in `.app` to borrow
+              the application's styles, which put the whole sequence inside the
+              shell grid's 240px sidebar track — `.app` is a layout, not a
+              theme. The component's own rules are unscoped instead, because it
+              shares its names with nothing. */}
+          <div className="card raised">
+            <Sequence
+              steps={sequenceFor({
+                warmUp: true,
+                connectionNote:
+                  "Hi Jane — saw you run partnerships at Northwind. Curious how you keep track of who actually sends you work.",
+                steps: [
+                  {
+                    step_number: 1,
+                    delay_days: 0,
+                    message: "Thanks for connecting, Jane. Is partner referrals something you own there, or does it sit with marketing?",
+                  },
+                  {
+                    step_number: 2,
+                    delay_days: 4,
+                    message: "No worries if the timing is off — here is the short version if it is ever useful: {{cta_link}}",
+                  },
+                ],
+              })}
+            />
+          </div>
+        </Reveal>
+      </div>
+    </section>
+  );
+}
+
 export function TheGate() {
   return (
     <section className="section">

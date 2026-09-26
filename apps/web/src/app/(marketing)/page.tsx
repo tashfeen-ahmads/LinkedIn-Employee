@@ -10,6 +10,7 @@ import {
   Safety,
   Signals,
   TheGate,
+  TheSequence,
   Volume,
 } from "@/components/marketing";
 import { FaqSchema, SoftwareSchema } from "@/components/schema";
@@ -29,6 +30,7 @@ export default function HomePage() {
       <Hero />
       <Film />
       <HowItWorks />
+      <TheSequence />
       <TheGate />
       <Signals />
       <Safety />

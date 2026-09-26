@@ -1959,12 +1959,21 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
    refuses to send, and a refusal that arrives after the work is worse than
    never offering it. */
 
-.app .sequence { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
-.app .sequence-step { display: flex; gap: var(--space-4); }
+/* Unscoped, because this is a component rather than the frame.
+
+   It was written as `.app .sequence` and then reused on the marketing page,
+   where the obvious way to bring its styles along was to wrap it in `.app` —
+   and `.app` is the application's own `240px minmax(0, 1fr)` shell grid, so the
+   whole sequence rendered inside the sidebar track at a third of the width.
+   Rule 38 scopes the *frame* under `.app` because the frame shares words like
+   `.section` with the marketing site. `.sequence` is shared by nobody, so
+   scoping it bought nothing and cost a layout. */
+.sequence { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.sequence-step { display: flex; gap: var(--space-4); }
 /* The rail is one column wide and its line runs between the dots rather than
    beside them, so the steps read as one thread and not as separate cards. */
-.app .sequence-rail { display: flex; flex-direction: column; align-items: center; width: 0.75rem; }
-.app .sequence-dot {
+.sequence-rail { display: flex; flex-direction: column; align-items: center; width: 0.75rem; }
+.sequence-dot {
   width: 0.6rem;
   height: 0.6rem;
   border-radius: 50%;
@@ -1972,13 +1981,13 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
   margin-top: 0.45rem;
   flex: none;
 }
-.app .sequence-line { width: 2px; flex: 1; background: var(--border); margin: 0.3rem 0; }
-.app .sequence-body { flex: 1; padding-bottom: var(--space-5); display: flex; flex-direction: column; gap: 0.35rem; }
-.app .sequence-head { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem; }
-.app .sequence-label { font-weight: 500; }
+.sequence-line { width: 2px; flex: 1; background: var(--border); margin: 0.3rem 0; }
+.sequence-body { flex: 1; padding-bottom: var(--space-5); display: flex; flex-direction: column; gap: 0.35rem; }
+.sequence-head { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.5rem; }
+.sequence-label { font-weight: 500; }
 /* Copy, quoted. A textarea would make the thing a prospect reads look like a
    configuration field. */
-.app .sequence-message {
+.sequence-message {
   margin: 0;
   padding: var(--space-3) var(--space-4);
   background: var(--surface-sunken);
