@@ -20,10 +20,10 @@ import { classifyReply } from "../src/reply.js";
 import { createLlmClient } from "../src/llm.js";
 import { CLASSIFICATION_CASES, EVAL_KNOWLEDGE_TITLES, type ClassificationCase } from "./classification-cases.js";
 
-const RECALL_THRESHOLD = 0.95;
+export const RECALL_THRESHOLD = 0.95;
 const CONCURRENCY = 4;
 
-interface Result {
+export interface Result {
   testCase: ClassificationCase;
   needsHuman: boolean;
   intent: string;
@@ -77,7 +77,17 @@ async function main(): Promise<void> {
   report(results);
 }
 
-function report(results: Result[]): void {
+/**
+ * Scores a finished run and decides whether it passed.
+ *
+ * Exported so the arithmetic can be checked without spending anything. This
+ * eval had never been run once, so nobody knew whether the harness worked —
+ * and a first run that makes thirty-three paid calls and then reports a wrong
+ * number is worse than no run, because the number gets written down.
+ *
+ * Returns the recall rather than only printing it, for the same reason.
+ */
+export function report(results: Result[]): number {
   const shouldEscalate = results.filter((r) => r.testCase.expect.needsHuman);
   const shouldAutomate = results.filter((r) => !r.testCase.expect.needsHuman);
 
@@ -122,11 +132,25 @@ function report(results: Result[]): void {
   }
 
   if (recall < RECALL_THRESHOLD || errors.length > 0) {
-    console.log(`\nFAILED: recall ${pct(recall)} is below the ${pct(RECALL_THRESHOLD)} gate.`);
+    /*
+     * An error fails the run as hard as a miss does.
+     *
+     * A case that threw is scored `needsHuman: false` so the report can still
+     * be assembled — and read as a result that would be a *miss* silently
+     * turned into a pass by a network blip. Recall computed over cases that
+     * never ran is not recall.
+     */
+    const why =
+      errors.length > 0
+        ? `${errors.length} case(s) errored, so the number is not trustworthy`
+        : `recall ${pct(recall)} is below the ${pct(RECALL_THRESHOLD)} gate`;
+    console.log(`\nFAILED: ${why}.`);
     process.exitCode = 1;
   } else {
     console.log("\nPASSED");
   }
+
+  return recall;
 }
 
 function pct(value: number): string {
@@ -137,4 +161,11 @@ function truncate(text: string, max = 68): string {
   return text.length > max ? `${text.slice(0, max)}…` : text;
 }
 
-await main();
+/*
+ * Only when run directly. Imported by a test that checks the scoring, this
+ * file must not reach for a model provider — an eval that bills you for being
+ * imported is one nobody dares import.
+ */
+if (import.meta.url === `file://${process.argv[1]}`) {
+  await main();
+}

@@ -10,6 +10,16 @@ is measured rather than assumed.
 OPENAI_API_KEY=sk-... pnpm --filter @le/agents eval:classify
 ```
 
+It needs a real key and makes one classifier call per case — 33 of them — so it
+cannot run in CI or in a container without one.
+
+The **scoring** is checked without spending anything
+(`packages/agents/test/eval-harness.test.ts`): recall is measured over the
+escalations alone rather than over every case, an over-escalation does not fail
+the run, and a case that errored fails it rather than counting as automated. A
+first paid run that reported a wrong number would be worse than no run, because
+the number gets written down and believed.
+
 The run costs roughly one Haiku call per case and exits non-zero if
 **needs-human recall** falls below 95%.
 
