@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { PageHeader } from "@/components/page";
 import { requireSession } from "@/lib/workspace";
+import { isPlatformAdmin } from "@/lib/admin";
 import { callWorker } from "@/lib/worker";
 
 /**
@@ -26,6 +27,8 @@ interface Check {
   detail: string;
   fix?: string;
   href?: string;
+  /** The same fault for whoever runs the deployment. Admins only. */
+  operator?: string;
 }
 
 const MARK: Record<CheckState, { glyph: string; word: string; tone: string }> = {
@@ -38,6 +41,16 @@ const MARK: Record<CheckState, { glyph: string; word: string; tone: string }> = 
 
 export default async function SystemPage() {
   const session = await requireSession();
+  /*
+   * Both kinds of person read this screen, and they need different sentences.
+   *
+   * A customer needs to know which stage of their outreach is broken and what
+   * it costs them. An operator needs the vendor, the environment variable and
+   * the remedy. Printing the second to the first names our supply chain on
+   * somebody else's dashboard and hands them a repair they have no access to
+   * perform — which is rule 8 one step worse.
+   */
+  const operator = await isPlatformAdmin();
   const result = await callWorker<{ checkedAt: string; checks: Check[] }>("/jobs/diagnostics", {
     workspaceId: session.workspaceId,
     userId: session.userId,
@@ -52,8 +65,9 @@ export default async function SystemPage() {
             <strong>The background service could not be reached.</strong> {result.error}
           </p>
           <p className="small">
-            That is itself the first answer: nothing that depends on the worker — the agents,
-            LinkedIn, sending — is running right now.
+            That is itself the first answer: nothing that depends on it — the agents, LinkedIn,
+            sending — is running right now. It is ours to fix rather than yours;{" "}
+            <Link href="/app/support">tell us</Link> and we will.
           </p>
         </div>
       </>
@@ -76,10 +90,10 @@ export default async function SystemPage() {
         title="What is standing in the way"
         lede={
           <>
-          Every precondition between signing up and a booked meeting, checked against what is true
-          right now. Two of these ask LinkedIn&rsquo;s provider directly rather than trusting what is
-          stored here — which is the difference between an account that says it is connected and one
-          that is.
+          Every step between signing up and a booked meeting, checked against what is true right now.
+          Two of these ask LinkedIn itself rather than trusting what is stored here — which is the
+          difference between an account that says it is connected and one that is. Anything on this
+          list that is ours to fix says so.
           </>
         }
       />
@@ -130,6 +144,11 @@ export default async function SystemPage() {
                       </div>
                       <p className="tiny subtle prewrap">{check.detail}</p>
                       {check.fix ? <p className="tiny">{check.fix}</p> : null}
+                      {operator && check.operator ? (
+                        <p className="tiny prewrap operator-note">
+                          <strong>Operator:</strong> {check.operator}
+                        </p>
+                      ) : null}
                     </div>
                     {check.href ? (
                       <Link href={check.href} className="btn ghost small checklist-go">

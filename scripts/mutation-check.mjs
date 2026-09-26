@@ -2554,12 +2554,31 @@ const MUTATIONS = [
     pkg: "@le/shared",
   },
   {
-    id: "needs-you/the-two-webhook-refusals-stay-apart",
-    rule: "No signature and a signature that does not verify are two different people doing two different things; merged, somebody re-copies a secret that was already correct",
-    file: "packages/shared/src/needs-you.ts",
-    from: '          ? "Deliveries are arriving without a signature and are refused, so a prospect who answers is invisible here. The webhook needs its signing secret set at the provider."',
-    to: '          ? "Deliveries are arriving with a signature that does not verify, so a prospect who answers is invisible here. The secret differs between the provider and this deployment."',
-    pkg: "@le/shared",
+    // The distinction moved to the operator half of the system check when the
+    // customer-facing row stopped naming our plumbing. It is still the same
+    // rule, and it is still only useful to somebody who can act on it.
+    id: "diagnostics/the-two-webhook-refusals-stay-apart",
+    rule: "No signature and a signature that does not verify are two different people doing two different things; merged, somebody re-copies a secret that was already correct (rule 46)",
+    file: "apps/worker/src/jobs/diagnostics.ts",
+    from: "      : unsigned\n        ? `Unipile called at ${webhook.beat_at} with no signature header.",
+    to: "      : false\n        ? `Unipile called at ${webhook.beat_at} with no signature header.",
+    pkg: "@le/worker",
+  },
+  {
+    id: "diagnostics/a-customer-is-told-what-it-costs-them",
+    rule: "The system check is gated on a session and nothing else, so its detail and fix are written for the business owner whose campaigns are stuck. A row naming our vendor or an environment variable hands them a repair they have no access to perform — rule 8 one step worse",
+    file: "apps/worker/src/jobs/diagnostics.ts",
+    from: '      : "Replies from prospects cannot be accepted yet, so your agent never sees them. This is ours to fix, not yours.",',
+    to: '      : "UNIPILE_WEBHOOK_SECRET is not set, so every reply from a prospect is rejected. Set it to the value in Unipile\'s webhook settings.",',
+    pkg: "@le/worker",
+  },
+  {
+    id: "diagnostics/the-operator-half-is-moved-not-deleted",
+    rule: "Moving the vendor and the variable off the customer's half must not lose them: somebody still has to fix the deployment, and a row with no remedy anywhere is a worse screen than one with the remedy on the wrong half",
+    file: "apps/worker/src/jobs/diagnostics.ts",
+    from: '      : "Neither OPENAI_API_KEY nor ANTHROPIC_API_KEY is set. Set one on the worker and redeploy.",',
+    to: "      : undefined,",
+    pkg: "@le/worker",
   },
   {
     id: "needs-you/a-warm-lead-outranks-work-not-started",

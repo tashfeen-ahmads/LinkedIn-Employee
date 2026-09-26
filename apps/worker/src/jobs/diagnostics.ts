@@ -33,11 +33,32 @@ export interface Check {
   stage: string;
   label: string;
   state: CheckState;
-  /** What is true, in a sentence someone can act on. */
+  /**
+   * What is true, said to the person who owns the workspace.
+   *
+   * Their language and their concerns: what is happening to their campaigns
+   * and what it costs them. Never the name of a vendor we buy from, never an
+   * environment variable, never a URL path in this deployment. A business
+   * owner does not know what those are, cannot change any of them, and does
+   * not need to learn our supply chain to use the product.
+   */
   detail: string;
-  /** What to do about it, when there is something. */
+  /** What *they* can do about it, when there is something they can do. */
   fix?: string;
   href?: string;
+  /**
+   * The same fault, for whoever operates the deployment.
+   *
+   * Rendered only for a platform admin. This is where the vendor, the
+   * variable and the exact remedy live — a real fix, written for somebody who
+   * can actually apply it.
+   *
+   * Splitting the two is not politeness. A row telling a customer to set
+   * `UNIPILE_WEBHOOK_SECRET` assigns repair to somebody who has no access to
+   * it, which is rule 8 one step worse: repair that does not merely wait for
+   * someone to find a button, but waits for someone who could never press it.
+   */
+  operator?: string;
 }
 
 export interface DiagnosticsReport {
@@ -88,34 +109,45 @@ export async function runDiagnostics(
   add({
     key: "model-provider",
     stage: STAGES.setup,
-    label: "A model provider is configured",
+    label: "Your agents can run",
     state: hasModelKey ? "ok" : "blocked",
     detail: hasModelKey
+      ? "The agents that write your strategy, your invitations and your replies are ready."
+      : "No agent can run, so nothing gets written: no strategy, no invitation notes, no replies. This is ours to fix rather than yours.",
+    fix: hasModelKey ? undefined : "Nothing to change on your side. Raise it with support and we will fix it.",
+    href: hasModelKey ? undefined : "/app/support",
+    operator: hasModelKey
       ? `Agents run on ${env.OPENAI_API_KEY ? "OpenAI" : "Anthropic"}.`
-      : "Neither OPENAI_API_KEY nor ANTHROPIC_API_KEY is set, so no agent can run at all.",
-    fix: hasModelKey ? undefined : "Set one of them on the worker and redeploy.",
+      : "Neither OPENAI_API_KEY nor ANTHROPIC_API_KEY is set. Set one on the worker and redeploy.",
   });
 
   const live = env.LINKEDIN_PROVIDER !== "mock";
   add({
     key: "linkedin-provider",
     stage: STAGES.setup,
-    label: "LinkedIn provider",
+    label: "Sending is live",
     state: live ? "ok" : "waiting",
     detail: live
-      ? "Connected to Unipile. Real invitations and messages will be sent."
-      : "Running on the mock provider. Nothing reaches a real LinkedIn account.",
+      ? "Connected to LinkedIn. Real invitations and messages will be sent."
+      : "This is a test setup. Nothing reaches a real LinkedIn account.",
+    operator: live ? undefined : "LINKEDIN_PROVIDER is `mock`. Set it to `unipile` to send for real.",
   });
 
   add({
     key: "webhook-secret",
     stage: STAGES.setup,
-    label: "Inbound message webhook is secured",
+    label: "Incoming replies are secured",
     state: env.UNIPILE_WEBHOOK_SECRET ? "ok" : live ? "blocked" : "waiting",
     detail: env.UNIPILE_WEBHOOK_SECRET
-      ? "UNIPILE_WEBHOOK_SECRET is set, so deliveries are verified."
-      : "UNIPILE_WEBHOOK_SECRET is not set. Webhooks fail closed, so every reply from a prospect is rejected and the Reply Agent never sees it.",
-    fix: env.UNIPILE_WEBHOOK_SECRET ? undefined : "Set it to the value in Unipile's webhook settings.",
+      ? "Replies are checked before they are let in, so nobody can write into your inbox pretending to be a prospect."
+      : "Replies from prospects cannot be accepted yet, so your agent never sees them. This is ours to fix, not yours.",
+    fix: env.UNIPILE_WEBHOOK_SECRET
+      ? undefined
+      : "Nothing to change on your side. Raise it with support and we will fix it.",
+    href: env.UNIPILE_WEBHOOK_SECRET ? undefined : "/app/support",
+    operator: env.UNIPILE_WEBHOOK_SECRET
+      ? undefined
+      : "Set UNIPILE_WEBHOOK_SECRET to the value in Unipile's webhook settings.",
   });
 
   // ---- Onboarding and Strategy -----------------------------------------
@@ -374,22 +406,26 @@ export async function runDiagnostics(
   // different things. The boot stamp goes straight to the database as the
   // process starts, which is what makes it readable in exactly the failure
   // that erases everything else.
+  const queueDown = Boolean(boot) && bootDetail.queueReachable === false;
   add({
     key: "worker-boot",
     stage: STAGES.campaign,
-    label: "The worker process is up",
-    state: boot ? (bootDetail.queueReachable === false ? "blocked" : "ok") : "unknown",
+    label: "The sending service is up",
+    state: boot ? (queueDown ? "blocked" : "ok") : "unknown",
     detail: !boot
-      ? "It has not reported starting. Either the process is down, or the build carrying this check has not deployed yet."
-      : bootDetail.queueReachable === false
-        ? `Started ${boot.beat_at}, and could not reach its job queue at ${typeof bootDetail.redisHost === "string" ? bootDetail.redisHost : "its configured address"}. Nothing queued is consumed.`
-        : `Started ${boot.beat_at}${typeof bootDetail.commit === "string" ? ` on build ${bootDetail.commit.slice(0, 7)}` : ""}, queue reachable.`,
-    fix:
-      boot && bootDetail.queueReachable === false
-        ? "Point REDIS_URL at a reachable queue and redeploy."
-        : boot
-          ? undefined
-          : "Check the worker process, and that the latest build actually deployed.",
+      ? "It has not reported starting, so we cannot say whether it is running. If a campaign of yours is not sending, tell us and we will look."
+      : queueDown
+        ? `Started ${boot.beat_at}, and cannot reach the list of work it sends from. Nothing you launch will be picked up. This is ours to fix rather than yours.`
+        : `Running since ${boot.beat_at}.`,
+    fix: queueDown ? "Nothing to change on your side. Raise it with support and we will fix it." : undefined,
+    href: queueDown ? "/app/support" : undefined,
+    operator: !boot
+      ? "No BOOT_BEAT row. Either the process is down or the build carrying the stamp has not deployed — check both before restarting anything."
+      : queueDown
+        ? `Could not reach the queue at ${typeof bootDetail.redisHost === "string" ? bootDetail.redisHost : "its configured address"}. Point REDIS_URL at a reachable queue and redeploy.`
+        : typeof bootDetail.commit === "string"
+          ? `Build ${bootDetail.commit.slice(0, 7)}, queue reachable.`
+          : "Queue reachable.",
   });
 
   /*
@@ -424,18 +460,20 @@ export async function runDiagnostics(
     // from this row, and reporting the second as working is how a week goes.
     state: !webhook ? "waiting" : rejected ? "blocked" : "ok",
     detail: !webhook
-      ? "Unipile has not called this deployment yet. Until it does, a reply from a prospect reaches LinkedIn and not this product."
+      ? "No reply has come through to this inbox yet. That is normal before your first prospect answers — if somebody has replied on LinkedIn and it is not here, tell us."
       : rejected
-        ? unsigned
-          ? `Unipile called at ${webhook.beat_at} with no signature header, so the delivery was refused. Replies are reaching LinkedIn and not this inbox.`
-          : `Unipile called at ${webhook.beat_at} and the signature did not verify (${String(webhookDetail.reason ?? "no reason recorded")}).`
-        : `Last delivery accepted ${webhook.beat_at}.`,
-    fix: !webhook
-      ? "Point Unipile's messaging webhook at this worker's /webhooks/unipile/messages."
+        ? "A reply was sent to us and we could not accept it, so it stayed on LinkedIn instead of arriving here. This is a fault on our side and we can see it."
+        : `Replies are arriving. The last one came through at ${webhook.beat_at}.`,
+    // Nothing for the customer to do but tell us, because there is nothing
+    // else they *can* do: the fault and the remedy are both on our side.
+    fix: rejected ? "Nothing to change on your side. Raise it with support and we will fix it." : undefined,
+    href: rejected ? "/app/support" : undefined,
+    operator: !webhook
+      ? "Unipile has never called this deployment. Point its messaging webhook at this worker's /webhooks/unipile/messages."
       : unsigned
-        ? "In Unipile's webhook settings, add the signature header (`unipile-signature`) with the same value as UNIPILE_WEBHOOK_SECRET. The endpoint refuses an unsigned delivery on purpose and will keep doing so."
+        ? `Unipile called at ${webhook.beat_at} with no signature header. In its webhook settings add the \`unipile-signature\` header with the same value as UNIPILE_WEBHOOK_SECRET — the endpoint refuses an unsigned delivery on purpose and will keep doing so.`
         : rejected
-          ? "Make UNIPILE_WEBHOOK_SECRET and the value in Unipile's webhook settings match."
+          ? `Unipile called at ${webhook.beat_at} and the signature did not verify (${String(webhookDetail.reason ?? "no reason recorded")}). Make UNIPILE_WEBHOOK_SECRET and the value in Unipile's webhook settings match.`
           : undefined,
   });
 
@@ -447,10 +485,14 @@ export async function runDiagnostics(
     detail: beating
       ? `Last ran ${Math.max(0, Math.round(beatAge! / 60_000))} minutes ago. It wakes every five.${lastDecision(beat)}`
       : beat?.beat_at
-        ? `It last ran ${new Date(beat.beat_at).toISOString()} and should run every five minutes. Nothing queued is being sent.`
-        : "It has never reported in. Nothing queued is being sent, whatever the campaign screens say.",
+        ? `It last ran ${new Date(beat.beat_at).toISOString()} and should run every five minutes. Nothing you have launched is being sent.`
+        : "It has never reported in. Nothing is being sent, whatever the campaign screens say.",
     // The row above names the cause when it can. This one says what it costs.
-    fix: beating ? undefined : "Read the row above — it says whether the worker is down or cannot reach its queue.",
+    fix: beating ? undefined : "Nothing to change on your side. Raise it with support and we will fix it.",
+    href: beating ? undefined : "/app/support",
+    operator: beating
+      ? undefined
+      : "The row above says which it is: the process down, or the process up and unable to reach its queue.",
   });
 
   // Nightly maintenance, which is where every promise that is not a campaign
@@ -484,13 +526,19 @@ export async function runDiagnostics(
     // did — the same reason a skipped check says `waiting` rather than `ok`.
     state: !nightly ? "unknown" : !nightlyFresh || nightlyFailed.length ? "blocked" : "ok",
     detail: !nightly
-      ? "It has not reported yet. It runs at 3am, so a deployment younger than a day has simply not reached its first run."
+      ? "It has not reported yet. It runs at 3am, so an account less than a day old has simply not reached its first run."
       : !nightlyFresh
-        ? `It last finished ${new Date(nightly.beat_at).toISOString()} and runs nightly. Invitations are not being withdrawn and data past its retention limit is not being erased.`
+        ? `It last finished ${new Date(nightly.beat_at).toISOString()} and runs nightly. Invitations that went unanswered are not being withdrawn, and data past its retention limit is not being erased.`
         : nightlyFailed.length
           ? `Ran, with ${nightlyFailed.length} step(s) failing: ${nightlyFailed.join(", ")}. The rest of the night still finished.`
           : `Ran cleanly ${new Date(nightly.beat_at).toISOString()}.`,
-    fix: !nightly
+    fix:
+      !nightly || (nightlyFresh && !nightlyFailed.length)
+        ? undefined
+        : "Nothing to change on your side. Raise it with support and we will fix it.",
+    href:
+      !nightly || (nightlyFresh && !nightlyFailed.length) ? undefined : "/app/support",
+    operator: !nightly
       ? undefined
       : !nightlyFresh
         ? "Check the worker is running and its schedule is registered."
@@ -614,13 +662,15 @@ export async function runDiagnostics(
     detail: canEmail
       ? "Both sides get a calendar invitation when a meeting is booked."
       : env.EMAIL_PROVIDER === "off"
-        ? "Email is off, so a booked meeting exists only in this app. The prospect gets no invitation and nothing appears in their diary — they will not turn up."
-        : `EMAIL_PROVIDER is "${env.EMAIL_PROVIDER}" but no provider could be built, so nothing is sent: a booked meeting exists only in this app and the prospect never hears. The digest and the weekly report are silent for the same reason.`,
-    fix: canEmail
+        ? "Email is switched off here, so a booked meeting exists only in this app. The prospect gets no invitation and nothing appears in their diary — they will not turn up. The digest and the weekly report are silent for the same reason."
+        : "No email can be sent, so a booked meeting exists only in this app and the prospect never hears. The digest and the weekly report are silent for the same reason. This is ours to fix rather than yours.",
+    fix: canEmail ? undefined : "Nothing to change on your side. Raise it with support and we will fix it.",
+    href: canEmail ? undefined : "/app/support",
+    operator: canEmail
       ? undefined
       : env.EMAIL_PROVIDER === "off"
-        ? "Set EMAIL_PROVIDER and a key on the worker."
-        : "Set RESEND_API_KEY and EMAIL_FROM on the worker. Both are needed; either one missing sends nothing.",
+        ? 'EMAIL_PROVIDER is "off". Set it and a key on the worker.'
+        : `EMAIL_PROVIDER is "${env.EMAIL_PROVIDER}" but no provider could be built. Set RESEND_API_KEY and EMAIL_FROM on the worker — both are needed; either one missing sends nothing.`,
   });
 
   return { checkedAt: new Date().toISOString(), checks };

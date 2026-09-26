@@ -75,10 +75,12 @@ describe("whether an email can actually be sent", () => {
     const row = check(await run(ctx), "invitations");
 
     expect(row.state).toBe("blocked");
-    expect(row.detail).toContain("no provider could be built");
+    // What it costs, to the customer; which variables, to whoever can set them.
+    expect(row.detail).toContain("No email can be sent");
+    expect(row.operator).toContain("no provider could be built");
     // And names both variables, because either one missing sends nothing.
-    expect(row.fix).toContain("RESEND_API_KEY");
-    expect(row.fix).toContain("EMAIL_FROM");
+    expect(row.operator).toContain("RESEND_API_KEY");
+    expect(row.operator).toContain("EMAIL_FROM");
   });
 
   it("says the digest and the weekly report are silent for the same reason", async () => {
@@ -94,7 +96,7 @@ describe("whether an email can actually be sent", () => {
     const { ctx } = harness({ env: { EMAIL_PROVIDER: "off" }, email: null });
     const row = check(await run(ctx), "invitations");
     expect(row.state).toBe("blocked");
-    expect(row.detail).toContain("Email is off");
+    expect(row.detail).toContain("Email is switched off");
   });
 
   it("is ok only when a provider exists", async () => {
@@ -148,7 +150,7 @@ describe("system check", () => {
     const report = await run(ctx);
 
     expect(check(report, "webhook-secret").state).toBe("blocked");
-    expect(check(report, "webhook-secret").detail).toMatch(/never sees it/i);
+    expect(check(report, "webhook-secret").detail).toMatch(/never sees them/i);
   });
 
   /**
@@ -242,8 +244,11 @@ describe("system check", () => {
     const report = await run(ctx);
 
     expect(check(report, "worker-boot").state).toBe("blocked");
-    expect(check(report, "worker-boot").detail).toContain("red-abc:6379");
-    expect(check(report, "worker-boot").fix).toMatch(/REDIS_URL/);
+    // The address and the variable go to whoever can change them; the customer
+    // is told their campaigns are not being picked up.
+    expect(check(report, "worker-boot").operator).toContain("red-abc:6379");
+    expect(check(report, "worker-boot").operator).toMatch(/REDIS_URL/);
+    expect(check(report, "worker-boot").detail).toMatch(/nothing you launch/i);
   });
 
   it("says a webhook Unipile is calling unsigned is a webhook nobody is receiving", async () => {
@@ -269,7 +274,7 @@ describe("system check", () => {
     // The header, not the secret: those are two different things to go and do,
     // and telling somebody to re-copy a secret that is already correct is an
     // afternoon.
-    expect(check(report, "webhook-deliveries").fix).toMatch(/unipile-signature/);
+    expect(check(report, "webhook-deliveries").operator).toMatch(/unipile-signature/);
     // And the secret check still reads ok, which is why this row had to exist.
     expect(check(report, "webhook-secret").state).toBe("ok");
   });
@@ -284,7 +289,7 @@ describe("system check", () => {
       },
     ]);
 
-    expect(check(await run(ctx), "webhook-deliveries").fix).toMatch(/UNIPILE_WEBHOOK_SECRET/);
+    expect(check(await run(ctx), "webhook-deliveries").operator).toMatch(/UNIPILE_WEBHOOK_SECRET/);
   });
 
   it("does not report a webhook that has never been called as working", async () => {
@@ -326,7 +331,7 @@ describe("system check", () => {
     expect(check(report, "worker-boot").state).toBe("ok");
     // Which build is actually running, from the process rather than from the
     // dashboard reporting on it.
-    expect(check(report, "worker-boot").detail).toContain("abc1234");
+    expect(check(report, "worker-boot").operator).toContain("abc1234");
     // Booting is not sending. Two rows, because they fail separately.
     expect(check(report, "pacing-loop").state).toBe("blocked");
   });
@@ -349,5 +354,125 @@ describe("system check", () => {
     expect(check(report, "approval").state).toBe("waiting");
     expect(check(report, "account-row").state).toBe("todo");
     expect(check(report, "account-live").state).toBe("waiting");
+  });
+});
+
+/*
+ * Who each sentence on this screen is written for.
+ *
+ * `/app/system` is gated on a session and nothing else, so the person reading
+ * it is normally the business owner whose campaigns are stuck. A row telling
+ * them to set `UNIPILE_WEBHOOK_SECRET`, or naming the vendor we buy LinkedIn
+ * access from, does two harmful things at once: it names our supply chain on
+ * somebody else's dashboard, and it assigns the repair to a person with no
+ * access to perform it. That is rule 8 one step worse — repair that waits not
+ * for somebody to find a button, but for somebody who could never press it.
+ *
+ * So `detail` and `fix` are theirs and `operator` is ours, and only a platform
+ * admin is served the second. This walks every row in every state it has,
+ * because the one that regresses will be a branch nobody re-read.
+ */
+describe("the two audiences for a system check", () => {
+  /** Words that belong to whoever runs the deployment, and to nobody else. */
+  const OPERATOR_ONLY = [
+    "unipile",
+    "resend",
+    "openai",
+    "anthropic",
+    "redis",
+    "render",
+    "supabase",
+    "bullmq",
+    "webhook",
+    "env",
+    "api key",
+    "api_key",
+    "redeploy",
+    "deploy",
+    "mock",
+    "localhost",
+    "signature",
+    "/webhooks/",
+    "/jobs/",
+    "boot_beat",
+  ];
+
+  /** Every state each row has, so no branch escapes by not being exercised. */
+  async function everyRow() {
+    const states = [
+      harness(),
+      harness({ account: null }),
+      harness({ env: { LINKEDIN_PROVIDER: "mock" } }),
+      harness({ env: { UNIPILE_WEBHOOK_SECRET: undefined } }),
+      harness({ env: { OPENAI_API_KEY: undefined, ANTHROPIC_API_KEY: undefined } }),
+      harness({ env: { EMAIL_PROVIDER: "off" }, email: null }),
+      harness({ env: { EMAIL_PROVIDER: "resend" }, email: null }),
+      harness({ env: { EMAIL_PROVIDER: "resend" }, email: { send: async () => {} } }),
+    ];
+
+    // A signature that did not verify, and one that never arrived: the two
+    // refusals are different rows of prose and both used to name the vendor.
+    states[0].db.seed("worker_heartbeats", [
+      { name: "webhook:messages", beat_at: "2026-09-23T09:57:55.094Z", detail: { ok: false, reason: "bad digest" } },
+    ]);
+    states[1].db.seed("worker_heartbeats", [
+      { name: "webhook:messages", beat_at: "2026-09-23T09:57:55.094Z", detail: { ok: false, unsigned: true } },
+      { name: "worker-boot", beat_at: new Date().toISOString(), detail: { queueReachable: false, redisHost: "127.0.0.1" } },
+    ]);
+    states[2].db.seed("worker_heartbeats", [
+      { name: "webhook:messages", beat_at: "2026-09-23T09:57:55.094Z", detail: { ok: true, messages: 1 } },
+      { name: "worker-boot", beat_at: new Date().toISOString(), detail: { queueReachable: true, commit: "abc1234def" } },
+      // A live loop, so the branch that quotes its own last decision is walked
+      // too: that string is assembled from a reason the loop wrote, and it is
+      // the one piece of customer-facing prose this file does not spell out.
+      {
+        name: "PACING_LOOP",
+        beat_at: new Date().toISOString(),
+        detail: { enqueued: 0, reason: "outside_working_hours", queued: 0, waiting: 0 },
+      },
+      { name: "maintenance", beat_at: new Date().toISOString(), detail: { ok: false, failed: ["retention"] } },
+    ]);
+
+    const reports = await Promise.all(states.map((s) => run(s.ctx)));
+    return reports.flatMap((r) => r.checks);
+  }
+
+  it("says nothing to a customer that only an operator could act on", async () => {
+    const offenders: string[] = [];
+    for (const row of await everyRow()) {
+      // Every sentence this screen shows without an admin session.
+      const mine = [row.label, row.detail, row.fix ?? ""].join(" ").toLowerCase();
+      for (const word of OPERATOR_ONLY) {
+        if (mine.includes(word)) offenders.push(`${row.key}: "${word}"`);
+      }
+      // An environment variable is SHOUTED, which is how one is recognised
+      // without listing every name this deployment might gain.
+      const shouted = mine.match(/[A-Z][A-Z0-9]{3,}_[A-Z0-9_]+/);
+      if (shouted) offenders.push(`${row.key}: ${shouted[0]}`);
+    }
+    expect(offenders).toEqual([]);
+  });
+
+  it("does not answer a fault of ours by asking the customer to fix it", async () => {
+    // A blocked row either has something they can do, or says so and points at
+    // support. What it must never do is describe a remedy they have no access
+    // to and then leave them looking at it.
+    for (const row of await everyRow()) {
+      if (row.state !== "blocked") continue;
+      if (row.href && row.href !== "/app/support") continue;
+      expect(row.fix, `${row.key} is blocked with nothing to do about it`).toBeTruthy();
+    }
+  });
+
+  it("keeps the operator's version, rather than deleting the detail", async () => {
+    // The point is to move that sentence, not to lose it: somebody still has to
+    // fix the deployment, and a row with no remedy anywhere is a worse screen
+    // than one with the remedy on the wrong half of it.
+    const rows = await everyRow();
+    const blocked = rows.filter((r) => r.state === "blocked");
+    expect(blocked.length).toBeGreaterThan(3);
+    for (const row of blocked) {
+      expect(row.operator, `${row.key} tells nobody how to fix it`).toBeTruthy();
+    }
   });
 });

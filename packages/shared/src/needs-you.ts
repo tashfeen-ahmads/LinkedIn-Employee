@@ -176,12 +176,25 @@ export function needsYou(facts: NeedsYouFacts): NeedsYouItem[] {
     items.push({
       kind: "webhook_refused",
       title: "Replies from LinkedIn are not reaching your inbox.",
-      why:
-        facts.webhookRefused === "no_signature"
-          ? "Deliveries are arriving without a signature and are refused, so a prospect who answers is invisible here. The webhook needs its signing secret set at the provider."
-          : "Deliveries are arriving with a signature that does not verify, so a prospect who answers is invisible here. The secret differs between the provider and this deployment.",
-      href: "/app/system",
-      action: "See the deliveries",
+      /*
+       * Said as what it costs them, never as what is broken in here.
+       *
+       * This row named a webhook, a signing secret and "the provider" — our
+       * vendor, our plumbing, on a business owner's dashboard. They do not
+       * know what any of it is, cannot change a single part of it, and do not
+       * need to learn our supply chain to use the product. The two refusals
+       * still differ and an operator still needs to know which; that belongs
+       * on the system check, behind the admin flag, where somebody can act on
+       * it.
+       *
+       * A row whose action the reader cannot perform is rule 8 one step worse:
+       * repair that waits not for somebody to find a button, but for somebody
+       * who could never press it. So the action is the one thing they really
+       * can do — tell us.
+       */
+      why: "Somebody may have answered on LinkedIn without it showing up here. Your campaigns are still sending; it is the replies coming back that are affected, and this one is ours to fix rather than yours.",
+      href: "/app/support",
+      action: "Let us know",
       tone: "blocker",
       count: 1,
     });

@@ -48,15 +48,30 @@ describe("a webhook refusing deliveries", () => {
     expect(items[0]?.tone).toBe("blocker");
   });
 
-  it("tells the two refusals apart, because they are two different jobs", () => {
-    // Rule 46: no header is the webhook configured without a secret; a header
-    // that does not verify is the wrong secret on one side. Telling somebody to
-    // re-copy a secret that is already correct is its own wasted afternoon.
-    const none = needsYou({ ...CALM, webhookRefused: "no_signature" })[0]?.why ?? "";
-    const bad = needsYou({ ...CALM, webhookRefused: "bad_signature" })[0]?.why ?? "";
-    expect(none).toContain("without a signature");
-    expect(bad).toContain("does not verify");
-    expect(none).not.toBe(bad);
+  it("says what it costs them, never what is broken in here", () => {
+    /*
+     * It named a webhook, a signing secret and "the provider" — our vendor and
+     * our plumbing, on a business owner's dashboard. They do not know what any
+     * of that is and cannot change a single part of it. The distinction between
+     * the two refusals is real and belongs on the system check behind the admin
+     * flag, where somebody can act on it.
+     */
+    for (const kind of ["no_signature", "bad_signature"] as const) {
+      const row = needsYou({ ...CALM, webhookRefused: kind })[0]!;
+      const text = `${row.title} ${row.why}`;
+      for (const jargon of ["webhook", "signature", "signing secret", "provider", "deployment", "endpoint"]) {
+        expect(text.toLowerCase()).not.toContain(jargon);
+      }
+    }
+  });
+
+  it("asks for the only thing they can actually do", () => {
+    // A row whose action the reader cannot perform is rule 8 one step worse:
+    // repair waiting not for somebody to find a button, but for somebody who
+    // could never press it.
+    const row = needsYou({ ...CALM, webhookRefused: "no_signature" })[0]!;
+    expect(row.href).toBe("/app/support");
+    expect(row.why).toContain("ours to fix rather than yours");
   });
 
   it("says nothing when deliveries are fine, or when none has ever arrived", () => {

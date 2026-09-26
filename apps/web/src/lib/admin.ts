@@ -18,6 +18,28 @@ export interface AdminSession {
  * Someone who is not an admin is sent to /app, not shown a "forbidden" page.
  * There is nothing here for them and no reason to tell them it exists.
  */
+/**
+ * Whether this person operates the deployment, without redirecting them.
+ *
+ * `requirePlatformAdmin` sends everybody else away, which is right for the
+ * console and wrong for a screen both kinds of person use. The system check is
+ * one of those: a customer needs to know which stage of their outreach is
+ * broken, and an operator needs the vendor, the variable and the remedy. Asking
+ * the question without acting on the answer is what lets one page say both.
+ *
+ * A failed check reads as *not* an admin. The privilege is the thing being
+ * asked about, so an error has to fall to the smaller answer.
+ */
+export async function isPlatformAdmin(): Promise<boolean> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("is_platform_admin");
+  if (error) {
+    console.error("platform admin check failed", error);
+    return false;
+  }
+  return data === true;
+}
+
 export async function requirePlatformAdmin(): Promise<AdminSession> {
   if (!isAppConfigured()) redirect("/login");
 

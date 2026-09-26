@@ -1208,6 +1208,39 @@ tests that were verified by deliberately breaking the code.
     name with an unscoped rule is an accident. The fix is a different word for a
     different thing, never more specificity.
 
+54. **A screen says what a fault costs the person reading it, not the name of
+    the vendor we buy from.** `/app/system` is gated on a session and nothing
+    else, so the person reading it is normally the business owner whose
+    campaigns are stuck. It told them to set `UNIPILE_WEBHOOK_SECRET`, pointed
+    them at `/webhooks/unipile/messages`, named `REDIS_URL`, `RESEND_API_KEY`
+    and `OPENAI_API_KEY`, and reported the account as "connected to Unipile" —
+    our supply chain printed on somebody else's dashboard, and a repair
+    assigned to a person with no access to perform it. That is rule 8 one step
+    worse: repair that waits not for somebody to find a button, but for
+    somebody who could never press it. `needsYou`'s webhook row did the same on
+    the overview.
+
+    So `Check` has two halves. `detail`, `fix` and `label` are the customer's:
+    what is happening to their campaigns, what it costs them, and either
+    something they can actually do or a plain statement that this one is ours.
+    `operator` carries the vendor, the variable and the real remedy, and
+    `/app/system` renders it only for a platform admin (`isPlatformAdmin`,
+    which returns `false` on error — the privilege is the thing being asked
+    about, so a failed check has to fall to the smaller answer).
+
+    Moving it is the point; **deleting it is not**. Somebody still has to fix
+    the deployment, and a row with no remedy anywhere is a worse screen than
+    one with the remedy on the wrong half — so every blocked row carries an
+    `operator` sentence, and every blocked row the customer can see carries
+    either an action of their own or the way to tell us.
+
+    `apps/worker/test/diagnostics.test.ts` walks every row in every state it
+    has and greps the customer's half for a vendor name, a shouted environment
+    variable and a path in this deployment, because the branch that regresses
+    will be the one nobody re-read. The words are banned in code rather than in
+    a review convention for the same reason `containsLink` exists: a prompt or
+    a habit saying so is not what makes it true.
+
 
 ## Conventions
 

@@ -1677,6 +1677,21 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
 .checklist-go { flex: none; align-self: center; }
 
 /*
+ * The same fault, written for whoever runs the deployment.
+ *
+ * Only a platform admin is served this text, so it has to look unlike the
+ * sentence above it — otherwise the two read as one paragraph and the
+ * customer-facing half gets the vendor's name back by association.
+ */
+.operator-note {
+  border-left: 2px solid var(--border-strong);
+  padding-left: var(--space-3);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+.operator-note strong { color: var(--text); }
+
+/*
  * The setup progress meter. Segmented rather than a continuous bar: there are
  * seven discrete steps, and a smooth fill would imply a percentage nobody
  * measured. A required step that is still outstanding is the only segment that
