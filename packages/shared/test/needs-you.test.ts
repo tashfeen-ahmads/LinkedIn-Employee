@@ -11,6 +11,7 @@ import { NOTHING_NEEDS_YOU, needsYou, type NeedsYouFacts } from "../src/needs-yo
 const CALM: NeedsYouFacts = {
   loopStalled: false,
   linkedInConnected: true,
+  webhookRefused: null,
   heldReplies: 0,
   heldBookings: 0,
   heldForCopy: 0,
@@ -30,6 +31,38 @@ describe("a day with nothing waiting", () => {
     // everything is fine teaches people to stop opening it.
     expect(needsYou(CALM)).toEqual([]);
     expect(NOTHING_NEEDS_YOU).toContain("Nothing needs you");
+  });
+});
+
+describe("a webhook refusing deliveries", () => {
+  it("is a blocker, because it is the quietest failure there is", () => {
+    /*
+     * Every other row is something visibly undone. This one looks exactly like
+     * a working deployment nobody has replied to yet: LinkedIn holds the reply,
+     * the worker answers 401 exactly as it should, and the funnel reports a
+     * zero that reads as an audience problem. It sat on `/app/system` where
+     * only somebody already suspicious would look.
+     */
+    const items = needsYou({ ...CALM, webhookRefused: "no_signature" });
+    expect(items[0]?.kind).toBe("webhook_refused");
+    expect(items[0]?.tone).toBe("blocker");
+  });
+
+  it("tells the two refusals apart, because they are two different jobs", () => {
+    // Rule 46: no header is the webhook configured without a secret; a header
+    // that does not verify is the wrong secret on one side. Telling somebody to
+    // re-copy a secret that is already correct is its own wasted afternoon.
+    const none = needsYou({ ...CALM, webhookRefused: "no_signature" })[0]?.why ?? "";
+    const bad = needsYou({ ...CALM, webhookRefused: "bad_signature" })[0]?.why ?? "";
+    expect(none).toContain("without a signature");
+    expect(bad).toContain("does not verify");
+    expect(none).not.toBe(bad);
+  });
+
+  it("says nothing when deliveries are fine, or when none has ever arrived", () => {
+    // A red row on every workspace whose first campaign has had no reply yet
+    // is a check that cries wolf until nobody reads it.
+    expect(needsYou(CALM)).toEqual([]);
   });
 });
 

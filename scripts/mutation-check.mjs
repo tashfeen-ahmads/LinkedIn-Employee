@@ -2498,6 +2498,22 @@ const MUTATIONS = [
     pkg: "@le/shared",
   },
   {
+    id: "needs-you/a-refused-webhook-is-surfaced",
+    rule: "Deliveries being refused is the quietest failure in the product — everything looks healthy and the replies simply never arrive — so it belongs on the overview, not behind a visit to /app/system (rules 8 and 46)",
+    file: "packages/shared/src/needs-you.ts",
+    from: "  if (facts.webhookRefused) {",
+    to: "  if (false) {",
+    pkg: "@le/shared",
+  },
+  {
+    id: "needs-you/the-two-webhook-refusals-stay-apart",
+    rule: "No signature and a signature that does not verify are two different people doing two different things; merged, somebody re-copies a secret that was already correct",
+    file: "packages/shared/src/needs-you.ts",
+    from: '          ? "Deliveries are arriving without a signature and are refused, so a prospect who answers is invisible here. The webhook needs its signing secret set at the provider."',
+    to: '          ? "Deliveries are arriving with a signature that does not verify, so a prospect who answers is invisible here. The secret differs between the provider and this deployment."',
+    pkg: "@le/shared",
+  },
+  {
     id: "needs-you/a-warm-lead-outranks-work-not-started",
     rule: "A held reply is a prospect going cold; an unapproved strategy is work that has not begun. Reversed, the list reads as a chore list",
     file: "packages/shared/src/needs-you.ts",

@@ -89,16 +89,25 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
       <NeedsYou items={needs} />
 
       {/*
-        Onboarding, below the queue rather than above it.
-        The next step matters enormously on day one and not at all on day
-        thirty, whereas a held reply matters every day — so the ordering follows
-        the daily case and `NextStep` keeps saying the same thing it did.
+        Onboarding, and only while there is onboarding left.
+
+        These three were unconditional, so a workspace that finished setting up
+        in September still opened every morning to a next-step card saying
+        "everything is connected", a strategy panel and a six-item checklist of
+        ticks — three sections of congratulation above the work. That is most of
+        how the overview came to have eight things on it competing for one
+        person's attention.
+
+        A workspace mid-setup still gets the full instruction, which is the case
+        they were written for. A finished one gets Q1, Q2, Q3 and nothing else.
       */}
-      <NextStep step={next} ready={isReadyToSend(setup)} />
-
-      <StrategyStatus state={strategy} />
-
-      <SetupChecklist state={setup} />
+      {next ? (
+        <PageGroup id="setup">
+          <NextStep step={next} ready={isReadyToSend(setup)} />
+          <StrategyStatus state={strategy} />
+          <SetupChecklist state={setup} />
+        </PageGroup>
+      ) : null}
 
       {/*
         A summary, and a link — not a second analytics page.

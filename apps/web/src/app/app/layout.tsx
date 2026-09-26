@@ -30,53 +30,55 @@ function navGroups(waiting: number, marks: NavMarks): NavGroup[] {
    * who stops opening the Inbox.
    */
   return [
+    /*
+     * The daily loop, and nothing else in it.
+     *
+     * Three screens are the product: the overview answers what needs you, the
+     * inbox holds the conversations, and campaigns is where sending is watched
+     * and launched. Everything a rep touches on an ordinary Tuesday is here and
+     * everything else folds away — which is what a map is for. `alwaysOpen`
+     * because a remembered collapse that hides the Inbox is a rep who stops
+     * opening the Inbox.
+     */
     {
       label: "Work",
       alwaysOpen: true,
       items: [
         { href: "/app", label: "Overview" },
         { href: "/app/inbox", label: "Inbox", count: waiting },
-        { href: "/app/meetings", label: "Meetings" },
+        { href: "/app/campaigns", label: "Campaigns", ...next("/app/campaigns", "Campaigns") },
       ],
     },
+    /*
+     * Visited while setting up, and then roughly never.
+     *
+     * These were in the daily path and they are not daily work: a strategy is
+     * approved once, an agent is written once, a destination is named once.
+     * Sitting beside the Inbox they made twelve links of equal weight, which is
+     * a list to read rather than a nav to use — and the next-step mark had to
+     * compete with all of them.
+     */
     {
-      // The pipeline, in the order it happens: a strategy finds prospects, and
-      // prospects go into a campaign. Three screens that were three lists.
-      label: "Pipeline",
+      label: "Setup",
       items: [
         { href: "/app/strategy", label: "Strategies", ...next("/app/strategy", "Strategies") },
-        { href: "/app/prospects", label: "Prospects" },
-        { href: "/app/campaigns", label: "Campaigns", ...next("/app/campaigns", "Campaigns") },
-        /*
-         * One link where there were two, and a prompt constant besides.
-         *
-         * "Knowledge base" and "Opener & pitch" were two thirds of one
-         * decision — what a prospect reads — and the third was a system prompt
-         * in the repo that nobody outside it could see. A rep who wanted the
-         * messages to sound different had no single place to go and no way to
-         * find out what a change would produce before a stranger read it.
-         *
-         * An agent is that place, and it is in Pipeline rather than Settings
-         * because it is not a preference: a campaign cannot run without one,
-         * and it is the piece a rep changes most.
-         */
         { href: "/app/agents", label: "Agents", ...next("/app/agents", "Agents") },
-      ],
-    },
-    {
-      label: "Settings",
-      items: [
-        // Profile carries the rep's own details, the LinkedIn connection, sending
-        // hours, the team and the subscription. Somebody managing a workspace
-        // does all of that in one sitting, and it used to be three tabs.
-        { href: "/app/profile", label: "Profile & team", ...next("/app/profile", "Profile & team") },
         { href: "/app/cta", label: "Calls to action" },
         { href: "/app/exclusions", label: "Do not contact" },
+        { href: "/app/profile", label: "Profile & team", ...next("/app/profile", "Profile & team") },
       ],
     },
+    /*
+     * Reachable, off the daily path. `/app/system` in particular should stop
+     * being a place anybody goes: its failures surface into the overview's
+     * list, because repair must never wait for somebody to find a screen
+     * (rule 8).
+     */
     {
-      label: "Help",
+      label: "More",
       items: [
+        { href: "/app/prospects", label: "Prospects" },
+        { href: "/app/meetings", label: "Meetings" },
         { href: "/app/tutorial", label: "How it works" },
         { href: "/app/system", label: "System check" },
         { href: "/app/support", label: "Support" },

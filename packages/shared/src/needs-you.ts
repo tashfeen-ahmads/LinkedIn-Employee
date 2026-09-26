@@ -39,6 +39,7 @@
 export type NeedsYouKind =
   | "loop_stalled"
   | "linkedin_disconnected"
+  | "webhook_refused"
   | "held_reply"
   | "held_booking"
   | "pitch_unapproved"
@@ -71,6 +72,22 @@ export interface NeedsYouFacts {
   loopStalled: boolean;
   /** A LinkedIn account exists and is active. */
   linkedInConnected: boolean;
+  /**
+   * The last webhook delivery was refused, and why (rule 46).
+   *
+   * Surfaced here rather than left on `/app/system`, because repair must never
+   * depend on somebody finding a screen (rule 8) — and this is the failure
+   * least likely to send anybody looking. Everything appears to work: campaigns
+   * send, invitations are accepted, and the replies simply never arrive, so the
+   * funnel reads a plausible zero and the product looks like it is running.
+   *
+   * `no_signature` and `bad_signature` are two different people doing two
+   * different things, so they are never merged: one is the webhook configured
+   * without a secret, the other is the wrong secret on one side, and telling
+   * somebody to re-copy a secret that is already correct is its own wasted
+   * afternoon.
+   */
+  webhookRefused: "no_signature" | "bad_signature" | null;
   /** Conversations held right now for a reply, and for a manual booking. */
   heldReplies: number;
   heldBookings: number;
@@ -142,6 +159,29 @@ export function needsYou(facts: NeedsYouFacts): NeedsYouItem[] {
       why: "Every invitation, message and reply goes through it, so nothing reaches anybody until it is reconnected.",
       href: "/app/profile#team",
       action: "Reconnect LinkedIn",
+      tone: "blocker",
+      count: 1,
+    });
+  }
+
+  /*
+   * Deliveries being refused, which is the quietest failure in the product.
+   *
+   * Every other row here is something visibly undone. This one looks exactly
+   * like a working deployment that nobody has replied to yet: LinkedIn holds
+   * the reply, the worker answers 401 exactly as it should, and the funnel
+   * reports a zero that reads as an audience problem.
+   */
+  if (facts.webhookRefused) {
+    items.push({
+      kind: "webhook_refused",
+      title: "Replies from LinkedIn are not reaching your inbox.",
+      why:
+        facts.webhookRefused === "no_signature"
+          ? "Deliveries are arriving without a signature and are refused, so a prospect who answers is invisible here. The webhook needs its signing secret set at the provider."
+          : "Deliveries are arriving with a signature that does not verify, so a prospect who answers is invisible here. The secret differs between the provider and this deployment.",
+      href: "/app/system",
+      action: "See the deliveries",
       tone: "blocker",
       count: 1,
     });

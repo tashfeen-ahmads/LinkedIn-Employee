@@ -1,6 +1,7 @@
 import "server-only";
 import {
   CTA_PLACEHOLDER,
+  MESSAGE_WEBHOOK_BEAT,
   PACING_LOOP,
   PACING_STALE_MS,
   effectiveCta,
@@ -39,6 +40,7 @@ export async function loadNeedsYou(
 
   const [
     { data: beat },
+    { data: webhookBeat },
     account,
     { data: holds },
     pitches,
@@ -48,6 +50,14 @@ export async function loadNeedsYou(
     { data: thin },
   ] = await Promise.all([
     supabase.from("worker_heartbeats").select("beat_at").eq("name", PACING_LOOP).maybeSingle(),
+    // What the webhook endpoint itself recorded, not whether a secret is set
+    // (rule 46). A check that asks about configuration passes while every
+    // delivery is being refused.
+    supabase
+      .from("worker_heartbeats")
+      .select("detail")
+      .eq("name", MESSAGE_WEBHOOK_BEAT)
+      .maybeSingle(),
     supabase
       .from("linkedin_accounts")
       .select("id", head)
@@ -102,6 +112,16 @@ export async function loadNeedsYou(
 
   const stamped = beat?.beat_at ? Date.parse(beat.beat_at) : null;
 
+  /*
+   * Only a refusal counts. A delivery that verified, and an endpoint nobody has
+   * ever called, are both "nothing to do here" — and reporting the second as a
+   * fault would put a permanent red row on the screen of every workspace whose
+   * first campaign has not had a reply yet.
+   */
+  const hook = (webhookBeat?.detail ?? null) as { ok?: boolean; hadSignature?: boolean } | null;
+  const webhookRefused =
+    hook && hook.ok === false ? (hook.hadSignature ? "bad_signature" : "no_signature") : null;
+
   let heldReplies = 0;
   let heldBookings = 0;
   let heldForCopy = 0;
@@ -153,6 +173,7 @@ export async function loadNeedsYou(
   const facts: NeedsYouFacts = {
     loopStalled: stamped === null || now.getTime() - stamped > PACING_STALE_MS,
     linkedInConnected: (account.count ?? 0) > 0,
+    webhookRefused,
     heldReplies,
     heldBookings,
     // A conversation held for copy is the follow-up itself waiting, which is
