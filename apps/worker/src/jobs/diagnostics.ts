@@ -587,16 +587,40 @@ export async function runDiagnostics(
     href: availability?.location ? undefined : "/app/meetings",
   });
 
+  /*
+   * Whether an email can actually be sent, not whether one is named.
+   *
+   * This asked `EMAIL_PROVIDER === "off"` — and `render.yaml` hard-codes that
+   * variable to `resend`, so the check reported "both sides get a calendar
+   * invitation" on a deployment with no API key, where no email can be sent at
+   * all. A prospect books a time, nothing reaches their diary, and the one
+   * screen built to find that says it is working.
+   *
+   * `trySend` swallows a failure on purpose — email is a notification channel
+   * and must never retry a job that would re-send a LinkedIn message — so there
+   * is no second chance to notice. This row is the only place it can be seen.
+   *
+   * Read off the provider the worker actually built rather than re-deriving the
+   * condition from env, because two readings drift and the screen's is the one
+   * somebody believes (rule 21). `createEmailProvider` is the one definition of
+   * "can this deployment send an email".
+   */
+  const canEmail = ctx.email !== null;
   add({
     key: "invitations",
     stage: STAGES.calendar,
     label: "Calendar invitations can be sent",
-    state: env.EMAIL_PROVIDER === "off" ? "blocked" : "ok",
-    detail:
-      env.EMAIL_PROVIDER === "off"
+    state: canEmail ? "ok" : "blocked",
+    detail: canEmail
+      ? "Both sides get a calendar invitation when a meeting is booked."
+      : env.EMAIL_PROVIDER === "off"
         ? "Email is off, so a booked meeting exists only in this app. The prospect gets no invitation and nothing appears in their diary — they will not turn up."
-        : "Both sides get a calendar invitation when a meeting is booked.",
-    fix: env.EMAIL_PROVIDER === "off" ? "Set EMAIL_PROVIDER and a key on the worker." : undefined,
+        : `EMAIL_PROVIDER is "${env.EMAIL_PROVIDER}" but no provider could be built, so nothing is sent: a booked meeting exists only in this app and the prospect never hears. The digest and the weekly report are silent for the same reason.`,
+    fix: canEmail
+      ? undefined
+      : env.EMAIL_PROVIDER === "off"
+        ? "Set EMAIL_PROVIDER and a key on the worker."
+        : "Set RESEND_API_KEY and EMAIL_FROM on the worker. Both are needed; either one missing sends nothing.",
   });
 
   return { checkedAt: new Date().toISOString(), checks };

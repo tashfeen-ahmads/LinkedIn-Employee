@@ -2538,6 +2538,14 @@ const MUTATIONS = [
     pkg: "@le/shared",
   },
   {
+    id: "diagnostics/email-asks-whether-it-can-send",
+    rule: "render.yaml hard-codes EMAIL_PROVIDER=resend, so a check reading that variable reported calendar invitations working on a deployment with no API key — and trySend swallows the failure, so this row is the only place it can be seen (rule 17)",
+    file: "apps/worker/src/jobs/diagnostics.ts",
+    from: "  const canEmail = ctx.email !== null;",
+    to: '  const canEmail = env.EMAIL_PROVIDER !== "off";',
+    pkg: "@le/worker",
+  },
+  {
     id: "needs-you/a-refused-webhook-is-surfaced",
     rule: "Deliveries being refused is the quietest failure in the product — everything looks healthy and the replies simply never arrive — so it belongs on the overview, not behind a visit to /app/system (rules 8 and 46)",
     file: "packages/shared/src/needs-you.ts",

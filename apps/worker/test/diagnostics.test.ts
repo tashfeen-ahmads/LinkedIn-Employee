@@ -16,7 +16,14 @@ const USER = "22222222-2222-4222-8222-222222222222";
  * of the bug it was built to catch — a row saying `active` for an account the
  * provider had never heard of.
  */
-function harness(options: { account?: Record<string, unknown> | null; env?: Record<string, unknown> } = {}) {
+function harness(
+  options: {
+    account?: Record<string, unknown> | null;
+    env?: Record<string, unknown>;
+    /** The provider the worker actually built, which is what the email row reads. */
+    email?: unknown;
+  } = {},
+) {
   const db = new FakeDb();
   const linkedin = new MockLinkedInProvider();
 
@@ -36,7 +43,7 @@ function harness(options: { account?: Record<string, unknown> | null; env?: Reco
   const ctx = {
     db: db.asDb(),
     linkedin,
-    email: null,
+    email: options.email ?? null,
     env: {
       APP_URL: "http://app.test",
       OPENAI_API_KEY: "key",
@@ -53,6 +60,48 @@ function harness(options: { account?: Record<string, unknown> | null; env?: Reco
 const run = (ctx: WorkerContext) => runDiagnostics(ctx, { workspaceId: WORKSPACE, userId: USER });
 const check = (report: { checks: Array<{ key: string }> }, key: string) =>
   report.checks.find((c) => c.key === key)!;
+
+describe("whether an email can actually be sent", () => {
+  /*
+   * The row asked `EMAIL_PROVIDER === "off"`, and `render.yaml` hard-codes that
+   * variable to `resend`. So on a deployment with no API key the check reported
+   * "both sides get a calendar invitation" while no email could be sent at all:
+   * a prospect books a time, nothing reaches their diary, and the one screen
+   * built to find that says it is working. Rule 17, and `trySend` swallows the
+   * failure on purpose, so this row is the only place it can be seen.
+   */
+  it("is blocked when the provider is named but could not be built", async () => {
+    const { ctx } = harness({ env: { EMAIL_PROVIDER: "resend" }, email: null });
+    const row = check(await run(ctx), "invitations");
+
+    expect(row.state).toBe("blocked");
+    expect(row.detail).toContain("no provider could be built");
+    // And names both variables, because either one missing sends nothing.
+    expect(row.fix).toContain("RESEND_API_KEY");
+    expect(row.fix).toContain("EMAIL_FROM");
+  });
+
+  it("says the digest and the weekly report are silent for the same reason", async () => {
+    // A meeting invitation is the row's title, and it is not the only thing
+    // that stops. Somebody reading this should not have to work out the rest.
+    const { ctx } = harness({ env: { EMAIL_PROVIDER: "resend" }, email: null });
+    expect(check(await run(ctx), "invitations").detail).toContain("weekly report");
+  });
+
+  it("still tells somebody who turned email off that they turned it off", async () => {
+    // Two different situations, two different things to do: one is a decision,
+    // the other is a missing key.
+    const { ctx } = harness({ env: { EMAIL_PROVIDER: "off" }, email: null });
+    const row = check(await run(ctx), "invitations");
+    expect(row.state).toBe("blocked");
+    expect(row.detail).toContain("Email is off");
+  });
+
+  it("is ok only when a provider exists", async () => {
+    const { ctx } = harness({ env: { EMAIL_PROVIDER: "resend" }, email: { send: async () => {} } });
+    expect(check(await run(ctx), "invitations").state).toBe("ok");
+  });
+});
 
 describe("system check", () => {
   it("reports the account as blocked when the provider has never heard of it", async () => {
