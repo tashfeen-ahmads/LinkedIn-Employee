@@ -1,5 +1,5 @@
 import { knowledgeSentences, type AgentKnowledge } from "@le/shared";
-import { Section } from "@/components/page";
+import { Panel, Section } from "@/components/page";
 
 /**
  * What this workspace's agent has accumulated.
@@ -18,11 +18,13 @@ export function AgentKnows({ knowledge }: { knowledge: AgentKnowledge }) {
       title="What your agent knows"
       description="This is yours, and it grows. None of it is anything a new tool could be handed on day one."
     >
-      <div className="report">
-        {knowledgeSentences(knowledge).map((line) => (
-          <p key={line}>{line}</p>
-        ))}
-      </div>
+      <Panel>
+        <div className="report">
+          {knowledgeSentences(knowledge).map((line) => (
+            <p key={line}>{line}</p>
+          ))}
+        </div>
+      </Panel>
     </Section>
   );
 }

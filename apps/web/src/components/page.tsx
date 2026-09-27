@@ -42,6 +42,40 @@ export function PageHeader({
 }
 
 /**
+ * The surface a section's content sits on.
+ *
+ * Measured on the overview: six sections wrapped their content in a card and
+ * four did not, so "Today", "Inside your limits", "How it is going" and "This
+ * week" rendered as bare text and bars straight onto the page background — a
+ * transparent box with no border and no padding, directly beside a bordered,
+ * padded one. That is what a person reads as "some blocks look like a website
+ * with no styling", and it is not a judgement about any one screen: it is four
+ * call sites that each decided for themselves, which is precisely the drift
+ * rule 34 built `PageHeader` and `Section` to stop.
+ *
+ * So the container is part of the frame. `Panel` *is* a card — the same class,
+ * not a second look — and the point of the name is that a section's content
+ * asks for one rather than each page remembering to.
+ *
+ * `bare` is the deliberate exception: a row of tiles that are already cards, or
+ * a table that brings its own frame, must not be wrapped again or it renders a
+ * box inside a box (rule 38's collision, in markup rather than CSS).
+ */
+export function Panel({
+  children,
+  bare = false,
+  className,
+}: {
+  children: ReactNode;
+  /** This content already carries its own frame. */
+  bare?: boolean;
+  className?: string;
+}) {
+  if (bare) return <>{children}</>;
+  return <div className={className ? `card ${className}` : "card"}>{children}</div>;
+}
+
+/**
  * A titled group of content.
  *
  * `title` renders the screen's only heading level below the page title, and an

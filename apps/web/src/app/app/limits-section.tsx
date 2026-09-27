@@ -10,7 +10,7 @@ import {
   type AccountRecord,
 } from "@le/linkedin";
 import { AllowanceMeter, StackedDays } from "@/components/charts";
-import { Section } from "@/components/page";
+import { Panel, Section } from "@/components/page";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { readFunnelData } from "@/lib/funnel-data";
@@ -84,34 +84,41 @@ export async function LimitsSection() {
       title="Inside your limits"
       description="Your account's allowances, and what went out each day. These caps are product rules rather than settings — they only ever move down."
     >
-      <div className="allowance-row">
-        <AllowanceMeter
-          label="Invitations today"
-          used={usage.invitesToday}
-          cap={cap}
-          note={rampNote}
-        />
-        <AllowanceMeter
-          label="Invitations this week"
-          used={usage.invitesThisWeek}
-          cap={LINKEDIN_LIMITS.invitesPerWeek}
-        />
-        <AllowanceMeter
-          label="Profile views today"
-          used={usage.profileViewsToday}
-          cap={LINKEDIN_LIMITS.profileViewsPerDay}
-          note="Warm-ups have their own allowance; they never cost an invitation."
-        />
-        <AllowanceMeter
-          label="Messages today"
-          used={usage.messagesToday}
-          cap={LINKEDIN_LIMITS.messagesPerDay}
-        />
-      </div>
+      {/*
+        One panel, not two. The allowances and the day chart answer the same
+        question — how much of the line is left, and what actually went out —
+        and split across two surfaces they read as two unrelated widgets.
+      */}
+      <Panel>
+        <div className="allowance-row">
+          <AllowanceMeter
+            label="Invitations today"
+            used={usage.invitesToday}
+            cap={cap}
+            note={rampNote}
+          />
+          <AllowanceMeter
+            label="Invitations this week"
+            used={usage.invitesThisWeek}
+            cap={LINKEDIN_LIMITS.invitesPerWeek}
+          />
+          <AllowanceMeter
+            label="Profile views today"
+            used={usage.profileViewsToday}
+            cap={LINKEDIN_LIMITS.profileViewsPerDay}
+            note="Warm-ups have their own allowance; they never cost an invitation."
+          />
+          <AllowanceMeter
+            label="Messages today"
+            used={usage.messagesToday}
+            cap={LINKEDIN_LIMITS.messagesPerDay}
+          />
+        </div>
 
-      {days.length ? (
-        <StackedDays days={days} series={["Invited", "Accepted", "Replied"]} />
-      ) : null}
+        {days.length ? (
+          <StackedDays days={days} series={["Invited", "Accepted", "Replied"]} />
+        ) : null}
+      </Panel>
     </Section>
   );
 }

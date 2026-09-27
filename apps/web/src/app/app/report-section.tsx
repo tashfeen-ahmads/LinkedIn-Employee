@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Section } from "@/components/page";
+import { Panel, Section } from "@/components/page";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { loadDailyReport } from "@/lib/daily-report";
@@ -51,24 +51,32 @@ export async function DailyReportSection() {
         ) : null
       }
     >
-      <div className={`report${facts.loopStalled ? " report-alarm" : ""}`}>
-        {lines.map((line) => (
-          <p key={line}>{line}</p>
-        ))}
-      </div>
-
-      {/* Only what happened. A row of zeroes reads as a failed day; an absent
-          counter reads as "it did not come up", which is the truth. */}
-      {counts.length > 0 ? (
-        <dl className="report-counts">
-          {counts.map((entry) => (
-            <div key={entry.label}>
-              <dt className="tiny subtle">{entry.label}</dt>
-              <dd className="nums">{entry.value}</dd>
-            </div>
+      {/*
+        The day's sentences and its counters are one statement, so they share
+        one surface. Bare on the page background this read as loose paragraphs
+        beside the bordered blocks under it, which is the drift `Panel` exists
+        to stop.
+      */}
+      <Panel>
+        <div className={`report${facts.loopStalled ? " report-alarm" : ""}`}>
+          {lines.map((line) => (
+            <p key={line}>{line}</p>
           ))}
-        </dl>
-      ) : null}
+        </div>
+
+        {/* Only what happened. A row of zeroes reads as a failed day; an
+            absent counter reads as "it did not come up", which is the truth. */}
+        {counts.length > 0 ? (
+          <dl className="report-counts">
+            {counts.map((entry) => (
+              <div key={entry.label}>
+                <dt className="tiny subtle">{entry.label}</dt>
+                <dd className="nums">{entry.value}</dd>
+              </div>
+            ))}
+          </dl>
+        ) : null}
+      </Panel>
     </Section>
   );
 }
