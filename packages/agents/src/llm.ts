@@ -15,7 +15,21 @@ import type { z } from "zod";
  * eight agent files.
  */
 
-export type Effort = "low" | "medium" | "high" | "xhigh" | "max";
+/**
+ * How hard the model thinks before answering.
+ *
+ * `minimal` was missing, and it is the rung most of this product needs. A
+ * reasoning model spends its thinking against the same budget as its answer,
+ * so effort is the single biggest lever on cost: measured over this
+ * deployment's first month, input was 85k tokens and output was 381k, and
+ * output is billed at roughly four times input. Ninety-five percent of the
+ * bill was the models thinking.
+ *
+ * Anthropic has no equivalent, so `minimal` maps to its lowest there. The
+ * scale is written in the product's terms and translated per provider, not
+ * the other way round.
+ */
+export type Effort = "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
 
 export interface LlmSystemBlock {
   text: string;
@@ -90,9 +104,25 @@ export interface LlmClient {
 /* ----------------------------------------------------------------- openai */
 
 /** Reasoning effort, in OpenAI's four levels rather than Anthropic's five. */
-function openAiEffort(effort: Effort | undefined): "low" | "medium" | "high" | undefined {
+function openAiEffort(
+  effort: Effort | undefined,
+): "minimal" | "low" | "medium" | "high" | undefined {
   if (!effort) return undefined;
   return effort === "xhigh" || effort === "max" ? "high" : effort;
+}
+
+/**
+ * Anthropic's scale has no `minimal`, so it takes the lowest rung it has.
+ *
+ * Passed through raw, `minimal` would be rejected by the API — and the call
+ * that fails is the cheapest one, which is the last place anybody looks when
+ * the bill is the complaint.
+ */
+function anthropicEffort(
+  effort: Effort | undefined,
+): "low" | "medium" | "high" | "xhigh" | "max" | undefined {
+  if (!effort) return undefined;
+  return effort === "minimal" ? "low" : effort;
 }
 
 export interface OpenAiOptions {
@@ -204,7 +234,7 @@ export class AnthropicClient implements LlmClient {
       messages: [{ role: "user", content: request.user }],
       output_config: {
         format: zodOutputFormat(request.schema),
-        ...(request.effort ? { effort: request.effort } : {}),
+        ...(anthropicEffort(request.effort) ? { effort: anthropicEffort(request.effort) } : {}),
       },
     });
 

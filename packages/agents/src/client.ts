@@ -65,7 +65,10 @@ export async function callStructured<T extends z.ZodTypeAny>(
     return attempt(ctx, {
       ...call,
       maxTokens: (call.maxTokens ?? 16000) * 2,
-      effort: call.effort === "low" ? "low" : "medium",
+      // Never *raises* the effort. Retrying a minimal call at medium is how a
+      // deliberately cheap task quietly becomes an expensive one, on exactly
+      // the runs that were already costing the most.
+      effort: call.effort === "minimal" || call.effort === "low" ? call.effort : "medium",
     });
   }
 }

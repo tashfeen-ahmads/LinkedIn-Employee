@@ -40,6 +40,17 @@ export async function classifyReply(
       `\nConversation so far:\n${renderHistory(input.history)}`,
       `\nClassify this new message from the prospect:\n"""\n${input.message}\n"""`,
     ].join("\n"),
+    /*
+     * Classifying a reply is reading it, not reasoning about it.
+     *
+     * It set no effort and took the provider's default — and this runs on
+     * every inbound message, so it is the call whose volume grows fastest as
+     * the product works. The judgement it makes is which of a fixed set of
+     * conditions a message meets, and `applyRules` decides what happens next
+     * (rule 5). Deeper thinking here does not change what the gate does with
+     * the answer.
+     */
+    effort: "minimal",
     maxTokens: 2000,
   });
 

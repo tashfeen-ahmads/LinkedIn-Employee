@@ -119,6 +119,19 @@ export async function scoreProspects(
           null,
           2,
         )}`,
+        /*
+         * Scoring is applying a rubric, not thinking it through.
+         *
+         * It set no effort at all, so it took the default and spent an
+         * average of 4,314 output tokens to return a number and a sentence
+         * per prospect — three times what it was given to read. On a
+         * reasoning model the thinking is billed as output, and output costs
+         * about four times input, so this was the largest line on the bill.
+         *
+         * The rubric is in the prompt and the fields are in the schema. What
+         * the extra reasoning bought was a longer path to the same shape.
+         */
+        effort: "minimal",
         maxTokens: 8000,
       }),
     ),
@@ -355,6 +368,10 @@ export async function personalizeInvites(
           null,
           2,
         )}`,
+        // One sentence per person, from details already selected and handed
+        // over. The judgement went into the prompt and the grounding; what is
+        // left is writing, and it was costing 2,818 output tokens a batch.
+        effort: "low",
         maxTokens: 4000,
       }),
     ),
