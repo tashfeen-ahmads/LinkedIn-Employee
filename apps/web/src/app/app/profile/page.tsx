@@ -1,16 +1,17 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { callWorker, errorQuery, noticeQuery } from "@/lib/worker";
-import { checkCtaUrl, LINKEDIN_LIMITS, describeWorkingHours, isValidTimezone } from "@le/shared";
+import { checkCtaUrl, LINKEDIN_LIMITS, describeWorkingHours } from "@le/shared";
 import { TimezoneSelect } from "@/components/timezone-select";
 import { cannotSend, describeRepair, type RefreshResult, type RepairNotice } from "../team/repair";
 import { PageNotice } from "@/components/page-notice";
 import { SubmitButton } from "@/components/submit-button";
 import { TeamSection } from "./team-section";
 import { BillingSection } from "./billing-section";
-import { PageHeader, PageGroup, Section } from "@/components/page";
+import { PageHeader, PageGroup, Panel, Section } from "@/components/page";
 import { AllowanceMeter } from "@/components/charts";
 
 /**
@@ -120,33 +121,49 @@ async function refreshLinkedIn() {
 }
 
 
-async function saveMyDetails(formData: FormData) {
+/**
+ * Everything on this screen, saved once.
+ *
+ * It replaces four actions with four buttons — one for the bio and the
+ * scheduling link, one for the Sales Navigator tick, one for the working
+ * hours, one for autonomy. A settings page that is permanently in edit mode
+ * and asks to be saved in four places is a page where somebody changes two
+ * things, presses the Save they can see, and loses the other one. Nothing on
+ * screen said which button owned which field.
+ *
+ * So the page has a state: it shows the profile, and editing is a thing you
+ * start and finish. Every validation the four actions carried is still here —
+ * they were not ceremony. A booking URL is checked before it is stored because
+ * the agent sends it to a stranger under this person's name; an inverted or
+ * empty working window would either send nothing or send at three in the
+ * morning; a timezone this runtime cannot evaluate falls back to UTC in
+ * silence, which is how this deployment came to invite New Yorkers at 4am
+ * while its own screen read "8 to 18".
+ *
+ * A field the form did not send is left alone rather than cleared. The edit
+ * form carries all of them, but a role that cannot change autonomy does not
+ * render that control, and a missing input must not read as "set it to false".
+ */
+async function saveProfile(formData: FormData) {
   "use server";
+  const session = await requireSession();
+  const supabase = await createClient();
+
+  /* ---- who you are, and how the agent sounds ---- */
   const bio = String(formData.get("bio") ?? "").trim();
   const timezone = String(formData.get("timezone") ?? "").trim();
 
-  // Your own scheduling link, if you use one.
-  //
-  // The product owns a booking page and it works, but a rep who has used
-  // Calendly for three years keeps their availability, buffers and reminders
-  // there — asking them to maintain a second calendar so a LinkedIn reply can
-  // offer a time is asking them to maintain two. Google Calendar is the option
-  // that cannot be built: its scopes need brand verification, a verified domain
-  // and weeks of review. One pasted URL works the day somebody signs up.
   const raw = String(formData.get("bookingUrl") ?? "").trim();
   let bookingUrl: string | null = null;
   if (raw) {
-    // Checked before it is stored, because the agent will send it to a stranger
-    // under this person's own name. The reason is shown rather than a generic
-    // refusal — somebody who pasted "cal.com/sam" needs telling it is missing
-    // the https://, not that it is invalid.
+    // The reason is shown rather than a generic refusal — somebody who pasted
+    // "cal.com/sam" needs telling it is missing the https://, not that it is
+    // invalid.
     const checked = checkCtaUrl(raw);
-    if (!checked.ok) redirect(errorQuery("/app/profile", checked.reason));
+    if (!checked.ok) redirect(errorQuery("/app/profile?edit=1", checked.reason));
     bookingUrl = checked.url;
   }
 
-  const session = await requireSession();
-  const supabase = await createClient();
   await supabase
     .from("profiles")
     .update({
@@ -156,122 +173,64 @@ async function saveMyDetails(formData: FormData) {
     })
     .eq("id", session.userId);
 
-  revalidatePath("/app/profile");
-}
-
-/**
- * When this account is allowed to act. Read by the rate limiter before every
- * send and never settable until now, so every rep was on the same 8am-to-6pm
- * weekday default whatever their day actually looks like.
- */
-
-async function saveWorkingHours(formData: FormData) {
-  "use server";
+  /* ---- the account: when it may act, and what it can search ---- */
   const start = Number(formData.get("start"));
   const end = Number(formData.get("end"));
   const days = [1, 2, 3, 4, 5, 6, 0].filter((day) => formData.get(`day-${day}`) === "on");
-  const timezone = String(formData.get("timezone") ?? "").trim();
 
-  // A window that is empty or inverted would either send nothing or send at
-  // three in the morning; neither is a setting anyone means to choose.
-  if (!Number.isInteger(start) || !Number.isInteger(end)) return;
-  if (start < 0 || end > 24 || start >= end || days.length === 0) return;
+  const accountPatch: Record<string, unknown> = {
+    has_sales_navigator: formData.get("hasSalesNavigator") === "on",
+  };
+  // A window that is empty or inverted is not a setting anybody means to
+  // choose, so it is refused rather than written — and said out loud, because
+  // silently keeping the old hours after somebody edited them is the same
+  // class of lie as saving them wrong.
+  if (Number.isInteger(start) && Number.isInteger(end)) {
+    if (start < 0 || end > 24 || start >= end || days.length === 0) {
+      redirect(
+        errorQuery(
+          "/app/profile?edit=1",
+          "Those sending hours cannot be used: the day has to start before it ends, and at least one day has to be ticked.",
+        ),
+      );
+    }
+    accountPatch.working_hours = { start, end, days };
+  }
 
-  const session = await requireSession();
-  const supabase = await createClient();
   await supabase
     .from("linkedin_accounts")
-    .update({ working_hours: { start, end, days } as never })
+    .update(accountPatch as never)
     .eq("workspace_id", session.workspaceId)
     .eq("user_id", session.userId);
 
-  /*
-   * The zone travels with the hours it is read in.
-   *
-   * It lived on a different form, so a rep could set a window and leave the
-   * zone at its UTC default and have no way to tell from this screen. Only a
-   * zone this runtime can actually evaluate is written: an unreadable one
-   * saved here would fall back to UTC inside the limiter and say nothing.
-   */
-  if (timezone && isValidTimezone(timezone)) {
-    await supabase.from("profiles").update({ timezone }).eq("id", session.userId);
-  }
-
-  revalidatePath("/app/profile");
-}
-
-/**
- * How much the agent finishes on its own.
- *
- * Written to every campaign in the workspace rather than one, because the
- * question a person is answering here is "is anybody watching the inbox?", and
- * that is true of the whole workspace or of none of it. Per-campaign autonomy
- * would mean remembering which campaigns you had told and which you had not.
- */
-async function saveAutonomy(formData: FormData) {
-  "use server";
-  const autonomy = formData.get("autonomy") === "autonomous" ? "autonomous" : "supervised";
-
-  const session = await requireSession();
-  if (!["owner", "admin", "manager"].includes(session.role)) {
-    redirect(errorQuery("/app/profile", "You do not have permission to change this."));
-  }
-
-  const supabase = await createClient();
-  const { data: campaigns } = await supabase
-    .from("campaigns")
-    .select("id, rules")
-    .eq("workspace_id", session.workspaceId);
-
-  for (const campaign of campaigns ?? []) {
-    const rules = (campaign.rules && typeof campaign.rules === "object" ? campaign.rules : {}) as Record<
-      string,
-      unknown
-    >;
-    await supabase
+  /* ---- how much the agent finishes on its own ---- */
+  const wanted = formData.get("autonomy");
+  if (wanted && ["owner", "admin", "manager"].includes(session.role)) {
+    const autonomy = wanted === "autonomous" ? "autonomous" : "supervised";
+    const { data: campaigns } = await supabase
       .from("campaigns")
-      // Merged, never replaced: `rules` also carries the search notes and the
-      // filters a campaign was built with, and overwriting those would lose
-      // the record of what the list actually is.
-      .update({ rules: { ...rules, autonomy } as never })
-      .eq("id", campaign.id)
+      .select("id, rules")
       .eq("workspace_id", session.workspaceId);
+
+    for (const campaign of campaigns ?? []) {
+      const rules = (campaign.rules && typeof campaign.rules === "object" ? campaign.rules : {}) as Record<
+        string,
+        unknown
+      >;
+      await supabase
+        .from("campaigns")
+        // Merged, never replaced: `rules` also carries the search notes and the
+        // filters a campaign was built with, and overwriting those would lose
+        // the record of what the list actually is.
+        .update({ rules: { ...rules, autonomy } as never })
+        .eq("id", campaign.id)
+        .eq("workspace_id", session.workspaceId);
+    }
   }
 
   revalidatePath("/app/profile");
-  redirect(
-    noticeQuery(
-      "/app/profile",
-      autonomy === "autonomous"
-        ? "The agent will now finish conversations on its own."
-        : "The agent will hold anything uncertain for you.",
-    ),
-  );
-}
-
-/**
- * Whether this rep has a Sales Navigator seat.
- *
- * It decides which search the Targeting Agent runs, and getting it wrong is
- * silent in both directions: claim a seat you do not have and the search
- * returns nothing, which reads as "your customer profile matched nobody";
- * leave it off when you do have one and every campaign is built from classic
- * search with half the profile ignored.
- */
-
-async function saveSalesNavigator(formData: FormData) {
-  "use server";
-  const has = formData.get("hasSalesNavigator") === "on";
-
-  const session = await requireSession();
-  const supabase = await createClient();
-  await supabase
-    .from("linkedin_accounts")
-    .update({ has_sales_navigator: has })
-    .eq("workspace_id", session.workspaceId)
-    .eq("user_id", session.userId);
-
-  revalidatePath("/app/profile");
+  // Back to the profile, not to the form. Finishing is the point of Save.
+  redirect(noticeQuery("/app/profile", "Saved."));
 }
 
 /** Validated against the runtime's own list rather than a hand-kept one. */
@@ -288,7 +247,7 @@ function isKnownTimezone(value: string): boolean {
 export default async function ProfilePage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; notice?: string; connected?: string }>;
+  searchParams: Promise<{ error?: string; notice?: string; connected?: string; edit?: string }>;
 }) {
   const params = await searchParams;
   const session = await requireSession();
@@ -361,13 +320,26 @@ export default async function ProfilePage({
   const awaitingProvider = found?.status === "connecting";
   const needsReconnect = cannotSend(found?.status);
   const hours = readWorkingHours(mine?.working_hours);
+  const editing = params.edit === "1";
+  const canManage = ["owner", "admin", "manager"].includes(session.role);
 
   return (
     <>
       <PageHeader
         eyebrow="Settings"
         title="Your profile"
-        lede="How the agent writes as you, when it may send, and the LinkedIn account it sends from."
+        lede={
+          editing
+            ? "Change anything here, then save it all at once."
+            : "How the agent writes as you, when it may send, and the LinkedIn account it sends from."
+        }
+        actions={
+          editing ? null : (
+            <Link className="btn" href="/app/profile?edit=1">
+              Edit profile
+            </Link>
+          )
+        }
       />
 
       <PageNotice error={params.error} notice={params.notice} />
@@ -380,58 +352,249 @@ export default async function ProfilePage({
         </div>
       ) : null}
 
-      <section className="card">
-        <h3>How you sound</h3>
-        <p className="small muted">
-          The agent writes in your voice and sends inside your working day, so both of these change
-          what a prospect receives.
-        </p>
-        <form action={saveMyDetails}>
-          <label className="field">
-            <span>How you would describe yourself to a prospect</span>
-            <textarea
-              name="bio"
-              rows={3}
-              defaultValue={me?.bio ?? ""}
-              placeholder="Twelve years in logistics ops before this. I care about the boring parts."
-            />
-          </label>
+      {/*
+        The profile, then editing it — not a page permanently in edit mode.
+
+        This screen was six forms with six Save buttons, each owning a subset of
+        the fields and nothing on screen saying which. Somebody changing their
+        bio and their sending hours pressed the Save they could see and lost the
+        other. It also meant the answer to "what is my setup" — the thing a
+        person actually comes here for — was never stated: you had to read it
+        out of the form controls holding it.
+
+        So there are two states. `?edit=1` is one form over every field with one
+        Save; without it this is a profile you read. Each block keeps an Edit
+        that lands you in the form at that block, because "I want to change my
+        hours" should not mean scrolling a page of inputs to find them.
+      */}
+      {editing ? (
+        <form action={saveProfile} className="stack-5">
+          <Section
+            id="sound"
+            title="How you sound"
+            description="The agent writes in your voice and sends inside your working day, so both of these change what a prospect receives."
+          >
+            <Panel>
+              <div className="stack-4">
+                <label className="field">
+                  <span>How you would describe yourself to a prospect</span>
+                  <textarea
+                    name="bio"
+                    rows={3}
+                    defaultValue={me?.bio ?? ""}
+                    placeholder="Twelve years in logistics ops before this. I care about the boring parts."
+                  />
+                </label>
+                {/*
+                  The link the agent sends when a campaign is asking for a
+                  meeting. Optional: without one the product offers times from
+                  its own calendar, which it can see and protect from
+                  double-booking.
+                */}
+                <label className="field medium">
+                  <span>Your scheduling link · optional</span>
+                  <input
+                    type="url"
+                    name="bookingUrl"
+                    placeholder="https://cal.com/you/intro"
+                    defaultValue={me?.booking_url ?? ""}
+                  />
+                  <span className="hint">
+                    Calendly, Cal.com, SavvyCal — whatever you already use. The agent sends this
+                    instead of offering times from here. A booking made there is invisible to this
+                    product, so meetings booked through your own link will not appear in the funnel;
+                    everything up to the reply still does.
+                  </span>
+                </label>
+                <label className="field medium">
+                  <span>Your timezone</span>
+                  {/*
+                    A picker, not a text box. Every sending window, meeting slot
+                    and warm-up day is evaluated in this zone, and a typed "EST"
+                    parses to nothing and falls back to UTC in silence — which is
+                    how this deployment came to invite people in New York at four
+                    in the morning while its screen read "8 to 18".
+                  */}
+                  <TimezoneSelect value={me?.timezone} />
+                </label>
+              </div>
+            </Panel>
+          </Section>
+
+          <Section
+            id="sending"
+            title="When it may send"
+            description="Nothing leaves this account outside these hours, in the timezone above."
+          >
+            <Panel>
+              <div className="stack-4">
+                <p className="small">
+                  <strong>{describeWorkingHours(hours, me?.timezone ?? "UTC")}</strong>
+                </p>
+                <div className="form-row">
+                  <label className="field compact">
+                    <span>From</span>
+                    <input type="number" name="start" min={0} max={23} defaultValue={hours.start} />
+                  </label>
+                  <label className="field compact">
+                    <span>To</span>
+                    <input type="number" name="end" min={1} max={24} defaultValue={hours.end} />
+                  </label>
+                  <div className="cluster-3">
+                    {DAYS.map((day) => (
+                      <label key={day.value} className="small check">
+                        <input
+                          type="checkbox"
+                          name={`day-${day.value}`}
+                          defaultChecked={hours.days.includes(day.value)}
+                        />
+                        {day.label}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <label className="small check">
+                  <input
+                    type="checkbox"
+                    name="hasSalesNavigator"
+                    defaultChecked={mine?.has_sales_navigator ?? false}
+                  />
+                  <span>
+                    This account has Sales Navigator
+                    <span className="tiny subtle hint">
+                      Without it, prospect search cannot filter on seniority or company size, and
+                      campaigns say so before you launch them. With it, the full customer profile is
+                      used.
+                    </span>
+                  </span>
+                </label>
+              </div>
+            </Panel>
+          </Section>
+
+          {canManage ? (
+            <Section
+              id="autonomy"
+              title="How much the agent finishes on its own"
+              description="A hold is not a pause, it is a full stop. A prospect who replies on a Friday and is never answered is a warm lead lost, and nothing on any screen explains why."
+            >
+              <Panel>
+                <label className="field">
+                  <span>When a reply arrives</span>
+                  <select name="autonomy" defaultValue={autonomy}>
+                    <option value="autonomous">The agent answers and books, on its own</option>
+                    <option value="supervised">Hold anything uncertain for me to read first</option>
+                  </select>
+                  <span className="hint">
+                    Either way the agent only ever states facts from your knowledge base, never sends
+                    a link it was not given, and stops the moment somebody asks not to be contacted.
+                    Two things always wait for you: a prospect who asks to speak to a person, and a
+                    message the agent did not understand. You can still take over any conversation by
+                    hand from the Inbox.
+                  </span>
+                </label>
+              </Panel>
+            </Section>
+          ) : null}
+
           {/*
-            The link the agent sends when a campaign is asking for a meeting.
-            Optional: without one the product offers times from its own
-            calendar, which it can see and protect from double-booking.
+            One Save, at the end, for everything above it. Sticky, because the
+            form is longer than a screen and a Save you have to scroll for is a
+            Save people forget — which is the failure this whole change is
+            about.
           */}
-          <label className="field medium">
-            <span>Your scheduling link · optional</span>
-            <input
-              type="url"
-              name="bookingUrl"
-              placeholder="https://cal.com/you/intro"
-              defaultValue={me?.booking_url ?? ""}
-            />
-            <span className="tiny subtle">
-              Calendly, Cal.com, SavvyCal — whatever you already use. The agent sends this instead of
-              offering times from here. A booking made there is invisible to this product, so meetings
-              booked through your own link will not appear in the funnel; everything up to the reply
-              still does.
-            </span>
-          </label>
-          <label className="field medium">
-            <span>Your timezone</span>
-            {/*
-              A picker, not a text box. Every sending window, meeting slot and
-              warm-up day is evaluated in this zone, and a typed "EST" parses to
-              nothing and falls back to UTC in silence — which is how this
-              deployment came to invite people in New York at four in the
-              morning while its screen read "8 to 18".
-            */}
-            <TimezoneSelect value={me?.timezone} />
-          </label>
-          <button className="btn secondary" type="submit">
-            Save
-          </button>
+          <div className="edit-bar">
+            <SubmitButton pendingLabel="Saving…">Save changes</SubmitButton>
+            <Link className="btn secondary" href="/app/profile">
+              Cancel
+            </Link>
+          </div>
         </form>
-      </section>
+      ) : (
+        <>
+          <Section
+            id="sound"
+            title="How you sound"
+            description="What the agent knows about you, and what it sends on your behalf."
+            action={
+              <Link className="btn secondary small" href="/app/profile?edit=1#sound">
+                Edit
+              </Link>
+            }
+          >
+            <Panel>
+              <dl className="facts">
+                <Fact label="Name">{session.fullName || "—"}</Fact>
+                <Fact label="Role">{session.role}</Fact>
+                <Fact label="How you describe yourself" wide>
+                  {me?.bio || <span className="subtle">Nothing yet — the agent falls back to your business profile.</span>}
+                </Fact>
+                <Fact label="Your scheduling link">
+                  {me?.booking_url ? (
+                    <a href={me.booking_url} target="_blank" rel="noreferrer">
+                      {me.booking_url}
+                    </a>
+                  ) : (
+                    <span className="subtle">None — the agent offers times from this product&rsquo;s own calendar.</span>
+                  )}
+                </Fact>
+                <Fact label="Timezone">{me?.timezone || "UTC"}</Fact>
+              </dl>
+            </Panel>
+          </Section>
+
+          <Section
+            id="sending"
+            title="When it may send"
+            description="Nothing leaves this account outside these hours."
+            action={
+              <Link className="btn secondary small" href="/app/profile?edit=1#sending">
+                Edit
+              </Link>
+            }
+          >
+            <Panel>
+              <dl className="facts">
+                <Fact label="Sending hours" wide>
+                  {describeWorkingHours(hours, me?.timezone ?? "UTC")}
+                </Fact>
+                <Fact label="Sales Navigator" wide>
+                  {mine?.has_sales_navigator
+                    ? "Yes — the full customer profile is used in search."
+                    : "No — search cannot filter on seniority or company size."}
+                </Fact>
+              </dl>
+            </Panel>
+          </Section>
+
+          <Section
+            id="autonomy"
+            title="How much the agent finishes on its own"
+            description="A hold is not a pause, it is a full stop."
+            action={
+              canManage ? (
+                <Link className="btn secondary small" href="/app/profile?edit=1#autonomy">
+                  Edit
+                </Link>
+              ) : null
+            }
+          >
+            <Panel>
+              <dl className="facts">
+                <Fact label="When a reply arrives" wide>
+                  {autonomy === "autonomous"
+                    ? "The agent answers and books on its own."
+                    : "Anything uncertain is held for you to read first."}
+                </Fact>
+                <Fact label="Always held for you" wide>
+                  A prospect who asks to speak to a person, and a message the agent did not
+                  understand. An opt-out stops everything, on either setting.
+                </Fact>
+              </dl>
+            </Panel>
+          </Section>
+        </>
+      )}
 
       <section className="card">
         <h3>Your LinkedIn account</h3>
@@ -492,72 +655,11 @@ export default async function ProfilePage({
               </div>
             )}
 
-            <form action={saveSalesNavigator}>
-              <label className="small check">
-                <input
-                  type="checkbox"
-                  name="hasSalesNavigator"
-                  defaultChecked={mine.has_sales_navigator}
-                 
-                />
-                <span>
-                  This account has Sales Navigator
-                  <span className="tiny subtle hint">
-                    Without it, prospect search cannot filter on seniority or company size, and
-                    campaigns say so before you launch them. With it, the full customer profile is
-                    used.
-                  </span>
-                </span>
-              </label>
-              <button className="btn small" type="submit">
-                Save
-              </button>
-            </form>
-
-            <form action={saveWorkingHours}>
-              <p className="small muted">
-                Nothing is sent from this account outside these hours.
-              </p>
-              {/*
-                The window in words, with the time in that zone right now.
-                Two numbers and a row of checkboxes are not a claim anybody can
-                check; a rep looking at this at nine in the evening can now see
-                at once why nothing is going out.
-              */}
-              <p className="small">
-                <strong>{describeWorkingHours(hours, me?.timezone ?? "UTC")}</strong>
-              </p>
-              <div className="form-row">
-                <label className="field compact">
-                  <span>From</span>
-                  <input type="number" name="start" min={0} max={23} defaultValue={hours.start} />
-                </label>
-                <label className="field compact">
-                  <span>To</span>
-                  <input type="number" name="end" min={1} max={24} defaultValue={hours.end} />
-                </label>
-                <div className="cluster-3">
-                  {DAYS.map((day) => (
-                    <label key={day.value} className="small check">
-                      <input
-                        type="checkbox"
-                        name={`day-${day.value}`}
-                        defaultChecked={hours.days.includes(day.value)}
-                      />
-                      {day.label}
-                    </label>
-                  ))}
-                </div>
-                <label className="field medium">
-                  <span>Timezone</span>
-                  <TimezoneSelect value={me?.timezone} />
-                </label>
-                <button className="btn secondary small" type="submit">
-                  Save hours
-                </button>
-              </div>
-            </form>
-
+            {/* The Sales Navigator tick and the sending hours used to live here
+                with two more Save buttons. They are settings, so they moved to
+                the one form above; what stays on this card is the two things
+                that are operations rather than settings — connecting the
+                account, and asking the provider whether it is still there. */}
             {/* Connected is a claim this page makes, not one it has checked.
                 The row keeps whatever provider id it was bound with, and when
                 the provider drops that account nothing here notices until the
@@ -604,39 +706,6 @@ export default async function ProfilePage({
           </>
         )}
       </section>
-      {/* `Section`, rather than its markup copied out by hand. The component
-          is the one place this shape is defined, and a hand-written copy is a
-          second definition that drifts the moment either is touched. */}
-      <Section
-        id="autonomy"
-        title="How much the agent finishes on its own"
-        description="A hold is not a pause, it is a full stop. A prospect who replies on a Friday and is never answered is a warm lead lost, and nothing on any screen explains why."
-      >
-        <div className="card">
-          <form action={saveAutonomy} className="stack-3">
-            <label className="field">
-              <span>When a reply arrives</span>
-              <select name="autonomy" defaultValue={autonomy}>
-                <option value="autonomous">
-                  The agent answers and books, on its own
-                </option>
-                <option value="supervised">
-                  Hold anything uncertain for me to read first
-                </option>
-              </select>
-              <span className="hint">
-                Either way the agent only ever states facts from your knowledge base, never sends a
-                link it was not given, and stops the moment somebody asks not to be contacted. Two
-                things always wait for you: a prospect who asks to speak to a person, and a message
-                the agent did not understand. You can still take over any conversation by hand from
-                the Inbox.
-              </span>
-            </label>
-            <SubmitButton pendingLabel="Saving…">Save</SubmitButton>
-          </form>
-        </div>
-      </Section>
-
       {/*
         Team and billing live here rather than on tabs of their own.
         Somebody managing a workspace does all three in one sitting — who is on
@@ -651,6 +720,32 @@ export default async function ProfilePage({
         <BillingSection searchParams={searchParams} />
       </PageGroup>
     </>
+  );
+}
+
+/**
+ * One fact on the profile: what it is called, and what it says.
+ *
+ * A definition list rather than a form control showing its own value, which is
+ * what this page used to be. The distinction matters for a screen reader as
+ * much as for a reader: a value inside a disabled input is announced as a text
+ * box you cannot use, and a value in a `<dd>` is announced as an answer.
+ */
+function Fact({
+  label,
+  children,
+  wide = false,
+}: {
+  label: string;
+  children: React.ReactNode;
+  /** A sentence rather than a word, so it takes the row to itself. */
+  wide?: boolean;
+}) {
+  return (
+    <div className={wide ? "fact is-wide" : "fact"}>
+      <dt className="tiny subtle">{label}</dt>
+      <dd>{children}</dd>
+    </div>
   );
 }
 

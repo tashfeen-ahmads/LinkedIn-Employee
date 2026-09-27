@@ -333,8 +333,20 @@ input, select, textarea, button { margin: 0; }
 .container { width: min(1140px, 100% - 2.5rem); margin-inline: auto; }
 .narrow    { width: min(720px, 100% - 2.5rem); margin-inline: auto; }
 
-/* Vertical rhythm as a component, so pages stop setting margins by hand. */
-.stack   { display: flex; flex-direction: column; gap: var(--space-4); }
+/* Vertical rhythm as a component, so pages stop setting margins by hand.
+
+   `.stack-4` is grouped with `.stack` rather than missing, and that gap is why
+   this comment exists. The scale ran 1, 2, 3, _, 5, 6, 7: step four was spelt
+   `.stack` alone, on the reasoning that it is the default. Twenty-eight blocks
+   across twelve files were written as `stack-4` — the obvious name for the
+   fourth step — and every one of them got no rule at all, so its children sat
+   flush against each other with no gap. That is not a styling opinion, it is a
+   class that silently does nothing, and it is exactly what a person reads as
+   "some blocks have padding and some have none".
+
+   A scale with a hole in it is a scale people fall through. */
+.stack,
+.stack-4 { display: flex; flex-direction: column; gap: var(--space-4); }
 .stack-2 { display: flex; flex-direction: column; gap: var(--space-2); }
 .stack-3 { display: flex; flex-direction: column; gap: var(--space-3); }
 .stack-5 { display: flex; flex-direction: column; gap: var(--space-5); }
@@ -3081,6 +3093,43 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
    paragraphs — which are what makes a post readable on a phone — render as one
    block, and the review screen shows something the reader never sees. */
 .app .post-body { white-space: pre-wrap; }
+
+/* A profile's facts: what it is called, and what it says.
+
+   A definition list rather than disabled inputs showing their own values, which
+   is what this page used to be. The distinction is not cosmetic — a value in a
+   disabled text box is announced to a screen reader as a control you cannot
+   use, and the same value in a `<dd>` is announced as an answer. */
+.app .facts {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: var(--space-4) var(--space-5);
+}
+.app .fact { display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; }
+/* A sentence takes the row to itself; a word shares one. Read in two columns a
+   sentence wraps every four or five words, which is a paragraph pretending to
+   be a label. */
+.app .fact.is-wide { grid-column: 1 / -1; }
+.app .fact dd { margin: 0; font-size: 0.9375rem; line-height: 1.5; overflow-wrap: anywhere; }
+
+/* The one Save, for everything above it.
+
+   Deliberately not sticky. It was, on the argument that a Save you have to
+   scroll to find is a Save people forget — and a render showed what that
+   actually does: the form is shorter than the page it sits in, so the bar
+   stuck to the bottom of the viewport and printed itself across the middle of
+   the section below, covering its text. A control that hides content is worse
+   than one you scroll to. The rule it enforces is still there in the markup:
+   one bar, at the end of one form, for everything above it. */
+.app .edit-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
 
 .app .cal-grid {
   display: grid;

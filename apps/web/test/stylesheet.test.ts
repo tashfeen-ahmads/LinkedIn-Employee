@@ -186,6 +186,78 @@ describe("globals.css", () => {
     ).toEqual([]);
   });
 
+  it("defines every layout class the app actually uses", () => {
+    /*
+     * The bug this catches, and it was live on twelve files.
+     *
+     * The vertical rhythm scale ran `.stack-1 .stack-2 .stack-3 _ .stack-5
+     * .stack-6 .stack-7`: step four was spelt `.stack` alone, because it is the
+     * default. Twenty-eight blocks were written as `stack-4` — the obvious name
+     * for the fourth step — and every one got no rule at all, so its children
+     * sat flush with no gap between them. Nothing failed, nothing warned, and
+     * it reads on screen as "some blocks have padding and some have none".
+     *
+     * A class that silently does nothing is the same disease as a class
+     * declared twice, arriving from the other direction: one is an override
+     * nobody can see, the other is a rule that was never there. So the check is
+     * the same shape — scoped to the families where a missing step is invisible
+     * rather than obvious, because a typo'd one-off class shows up the moment
+     * somebody looks at the page, and a missing rung of a scale does not.
+     */
+    const FAMILIES = /^(stack|cluster|grid|gap|space|inset)-/;
+
+    /*
+     * Declared, not merely mentioned — and the difference caught this test out
+     * on its first run.
+     *
+     * A grep for `.stack-4` anywhere in the sheet passes on
+     * `:is(.stack, .stack-3, .stack-4, …) > :is(h1, h2) + *`, which styles a
+     * *descendant* of those and declares none of them. So the check reported
+     * the class as present while the rule giving it a gap did not exist, which
+     * is a test passing for the reason CLAUDE.md says is worse than no test.
+     *
+     * A declaration is a bare `.thing` standing alone as one whole selector, so
+     * commas are split at depth zero: inside `:is(…)` they separate arguments,
+     * not rules.
+     */
+    const declared = new Set<string>();
+    for (const selector of topLevelSelectors(CSS)) {
+      let depth = 0;
+      let part = "";
+      const parts: string[] = [];
+      for (const ch of selector) {
+        if (ch === "(") depth += 1;
+        else if (ch === ")") depth -= 1;
+        if (ch === "," && depth === 0) {
+          parts.push(part);
+          part = "";
+        } else part += ch;
+      }
+      parts.push(part);
+      for (const one of parts) {
+        const match = /^\.([a-zA-Z0-9_-]+)$/.exec(one.trim());
+        if (match) declared.add(match[1]!);
+      }
+    }
+
+    const used = new Map<string, string>();
+    for (const file of pages(join(dirname(fileURLToPath(import.meta.url)), "../src"))) {
+      const source = readFileSync(file, "utf8");
+      for (const attr of source.matchAll(/className=(?:"([^"]+)"|\{`([^`]*)`\})/g)) {
+        for (const cls of (attr[1] ?? attr[2] ?? "").split(/[\s${}]+/)) {
+          if (cls && FAMILIES.test(cls)) used.set(cls, file);
+        }
+      }
+    }
+    expect(used.size, "no scale classes found — this test would pass vacuously").toBeGreaterThan(0);
+
+    const missing = [...used.entries()]
+      .filter(([cls]) => !declared.has(cls))
+      .map(([cls, file]) => `.${cls} (used in ${file.split("/src/")[1]})`);
+
+    expect(missing, "used in the app, declared nowhere — so it does nothing").toEqual([]);
+  });
+
   it("never lets the page frame outrank a component", () => {
     /*
      * The bug this catches, and it had every card and two grids in the app.
