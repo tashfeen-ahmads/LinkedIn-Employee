@@ -176,11 +176,24 @@ function renderCampaigns(
                   </Link>
                 </div>
               </header>
-              <p
-                className="small panel"
-              >
-                {campaign.connection_note}
-              </p>
+              {/*
+                A panel is a box drawn around something. With no note there is
+                nothing to draw it around, and every campaign on this screen
+                carried an empty sunken rectangle where its opening line should
+                be — which reads as a card that failed to load rather than as a
+                campaign whose copy has not been written.
+
+                A campaign without one is also worth saying out loud: the note
+                is what the stranger actually reads, so "not written yet" is a
+                fact about the campaign, not an empty space.
+              */}
+              {campaign.connection_note ? (
+                <p className="small panel">{campaign.connection_note}</p>
+              ) : (
+                <p className="small subtle">
+                  No opening line yet — it is written for each person when the list is built.
+                </p>
+              )}
             </article>
         );
       })}

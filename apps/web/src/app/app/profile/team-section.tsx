@@ -114,6 +114,13 @@ async function revokeInvitation(formData: FormData) {
  * the wrong hour of their own day.
  */
 
+/** A date, or a dash — never the words "Invalid Date". */
+function formatExpiry(value: string | null): string {
+  if (!value) return "—";
+  const when = new Date(value);
+  return Number.isNaN(when.getTime()) ? "—" : when.toLocaleDateString();
+}
+
 export async function TeamSection({
   searchParams,
 }: {
@@ -289,7 +296,14 @@ export async function TeamSection({
                       <td>{invitation.email}</td>
                       <td className="small">{invitation.role}</td>
                       <td className="small subtle">
-                        {new Date(invitation.expires_at).toLocaleDateString()}
+                        {/*
+                          `new Date(x).toLocaleDateString()` prints the literal
+                          words "Invalid Date" for anything it cannot parse,
+                          and puts them in a table cell on a customer's screen.
+                          A date we do not have is said as a dash, the way
+                          every other missing value on this page is.
+                        */}
+                        {formatExpiry(invitation.expires_at)}
                       </td>
                       <td className="small mono breakable">
                         {appUrl}/invite/{invitation.token}

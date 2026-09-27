@@ -1003,9 +1003,9 @@ export default async function CampaignPage({
                 <tr>
                   <th>Angle</th>
                   <th>Pain it names</th>
-                  <th>Sent</th>
-                  <th>Accepted</th>
-                  <th>Replied</th>
+                  <th className="num">Sent</th>
+                  <th className="num">Accepted</th>
+                  <th className="num">Replied</th>
                 </tr>
               </thead>
               <tbody>
@@ -1019,8 +1019,8 @@ export default async function CampaignPage({
                         <span className="tiny subtle block">{variant?.angle}</span>
                       </td>
                       <td className="small muted">{variant?.pain_point ?? "—"}</td>
-                      <td className="mono">{standing.sent}</td>
-                      <td className="mono">
+                      <td className="num">{standing.sent}</td>
+                      <td className="num">
                         {standing.accepted}
                         {/*
                           The rate is only shown once there is enough behind it
@@ -1040,7 +1040,7 @@ export default async function CampaignPage({
                           </span>
                         )}
                       </td>
-                      <td className="mono">{standing.replied}</td>
+                      <td className="num">{standing.replied}</td>
                     </tr>
                   );
                 })}

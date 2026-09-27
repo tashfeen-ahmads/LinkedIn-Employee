@@ -58,7 +58,7 @@ export function FunnelChart({ steps }: { steps: FunnelStep[] }) {
           <div className="funnel-row" key={step.label}>
             <div className="funnel-row-head">
               <span className="funnel-label">{step.label}</span>
-              <span className="funnel-value mono">{step.value.toLocaleString()}</span>
+              <span className="funnel-value nums">{step.value.toLocaleString()}</span>
             </div>
             <div className="funnel-track" title={step.hint ?? step.label}>
               <span

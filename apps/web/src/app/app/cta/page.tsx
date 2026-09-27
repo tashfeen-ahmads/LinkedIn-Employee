@@ -178,15 +178,26 @@ export default async function CtaPage({ searchParams }: { searchParams: NoticePa
               const used = usage.get(cta.id) ?? [];
               return (
                 <article key={cta.id} className="card">
+                  {/*
+                    The labels are shown, not hidden.
+                    They were `sr-only`, which is correct for a control whose
+                    job is obvious from what is in it and wrong for four text
+                    boxes in a row. The form that *creates* a call to action,
+                    twenty lines up this page, labels all four; this one —
+                    where the boxes are full of values rather than
+                    placeholders, so there is not even a hint to read — showed
+                    none. Somebody editing a destination had to work out which
+                    box was which from the shape of the text in it.
+                  */}
                   <form action={saveCta} className="stack-3">
                     <input type="hidden" name="id" value={cta.id} />
                     <div className="form-row">
                       <label className="field grow">
-                        <span className="sr-only">Name</span>
+                        <span>Name</span>
                         <input type="text" name="name" defaultValue={cta.name} maxLength={80} required />
                       </label>
                       <label className="field">
-                        <span className="sr-only">Asks for</span>
+                        <span>What it asks for</span>
                         <select name="kind" defaultValue={cta.kind}>
                           {CTA_KINDS.map((kind) => (
                             <option key={kind} value={kind}>
@@ -198,11 +209,11 @@ export default async function CtaPage({ searchParams }: { searchParams: NoticePa
                     </div>
                     <div className="form-row">
                       <label className="field grow">
-                        <span className="sr-only">Destination</span>
+                        <span>Destination</span>
                         <input type="url" name="url" defaultValue={cta.url ?? ""} placeholder="No destination" />
                       </label>
                       <label className="field grow">
-                        <span className="sr-only">Wording</span>
+                        <span>How the message refers to it</span>
                         <input type="text" name="label" defaultValue={cta.label ?? ""} maxLength={80} />
                       </label>
                     </div>

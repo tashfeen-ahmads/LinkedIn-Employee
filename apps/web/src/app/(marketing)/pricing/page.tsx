@@ -40,7 +40,7 @@ export default function PricingPage() {
           { name: "Pricing", path: "/pricing" },
         ]}
       />
-      <Pricing />
+      <Pricing standalone />
       <section className="section band">
         <div className="narrow stack-5">
           <h2>Before you ask</h2>

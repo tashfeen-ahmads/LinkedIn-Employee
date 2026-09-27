@@ -141,7 +141,7 @@ export default async function AgentTestPage({
         title="Write a connection note"
         description="Pick somebody already on your list — that is where an unfillable merge field shows up."
       >
-        <form action={runTest} className="stack">
+        <form action={runTest} className="card">
           <input type="hidden" name="agent" value={id} />
           <label className="field">
             <span>A prospect you already have</span>

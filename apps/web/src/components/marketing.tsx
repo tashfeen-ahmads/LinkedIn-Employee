@@ -609,13 +609,25 @@ const ALTERNATIVES = [
   },
 ];
 
-export function Pricing() {
+/**
+ * The plans, as a section of the home page and as the whole of /pricing.
+ *
+ * `standalone` is what decides the heading level, and it is not cosmetic. On
+ * the home page this is one section under the hero's `<h1>`, so it is an
+ * `<h2>`. On /pricing it *is* the page — and because every other marketing
+ * page hand-rolls its own `<h1>` while this one composes a shared component,
+ * /pricing shipped with no `<h1>` at all: a page whose top heading was an h2,
+ * with nothing above it. The application has a test that catches exactly this
+ * and it only ever looked at `src/app/app`.
+ */
+export function Pricing({ standalone = false }: { standalone?: boolean } = {}) {
+  const Heading = standalone ? "h1" : "h2";
   return (
     <section id="pricing" className="section">
       <div className="container stack-6">
         <div className="stack-3">
           <p className="eyebrow section-mark">Pricing</p>
-          <h2>Per seat, per month.</h2>
+          <Heading>Per seat, per month.</Heading>
           <p className="lede prose">Seven-day free trial on every plan. No card to start.</p>
         </div>
 

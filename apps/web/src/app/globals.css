@@ -769,6 +769,22 @@ input[type="text"], input[type="email"], input[type="url"], input[type="number"]
  * this sheet carries a margin. A form that wants a row sets `.form-row` or its
  * own flex-direction, and a form holding one button is unchanged. */
 form { display: flex; flex-direction: column; gap: var(--space-4); }
+/*
+ * A button in a column form takes its own width, not the form's.
+ *
+ * A flex column stretches its children, so every submit button in the product
+ * was as wide as the widest field beside it: a full-bleed "Send" with a
+ * full-bleed "Dismiss, I will handle it on LinkedIn" stacked underneath, two
+ * thousand-pixel slabs where there should be one action and one way out. A
+ * button that wide reads as a banner rather than as something to press, and it
+ * gives the secondary action exactly the same weight as the primary one.
+ *
+ * `.block` is the opt-out, and it is what the sign-in form and the pricing
+ * cards use — there a full-width button is the design rather than the flex
+ * default leaking through.
+ */
+form > .btn:not(.block),
+form > button.btn:not(.block) { align-self: flex-start; }
 
 /* `flex-direction: row` is not redundant. `form` below sets `column`, and a
  * class that only sets `display: flex` does not override a direction it never

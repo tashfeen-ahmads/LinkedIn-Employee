@@ -443,7 +443,7 @@ export default async function AgentPage({
       ) : null}
 
       <Section id="identity" title="Who it is" description="The name a prospect reads, and the model it runs on.">
-        <form action={saveIdentity} className="stack">
+        <form action={saveIdentity} className="card">
           <input type="hidden" name="id" value={id} />
           <label className="field">
             <span>Agent name</span>
@@ -547,7 +547,7 @@ export default async function AgentPage({
             </table>
           )}
 
-          <form action={writeLines} className="stack">
+          <form action={writeLines} className="card">
             <input type="hidden" name="id" value={id} />
             <input type="hidden" name="table" value="hooks" />
             <label className="field">
@@ -568,7 +568,7 @@ export default async function AgentPage({
             </SubmitButton>
           </form>
 
-          <form action={addOpener} className="stack">
+          <form action={addOpener} className="card">
             <input type="hidden" name="id" value={id} />
             <label className="field">
               <span>New opener</span>
@@ -639,7 +639,7 @@ export default async function AgentPage({
             </table>
           )}
 
-          <form action={writeLines} className="stack">
+          <form action={writeLines} className="card">
             <input type="hidden" name="id" value={id} />
             <input type="hidden" name="table" value="pitches" />
             <label className="field">
@@ -660,7 +660,7 @@ export default async function AgentPage({
             </SubmitButton>
           </form>
 
-          <form action={addOffer} className="stack">
+          <form action={addOffer} className="card">
             <input type="hidden" name="id" value={id} />
             <label className="field">
               <span>New offer line</span>
@@ -682,7 +682,7 @@ export default async function AgentPage({
         title="Playbook"
         description="What it is trying to achieve, what it needs to find out, and when it stops and asks for you."
       >
-        <form action={savePlaybook} className="stack">
+        <form action={savePlaybook} className="card">
           <input type="hidden" name="id" value={id} />
           <label className="field">
             <span>What this agent is for</span>
@@ -762,7 +762,7 @@ export default async function AgentPage({
             </table>
           ) : null}
 
-          <form action={addCustomField} className="stack">
+          <form action={addCustomField} className="card">
             <input type="hidden" name="id" value={id} />
             <label className="field">
               <span>Field name</span>

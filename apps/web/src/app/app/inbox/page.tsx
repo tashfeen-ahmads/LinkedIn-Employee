@@ -326,15 +326,27 @@ export default async function InboxPage({
                 </div>
               </header>
 
-              <div className="panel scroll"
-              >
-                {thread.map((message, index) => (
-                  <p key={index} className="small">
-                    <span className="muted">{message.direction === "outbound" ? "You: " : "Them: "}</span>
-                    {message.body}
-                  </p>
-                ))}
-              </div>
+              {/*
+                Rule 10 says a conversation can be flagged with nothing in it,
+                and this is what that looked like: an empty sunken box above
+                the reply field, on the screen a rep works all day. A box
+                around nothing reads as a thread that failed to load — so when
+                there is nothing to show, it says so instead of drawing one.
+              */}
+              {thread.length ? (
+                <div className="panel scroll">
+                  {thread.map((message, index) => (
+                    <p key={index} className="small">
+                      <span className="muted">{message.direction === "outbound" ? "You: " : "Them: "}</span>
+                      {message.body}
+                    </p>
+                  ))}
+                </div>
+              ) : (
+                <p className="small subtle">
+                  No messages have been recorded on this conversation yet.
+                </p>
+              )}
 
               {questions.length ? (
                 <div className="notice warning">

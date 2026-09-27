@@ -10,6 +10,7 @@ import { SubmitButton } from "@/components/submit-button";
 import { TeamSection } from "./team-section";
 import { BillingSection } from "./billing-section";
 import { PageHeader, PageGroup, Section } from "@/components/page";
+import { AllowanceMeter } from "@/components/charts";
 
 /**
  * You, and the account you send from.
@@ -440,10 +441,33 @@ export default async function ProfilePage({
               /* Hidden while the account cannot send. Three bars reading 0/35
                  next to "reauth required" describe an allowance that does not
                  exist, and read as a working account to anyone skimming. */
-              <div className="meter-group">
-                <Usage label="Invites today" used={mine.invites_today} cap={LINKEDIN_LIMITS.invitesPerDayMax} />
-                <Usage label="Invites this week" used={mine.invites_this_week} cap={LINKEDIN_LIMITS.invitesPerWeek} />
-                <Usage label="Messages today" used={mine.messages_today} cap={LINKEDIN_LIMITS.messagesPerDay} />
+              /*
+                The same meter the overview draws, not a second one.
+
+                This page had its own `Usage` component: a label, a "24 / 35"
+                set in the monospace, and a four-pixel rule under it. Beside
+                the overview's allowance meters they were two drawings of one
+                idea that had already drifted, and the four-pixel one read as a
+                rendering fault rather than as a measurement. One component,
+                one definition — and rule 51's argument about drawing a meter
+                against its cap now reaches this screen too.
+              */
+              <div className="allowance-row">
+                <AllowanceMeter
+                  label="Invites today"
+                  used={mine.invites_today}
+                  cap={LINKEDIN_LIMITS.invitesPerDayMax}
+                />
+                <AllowanceMeter
+                  label="Invites this week"
+                  used={mine.invites_this_week}
+                  cap={LINKEDIN_LIMITS.invitesPerWeek}
+                />
+                <AllowanceMeter
+                  label="Messages today"
+                  used={mine.messages_today}
+                  cap={LINKEDIN_LIMITS.messagesPerDay}
+                />
               </div>
             )}
 
@@ -617,21 +641,4 @@ function readWorkingHours(value: unknown): { start: number; end: number; days: n
     return { start: hours.start, end: hours.end, days: hours.days };
   }
   return fallback;
-}
-
-function Usage({ label, used, cap }: { label: string; used: number; cap: number }) {
-  const ratio = Math.min(1, cap === 0 ? 0 : used / cap);
-  return (
-    <div className="meter-item">
-      <span className="stat-label">{label}</span>
-      <span className="mono small">
-        {used} / {cap}
-      </span>
-      {/* The width is the only genuinely dynamic value here; the colour it
-          turns near the cap is a state, so it is a class. */}
-      <div className={`meter${ratio > 0.85 ? " is-near" : ""}`}>
-        <span style={{ width: `${ratio * 100}%` }} />
-      </div>
-    </div>
-  );
 }

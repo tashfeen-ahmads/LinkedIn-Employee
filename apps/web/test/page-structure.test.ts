@@ -81,3 +81,41 @@ describe("application page structure", () => {
     }
   });
 });
+
+/*
+ * The marketing pages, which this file never looked at.
+ *
+ * Every rule above is scoped to `src/app/app`, and that is how /pricing came
+ * to ship with no `<h1>` on it at all: its whole content is the shared
+ * `Pricing` component, which renders an `<h2>` because on the home page it is
+ * one section under the hero's heading. Nothing checked, so nobody noticed —
+ * a page whose top heading is an h2 has no heading, for the same reason a page
+ * with three h1s has none.
+ *
+ * A marketing page writes its own `<h1>`, or it composes exactly one component
+ * that is listed here as owning one. Two named exceptions, both deliberate.
+ */
+const marketingDir = join(dirname(fileURLToPath(import.meta.url)), "../src/app/(marketing)");
+
+/** Components that render the `<h1>` for the page composing them. */
+const OWNS_AN_H1 = ["<Hero", "<Pricing standalone"];
+
+describe("marketing page structure", () => {
+  const MARKETING = pages(marketingDir);
+
+  it("finds the pages", () => {
+    expect(MARKETING.length).toBeGreaterThanOrEqual(5);
+  });
+
+  it("gives every page exactly one top-level heading", () => {
+    for (const page of MARKETING) {
+      const source = readFileSync(page, "utf8");
+      const own = source.match(/<h1[\s>]/g)?.length ?? 0;
+      const borrowed = OWNS_AN_H1.filter((component) => source.includes(component)).length;
+      expect(
+        own + borrowed,
+        `${page.slice(marketingDir.length + 1)} has ${own} <h1> of its own and borrows ${borrowed}`,
+      ).toBe(1);
+    }
+  });
+});

@@ -249,8 +249,8 @@ export default async function ProspectsPage({
           <thead>
             <tr>
               <th>Person</th>
-              <th>Fit</th>
-              <th>Intent</th>
+              <th className="num">Fit</th>
+              <th className="num">Intent</th>
               <th>Why</th>
               <th>Status</th>
               <th />
@@ -296,7 +296,15 @@ export default async function ProspectsPage({
                         (displayName(prospect) === prospect.headline ? "" : prospect.headline ?? "")}
                     </p>
                   </td>
-                  <td className="mono">
+                  {/*
+                    `num`, not `mono`. The cell's font-family is inherited by
+                    everything in it, so the monospace meant for the figure was
+                    also setting the strategy's *name* underneath it — a
+                    segment somebody wrote, rendered as though it were code.
+                    Geist has real tabular figures, so the column lines up
+                    without the number having to look like a terminal.
+                  */}
+                  <td className="num">
                     {/*
                       A fit score is a fact about a person AND a strategy: 87
                       against "small B2B agencies" says nothing about how well
@@ -312,7 +320,7 @@ export default async function ProspectsPage({
                       </span>
                     ) : null}
                   </td>
-                  <td className="mono">{prospect.intent_score ?? 0}</td>
+                  <td className="num">{prospect.intent_score ?? 0}</td>
                   <td className="medium">
                     <div className="cluster">
                       {signals.slice(0, 3).map((signal, index) => (
