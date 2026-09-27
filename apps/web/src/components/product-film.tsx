@@ -67,8 +67,10 @@ function Line({
   return (
     <motion.div
       className={className}
-      initial={{ opacity: 0.001, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
+      // A rise, not a fade from nothing: the row is opaque in the server's
+      // markup, so a scene that never hydrates is a scene you can still read.
+      initial={{ y: 8 }}
+      animate={{ y: 0 }}
       transition={{ duration: 0.4, delay: 0.15 + index * 0.16, ease: [0.16, 1, 0.3, 1] }}
     >
       {children}
@@ -286,7 +288,15 @@ export function ProductFilm() {
         {/* Height is held by the tallest scene rather than animated, so the page
             below does not jump every five seconds. */}
         <div className="film-stage">
-          <AnimatePresence mode="wait">
+          {/*
+            `initial={false}`, exactly as the timeline and the gate already do
+            it. Without it the first scene mounts at its `initial` opacity —
+            which framer writes into the server's HTML, so the film's whole
+            body is invisible until the client hydrates, and stays invisible
+            for ever if it never does. A crossfade between scenes is a
+            client-side event; the first frame is just the page.
+          */}
+          <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={scene.id}
               initial={{ opacity: 0.001 }}

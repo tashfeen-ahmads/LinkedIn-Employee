@@ -11,6 +11,21 @@ import type { ReactNode } from "react";
  * which is what a shared link, a thumbnail and a fast scroller all get.
  *
  * And anyone who has asked their system for reduced motion gets none of it.
+ *
+ * The first rule was written down here and then broken on the line below it.
+ * `opacity: 0.001` is not a visible resting state, it is zero with a decimal
+ * point in it — and it is the value framer renders into the *server's* HTML,
+ * so the markup left this building invisible and stayed invisible until a
+ * client-side observer fired. Which meant a landing page that is blank to a
+ * crawler, blank in a link preview, blank on a connection slow enough that
+ * somebody scrolls before hydration, and blank for ever if any script on the
+ * page throws. Every section below the hero, on the one page that has to sell
+ * this product.
+ *
+ * So nothing fades from nothing. A reveal is a **rise**: the element is fully
+ * opaque in the server's markup and ten pixels low, and the animation brings
+ * it home. With JavaScript the movement is the same to look at; without it the
+ * page is whole and ten pixels out, which nobody can see.
  */
 
 const EASE = [0.16, 1, 0.3, 1] as const;
@@ -30,8 +45,8 @@ export function Reveal({
   const Tag = motion[as];
   return (
     <Tag
-      initial={{ opacity: 0.001, y: 10 }}
-      whileInView={{ opacity: 1, y: 0 }}
+      initial={{ y: 10 }}
+      whileInView={{ y: 0 }}
       viewport={{ once: true, margin: "-60px" }}
       transition={{ duration: 0.5, delay, ease: EASE }}
     >
@@ -46,8 +61,8 @@ const container: Variants = {
 };
 
 const item: Variants = {
-  hidden: { opacity: 0.001, y: 12 },
-  shown: { opacity: 1, y: 0, transition: { duration: 0.45, ease: EASE } },
+  hidden: { y: 12 },
+  shown: { y: 0, transition: { duration: 0.45, ease: EASE } },
 };
 
 /**
@@ -94,8 +109,13 @@ export function DrawPath({ d, className }: { d: string; className?: string }) {
     <motion.path
       d={d}
       className={className}
-      initial={{ pathLength: 0, opacity: 0.001 }}
-      whileInView={{ pathLength: 1, opacity: 1 }}
+      /*
+       * The one place a zero start is right, and it is `pathLength` rather
+       * than opacity: without the script the path renders at its full length,
+       * which is the finished drawing rather than a blank.
+       */
+      initial={{ pathLength: 0 }}
+      whileInView={{ pathLength: 1 }}
       viewport={{ once: true, margin: "-40px" }}
       transition={{ duration: 0.9, ease: "easeInOut" }}
     />
