@@ -3,7 +3,8 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { callWorker, errorQuery, noticeQuery } from "@/lib/worker";
-import { checkCtaUrl, LINKEDIN_LIMITS } from "@le/shared";
+import { checkCtaUrl, LINKEDIN_LIMITS, describeWorkingHours, isValidTimezone } from "@le/shared";
+import { TimezoneSelect } from "@/components/timezone-select";
 import { cannotSend, describeRepair, type RefreshResult, type RepairNotice } from "../team/repair";
 import { PageNotice } from "@/components/page-notice";
 import { SubmitButton } from "@/components/submit-button";
@@ -169,6 +170,7 @@ async function saveWorkingHours(formData: FormData) {
   const start = Number(formData.get("start"));
   const end = Number(formData.get("end"));
   const days = [1, 2, 3, 4, 5, 6, 0].filter((day) => formData.get(`day-${day}`) === "on");
+  const timezone = String(formData.get("timezone") ?? "").trim();
 
   // A window that is empty or inverted would either send nothing or send at
   // three in the morning; neither is a setting anyone means to choose.
@@ -182,6 +184,18 @@ async function saveWorkingHours(formData: FormData) {
     .update({ working_hours: { start, end, days } as never })
     .eq("workspace_id", session.workspaceId)
     .eq("user_id", session.userId);
+
+  /*
+   * The zone travels with the hours it is read in.
+   *
+   * It lived on a different form, so a rep could set a window and leave the
+   * zone at its UTC default and have no way to tell from this screen. Only a
+   * zone this runtime can actually evaluate is written: an unreadable one
+   * saved here would fall back to UTC inside the limiter and say nothing.
+   */
+  if (timezone && isValidTimezone(timezone)) {
+    await supabase.from("profiles").update({ timezone }).eq("id", session.userId);
+  }
 
   revalidatePath("/app/profile");
 }
@@ -404,7 +418,14 @@ export default async function ProfilePage({
           </label>
           <label className="field medium">
             <span>Your timezone</span>
-            <input name="timezone" defaultValue={me?.timezone ?? "UTC"} placeholder="Europe/London" />
+            {/*
+              A picker, not a text box. Every sending window, meeting slot and
+              warm-up day is evaluated in this zone, and a typed "EST" parses to
+              nothing and falls back to UTC in silence — which is how this
+              deployment came to invite people in New York at four in the
+              morning while its screen read "8 to 18".
+            */}
+            <TimezoneSelect value={me?.timezone} />
           </label>
           <button className="btn secondary" type="submit">
             Save
@@ -495,7 +516,16 @@ export default async function ProfilePage({
 
             <form action={saveWorkingHours}>
               <p className="small muted">
-                Nothing is sent from this account outside these hours, read in your timezone above.
+                Nothing is sent from this account outside these hours.
+              </p>
+              {/*
+                The window in words, with the time in that zone right now.
+                Two numbers and a row of checkboxes are not a claim anybody can
+                check; a rep looking at this at nine in the evening can now see
+                at once why nothing is going out.
+              */}
+              <p className="small">
+                <strong>{describeWorkingHours(hours, me?.timezone ?? "UTC")}</strong>
               </p>
               <div className="form-row">
                 <label className="field compact">
@@ -518,6 +548,10 @@ export default async function ProfilePage({
                     </label>
                   ))}
                 </div>
+                <label className="field medium">
+                  <span>Timezone</span>
+                  <TimezoneSelect value={me?.timezone} />
+                </label>
                 <button className="btn secondary small" type="submit">
                   Save hours
                 </button>
