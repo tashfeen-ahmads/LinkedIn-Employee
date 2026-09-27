@@ -869,17 +869,21 @@ form > button.btn:not(.block) { align-self: flex-start; }
 
 /* ---------------------------------------------------------------- badges */
 
+/*
+ * A status chip: a soft tint, a round end, and a dot that carries the state
+ * for anyone who cannot see the tint.
+ */
 .pill {
   display: inline-flex;
   align-items: center;
   gap: 0.3rem;
-  padding: 0.175rem 0.5rem;
-  border-radius: var(--radius-sm);
+  padding: 0.3rem 0.7rem;
+  border-radius: var(--radius-pill);
   font-size: 0.75rem;
   font-weight: 550;
   letter-spacing: 0.01em;
   background: var(--surface);
-  border: 1px solid var(--border);
+  border: 1px solid transparent;
   color: var(--text-muted);
   white-space: nowrap;
 }
@@ -979,6 +983,7 @@ form > button.btn:not(.block) { align-self: flex-start; }
   background-color: var(--surface-raised);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-xs);
+  padding: var(--space-3);
 }
 table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
 /*
@@ -999,6 +1004,16 @@ table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
  * rather than as a report. Same face as everything else, smaller, tracked and
  * quiet.
  */
+/*
+ * A header band, and dashed rules between the rows.
+ *
+ * The solid 1px rule under every row draws a grid, and a grid is what makes a
+ * report look like a spreadsheet somebody exported. Dashed, the separator does
+ * the one job it has — keeping the eye on its line — without claiming each row
+ * is a cell in a table of boxes. The header takes a tinted band instead of a
+ * rule, so the column names read as a label on the list rather than as its
+ * first row.
+ */
 thead th {
   font-family: var(--font-ui);
   font-size: 0.6875rem;
@@ -1007,17 +1022,22 @@ thead th {
   color: var(--text-subtle);
   font-weight: 600;
   background: var(--surface);
-  border-bottom: 1px solid var(--border);
+  padding-block: 0.9rem;
   white-space: nowrap;
 }
+thead th:first-child { border-top-left-radius: var(--radius); border-bottom-left-radius: var(--radius); }
+thead th:last-child { border-top-right-radius: var(--radius); border-bottom-right-radius: var(--radius); }
 /* A header that stays while the rows scroll. Forty prospects in and the column
    a number belongs to is off the top of the screen. */
 .table-scroll thead th { position: sticky; top: 0; z-index: 1; }
-th, td { text-align: left; padding: 0.75rem 0.875rem; vertical-align: middle; }
+th, td { text-align: left; padding: 0.95rem 1rem; vertical-align: middle; }
 /* A cell holding a paragraph rather than a value still aligns to its first
    line, so a two-line description does not push its row's other cells down. */
 td.top, th.top { vertical-align: top; }
-tbody tr + tr td { border-top: 1px solid var(--border); }
+tbody tr + tr td { border-top: 1px dashed var(--border); }
+/* The band already separates the header; a rule under it as well is two
+   devices doing one job. */
+tbody tr:first-child td { padding-top: 1rem; }
 tbody tr { transition: background 110ms ease; }
 tbody tr:hover td { background: var(--surface); }
 /* Numbers line up on the right, on their own figures. A column of counts set
@@ -1095,6 +1115,126 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   overflow-y: auto;
 }
 .app-main { min-width: 0; display: flex; flex-direction: column; background: var(--bg); }
+
+/*
+ * The top bar: who is signed in, what is waiting, and the search.
+ *
+ * Everything on it is about the person rather than the page, which is why it
+ * does not belong in a rail whose job is telling them where they can go.
+ */
+.app-top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) clamp(var(--space-3), 4vw, var(--space-5));
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-raised);
+  position: sticky;
+  top: 0;
+  z-index: 15;
+}
+.app-top-actions { display: flex; align-items: center; gap: var(--space-2); margin-left: auto; }
+
+.app-search { position: relative; flex: 0 1 26rem; min-width: 0; }
+.app-search-icon {
+  position: absolute;
+  left: 0.85rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  color: var(--text-subtle);
+  pointer-events: none;
+}
+.app-search input {
+  width: 100%;
+  padding: 0.5rem 0.9rem 0.5rem 2.35rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.875rem;
+}
+.app-search input::placeholder { color: var(--text-subtle); }
+.app-search input:focus { background: var(--surface-raised); }
+
+/* A circular control, sized as a target rather than as a glyph. */
+.app-top-icon {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--text-muted);
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.app-top-icon:hover { background: var(--surface); border-color: var(--border-strong); text-decoration: none; }
+/* The count rides the corner of its own button rather than sitting beside it,
+   so the bar keeps one rhythm however many are waiting. */
+.app-top-count {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  min-width: 1.05rem;
+  height: 1.05rem;
+  padding: 0 0.25rem;
+  border-radius: var(--radius-pill);
+  background: var(--danger);
+  color: var(--text-inverse);
+  font-size: 0.625rem;
+  font-weight: 650;
+  line-height: 1.05rem;
+  text-align: center;
+}
+
+.app-top-who {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0.25rem 0.6rem 0.25rem 0.25rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid transparent;
+  min-width: 0;
+}
+.app-top-who:hover { background: var(--surface); border-color: var(--border); text-decoration: none; }
+.app-top-who-text { display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
+.app-top-who-text > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-avatar {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  flex: none;
+  border-radius: 50%;
+  background: linear-gradient(140deg, var(--accent), var(--accent-2));
+  color: var(--text-inverse);
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+/* The trial, in the rail. A card rather than a line, because it carries an
+   action and a line with a button in it is not a line. */
+.app-upsell {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: var(--space-3);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-border);
+}
+.app-upsell .btn { margin-top: var(--space-2); justify-content: center; }
+/* Sign-out sits last. `margin-top: auto` on it only reaches the bottom when
+   nothing above it already claimed the slack. */
+.app-signout { margin-top: auto; padding-top: var(--space-3); border-top: 1px solid var(--border); }
+.app-upsell + .app-signout { margin-top: var(--space-3); }
 .app-body {
   display: flex;
   flex-direction: column;
@@ -1195,13 +1335,23 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
  * the same treatment `:hover` gave every other row — so the current page was
  * only obvious while the pointer was somewhere else.
  */
+/*
+ * The current row is a solid pill, not a tint with a rail.
+ *
+ * The tint reads at a glance only if you are already looking at the sidebar; a
+ * filled pill is findable from the other side of the screen, which is what a
+ * nav marker is for. It also gives the rail the one piece of saturated colour
+ * it has, so the eye has somewhere to start.
+ */
 .nav a[aria-current="page"] {
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--accent);
+  color: var(--text-inverse);
   font-weight: 550;
-  box-shadow: inset 2px 0 0 var(--accent);
+  box-shadow: 0 6px 16px -8px color-mix(in srgb, var(--accent) 70%, transparent);
 }
-.nav a[aria-current="page"] .nav-icon { color: var(--accent); }
+.nav a[aria-current="page"] .nav-icon { color: var(--text-inverse); }
+.nav a[aria-current="page"]:hover { background: var(--accent-hover); color: var(--text-inverse); }
+.nav a[aria-current="page"] .nav-count { background: var(--surface-raised); color: var(--accent); }
 .nav-count {
   font-family: var(--font-mono);
   font-size: 0.6875rem;
@@ -1264,19 +1414,8 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
    read as a group — and one taken out is 16px of a 240px sidebar given back to
    the labels. */
 
-/* Pushed to the bottom of the column: it is the last thing you reach for, and
-   it must be reachable from every page. */
-.app-account {
-  margin-top: auto;
-  padding: var(--space-3) var(--space-2) 0;
-  border-top: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-}
-.app-account-who { min-width: 0; }
-.app-account-who p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* `.app-account` is gone: who is signed in now lives in the top bar, where an
+   application puts it, and the rail keeps only sign-out. */
 
 /*
  * Aligned to the page, not to the frame.
@@ -1325,9 +1464,15 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     align-items: center;
   }
   .app-brand { grid-column: 1; }
-  .app-account { grid-column: 2; grid-row: 1; margin-top: 0; padding-top: 0; border-top: 0; }
-  /* The email is the first thing to go when there is no room for it. */
-  .app-account-who { display: none; }
+  /* In a bar, sign-out sits beside the brand rather than at the foot of a
+     column that no longer exists. */
+  .app-signout { grid-column: 2; grid-row: 1; margin-top: 0; padding-top: 0; border-top: 0; }
+  /* The trial card is a rail idea; in a bar it would push the nav off screen,
+     and the same fact is already on the billing page and in the banner. */
+  .app-upsell { display: none; }
+  /* The search is in the top bar, which the phone keeps. */
+  .app-top { padding-inline: var(--space-4); }
+  .app-top-who-text { display: none; }
 
   /* Wrapping twelve links puts four rows of navigation above every page. One
      scrolling row keeps the page where it belongs — at the top. */
@@ -1365,9 +1510,6 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     border-radius: var(--radius-pill);
   }
   .nav a[aria-current="page"] { box-shadow: none; }
-  /* The search field belongs to a twelve-row column, not to a bar that already
-     shows every link at once. */
-  .nav-search { display: none; }
 
   /* A tap target, not a mouse target. 44px is the floor every platform's
      guidance agrees on, and these were 30. */
@@ -1391,13 +1533,21 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 
 /* ------------------------------------------------------------- marketing */
 
+/*
+ * The header floats as a card rather than sitting as a bar.
+ *
+ * A full-width bar with a rule under it is the shape of a document; a rounded
+ * panel with air around it reads as an application, and it lets the hero's
+ * wash run underneath so the top of the page is one surface instead of two
+ * stacked bands. The sticky wrapper is transparent — only the panel inside it
+ * is painted.
+ */
 .site-header {
   position: sticky;
   top: 0;
   z-index: 10;
-  border-bottom: 1px solid var(--border);
-  background: color-mix(in srgb, var(--bg) 88%, transparent);
-  backdrop-filter: saturate(140%) blur(10px);
+  padding-top: var(--space-3);
+  padding-bottom: var(--space-2);
 }
 @media (max-width: 640px) {
   .site-nav-link { display: none; }
@@ -1445,16 +1595,29 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 
 /* Hero: copy leads, the product panel sits beside it and stacks under on a
    narrow screen rather than being hidden. */
+/*
+ * One column, centred, with the product beneath the promise.
+ *
+ * Two columns gave the headline half the page — at which point the sentence
+ * that has to do all the work wraps at 18 characters and the panel beside it
+ * competes for the same glance. Centred, the headline is the widest thing on
+ * the page and the panel below it reads as the evidence for what it just
+ * said.
+ */
 .hero-grid {
   display: grid;
-  gap: var(--space-7);
-  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
-  /* Both columns start at the headline's line. Centred, the panel floated
-     against the taller column and left a wedge of empty page under whichever
-     one ran out first. */
-  align-items: start;
-  padding-bottom: var(--space-7);
+  gap: var(--space-6);
+  justify-items: center;
+  padding-bottom: var(--space-6);
 }
+.hero-copy { align-items: center; text-align: center; }
+/* Centred text needs its own measure: the lede's 65ch is a paragraph, and a
+   centred paragraph that wide is read as a block rather than as a sentence. */
+.hero-copy .lede { max-width: 46ch; }
+.hero-copy .cluster { justify-content: center; }
+/* The panel is the hero's evidence, so it takes a readable width rather than
+   half the grid. */
+.hero-grid > :last-child { width: min(46rem, 100%); }
 
 /*
  * The strip of rules under the hero.
@@ -1483,7 +1646,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 }
 .proof-label { font-size: 0.8125rem; line-height: 1.5; color: var(--text-muted); }
 @media (max-width: 900px) {
-  .hero-grid { grid-template-columns: minmax(0, 1fr); gap: var(--space-6); }
+  .hero-grid { gap: var(--space-5); }
 }
 
 
@@ -1623,14 +1786,22 @@ ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: none; }
      on the most important screen we have. The blobs inside are radial
      gradients that fade to transparent well before their own edges, so
      pulling the sides in costs nothing visible. */
-  inset: -20% 0 auto 0;
-  height: 620px;
+  inset: -30% 0 auto 0;
+  height: 860px;
   z-index: -1;
   pointer-events: none;
+  /*
+   * Three washes rather than two, and they run past the hero rather than
+   * stopping under it — the header floats on this now, so a gradient that ends
+   * at the fold draws a horizontal seam across the top of the page. The third
+   * is a warm one at the top centre, which is what keeps the cool pair from
+   * reading as a grey haze.
+   */
   background:
-    radial-gradient(50% 60% at 18% 12%, color-mix(in srgb, var(--accent) 16%, transparent) 0%, transparent 70%),
-    radial-gradient(45% 55% at 88% 8%, color-mix(in srgb, var(--accent-2) 13%, transparent) 0%, transparent 70%);
-  filter: blur(8px);
+    radial-gradient(42% 52% at 12% 6%, color-mix(in srgb, var(--accent) 20%, transparent) 0%, transparent 72%),
+    radial-gradient(40% 50% at 88% 2%, color-mix(in srgb, var(--accent-2) 16%, transparent) 0%, transparent 72%),
+    radial-gradient(55% 45% at 52% 0%, color-mix(in srgb, #E9A2D9 26%, transparent) 0%, transparent 70%);
+  filter: blur(10px);
 }
 
 /* The panel's own quiet lift off the wash. */
@@ -1665,6 +1836,9 @@ ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: none; }
    caps the paragraph too, and a 40-character measure turns a three-word line
    into four. */
 .section h1 { max-width: 18ch; }
+/* Centred, the headline sets its own measure and centres it. The 18ch cap is
+   for a headline in a column beside something else. */
+.hero-copy h1 { max-width: 20ch; margin-inline: auto; }
 .narrow h1, .prose h1 { max-width: none; }
 
 
@@ -1894,17 +2068,90 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
   grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: var(--space-5);
-  height: 68px;
+  height: 64px;
+  padding-inline: var(--space-4) var(--space-2);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--surface-raised) 92%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  box-shadow: var(--shadow);
+  backdrop-filter: saturate(140%) blur(12px);
 }
 .site-nav { display: flex; justify-content: center; gap: var(--space-1); }
 .site-nav-link {
   font-size: 0.9rem;
   color: var(--text-muted);
-  padding: 0.4rem 0.65rem;
-  border-radius: var(--radius-sm);
+  padding: 0.4rem 0.8rem;
+  border-radius: var(--radius-pill);
   transition: color 130ms ease, background 130ms ease;
 }
 .site-nav-link:hover { color: var(--text); background: var(--surface); text-decoration: none; }
+/* The page you are on wears a soft pill, the way the application's sidebar
+   marks its current row. Without it the nav is five links of one weight and
+   nothing says where you are. */
+.site-nav-link[aria-current="page"] { color: var(--text); background: var(--surface); font-weight: 550; }
+
+/*
+ * The line above the headline: a status dot, a sentence, and the thing to go
+ * and read. One pill rather than a bare uppercase eyebrow, because the eyebrow
+ * said what the page was about and this says what is new — and a pill with a
+ * live dot in it is the one piece of the header that looks like the product
+ * rather than like a brochure.
+ */
+.announce {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0.35rem 0.4rem 0.35rem 0.9rem;
+  border-radius: var(--radius-pill);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-xs);
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+.announce:hover { text-decoration: none; box-shadow: var(--shadow-sm); }
+.announce-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--positive);
+  flex: none;
+  /* A ring rather than a pulse: a dot that throbs on every page load is an
+     alert, and nothing here is alarming. */
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--positive) 18%, transparent);
+}
+.announce-chip {
+  padding: 0.15rem 0.6rem;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--text-inverse);
+  font-size: 0.8125rem;
+  font-weight: 550;
+  white-space: nowrap;
+}
+
+/*
+ * The half of the headline that carries the promise, in the accent.
+ *
+ * A single flat colour across a two-line headline gives the eye nowhere to
+ * land. The gradient runs through the accent rather than away from it, so it
+ * reads as emphasis rather than as decoration, and it falls on the words that
+ * say what the product does.
+ */
+.headline-accent {
+  /* The sweep has to be visible or it is just a blue word. It runs from the
+     full accent into a light tint of it, so the phrase lifts away at the end
+     rather than sitting flat. */
+  background: linear-gradient(
+    100deg,
+    var(--accent) 0%,
+    color-mix(in srgb, var(--accent) 88%, #FFFFFF) 45%,
+    color-mix(in srgb, var(--accent) 52%, #FFFFFF) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
 .site-header-actions { display: flex; align-items: center; gap: var(--space-2); }
 
 @media (max-width: 900px) {
@@ -2343,17 +2590,6 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
 
 /* The sidebar's own search. Full width so it reads as part of the nav rather
    than a control floating above it. */
-.nav-search { padding: 0 var(--space-1) var(--space-2); }
-.nav-search input {
-  width: 100%;
-  padding: 0.4rem var(--space-3);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface-raised);
-  color: var(--text);
-  font-size: 0.8125rem;
-}
-.nav-search input::placeholder { color: var(--text-subtle); }
 .nav-empty { padding: 0 var(--space-3) var(--space-3); }
 
 /* ------------------------------------------------------------ product film

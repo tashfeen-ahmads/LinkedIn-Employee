@@ -361,6 +361,9 @@ export function StackedDays({
 }) {
   const totals = days.map((d) => d.values.reduce((sum, v) => sum + v, 0));
   const top = niceCeiling(Math.max(1, ...totals));
+  // About eight labels, whatever the range: enough to place yourself, few
+  // enough that none of them touch.
+  const step = Math.max(1, Math.ceil(days.length / 8));
 
   return (
     <figure className="viz">
@@ -379,7 +382,7 @@ export function StackedDays({
         </div>
 
         <div className="bars-plot">
-          {days.map((day) => {
+          {days.map((day, i) => {
             const total = day.values.reduce((sum, v) => sum + v, 0);
             return (
               <div className="bars-col" key={day.date}>
@@ -410,7 +413,18 @@ export function StackedDays({
                   */}
                   {total === 0 ? <span className="bars-none" aria-hidden="true" /> : null}
                 </div>
-                <span className="bars-label tiny subtle">{dayLabel(day.date)}</span>
+                {/*
+                  Not every column gets a label. Thirty days of weekday names
+                  is "Sat Sun Mon Tue Wed Thu Fri" four times over — an axis
+                  that repeats itself tells you nothing about where you are in
+                  it, and at this width the words collide as well. Past a week
+                  the labels become dates and only every few columns carries
+                  one; the rest keep the slot so the columns stay on their
+                  grid.
+                */}
+                <span className="bars-label tiny subtle">
+                  {i % step === 0 ? axisLabel(day.date, days.length) : ""}
+                </span>
               </div>
             );
           })}
@@ -449,9 +463,24 @@ function niceCeiling(peak: number): number {
   return 10 * magnitude;
 }
 
-/** Mon, Tue — the axis label this chart never had. */
+/** Mon, Tue — used in the tooltip, where every column names its own day. */
 function dayLabel(iso: string): string {
   const date = new Date(`${iso}T00:00:00Z`);
   if (Number.isNaN(date.getTime())) return iso;
   return date.toLocaleDateString(undefined, { weekday: "short", timeZone: "UTC" });
+}
+
+/**
+ * The label under a column.
+ *
+ * A week is read by weekday — "did anything go out on Friday" is the question.
+ * Beyond that a weekday name is ambiguous, because there are four Fridays in
+ * the range, so it becomes a date.
+ */
+function axisLabel(iso: string, span: number): string {
+  const date = new Date(`${iso}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return iso;
+  return span <= 7
+    ? date.toLocaleDateString(undefined, { weekday: "short", timeZone: "UTC" })
+    : date.toLocaleDateString(undefined, { day: "numeric", month: "short", timeZone: "UTC" });
 }

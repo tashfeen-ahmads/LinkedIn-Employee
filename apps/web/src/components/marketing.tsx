@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SiteNav } from "./site-nav";
 import { Sequence, sequenceFor } from "@/components/sequence";
 import { LINKEDIN_LIMITS } from "@le/shared";
 import { Pipeline, ReplyGate, WarmupRamp } from "./diagrams";
@@ -33,13 +34,7 @@ export function SiteHeader() {
           <Wordmark />
         </Link>
 
-        <nav className="site-nav" aria-label="Main">
-          {NAV_LINKS.map((link) => (
-            <Link key={link.href} href={link.href} className="site-nav-link">
-              {link.label}
-            </Link>
-          ))}
-        </nav>
+        <SiteNav links={NAV_LINKS} />
 
         <div className="site-header-actions">
           <Link href="/login" className="site-nav-link site-signin">
@@ -57,12 +52,31 @@ export function SiteHeader() {
 export function Hero() {
   return (
     <section className="section hero-wash">
+      {/*
+        Centred, with the product underneath rather than beside.
+
+        The hero was a two-column grid: copy on the left, one panel on the
+        right. It reads as a brochure — the headline never gets the width to
+        land, and the panel competes with it for the same glance. Centred, the
+        sentence that has to do the work is the widest thing on the page and
+        the product sits under it as the evidence, which is the shape every
+        landing page in this category has converged on because it is the order
+        somebody actually reads in.
+      */}
       <div className="container hero-grid">
         <Reveal>
-          <div className="stack-5">
-            <p className="eyebrow">AI SDR for LinkedIn</p>
+          <div className="stack-5 hero-copy">
+            {/* What is new, and where to read it — rather than an uppercase
+                label repeating the headline underneath it. */}
+            <Link href="/how-it-works" className="announce">
+              <span className="announce-dot" aria-hidden="true" />
+              Four agents, one conversation at a time
+              <span className="announce-chip">See how &rarr;</span>
+            </Link>
             <div className="stack-3">
-              <h1>Your AI SDR for LinkedIn.</h1>
+              <h1>
+                Your AI SDR <span className="headline-accent">for LinkedIn.</span>
+              </h1>
               <p className="lede prose">
                 It finds your buyers, starts the conversation, and books the meeting into your
                 calendar. You show up and close.

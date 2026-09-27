@@ -121,24 +121,16 @@ export function AppNav({ groups }: { groups: NavGroup[] }) {
 
   return (
     <nav className="nav" aria-label="Sections">
-      <div className="nav-search">
-        <label className="sr-only" htmlFor="nav-search">
-          Search the menu
-        </label>
-        <input
-          id="nav-search"
-          type="search"
-          value={query}
-          placeholder="Search…"
-          onChange={(event) => setQuery(event.target.value)}
-          // Escape clears rather than blurs: the nav is a place you pass
-          // through, and leaving a stale filter behind hides most of it.
-          onKeyDown={(event) => {
-            if (event.key === "Escape") setQuery("");
-          }}
-        />
-      </div>
+      {/*
+        The menu filter is gone.
 
+        Two search boxes on one screen — one in the rail that filtered the menu
+        and one in the top bar that searches prospects — is a person having to
+        work out which box they are in. And a filter over twelve links, each of
+        which now has a glyph and sits under one of three headings, solves a
+        problem the grouping already solved. `query` stays: the filtering logic
+        below is still what makes a matched group open rather than stay folded.
+      */}
       {needle && shown.length === 0 ? (
         <p className="small muted nav-empty">Nothing matches “{query.trim()}”.</p>
       ) : null}

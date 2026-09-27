@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { AppNav, type NavGroup } from "@/components/app-nav";
+import { AppSearch } from "@/components/app-search";
+import { NavIcon } from "@/components/icons";
 import { readSetupState } from "@/lib/setup-state";
 import { markFor, type NavMarks } from "@/lib/nav-marks";
 import { loadNeedsYou } from "@/lib/needs-you-data";
@@ -88,6 +90,20 @@ function navGroups(waiting: number, marks: NavMarks): NavGroup[] {
 }
 
 /**
+ * Two letters for the avatar, from whatever name we actually have.
+ *
+ * An email falls back to the part before the @, and a single word to its first
+ * letter — never an empty circle, which reads as a photograph that failed to
+ * load rather than as somebody who has not uploaded one.
+ */
+function initials(name: string): string {
+  const source = name.includes("@") ? name.split("@")[0]! : name;
+  const parts = source.split(/[\s._-]+/).filter(Boolean);
+  const letters = parts.slice(0, 2).map((part) => part[0]!).join("");
+  return (letters || source[0] || "?").toUpperCase();
+}
+
+/**
  * There was no way to sign out of this application at all. On a shared or
  * borrowed machine that is not an inconvenience, it is the session staying open
  * for whoever sits down next — and this one can message a rep's real contacts.
@@ -160,22 +176,75 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           })}
         />
 
-        <div className="app-account">
-          <div className="app-account-who">
-            <p className="small">{session.fullName ?? session.email}</p>
-            <p className="tiny subtle">
-              {session.fullName ? session.email : session.role}
+        {/*
+          The trial, where a person looks for it.
+
+          `entitlementMessage` already computed this and the only place it
+          showed was a banner across the top of every page — which is the right
+          shape for something broken and the wrong one for a clock running
+          down. In the rail it is present without interrupting, and it carries
+          the one action it implies.
+        */}
+        {entitlement.trialDaysLeft !== null ? (
+          <div className="app-upsell">
+            <p className="tiny subtle">Trial</p>
+            <p className="small strongish">
+              {entitlement.trialDaysLeft > 0
+                ? `${entitlement.trialDaysLeft} ${entitlement.trialDaysLeft === 1 ? "day" : "days"} left`
+                : "Last day"}
             </p>
+            <Link className="btn small block" href="/app/billing">
+              Choose a plan
+            </Link>
           </div>
-          <form action={signOut}>
-            <button className="btn ghost small" type="submit">
-              Sign out
-            </button>
-          </form>
-        </div>
+        ) : null}
+
+        <form action={signOut} className="app-signout">
+          <button className="btn ghost small" type="submit">
+            Sign out
+          </button>
+        </form>
       </aside>
 
       <div className="app-main">
+        {/*
+          The bar the application was missing.
+
+          Everything that is about *you* rather than about the page — who is
+          signed in, what is waiting, the search — was crammed into the bottom
+          of a 240px rail or into the nav itself. It belongs across the top,
+          where every application a rep already uses puts it, and moving it
+          there gives the rail back to the twelve places they can go.
+        */}
+        <header className="app-top">
+          <AppSearch />
+          <div className="app-top-actions">
+            <Link
+              className="app-top-icon"
+              href="/app/inbox"
+              aria-label={waiting ? `Inbox, ${waiting} waiting` : "Inbox"}
+            >
+              <NavIcon name="inbox" className="nav-icon" />
+              {waiting ? <span className="app-top-count">{waiting}</span> : null}
+            </Link>
+            <Link className="app-top-icon" href="/app/support" aria-label="Support">
+              <NavIcon name="support" className="nav-icon" />
+            </Link>
+            <Link className="app-top-who" href="/app/profile">
+              {/* Initials rather than a photograph: this product has never
+                  asked anybody for one, and a grey silhouette is worse than
+                  a letter. */}
+              <span className="app-avatar" aria-hidden="true">
+                {initials(session.fullName ?? session.email)}
+              </span>
+              <span className="app-top-who-text">
+                <span className="small strongish">{session.fullName ?? session.email}</span>
+                <span className="tiny subtle">{session.workspaceName}</span>
+              </span>
+            </Link>
+          </div>
+        </header>
+
         {billingMessage || (account && account.status !== "active") ? (
           <div className="app-banners">
             {billingMessage ? (
