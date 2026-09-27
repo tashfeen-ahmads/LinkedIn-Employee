@@ -193,8 +193,20 @@ export function Film() {
     <section className="section">
       <div className="container stack-5">
         <div className="stack-3">
-          <p className="eyebrow section-mark">What it actually does</p>
-          <h2>Five things, in this order, every time.</h2>
+          {/*
+            The hero's diagram now makes the "five stages, in this order"
+            claim, and this band made it again two thousand pixels lower with
+            the same five names in a tab strip. A page that says one thing
+            twice has not said it twice as convincingly — the second telling
+            reads as padding, and the reader starts skimming.
+
+            So this is the evidence for that claim rather than a restatement of
+            it: not *that* there are five, but what each one actually hands
+            over. The strip was always the screens; only the sentence above it
+            was competing with the hero.
+          */}
+          <p className="eyebrow section-mark">The five stages, on screen</p>
+          <h2>What each one actually produces.</h2>
         </div>
         <ProductFilm />
       </div>
