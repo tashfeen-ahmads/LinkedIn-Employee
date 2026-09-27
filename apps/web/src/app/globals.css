@@ -34,9 +34,28 @@
   --border:          #E1E4EC;
   --border-strong:   #C3C9D6;
 
-  --text:            #0F1117;
-  --text-muted:      #565E70;
-  --text-subtle:     #7C8496;
+  /*
+   * Three ink levels, each of which a person can actually read.
+   *
+   * `--text-subtle` was #7C8496, which is 3.75:1 on white and 3.09:1 on a
+   * sunken card — under the 4.5:1 floor on every ground in this file. It is
+   * the token behind `.subtle`, `.eyebrow`, `.stat-label` and the timeline
+   * days, so sixty-three elements on the landing page alone were set in a grey
+   * that does not meet AA. That is not a subtle level, it is an unreadable
+   * one, and an ink level nobody can read is not a level.
+   *
+   * Moving only that token would have fixed the contrast and destroyed the
+   * scale: the floor sits at L≈0.52 in OKLab and muted was at 0.482, so the
+   * two would have landed 0.04 apart — two names for one colour. So the pair
+   * is re-spaced together, keeping the 0.10 lightness step the scale was
+   * designed around. Lightness moves and hue does not; the values are computed
+   * (scripts pick the darkest step that clears 4.5:1 on #FFFFFF, #F4F5F9,
+   * #EDEFF5, #E6E9F1 and the accent wash) rather than chosen by eye, for the
+   * same reason the chart colours in rule 35 are.
+   */
+  --text:            #0F1117;   /* 18.9:1 on white */
+  --text-muted:      #454D5E;   /*  7.0:1 worst ground */
+  --text-subtle:     #61697A;   /*  4.5:1 worst ground */
   --text-inverse:    #FFFFFF;
 
   /* One saturated hue, spent deliberately. Deliberately not LinkedIn's blue:
@@ -134,8 +153,8 @@
     --border-strong:  #3A4251;
 
     --text:           #ECEEF3;
-    --text-muted:     #A2AAB9;
-    --text-subtle:    #79808F;
+    --text-muted:     #A3ABBA;
+    --text-subtle:    #828998;   /* was #79808F: 4.21:1 on a raised card */
     --text-inverse:   #0B0D12;
 
     --accent:         #A5A0FF;
@@ -172,8 +191,8 @@
   --border:         #262C39;
   --border-strong:  #3A4251;
   --text:           #ECEEF3;
-  --text-muted:     #A2AAB9;
-  --text-subtle:    #79808F;
+  --text-muted:     #A3ABBA;
+  --text-subtle:    #828998;
   --text-inverse:   #0B0D12;
   --accent:         #A5A0FF;
   --viz-1: #6F68E8;
@@ -1231,7 +1250,20 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   height: 2rem;
   flex: none;
   border-radius: 50%;
-  background: linear-gradient(140deg, var(--accent), var(--accent-2));
+  /*
+   * The accent, flat, rather than the wordmark's gradient.
+   *
+   * `--accent-2` says above it is for "the wordmark, one hero wash" — and the
+   * avatar was a third use of it, the one with text on top. White is 7.6:1 on
+   * the accent and 3.0:1 on the travel-to teal, so the initials crossed the
+   * floor partway along: measured on the real geometry, the glyph box's
+   * bottom-right corner sits at 4.28:1. No stop of that hue can carry white at
+   * 4.5:1 — it clips the sRGB gamut at 4.49 on the way down — so the fix is not
+   * a darker teal, it is not putting text on a gradient that travels somewhere
+   * text cannot follow. A surface that carries text has a different job from a
+   * decorative mark, and the wordmark dot keeps the gradient.
+   */
+  background: var(--accent);
   color: var(--text-inverse);
   font-size: 0.75rem;
   font-weight: 650;
@@ -1541,19 +1573,38 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
    * rule that lists the controls it covers misses the next one added; these
    * are every control on the page that is not a field.
    */
-  .nav a,
+  /*
+   * `nav a` rather than a list of the navs we remember.
+   *
+   * The list said `.nav a` and `.tabs a` — both of which are `<nav>`
+   * elements — and so covered the application and nothing else. A sweep of the
+   * marketing site at 390 and 768 found every footer link at 22px on every
+   * page, and the breadcrumb on /linkedin-automation-limits at 14px. Those are
+   * navigation too; they were simply navs nobody had added to the list, which
+   * is the failure this rule's original comment predicted and has now made
+   * three times.
+   *
+   * Every `<nav>` in this product is a rail of links — footer columns, the
+   * breadcrumb, the marketing nav, the filter tabs, the sidebar — and none of
+   * them holds running prose, so the element selector is both the general rule
+   * and the true one. `.between > a` stays because a link beside a title in a
+   * flex row is a control that is not in a nav.
+   */
+  nav a,
   .btn.small,
-  .tabs a,
   .chip,
-  /* `.between` is a layout row, so a link that is its direct child is a
-     control standing on its own rather than a word inside a sentence — which
-     is what the comment above predicted and what a sweep of every route found:
-     one 22px link, the only way from a support ticket to its workspace. */
   .between > a {
     min-height: 2.75rem;
     display: inline-flex;
     align-items: center;
   }
+  /*
+   * The landing page's scene tabs take the floor without the display: each one
+   * already lays its own number and label out in a column, and `inline-flex`
+   * would collapse that into a row. The floor is the requirement; centring a
+   * single line in it is only how an inline control fills it.
+   */
+  .film-tab { min-height: 2.75rem; }
 
   /* The page's own gutter shrinks on a phone; the banners follow it rather
      than keeping a desktop inset the content no longer has. */
@@ -2200,7 +2251,17 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
 }
 @media (max-width: 480px) {
   .site-signin { display: none; }
-  .wordmark-thin { display: none; }
+  /*
+   * Scoped to the header, which is the only place the space runs out.
+   *
+   * Unscoped, this hid the second half of the product's name everywhere the
+   * wordmark appears — including the footer, which on a phone has a column to
+   * itself and no constraint at all. What was left there read "LinkedIn",
+   * four lines above "Not affiliated with LinkedIn Corporation": our own
+   * footer claiming somebody else's name and then disclaiming it. A rule
+   * written for one cramped bar had been applied to the whole site.
+   */
+  .site-header .wordmark-thin { display: none; }
 }
 
 /* The closing band: one ask, on a ground of its own so it reads as the end of

@@ -178,7 +178,7 @@ export function ReplyGate() {
 
         <div className="gate-out">
           <span className="pill positive">Everything else — a reply is drafted</span>
-          <p className="small muted">
+          <p className="small muted prose">
             On approval mode it waits for your click. On autopilot it sends. The conditions above do
             not change between the two; only what happens to a clean message does.
           </p>

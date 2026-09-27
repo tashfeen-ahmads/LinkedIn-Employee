@@ -155,7 +155,7 @@ export function GateSimulator() {
         </AnimatePresence>
       </div>
 
-      <p className="tiny subtle">
+      <p className="tiny subtle prose">
         The opt-out check above is the product&rsquo;s own code running in your browser, against the
         same phrase list the sender uses. The other conditions are keyword stand-ins here; in the
         product a classifier decides them, and it errs toward handing over.

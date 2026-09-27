@@ -118,7 +118,7 @@ export function Hero() {
               </p>
             </div>
 
-            <p className="tiny subtle">
+            <p className="tiny subtle prose">
               Held for you. Pricing, legal, anything negative and anything it is unsure about waits
               for a person, on every plan.
             </p>
@@ -510,7 +510,7 @@ export function Signals() {
               ))}
             </ul>
 
-            <p className="tiny subtle">
+            <p className="tiny subtle prose">
               Fit decides whether to contact at all. Intent decides who first, and decays to nothing
               over ninety days — a funding round from last spring is not a reason to message anyone
               today.
@@ -636,6 +636,17 @@ const ALTERNATIVES = [
  */
 export function Pricing({ standalone = false }: { standalone?: boolean } = {}) {
   const Heading = standalone ? "h1" : "h2";
+  /*
+   * And the cards move with it.
+   *
+   * The comment above got the section's own heading right and stopped there,
+   * so /pricing ran h1 straight to h3 — a level skipped is a level nobody can
+   * hear, and to a screen reader the plans then sit under a heading that is
+   * not in the document. It also put the page's only h2 ("Before you ask")
+   * *after* three h3s, so the outline read inside-out. One switch, applied to
+   * both levels, or the fix is half a fix.
+   */
+  const CardHeading = standalone ? "h2" : "h3";
   return (
     <section id="pricing" className="section">
       <div className="container stack-6">
@@ -649,7 +660,7 @@ export function Pricing({ standalone = false }: { standalone?: boolean } = {}) {
           {ALTERNATIVES.map((option) => (
             <article key={option.name} className={`card stack-2${option.here ? " alt-here" : ""}`}>
               <div className="between">
-                <h3 className="small">{option.name}</h3>
+                <CardHeading className="small">{option.name}</CardHeading>
                 <span className="tiny subtle">{option.cost}</span>
               </div>
               <p className="small muted">{option.body}</p>
@@ -661,7 +672,7 @@ export function Pricing({ standalone = false }: { standalone?: boolean } = {}) {
           {PLANS.map((plan) => (
             <article key={plan.name} className={`card stack-4 plan${plan.highlight ? " plan-featured" : ""}`}>
               <div className="between">
-                <h3>{plan.name}</h3>
+                <CardHeading>{plan.name}</CardHeading>
                 {plan.highlight ? <span className="pill accent">Most popular</span> : null}
               </div>
 
