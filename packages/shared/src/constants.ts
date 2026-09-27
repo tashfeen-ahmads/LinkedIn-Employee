@@ -319,3 +319,26 @@ export const HOOK_MAX_CHARS = 120;
 /** Same as the pitch: enough to compare, few enough to read in one sitting. */
 export const HOOK_VARIANTS_MIN = 4;
 export const HOOK_VARIANTS_MAX = 5;
+
+/**
+ * How long a post on the rep's own profile may be.
+ *
+ * LinkedIn's own ceiling, and it is the one length in this file that is not a
+ * product judgement about what somebody will read — it is what the API
+ * refuses. A post over it is not truncated by them, and truncating it here
+ * would put half a thought on a real professional's public profile under their
+ * own name, which is the reason `mayPublish` drops rather than trims.
+ */
+export const POST_MAX_CHARS = 3000;
+
+/**
+ * How many drafts the writer produces in one run.
+ *
+ * Several rather than one, for the pitch's reason: one draft is a
+ * take-it-or-leave-it, and the rep's only move is to reject it and press the
+ * button again. Fewer than the pitch set because a post is thirty times longer
+ * — four of them is a reading job, and a set nobody reads is approved unread,
+ * which is the one thing this table exists to prevent.
+ */
+export const POST_DRAFTS_MIN = 2;
+export const POST_DRAFTS_MAX = 3;

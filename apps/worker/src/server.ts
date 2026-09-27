@@ -21,6 +21,8 @@ import { sendOneNow } from "./jobs/send-one.js";
 import { runAgentTest } from "./jobs/agent-test.js";
 import { writeWorkspacePitch } from "./jobs/write-pitch.js";
 import { writeWorkspaceHooks } from "./jobs/write-hooks.js";
+import { writeWorkspacePosts } from "./jobs/write-posts.js";
+import { publishApprovedPosts } from "./jobs/publish-posts.js";
 import { rewriteCampaignNotes } from "./jobs/rewrite-notes.js";
 import type IORedis from "ioredis";
 import type { WorkerContext } from "./context.js";
@@ -51,6 +53,23 @@ const AgentTestRequestSchema = z.object({
       linkedinUrl: z.string().max(300).nullish(),
     })
     .optional(),
+});
+
+/** Just "who is asking, about which workspace" — the whole body some routes need. */
+const MembershipRequest = z.object({
+  workspaceId: z.string().uuid(),
+  userId: z.string().uuid(),
+});
+
+const WritePostsRequest = z.object({
+  workspaceId: z.string().uuid(),
+  userId: z.string().uuid(),
+  // What the person asked to change. Capped because it is typed into a box and
+  // goes straight into a prompt.
+  instruction: z.string().max(2000).optional(),
+  // Which business speaks, for a workspace that runs more than one. Absent is
+  // the workspace's first, which is every workspace that has only ever had one.
+  businessProfileId: z.string().uuid().optional(),
 });
 
 const WritePitchRequest = z.object({
@@ -452,6 +471,45 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
     // sell yet" is a correct answer to the question, and the caller renders
     // the sentence rather than translating a status code into a shrug.
     return c.json(result);
+  });
+
+  /*
+   * Drafts for the rep's own profile. Same shape and same reason for being
+   * synchronous: the drafts are the whole point of the click.
+   */
+  app.post("/jobs/write-posts", async (c) => {
+    const parsed = WritePostsRequest.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "invalid request" }, 400);
+    if (!(await assertMembership(ctx.db, parsed.data.workspaceId, parsed.data.userId))) {
+      return c.json({ error: "not a member of that workspace" }, 403);
+    }
+    // 200 either way, as /jobs/write-pitch does: "tell us what you do first" is
+    // a correct answer to the question, and the caller renders the sentence
+    // rather than turning a status code into a shrug.
+    return c.json(await writeWorkspacePosts(ctx, parsed.data));
+  });
+
+  /*
+   * Publish whatever is approved and due, now.
+   *
+   * The quarter-hourly sweep does this on its own; this is what Approve calls,
+   * for rule 21's reason — the action that most needs the worker must not be the
+   * one that only sets a row and trusts the schedule to notice. A post approved
+   * at 10:02 going out at 10:15 is a product that looks broken for thirteen
+   * minutes.
+   *
+   * It takes no post id on purpose. The sweep reads every approved row for the
+   * caller's own workspace and `mayPublish` decides each one, so a request
+   * cannot make a particular post go — including one somebody else's approval
+   * is still pending on.
+   */
+  app.post("/jobs/publish-posts", async (c) => {
+    const parsed = MembershipRequest.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "invalid request" }, 400);
+    if (!(await assertMembership(ctx.db, parsed.data.workspaceId, parsed.data.userId))) {
+      return c.json({ error: "not a member of that workspace" }, 403);
+    }
+    return c.json(await publishApprovedPosts(ctx, new Date(), 25, parsed.data.workspaceId));
   });
 
   // The openers. Same shape as /jobs/write-pitch, and same reason for being

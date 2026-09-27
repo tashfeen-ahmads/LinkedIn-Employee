@@ -202,6 +202,26 @@ export async function scheduleRepeatables(queues: Queues): Promise<void> {
     { every: 60 * 60_000 },
     { name: "acceptance", data: {} },
   );
+  /*
+   * Approved posts, every quarter of an hour.
+   *
+   * Not on the nightly sweep, and the reason is the whole point of the
+   * schedule: a post exists to be read, so three in the morning is the one
+   * time it must not go out. `mayPublish` holds an unscheduled post until the
+   * rep's own working hours, and a sweep that only ran at 03:00 would find
+   * every post outside them, hold it, and come back a day later — a queue that
+   * never drains while every screen reports it healthy.
+   *
+   * Fifteen minutes rather than an hour because a post's time is something a
+   * person chose: "9am Tuesday" landing at 09:52 is a scheduler somebody stops
+   * trusting. The query is one index lookup that returns nothing on almost
+   * every run, which is the cheapest thing in this worker.
+   */
+  await queues.maintenance.upsertJobScheduler(
+    "posts",
+    { every: 15 * 60_000 },
+    { name: "posts", data: {} },
+  );
   // Weekday mornings only: a digest on Sunday is an email nobody wants.
   await queues.digest.upsertJobScheduler(
     "weekday-morning",

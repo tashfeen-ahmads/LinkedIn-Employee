@@ -114,6 +114,7 @@ parts.push(
   `revoke execute on function ${schema}.handle_new_user() from public, anon, authenticated;`,
   `revoke execute on function ${schema}.touch_updated_at() from public, anon, authenticated;`,
   `revoke execute on function ${schema}.pitch_edit_needs_reapproval() from public, anon, authenticated;`,
+  `revoke execute on function ${schema}.clear_post_approval() from public, anon, authenticated;`,
   ``,
   `-- Every RPC this product exposes is called by a signed-in user. PUBLIC is`,
   `-- where CREATE FUNCTION puts EXECUTE by default, and PUBLIC includes anon,`,

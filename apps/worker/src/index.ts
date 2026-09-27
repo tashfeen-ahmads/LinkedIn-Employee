@@ -15,6 +15,7 @@ import { handleInboundMessage } from "./jobs/inbound.js";
 import { runStrategyJob } from "./jobs/strategy.js";
 import { runTargetingJob } from "./jobs/targeting.js";
 import { detectAcceptedInvitations } from "./jobs/acceptance.js";
+import { publishApprovedPosts } from "./jobs/publish-posts.js";
 import { recoverThrottledProspects, unstickProspects } from "./jobs/unstick.js";
 import { runMaintenance } from "./jobs/maintenance.js";
 import { seedMissingAgents } from "./jobs/seed-agent.js";
@@ -137,24 +138,36 @@ const workers = [
     connection,
     concurrency: 4,
   }),
-  // Two schedules share this queue: the nightly sweep, and the hourly
-  // acceptance poll that decides how long a warm prospect waits to be written
-  // to. Running the whole sweep hourly would withdraw invitations and send
-  // digests twelve times a day.
+  /*
+   * Three schedules share this queue, and the job's own name decides which
+   * runs. Running the whole nightly sweep hourly would withdraw invitations and
+   * send digests twelve times a day.
+   */
   new Worker(
     QUEUE_NAMES.maintenance,
-    (job) =>
-      job.name === "acceptance"
-        ? // Notice who accepted, then put anybody whose next step went missing
-          // back on the rails. Both are hourly because both decide whether a
-          // warm prospect is written to today or never.
+    (job) => {
+      if (job.name === "acceptance") {
+        // Notice who accepted, then put anybody whose next step went missing
+        // back on the rails. Both are hourly because both decide whether a
+        // warm prospect is written to today or never.
+        return (
           detectAcceptedInvitations(ctx)
             .then(() => unstickProspects(ctx.db))
-            // A throttle lifts on its own schedule, so the rows it wrote off are
-            // checked on the same hourly beat rather than waiting for the night.
+            // A throttle lifts on its own schedule, so the rows it wrote off
+            // are checked on the same hourly beat rather than waiting for the
+            // night.
             .then(() => recoverThrottledProspects(ctx.db))
             .then(() => undefined)
-        : runMaintenance(ctx, queues),
+        );
+      }
+      if (job.name === "posts") {
+        // Every quarter of an hour, because a post's time is one a person
+        // chose and because the nightly slot is the one hour a post must not
+        // go out in.
+        return publishApprovedPosts(ctx).then(() => undefined);
+      }
+      return runMaintenance(ctx, queues);
+    },
     { connection, concurrency: 1 },
   ),
   /*

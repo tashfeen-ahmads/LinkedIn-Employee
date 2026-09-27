@@ -82,6 +82,10 @@ function navGroups(waiting: number, marks: NavMarks): NavGroup[] {
       items: [
         { href: "/app/prospects", label: "Prospects", icon: "prospects" },
         { href: "/app/meetings", label: "Meetings", icon: "meetings" },
+        // Off the daily path deliberately. It is the one thing this product
+        // publishes that nobody is waiting for, and a post that waits a day
+        // has lost nothing — which is the whole argument for its approval gate.
+        { href: "/app/posts", label: "Profile posts", icon: "posts" },
         { href: "/app/tutorial", label: "How it works", icon: "tutorial" },
         { href: "/app/system", label: "System check", icon: "system" },
         { href: "/app/support", label: "Support", icon: "support" },

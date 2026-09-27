@@ -3062,6 +3062,12 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
 .app .cal-swatch.is-closed { background: repeating-linear-gradient(
   45deg, var(--surface) 0 4px, var(--surface-sunken) 4px 8px); }
 
+/* A post keeps the paragraph breaks it was written with.
+   `<p>` collapses a run of newlines, so without this the agent's short
+   paragraphs — which are what makes a post readable on a phone — render as one
+   block, and the review screen shows something the reader never sees. */
+.app .post-body { white-space: pre-wrap; }
+
 .app .cal-grid {
   display: grid;
   /* The hour gutter, then one equal column per day. */

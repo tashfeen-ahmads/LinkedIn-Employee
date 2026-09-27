@@ -6,6 +6,9 @@ import {
   PITCH_MAX_CHARS,
   PITCH_VARIANTS_MAX,
   PITCH_VARIANTS_MIN,
+  POST_DRAFTS_MAX,
+  POST_DRAFTS_MIN,
+  POST_MAX_CHARS,
 } from "./constants.js";
 
 // ---------- Strategy Agent artifacts ----------
@@ -197,6 +200,48 @@ export const HookSetSchema = z.object({
   variants: z.array(HookSchema).min(HOOK_VARIANTS_MIN).max(HOOK_VARIANTS_MAX),
 });
 export type HookSet = z.infer<typeof HookSetSchema>;
+
+// ---------- Posts on the rep's own profile ----------
+
+/**
+ * One post, written for the rep's own feed.
+ *
+ * Not an invitation and not a pitch. It goes to everybody who follows the rep,
+ * it stays on their profile, and it is the first thing a prospect reads when
+ * they look the sender up after an invitation arrives — which is the reason it
+ * is worth writing at all, and the reason nothing here reaches LinkedIn
+ * without a person having read it.
+ *
+ * `body` is long compared with everything else this product writes because a
+ * post is the one thing a reader chose to open. It still may not carry a link:
+ * LinkedIn suppresses the reach of a post with an outbound URL in it, which
+ * makes a link the most expensive sentence in the post rather than the most
+ * useful one. `containsLink` checks the text, exactly as it does for a
+ * connection note (rule 29) — the prompt saying so is not what makes it true.
+ */
+export const PostDraftSchema = z.object({
+  /** How the rep tells one draft from another in a list. "Referral leakage". */
+  name: z.string().max(60),
+  body: z
+    .string()
+    .max(POST_MAX_CHARS)
+    .describe(
+      `The post itself, ${POST_MAX_CHARS} characters at the absolute most. First person, no links, no hashtag spam.`,
+    ),
+  /** Which bet it places, written to the rep and never to the reader. */
+  angle: z.string().max(200),
+  factsUsed: z
+    .array(z.string())
+    .describe(
+      "Each claim this post makes, quoted from the material supplied. What makes 'is this true' checkable rather than a matter of opinion.",
+    ),
+});
+export type PostDraft = z.infer<typeof PostDraftSchema>;
+
+export const PostDraftSetSchema = z.object({
+  drafts: z.array(PostDraftSchema).min(POST_DRAFTS_MIN).max(POST_DRAFTS_MAX),
+});
+export type PostDraftSet = z.infer<typeof PostDraftSetSchema>;
 
 // ---------- Targeting Agent ----------
 

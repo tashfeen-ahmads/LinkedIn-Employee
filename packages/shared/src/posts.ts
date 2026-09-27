@@ -17,8 +17,26 @@
  * told, not constrained.
  */
 
-/** LinkedIn refuses a post above this, and truncating one is not an option. */
-export const POST_MAX_CHARS = 3000;
+import { POST_MAX_CHARS } from "./constants.js";
+import { isWithinWorkingHours, type WorkingHours } from "./time.js";
+
+/**
+ * The hours a post may land in, when nobody named a time.
+ *
+ * A post is read by whoever is scrolling when it appears, so *when* is part of
+ * whether it worked at all — and a post appearing on a real professional's
+ * profile at four in the morning their time reads as a machine posting for
+ * them, which is the one impression this product cannot afford to give on the
+ * account it exists to protect.
+ *
+ * So an unscheduled post waits for the rep's own working hours. A post with an
+ * explicit `scheduled_for` goes at that time whatever it is: they asked.
+ */
+export interface PostWindow {
+  hours: WorkingHours;
+  /** IANA zone. `profiles.timezone`, not the server's. */
+  timezone: string;
+}
 
 export type PostRow = {
   body: string;
@@ -42,7 +60,20 @@ export type PostVerdict =
  * ones — the same distinction rule 40 draws between holding a follow-up and
  * failing it.
  */
-export function mayPublish(post: PostRow, now: Date = new Date()): PostVerdict {
+export function mayPublish(
+  post: PostRow,
+  now: Date = new Date(),
+  /**
+   * The rep's posting hours, when the caller knows them.
+   *
+   * Optional because the row-only checks are worth making before anything is
+   * read from another table — a draft nobody approved should not cost a query
+   * against `linkedin_accounts`. The sweep asks twice for exactly that reason,
+   * and the screen asks once with the window, so both say the same thing about
+   * the same row (the habit rule 21 states for `describePacing`).
+   */
+  window?: PostWindow,
+): PostVerdict {
   if (post.published_at || post.status === "published") {
     // Not an error, and not a second publish. LinkedIn has no idempotency key
     // here, so a duplicate is two posts on a real profile minutes apart.
@@ -77,6 +108,17 @@ export function mayPublish(post: PostRow, now: Date = new Date()): PostVerdict {
     if (Number.isFinite(due) && due > now.getTime()) {
       return { send: false, reason: `scheduled for ${post.scheduled_for}`, retry: true };
     }
+    // Past its time, and the rep chose that time. The window below is what
+    // "publish it when you can" means, not an override of an instruction.
+    if (Number.isFinite(due)) return { send: true };
+  }
+
+  if (window && !isWithinWorkingHours(now, window.hours, window.timezone)) {
+    // Retryable, and the most ordinary hold there is: the words are approved
+    // and the next sweep inside working hours sends them. Written off as a
+    // failure this would be a post that never went out because it was approved
+    // in the evening.
+    return { send: false, reason: "waiting for your posting hours", retry: true };
   }
 
   return { send: true };

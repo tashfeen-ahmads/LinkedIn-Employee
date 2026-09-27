@@ -31,7 +31,7 @@ describe("reasoning effort", () => {
      * provider's default, which is neither cheap nor written down anywhere in
      * this repo. Both of the calls that did cost the most.
      */
-    for (const file of ["targeting.ts", "strategy.ts", "reply.ts", "hook.ts", "pitch.ts"]) {
+    for (const file of ["targeting.ts", "strategy.ts", "reply.ts", "hook.ts", "pitch.ts", "post.ts"]) {
       const source = read(file);
       const calls = source.match(/agent: "/g)?.length ?? 0;
       const efforts = source.match(/effort: "/g)?.length ?? 0;

@@ -7,6 +7,7 @@ export * from "./scoring.js";
 export * from "./knowledge.js";
 export * from "./pitch.js";
 export * from "./hook.js";
+export * from "./post.js";
 export {
   STRATEGY_PROMPT_VERSION,
 } from "./prompts/strategy.js";
@@ -20,4 +21,5 @@ export {
 } from "./prompts/reply.js";
 export { PITCH_PROMPT_VERSION } from "./prompts/pitch.js";
 export { HOOK_PROMPT_VERSION } from "./prompts/hook.js";
+export { POST_PROMPT_VERSION } from "./prompts/post.js";
 export * from "./agent-test.js";

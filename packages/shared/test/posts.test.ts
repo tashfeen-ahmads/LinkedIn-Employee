@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { mayPublish, POST_MAX_CHARS } from "../src/posts.js";
+import { POST_MAX_CHARS } from "../src/constants.js";
+import { mayPublish } from "../src/posts.js";
 
 /**
  * The gate between a draft and a real person's public profile.
@@ -75,5 +76,66 @@ describe("mayPublish", () => {
     const verdict = mayPublish({ ...approved, status: "failed" }, now);
     expect(verdict.send).toBe(false);
     expect(verdict.send === false && verdict.retry).toBe(false);
+  });
+
+  /*
+   * When a post lands is part of whether it worked.
+   *
+   * `now` is 12:00 UTC on Monday 5 October 2026: 13:00 in London, 05:00 in
+   * Los Angeles. The second is the case this gate exists for — a post appearing
+   * on a real professional's profile at five in the morning their time reads as
+   * a machine posting for them, on the one account this product exists to
+   * protect.
+   */
+  describe("posting hours", () => {
+    const hours = { start: 9, end: 17, days: [1, 2, 3, 4, 5] };
+
+    it("holds an unscheduled post until the rep's day has started", () => {
+      const verdict = mayPublish(approved, now, { hours, timezone: "America/Los_Angeles" });
+      expect(verdict.send).toBe(false);
+      // Retryable, and the most ordinary hold there is. Written off as a
+      // failure, a post approved in the evening would never go out.
+      expect(verdict.send === false && verdict.retry).toBe(true);
+    });
+
+    it("sends inside the window", () => {
+      // 13:00 in London, inside a nine-to-five.
+      expect(mayPublish(approved, now, { hours, timezone: "Europe/London" })).toEqual({ send: true });
+    });
+
+    it("holds on a day the rep does not work", () => {
+      const saturday = new Date("2026-10-10T12:00:00Z");
+      expect(mayPublish(approved, saturday, { hours, timezone: "Europe/London" }).send).toBe(false);
+    });
+
+    it("sends a post whose time the rep chose, whatever hour that is", () => {
+      /*
+       * The asymmetry is the point. "Publish it when you can" means inside
+       * working hours; "publish it at this time" is an instruction, and a
+       * window that overrode it would be a scheduler that ignores its schedule
+       * — somebody deliberately timing a post for 6am would find it never went.
+       */
+      const outside = { ...approved, scheduled_for: "2026-10-05T11:00:00Z" };
+      expect(mayPublish(outside, now, { hours, timezone: "America/Los_Angeles" })).toEqual({
+        send: true,
+      });
+    });
+
+    it("still refuses an unapproved post inside the window", () => {
+      // The window decides *when*, never *whether*. A gate that let approval
+      // through because the hour was right would be the whole table pointless.
+      expect(
+        mayPublish({ ...approved, approved_at: null, status: "draft" }, now, {
+          hours,
+          timezone: "Europe/London",
+        }).send,
+      ).toBe(false);
+    });
+
+    it("sends whenever no window is given", () => {
+      // The row-only verdict, which is what the sweep asks for before it has
+      // read an account. It must not hold a post for a window it was not told.
+      expect(mayPublish(approved, now)).toEqual({ send: true });
+    });
   });
 });

@@ -1,3 +1,4 @@
+import { parseWorkingHours } from "@le/linkedin";
 import { mayPublish, type PostRow } from "@le/shared";
 import { recordEvent, type WorkerContext } from "../context.js";
 
@@ -20,12 +21,24 @@ import { recordEvent, type WorkerContext } from "../context.js";
 export async function publishApprovedPosts(
   ctx: WorkerContext,
   now: Date = new Date(),
-  limit = 10,
+  limit = 25,
+  /**
+   * One workspace, when a person just pressed Approve there.
+   *
+   * The scheduled sweep passes nothing and covers the deployment. The route
+   * passes the caller's own workspace — not so it can publish something it
+   * otherwise could not, but so a click does not spend its seconds on every
+   * other tenant's queue before reaching the row that was just approved.
+   */
+  workspaceId?: string,
 ): Promise<{ published: number; held: number; failed: number }> {
-  const { data: rows } = await ctx.db
+  const query = ctx.db
     .from("linkedin_posts")
     .select("id, workspace_id, user_id, body, status, approved_at, scheduled_for, published_at")
-    .eq("status", "approved")
+    .eq("status", "approved");
+  // The worker holds the service role, so RLS will not scope this — it has to
+  // filter by workspace itself, exactly as every other job here does.
+  const { data: rows } = await (workspaceId ? query.eq("workspace_id", workspaceId) : query)
     .order("scheduled_for", { ascending: true, nullsFirst: true })
     .limit(limit);
 
@@ -55,10 +68,14 @@ export async function publishApprovedPosts(
      * The account is read here rather than carried, for the same reason the
      * row is: a rep who disconnected LinkedIn this morning must not have a
      * post go out against a stale account id.
+     *
+     * It is read *after* the row-only verdict, not before, so a draft nobody
+     * approved costs nothing — which is why `mayPublish` takes its window as
+     * an optional third argument rather than requiring one.
      */
     const { data: account } = await ctx.db
       .from("linkedin_accounts")
-      .select("provider_account_id, status")
+      .select("provider_account_id, status, working_hours")
       .eq("workspace_id", row.workspace_id)
       .eq("user_id", row.user_id)
       .maybeSingle();
@@ -69,6 +86,35 @@ export async function publishApprovedPosts(
     if (!account || account.status !== "active" || !account.provider_account_id) {
       // Held, not failed: the post is fine, the account is not, and the rep
       // reconnecting should be enough to send it without re-approving.
+      held += 1;
+      continue;
+    }
+
+    /*
+     * Now the same gate again, with the rep's own hours in it.
+     *
+     * Asked twice rather than once, and the second call re-doing the cheap
+     * checks is free. What it buys is one definition of the gate: the screen
+     * calls `mayPublish` with the window too, so the sweep and the page can
+     * never disagree about a row — the habit rule 21 states for
+     * `describePacing`, where two readings of one rule drifted and the
+     * screen's was the one somebody believed.
+     */
+    const { data: repProfile } = await ctx.db
+      .from("profiles")
+      .select("timezone")
+      .eq("id", row.user_id)
+      .maybeSingle();
+    const timed = mayPublish(row as PostRow, now, {
+      hours: parseWorkingHours(account.working_hours),
+      // UTC only when the row has never been written. That default is how an
+      // eight-to-six working day came to mean four in the morning Eastern for
+      // this deployment's first live account, so it is worth saying out loud
+      // that it is a fallback and not a setting anybody chose.
+      timezone: repProfile?.timezone || "UTC",
+    });
+    if (!timed.send) {
+      // Can only be the window by now: everything else was decided above.
       held += 1;
       continue;
     }

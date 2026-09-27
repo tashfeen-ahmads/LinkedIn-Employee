@@ -154,6 +154,15 @@ const PATHS: Record<string, React.ReactNode> = {
   ),
   /* Anything the map does not name. Never a blank space: a row with no glyph
      is a row whose left edge is 16px out of line with every other row. */
+  /* Posts — a sheet with two lines of text and the corner turned up, because
+     what this screen holds is something written rather than something sent. */
+  posts: (
+    <>
+      <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
+      <path d="M14 3v6h6" />
+      <path d="M8 13h8M8 17h5" />
+    </>
+  ),
   dot: <circle cx="12" cy="12" r="3.2" />,
 };
 
