@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Empty, PageHeader } from "@/components/page";
+import { Empty, PageHeader, Section } from "@/components/page";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { fetchAllRows } from "@/lib/rows";
@@ -114,9 +114,19 @@ export default async function CampaignsPage({
         }
       />
       {grouped.map((group) => (
-        <section key={group.id ?? "none"} className="stack-4">
-          <div className="between">
-            <h2>{group.name}</h2>
+        /*
+          `Section`, not a hand-rolled `<section className="stack-4">`.
+          The count belongs on the heading's own row, which is what
+          `Section`'s `action` slot is for — written by hand it was a
+          `.between` div inside a stack, so the heading picked up the stack's
+          gap *and* the extra margin this sheet gives whatever follows an h2.
+          Every group on this screen therefore sat a few pixels differently
+          from every framed section elsewhere in the product.
+        */
+        <Section
+          key={group.id ?? "none"}
+          title={group.name}
+          action={
             <p className="tiny subtle">
               {group.campaigns.length} {group.campaigns.length === 1 ? "campaign" : "campaigns"}
               {group.id ? (
@@ -126,11 +136,10 @@ export default async function CampaignsPage({
                 </>
               ) : null}
             </p>
-          </div>
-          <div className="grid">
-            {renderCampaigns(group.campaigns, byCampaign)}
-          </div>
-        </section>
+          }
+        >
+          <div className="grid">{renderCampaigns(group.campaigns, byCampaign)}</div>
+        </Section>
       ))}
     </>
   );

@@ -1,5 +1,5 @@
 import { formatUsd } from "@le/shared";
-import { PageHeader } from "@/components/page";
+import { PageHeader, Section } from "@/components/page";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { costPerMeeting, groupBy, type UsageGroup, type UsageRow } from "@/lib/usage";
@@ -78,8 +78,7 @@ export async function SpendSection() {
       <UsageTable title="By prompt version" groups={byVersion} firstColumn="Prompt" />
 
       {failures.length ? (
-        <section>
-          <h2>Recent failures</h2>
+        <Section title="Recent failures">
           <div className="table-scroll">
             <table>
               <thead>
@@ -100,7 +99,7 @@ export async function SpendSection() {
               </tbody>
             </table>
           </div>
-        </section>
+        </Section>
       ) : null}
     </>
   );
@@ -116,8 +115,11 @@ function UsageTable({
   firstColumn: string;
 }) {
   return (
-    <section>
-      <h2>{title}</h2>
+    /* Framed. Three of these sat on the page as bare `<section><h2>` pairs, so
+       the spend tables were spaced unlike every other table in the product —
+       and unlike each other, since the one below them was written out by
+       hand. */
+    <Section title={title}>
       <div className="table-scroll">
         <table>
           <thead>
@@ -154,19 +156,18 @@ function UsageTable({
           </tbody>
         </table>
       </div>
-    </section>
+    </Section>
   );
 }
 
 function Stat({ label, value, note }: { label: string; value: string; note?: string }) {
   return (
     <div className="card">
-      <p className="small muted">
-        {label}
-      </p>
-      <p className="mono stat-value">
-        {value}
-      </p>
+      <p className="stat-label">{label}</p>
+      {/* `.stat-value` sets the UI face on its tabular figures; the `mono`
+          beside it was a contradiction that only happened to lose on source
+          order. */}
+      <p className="stat-value">{value}</p>
       {note ? (
         <p className="small muted">
           {note}

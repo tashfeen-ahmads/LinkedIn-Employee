@@ -105,7 +105,7 @@ export async function BillingSection({ searchParams }: { searchParams: NoticePar
       </section>
 
       <section className="card">
-        <h2>Export everything</h2>
+        <h3>Export everything</h3>
         <p className="small muted">
           Every prospect, conversation, message, meeting and campaign in this workspace, as one JSON
           file. This is what answers a subject-access request, and it is here rather than behind a

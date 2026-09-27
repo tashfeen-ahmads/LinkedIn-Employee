@@ -2,7 +2,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { noticeQuery } from "@/lib/worker";
 import { PageNotice } from "@/components/page-notice";
-import { PageHeader } from "@/components/page";
+import { PageHeader, Section } from "@/components/page";
 import { KNOWLEDGE_BUDGET_CHARS, selectKnowledge } from "@le/agents";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
@@ -129,14 +129,12 @@ export default async function KnowledgePage({
         </section>
       ) : null}
 
-      <section>
-        <h2>
-          {docs.length} {docs.length === 1 ? "page" : "pages"}
-          <span className="small muted">
-            {" "}
-            · {Math.round((used / KNOWLEDGE_BUDGET_CHARS) * 100)}% of what fits in one prompt
-          </span>
-        </h2>
+      {/* Framed, so this list is spaced like every other list in the product
+          rather than by a bare `<section>` plus the sheet's post-h2 margin. */}
+      <Section
+        title={`${docs.length} ${docs.length === 1 ? "page" : "pages"}`}
+        description={`${Math.round((used / KNOWLEDGE_BUDGET_CHARS) * 100)}% of what fits in one prompt`}
+      >
 
         {docs.length === 0 ? (
           <p className="small muted">
@@ -182,7 +180,7 @@ export default async function KnowledgePage({
             ))}
           </div>
         )}
-      </section>
+      </Section>
     </>
   );
 }

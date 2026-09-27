@@ -89,7 +89,7 @@ export default async function TutorialPage() {
       </ol>
 
       <section className="card">
-        <h2>Still stuck</h2>
+        <h3>Still stuck</h3>
         <p className="small muted">
           Raise a ticket and it carries what the product believed at that moment — which step you
           are on, whether LinkedIn is connected, whether the sending loop is running. You do not

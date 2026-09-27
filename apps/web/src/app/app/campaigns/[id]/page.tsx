@@ -1,5 +1,6 @@
 import { revalidatePath } from "next/cache";
-import { PageHeader } from "@/components/page";
+import { PageHeader, Section } from "@/components/page";
+import { Kpi } from "@/components/charts";
 import { Sequence, sequenceFor } from "@/components/sequence";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
@@ -842,16 +843,16 @@ export default async function CampaignPage({
 
       {reached.length > 0 ? (
         <section className="card">
-          <div className="meter-group">
+          {/*
+            The same tile the overview uses. These were bare divs in a
+            `.meter-group` — a flex row meant for meters — so two figures sat
+            crammed against the left edge of a full-width card with a void
+            beside them, set in the monospace, at a size nothing else on the
+            product uses. `kpi-row` lays them out and `Kpi` draws them.
+          */}
+          <div className="kpi-row">
             {reached.map((stage) => (
-              <div key={stage.key}>
-                <p className="small muted">
-                  {stage.label}
-                </p>
-                <p className="mono lead-number">
-                  {counts[stage.key]}
-                </p>
-              </div>
+              <Kpi key={stage.key} label={stage.label} value={String(counts[stage.key])} />
             ))}
           </div>
         </section>
@@ -963,11 +964,10 @@ export default async function CampaignPage({
         offers are ones this product refuses to send, and a refusal that arrives
         after the work is worse than never offering it.
       */}
-      <section className="stack-4">
-        <div className="between">
-          <h2>What they receive</h2>
-          <p className="tiny subtle">Edit the words above; the timing is a product rule.</p>
-        </div>
+      <Section
+        title="What they receive"
+        action={<p className="tiny subtle">Edit the words above; the timing is a product rule.</p>}
+      >
         <Sequence
           steps={sequenceFor({
             warmUp: Boolean(campaign.warm_up),
@@ -979,18 +979,19 @@ export default async function CampaignPage({
             })),
           })}
         />
-      </section>
+      </Section>
 
       {variantStandings.length > 0 ? (
-        <section className="stack-4">
-          <div className="between">
-            <h2>Angles being tested</h2>
+        <Section
+          title="Angles being tested"
+          action={
             <p className="tiny subtle">
               {readyToCompare
                 ? "Enough sent to compare."
                 : `Too early to compare — each angle needs ${MIN_SENDS_TO_COMPARE} invitations.`}
             </p>
-          </div>
+          }
+        >
 
           {/*
             The variable under test is the angle, not the words. Every prospect
@@ -1053,16 +1054,17 @@ export default async function CampaignPage({
               ? "The ranges are the spread the true rate plausibly sits in. An angle is only called behind when its whole range sits below another's."
               : "Every angle here is still level: none of their ranges separate yet, which is the correct reading of a test this young."}
           </p>
-        </section>
+        </Section>
       ) : null}
 
-      <section className="stack-4">
-        <div className="between">
-          <h2>Who is on the list</h2>
+      <Section
+        title="Who is on the list"
+        action={
           <p className="tiny subtle">
             {rows.length} {rows.length === 1 ? "person" : "people"}
           </p>
-        </div>
+        }
+      >
 
         {searchNotice ? (
           <div className={searchNotice.tone === "danger" ? "notice danger" : "notice"}>
@@ -1270,7 +1272,7 @@ export default async function CampaignPage({
             })}
           </ul>
         )}
-      </section>
+      </Section>
     </>
   );
 }

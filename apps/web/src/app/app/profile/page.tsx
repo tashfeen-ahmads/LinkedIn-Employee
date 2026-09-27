@@ -570,16 +570,14 @@ export default async function ProfilePage({
           </>
         )}
       </section>
-      <section className="section" id="autonomy">
-        <div className="section-header">
-          <div className="section-header-text">
-            <h2>How much the agent finishes on its own</h2>
-            <p className="small muted prose">
-              A hold is not a pause, it is a full stop. A prospect who replies on a Friday and is
-              never answered is a warm lead lost, and nothing on any screen explains why.
-            </p>
-          </div>
-        </div>
+      {/* `Section`, rather than its markup copied out by hand. The component
+          is the one place this shape is defined, and a hand-written copy is a
+          second definition that drifts the moment either is touched. */}
+      <Section
+        id="autonomy"
+        title="How much the agent finishes on its own"
+        description="A hold is not a pause, it is a full stop. A prospect who replies on a Friday and is never answered is a warm lead lost, and nothing on any screen explains why."
+      >
         <div className="card">
           <form action={saveAutonomy} className="stack-3">
             <label className="field">
@@ -603,7 +601,7 @@ export default async function ProfilePage({
             <SubmitButton pendingLabel="Saving…">Save</SubmitButton>
           </form>
         </div>
-      </section>
+      </Section>
 
       {/*
         Team and billing live here rather than on tabs of their own.

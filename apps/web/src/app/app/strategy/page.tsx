@@ -8,7 +8,7 @@ import {
   parseCustomerProfile,
 } from "@le/shared";
 import { PageNotice } from "@/components/page-notice";
-import { PageHeader } from "@/components/page";
+import { PageHeader, Section } from "@/components/page";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { callWorker, errorQuery, noticeQuery } from "@/lib/worker";
@@ -379,9 +379,16 @@ export default async function StrategyPage({
         </div>
       )}
 
-      <h2>Customer profiles</h2>
-
-      <div className="grid">
+      {/*
+        The heading belongs to the list under it, so the frame owns both.
+        Written as a bare `<h2>` it was a direct child of the page column: the
+        page's own gap fell above it *and* below it, so the title sat exactly
+        as far from its own list as from the card above — a heading attached to
+        nothing. Every hand-rolled section on this product spaced itself
+        slightly differently, which is the whole reason `Section` exists.
+      */}
+      <Section title="Customer profiles">
+        <div className="grid">
         {profiles.map(({ row, spec }) => {
           if (!spec.success) {
             return (
@@ -592,8 +599,9 @@ export default async function StrategyPage({
               </details>
             </article>
           );
-        })}
-      </div>
+          })}
+        </div>
+      </Section>
     </>
   );
 }

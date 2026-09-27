@@ -242,6 +242,33 @@ h3 { font-size: 1.125rem; letter-spacing: -0.012em; }
 h4 { font-size: 1rem; letter-spacing: -0.008em; }
 p  { margin: 0; }
 
+/*
+ * The rest of the browser's own vertical margins, removed once.
+ *
+ * This sheet's rule is that spacing belongs to the container, set with `gap` —
+ * and it zeroed the margin on `p` and on the headings and then left every
+ * other block element carrying the user agent's. The evidence is thirty-odd
+ * separate `margin: 0` declarations further down this file: `.tour`,
+ * `.bullets`, `.prospect-list`, `ol.steps`, `.agents`, `.signal-list`,
+ * `.forecast-bars` — each list class remembering, individually, to undo
+ * something that should never have applied.
+ *
+ * Which means any list whose class forgot kept it. `<ul className="list">` on
+ * the agent page and `<ul className="tiny muted stack-2">` on the pitch page
+ * each sat inside a card with sixteen and thirteen extra pixels above and
+ * below, so a card holding a list had visibly more room in it than a card
+ * holding paragraphs on the screen beside it. That is what reads as some
+ * blocks having padding and some not — and no page's own code mentions it,
+ * because the extra space is coming from the browser.
+ *
+ * `padding` is deliberately left alone: a bulleted list needs its indent for
+ * the markers, and the classes that want a different one set it themselves.
+ */
+ul, ol, dl, dd, blockquote, pre, fieldset, h5, h6 { margin: 0; }
+/* Form controls carry their own, and a field's gap should be the only space
+   between a label and its input. */
+input, select, textarea, button { margin: 0; }
+
 .lede { font-size: clamp(1.05rem, 1rem + .35vw, 1.25rem); color: var(--text-muted); line-height: 1.6; }
 .muted   { color: var(--text-muted); }
 .subtle  { color: var(--text-subtle); }
@@ -277,9 +304,6 @@ p  { margin: 0; }
    would be too loud beside its own metadata. */
 .strongish { font-weight: 550; }
 
-/* A number that leads a row without being the page's headline — smaller than
-   `.stat-value`, which is for a tile whose whole job is one figure. */
-.lead-number { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 1.25rem; font-weight: 600; }
 
 /* A table column that must not collapse to its content: a funnel bar, a
    sparkline, anything drawn rather than written. */
@@ -809,28 +833,18 @@ form > button.btn:not(.block) { align-self: flex-start; }
 .check input { flex: none; margin-top: 0.15rem; }
 .check .hint { display: block; margin-top: var(--space-1); }
 
-/* A count against its ceiling. Two of these sat inline in the team page with
-   their own colours and radii; a third would have invented a fourth set. */
-.meter { height: 4px; background: var(--border); border-radius: var(--radius-pill); overflow: hidden; }
-.meter > span { display: block; height: 100%; background: var(--accent); border-radius: inherit; }
-.meter.is-near > span { background: var(--warning); }
-.meter-group { display: flex; flex-wrap: wrap; gap: var(--space-5); }
-.meter-item { min-width: 8.75rem; display: flex; flex-direction: column; gap: var(--space-1); }
-/* Against a benchmark rather than a cap: the fill is good or not, and the tick
-   marks where the benchmark sits. */
-.meter.vs-target { position: relative; background: var(--surface-sunken); margin-block: var(--space-2); }
-.meter.vs-target > span { border-radius: inherit; }
-.meter.is-met > span { background: var(--positive); }
-.meter.is-short > span { background: var(--warning); }
-.meter-tick {
-  position: absolute;
-  left: 50%;
-  top: -3px;
-  width: 2px;
-  height: 12px;
-  background: var(--text-subtle);
-  border-radius: 1px;
-}
+/*
+ * `.meter` and its family are gone, and their going is the point.
+ *
+ * They were a 4px rule drawn under a "24 / 35", a second way of saying what
+ * `AllowanceMeter` says — and rule 53 exists because a new component declared
+ * `.app .meter` for the labelled version, inherited what the 4px rule set, and
+ * rendered as a sliver with its label clipped off. Renaming the new one fixed
+ * the symptom; the old one sitting there unused, waiting for the next class to
+ * collide with a word this short, was the cause. Profile and the campaign page
+ * were the last two callers and both now draw the shared component, so the
+ * word is retired rather than left lying about.
+ */
 
 /* A funnel drawn as one bar per stage, stacked. One hue, stepping lighter as
    the numbers fall away — a sequential ramp, not five colours. */

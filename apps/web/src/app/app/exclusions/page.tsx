@@ -1,5 +1,5 @@
 import { requireSession } from "@/lib/workspace";
-import { PageHeader } from "@/components/page";
+import { PageHeader, Section } from "@/components/page";
 import { createClient } from "@/lib/supabase-server";
 import { normalizeExclusionValue, type ExclusionKind } from "@le/shared";
 import { revalidatePath } from "next/cache";
@@ -134,17 +134,23 @@ export default async function ExclusionsPage({
         </section>
       ) : null}
 
-      <section>
-        <h2>
-          {entries.length} on the list
-          {entries.length ? (
-            <span className="small muted">
-              {" "}
-              · {companies} {companies === 1 ? "company" : "companies"}, {people}{" "}
-              {people === 1 ? "person" : "people"}
-            </span>
-          ) : null}
-        </h2>
+      {/*
+        A bare `<section>` takes the frame's fallback rhythm and its heading
+        takes the sheet's "air under an h2" margin on top of it, so this list
+        sat at a spacing no other list in the product uses. The breakdown is
+        the section's `description`, which is where a sentence about a heading
+        belongs.
+      */}
+      <Section
+        title={`${entries.length} on the list`}
+        description={
+          entries.length
+            ? `${companies} ${companies === 1 ? "company" : "companies"}, ${people} ${
+                people === 1 ? "person" : "people"
+              }`
+            : undefined
+        }
+      >
 
         {entries.length === 0 ? (
           <p className="small muted">
@@ -198,7 +204,7 @@ export default async function ExclusionsPage({
             </table>
           </div>
         )}
-      </section>
+      </Section>
     </>
   );
 }

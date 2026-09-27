@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -80,7 +80,58 @@ describe("application page structure", () => {
       expect(source, `${relative(page)} uses an h4`).not.toMatch(/<h4[\s>]/);
     }
   });
+
+  /*
+   * The rule said `Section` is the only place an `<h2>` may appear, and only
+   * the `<h1>` half of it was ever checked. Twelve `<h2>`s were written by
+   * hand across ten files, and every one of them came with its own spacing:
+   * `<section className="stack-4">` picks up the stack's gap *and* the extra
+   * margin this sheet gives whatever follows an h2, a bare `<section>` takes
+   * the frame's fallback, and a bare `<h2>` — which is what Strategies had —
+   * becomes a direct child of the page column, so the page's own gap falls
+   * above it and below it and the title sits as far from its own list as from
+   * the card above it.
+   *
+   * That is the whole of "some screens have different padding": not a value
+   * somebody typed wrong, but sections that never went through the frame.
+   */
+  it("leaves the h2 to Section", () => {
+    for (const page of [...PAGES, ...SECTION_FILES]) {
+      // Comments discuss the tag; they do not render it.
+      const source = readFileSync(page, "utf8")
+        .replace(/\{?\/\*[\s\S]*?\*\/\}?/g, "")
+        .replace(/^\s*\/\/.*$/gm, "");
+      const found = source.match(/<h2[\s>]/g)?.length ?? 0;
+      const allowed = HAND_ROLLED_H2[relativeAny(page)] ?? 0;
+      expect(
+        found,
+        `${relativeAny(page)} writes ${found} <h2> of its own; Section owns that level`,
+      ).toBe(allowed);
+    }
+  });
 });
+
+/**
+ * The one place an `<h2>` is still written by hand, and why.
+ *
+ * The tutorial is a numbered list of stages, each of which really is a section
+ * of the page — it has its own heading rule (`.tour-stage h2`) and its own
+ * rhythm from the list. Wrapping each stage in a `Section` would put a second
+ * frame inside the list that draws them.
+ */
+const HAND_ROLLED_H2: Record<string, number> = { "tutorial/page.tsx": 1 };
+
+/** Section files that are not `page.tsx` but render part of one. */
+const SECTION_FILES = [
+  join(appDir, "usage-section.tsx"),
+  join(appDir, "analytics-section.tsx"),
+  join(appDir, "report-section.tsx"),
+  join(appDir, "limits-section.tsx"),
+  join(appDir, "profile/billing-section.tsx"),
+  join(appDir, "profile/team-section.tsx"),
+].filter((f) => existsSync(f));
+
+const relativeAny = (p: string) => p.slice(appDir.length + 1);
 
 /*
  * The marketing pages, which this file never looked at.

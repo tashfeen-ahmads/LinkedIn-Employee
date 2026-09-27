@@ -1,5 +1,5 @@
 import { revalidatePath } from "next/cache";
-import { PageHeader } from "@/components/page";
+import { Empty, PageHeader, Section } from "@/components/page";
 import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
@@ -121,8 +121,7 @@ export default async function SupportPage({ searchParams }: { searchParams: Noti
         </form>
       </section>
 
-      <section className="stack-4">
-        <h2>Your tickets</h2>
+      <Section title="Your tickets">
         {tickets?.length ? (
           <div className="stack-3">
             {tickets.map((ticket) => (
@@ -143,9 +142,13 @@ export default async function SupportPage({ searchParams }: { searchParams: Noti
             ))}
           </div>
         ) : (
-          <p className="small muted">Nothing raised yet.</p>
+          <Empty title="Nothing raised yet.">
+            A ticket carries what the product could see at the moment you raised it — which step you
+            are on, whether LinkedIn is connected, whether the sending loop has run — so you do not
+            have to go and check first.
+          </Empty>
         )}
-      </section>
+      </Section>
     </>
   );
 }
