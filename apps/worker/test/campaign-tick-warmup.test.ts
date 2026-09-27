@@ -161,9 +161,17 @@ describe("the loop deciding whether to warm", () => {
      * one situation, printed during another.
      */
     const db = harness({ pausedUntil: "2026-09-26T14:07:00Z" });
-    // Everybody on this campaign has already been looked at.
+    /*
+     * Everybody on this campaign has already been looked at — *recently*.
+     *
+     * The stamp used to be the day before, which said "warmed" when the only
+     * question asked was whether the column was set. It is now also a question
+     * of when: a view older than the warm-up window is spent, and a campaign
+     * holding eight of those really does have warming left to do. An hour ago
+     * is what this test always meant by "already looked at".
+     */
     db.rows("campaign_prospects").forEach((row) => {
-      row.warmed_at = "2026-09-24T10:00:00Z";
+      row.warmed_at = new Date(NOW.getTime() - 60 * 60_000).toISOString();
     });
     const { queues } = fakeQueues();
 
@@ -185,5 +193,58 @@ describe("the loop deciding whether to warm", () => {
     const beat = db.rows("worker_heartbeats").find((row) => row.name === "campaign-tick");
     const detail = JSON.stringify(beat?.detail ?? {});
     expect(detail).toContain("holding the warm-up");
+  });
+});
+
+/*
+ * The other half: a view that was spent and has since gone stale.
+ *
+ * `invitationCouldFollow` stops the *next* view being wasted. It did nothing
+ * for the eight people already carrying a Friday `warmed_at` against a hold
+ * that ran into the following week — and the invite path asked only whether
+ * that column was set, never how old it was. Three days later they were first
+ * in line for a "warm" invitation on a view worth nothing, and the campaign
+ * screen reported a warm-up that had worked.
+ *
+ * Asserted through `runCampaignTick` rather than against `warmStillCounts`,
+ * because the helper passes whether or not the loop consults it — which is the
+ * gap the comment at the top of this file is about, and the gap rule 39 was
+ * written after.
+ */
+describe("a warm that has gone stale", () => {
+  const invites = (added: Array<{ data: Record<string, unknown> }>) =>
+    added.filter((job) => job.data.kind === "invite");
+
+  it("is not invited on, and is put back in the warm-up queue", async () => {
+    const db = harness();
+    // The real shape of this deployment's eight: viewed on the Friday, still
+    // queued on the Monday.
+    const stale = new Date(NOW.getTime() - LINKEDIN_LIMITS.warmUpToInviteMaxMs - 60 * 60_000);
+    db.rows("campaign_prospects").forEach((row) => {
+      row.warmed_at = stale.toISOString();
+    });
+    const { queues, added } = fakeQueues();
+
+    await runCampaignTick(db.asDb(), queues, NOW);
+
+    // No invitation went out on the strength of a spent view...
+    expect(invites(added), "invited on a stale warm").toHaveLength(0);
+    // ...and the person is looked at again, so the next invitation is real.
+    expect(warmUps(added), "not re-warmed").toHaveLength(1);
+  });
+
+  it("still invites on a view that is inside the window", async () => {
+    // The guard must not cost an invitation that was properly warmed, or it
+    // trades one silent failure for a louder one.
+    const db = harness();
+    db.rows("campaign_prospects").forEach((row) => {
+      row.warmed_at = new Date(NOW.getTime() - 60 * 60_000).toISOString();
+    });
+    const { queues, added } = fakeQueues();
+
+    await runCampaignTick(db.asDb(), queues, NOW);
+
+    expect(invites(added), "a fresh warm was not invited on").toHaveLength(1);
+    expect(warmUps(added), "re-warmed somebody already warm").toHaveLength(0);
   });
 });

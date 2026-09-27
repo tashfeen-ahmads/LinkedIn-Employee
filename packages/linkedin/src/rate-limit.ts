@@ -315,3 +315,40 @@ export function checkAction(kind: ActionKind, usage: AccountUsage, now: Date = n
   return { allowed: true };
 }
 
+
+/**
+ * Is a view we already spent still worth anything?
+ *
+ * `invitationCouldFollow` above is the forward half of this: do not spend a
+ * view when no invitation could follow it. It exists because eight people were
+ * viewed on a Friday afternoon against a hold that ran until the following
+ * afternoon, and every one of those views was spent twenty-three hours early.
+ *
+ * This is the half that was missing. Those eight still carry a `warmed_at`,
+ * and the invite path asked only whether the column was set — never how old it
+ * was. So a warm-up campaign would invite them on a view spent three days
+ * earlier: the allowance is gone, the familiarity it bought has decayed to
+ * nothing, and the invitation lands exactly as cold as if nobody had looked.
+ * The screen meanwhile reports a warm-up that worked.
+ *
+ * A stale warm is therefore not a warm. Treated as unwarmed, the prospect goes
+ * back through the warm-up loop and the view is spent again at full value —
+ * which costs one view rather than one invitation, and an invitation is the
+ * scarcer of the two by a factor of three.
+ *
+ * Not symmetrical with the minimum: a view that is too *recent* is not stale,
+ * it is unripe, and the per-prospect wait already holds it. This asks one
+ * question only — has the window closed.
+ */
+export function warmStillCounts(
+  warmedAt: Date | string | null | undefined,
+  now: Date = new Date(),
+  windowMs: number = LINKEDIN_LIMITS.warmUpToInviteMaxMs,
+): boolean {
+  if (!warmedAt) return false;
+  const at = warmedAt instanceof Date ? warmedAt.getTime() : Date.parse(warmedAt);
+  // An unparseable stamp is not evidence of a warm-up. Reading it as one would
+  // invite somebody cold on the strength of a corrupt column.
+  if (!Number.isFinite(at)) return false;
+  return now.getTime() - at <= windowMs;
+}

@@ -434,6 +434,14 @@ const MUTATIONS = [
     pkg: "@le/worker",
   },
   {
+    id: "warmup/a-stale-warm-is-not-a-warm",
+    rule: "A profile view older than the warm-up window no longer counts, so nobody is invited on a view whose value has gone",
+    file: "apps/worker/src/jobs/campaign-tick.ts",
+    from: "    .filter((row) => (campaign.warm_up ? warmStillCounts(row.warmed_at, now) : true))",
+    to: "    /* mutated */",
+    pkg: "@le/worker",
+  },
+  {
     id: "billing/canceled-subscription",
     rule: "A canceled subscription stops sending",
     file: "packages/billing/src/entitlement.ts",

@@ -15,6 +15,7 @@ import {
   invitationCouldFollow,
   nextGapMs,
   spreadGapMs,
+  warmStillCounts,
   workingMsLeftToday,
 } from "@le/linkedin";
 import type { Db } from "@le/db";
@@ -431,12 +432,15 @@ async function enqueueWarmUps(
      */
     const { data: anyone } = await db
       .from("campaign_prospects")
-      .select("id")
+      // Same question as the pool below, so the two cannot disagree about
+      // whether this campaign still has warming to do.
+      .select("id, warmed_at")
       .eq("campaign_id", campaign.id)
       .eq("status", "queued")
-      .is("warmed_at", null)
-      .limit(1);
-    if (!anyone?.length) return { enqueued: 0, reason: null };
+      .limit(50);
+    if (!(anyone ?? []).some((row) => !warmStillCounts(row.warmed_at, now))) {
+      return { enqueued: 0, reason: null };
+    }
 
     return {
       enqueued: 0,
@@ -452,17 +456,29 @@ async function enqueueWarmUps(
   const budget = Math.max(0, LINKEDIN_LIMITS.profileViewsPerDay - usage.profileViewsToday);
   if (budget === 0) return { enqueued: 0, reason: "warm-up allowance used up today" };
 
-  const { data: waiting } = await db
+  const { data: pool } = await db
     .from("campaign_prospects")
-    .select("id")
+    .select("id, warmed_at")
     .eq("campaign_id", campaign.id)
     .eq("status", "queued")
-    // Only people nobody has looked at yet. Viewing somebody twice spends a
-    // second allowance on a familiarity we already bought.
-    .is("warmed_at", null)
-    .limit(budget);
+    /*
+     * Never viewed, or viewed so long ago the view is spent.
+     *
+     * It was `.is("warmed_at", null)` — only people nobody had looked at —
+     * because viewing somebody twice spends a second allowance on a
+     * familiarity already bought. That is right while the first view is still
+     * worth something, and wrong once the window has closed: those eight
+     * prospects held a Friday view against a hold that ran into the weekend,
+     * and nothing would ever have looked at them again.
+     *
+     * Expressed in memory rather than as `.or()`, for the reason the invite
+     * path gives: the in-memory double cannot model that filter faithfully,
+     * and a query the tests cannot reproduce is a query nothing checks.
+     */
+    .limit(budget * 4);
 
-  if (!waiting?.length) return { enqueued: 0, reason: null };
+  const waiting = (pool ?? []).filter((row) => !warmStillCounts(row.warmed_at, now)).slice(0, budget);
+  if (!waiting.length) return { enqueued: 0, reason: null };
 
   let delay = decision.allowed ? 0 : decision.retryAfterMs;
   let added = 0;
@@ -528,7 +544,9 @@ async function enqueueInvites(
 
   const warmFirst = db
     .from("campaign_prospects")
-    .select("id, next_action_at")
+    // `warmed_at` is read, not just tested for null: a view older than the
+    // warm-up window bought nothing that is still there to spend.
+    .select("id, next_action_at, warmed_at")
     .eq("campaign_id", campaign.id)
     .eq("status", "queued");
 
@@ -548,7 +566,21 @@ async function enqueueInvites(
   // carries its own wait. Filtered here rather than in the query because the
   // condition is "null or past", which PostgREST expresses with `.or()` and
   // the in-memory double cannot model faithfully.
+  /*
+   * A warm that has gone stale is not a warm.
+   *
+   * The query above asks only whether `warmed_at` is set, and for three days
+   * this deployment's eight warmed prospects carried a view spent on the Friday
+   * against a hold that ran into the weekend. Inviting them on that would send
+   * a cold invitation out of a warm-up campaign and report it as a warm-up that
+   * worked. They are dropped here and re-warmed below, which costs one profile
+   * view rather than one invitation.
+   */
+  const stale = campaign.warm_up
+    ? (waiting ?? []).filter((row) => !warmStillCounts(row.warmed_at, now)).length
+    : 0;
   const queued = (waiting ?? [])
+    .filter((row) => (campaign.warm_up ? warmStillCounts(row.warmed_at, now) : true))
     .filter((row) => {
       if (!row.next_action_at) return true;
       const due = Date.parse(row.next_action_at);
@@ -558,11 +590,13 @@ async function enqueueInvites(
   if (!queued.length) {
     return {
       enqueued: 0,
-      reason: waiting?.length
-        ? `${waiting.length} waiting on a per-person hold from LinkedIn`
-        : campaign.warm_up
-          ? "nobody warmed and waiting yet"
-          : "nobody left to invite",
+      reason: stale
+        ? `${stale} warmed too long ago to still count — re-warming before inviting`
+        : waiting?.length
+          ? `${waiting.length} waiting on a per-person hold from LinkedIn`
+          : campaign.warm_up
+            ? "nobody warmed and waiting yet"
+            : "nobody left to invite",
     };
   }
 
