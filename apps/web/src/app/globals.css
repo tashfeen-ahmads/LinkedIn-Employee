@@ -1706,8 +1706,22 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
    centred paragraph that wide is read as a block rather than as a sentence. */
 .hero-copy .lede { max-width: 46ch; }
 .hero-copy .cluster { justify-content: center; }
+/*
+ * Every hero child takes a real measure of its own.
+ *
+ * `justify-items: center` makes a grid item shrink to its content, which is
+ * what centred copy wants and exactly wrong for anything that draws itself.
+ * The platform diagram's wrapper had no width rule, so its SVG — sized
+ * `width: 100%` — resolved against a shrink-to-fit box and rendered at about a
+ * third of the hero's measure: five-pixel labels under a headline three inches
+ * tall, on the one picture that is supposed to show what the product is.
+ *
+ * The copy is unaffected: its h1 is capped at 20ch and its lede at 46ch, so
+ * the container being wider changes nothing about where the text sits.
+ */
+.hero-grid > * { width: min(1040px, 100%); min-width: 0; }
 /* The panel is the hero's evidence, so it takes a readable width rather than
-   half the grid. */
+   the whole grid. Beats the rule above on specificity, which is the point. */
 .hero-grid > :last-child { width: min(46rem, 100%); }
 
 /*
@@ -3180,8 +3194,16 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
 .platform-cap text { fill: var(--text-muted); }
 
 @media (max-width: 720px) {
-  /* Five stages across a phone is 60px each, which is a diagram nobody can
-     read. It scrolls sideways in its own box instead — the page does not. */
+  /*
+   * Five stages across a phone is 60px each, which is a diagram nobody can
+   * read. It scrolls sideways in its own box instead — the page does not.
+   *
+   * `min-width: 0` on the hero's children is what makes that second half
+   * true. A grid item's default `min-width: auto` is its content's minimum, so
+   * the 40rem floor below pushed the wrapper to 640px inside a 390px phone and
+   * the whole landing page scrolled sideways — which is not a diagram in a
+   * scrolling box, it is a broken page.
+   */
   .platform { overflow-x: auto; }
   .platform-svg { min-width: 40rem; }
 }
