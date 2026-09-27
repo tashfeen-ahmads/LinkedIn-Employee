@@ -124,6 +124,24 @@ describe("writeWorkspacePosts", () => {
         status: "published",
         approved_at: "2026-09-20T09:00:00Z",
       },
+      /*
+       * The row the mutation check found nothing guarding.
+       *
+       * A post LinkedIn refused has `approved_at` cleared but is not a draft,
+       * so `is("approved_at", null)` alone deletes it — and with it the
+       * provider's own words about why it failed, which is the only thing
+       * telling the rep what to change before they approve it again. Only the
+       * status filter keeps it.
+       */
+      {
+        id: "failed",
+        workspace_id: WORKSPACE,
+        user_id: USER,
+        body: "LinkedIn refused this one.",
+        status: "failed",
+        approved_at: null,
+        error: "422: Cannot post to this profile",
+      },
     ]);
 
     await writeWorkspacePosts(ctx, { workspaceId: WORKSPACE, userId: USER });
@@ -134,6 +152,10 @@ describe("writeWorkspacePosts", () => {
     expect(db.find("linkedin_posts", { id: "approved" })?.body).toBe("Somebody read this one.");
     // And this one is the record of what is on the profile.
     expect(db.find("linkedin_posts", { id: "published" })?.body).toBe("This is on the profile.");
+    // A refusal the rep has not read yet, with the provider's reason on it.
+    const refused = db.find("linkedin_posts", { id: "failed" });
+    expect(refused, "a failed post was swept away with the unread drafts").toBeDefined();
+    expect(refused?.error).toContain("422");
   });
 
   it("leaves another rep's drafts alone", async () => {

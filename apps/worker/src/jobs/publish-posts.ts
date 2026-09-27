@@ -47,11 +47,53 @@ export async function publishApprovedPosts(
   let failed = 0;
 
   for (const row of rows ?? []) {
-    const verdict = mayPublish(row as PostRow, now);
+    /*
+     * The account and the rep's zone first, because the gate needs them.
+     *
+     * Read here rather than carried, for the same reason the row is re-read:
+     * a rep who disconnected LinkedIn this morning must not have a post go out
+     * against a stale account id.
+     */
+    const { data: account } = await ctx.db
+      .from("linkedin_accounts")
+      .select("provider_account_id, status, working_hours")
+      .eq("workspace_id", row.workspace_id)
+      .eq("user_id", row.user_id)
+      .maybeSingle();
+    const { data: repProfile } = await ctx.db
+      .from("profiles")
+      .select("timezone")
+      .eq("id", row.user_id)
+      .maybeSingle();
+
+    /*
+     * One gate, asked once.
+     *
+     * This used to ask twice — a row-only verdict first, so an unapproved row
+     * cost no account read, and the window afterwards. Two calls to one rule is
+     * two places for it to be enforced, and the mutation check proved what that
+     * costs: forcing the first verdict to `send: true` broke nothing, because
+     * the second call quietly re-guarded it. A rule enforced twice is a rule
+     * whose real enforcement point nobody can name, and the saving was against
+     * a case the query above has already filtered out.
+     *
+     * The window goes in from the start, so this is the same call the screen
+     * makes — the sweep and the page can never disagree about whether a row is
+     * about to go out (rule 21's habit for `describePacing`).
+     */
+    const verdict = mayPublish(row as PostRow, now, {
+      hours: parseWorkingHours(account?.working_hours),
+      // UTC only when the row has never been written. That default is how an
+      // eight-to-six working day came to mean four in the morning Eastern for
+      // this deployment's first live account, so it is worth saying out loud
+      // that it is a fallback and not a setting anybody chose.
+      timezone: repProfile?.timezone || "UTC",
+    });
+
     if (!verdict.send) {
-      // A post waiting for its time is not a failure. Written off as one it
-      // would never go out, and the rep would find a "failed" row whose only
-      // fault was being early.
+      // A post waiting for its time, or for the rep's hours, is not a failure.
+      // Written off as one it would never go out, and the rep would find a
+      // "failed" row whose only fault was being early.
       if (verdict.retry) {
         held += 1;
         continue;
@@ -65,56 +107,18 @@ export async function publishApprovedPosts(
     }
 
     /*
-     * The account is read here rather than carried, for the same reason the
-     * row is: a rep who disconnected LinkedIn this morning must not have a
-     * post go out against a stale account id.
+     * A row that says `active` while holding no provider id is the state a
+     * half-finished connection leaves behind, and posting against it would be
+     * posting to nobody.
      *
-     * It is read *after* the row-only verdict, not before, so a draft nobody
-     * approved costs nothing — which is why `mayPublish` takes its window as
-     * an optional third argument rather than requiring one.
+     * After the gate, not before: a post that will never be sendable — nobody
+     * approved it, or it is over LinkedIn's ceiling — should be marked failed
+     * whatever the account is doing, or reconnecting is the only way to find
+     * out it was broken.
      */
-    const { data: account } = await ctx.db
-      .from("linkedin_accounts")
-      .select("provider_account_id, status, working_hours")
-      .eq("workspace_id", row.workspace_id)
-      .eq("user_id", row.user_id)
-      .maybeSingle();
-
-    // A row that says `active` while holding no provider id is the state a
-    // half-finished connection leaves behind, and posting against it would
-    // be posting to nobody.
     if (!account || account.status !== "active" || !account.provider_account_id) {
       // Held, not failed: the post is fine, the account is not, and the rep
       // reconnecting should be enough to send it without re-approving.
-      held += 1;
-      continue;
-    }
-
-    /*
-     * Now the same gate again, with the rep's own hours in it.
-     *
-     * Asked twice rather than once, and the second call re-doing the cheap
-     * checks is free. What it buys is one definition of the gate: the screen
-     * calls `mayPublish` with the window too, so the sweep and the page can
-     * never disagree about a row — the habit rule 21 states for
-     * `describePacing`, where two readings of one rule drifted and the
-     * screen's was the one somebody believed.
-     */
-    const { data: repProfile } = await ctx.db
-      .from("profiles")
-      .select("timezone")
-      .eq("id", row.user_id)
-      .maybeSingle();
-    const timed = mayPublish(row as PostRow, now, {
-      hours: parseWorkingHours(account.working_hours),
-      // UTC only when the row has never been written. That default is how an
-      // eight-to-six working day came to mean four in the morning Eastern for
-      // this deployment's first live account, so it is worth saying out loud
-      // that it is a fallback and not a setting anybody chose.
-      timezone: repProfile?.timezone || "UTC",
-    });
-    if (!timed.send) {
-      // Can only be the window by now: everything else was decided above.
       held += 1;
       continue;
     }

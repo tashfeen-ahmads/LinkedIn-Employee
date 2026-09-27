@@ -21,6 +21,107 @@ import { readFileSync, writeFileSync } from "node:fs";
  * sentence about the product rather than a diff.
  */
 const MUTATIONS = [
+  /*
+   * Posts on the rep's own profile.
+   *
+   * The only thing this product publishes that is not addressed to anybody: it
+   * goes to everyone who follows them, it stays on their profile, and the only
+   * remedy for one that should not have gone out is deleting it after people
+   * have read it. So the approval gate matters more here than anywhere else in
+   * the product, and the window is the difference between a post and a machine
+   * posting at four in the morning under a real name.
+   */
+  {
+    id: "posts/approved-only",
+    rule: "A post nobody approved never reaches LinkedIn",
+    file: "packages/shared/src/posts.ts",
+    from: '  if (!post.approved_at || post.status !== "approved") {',
+    to: "  if (false) {",
+    pkg: "@le/shared",
+  },
+  {
+    id: "posts/approved-only-at-the-send",
+    rule: "The sweep acts on the verdict rather than trusting the query's `status = approved`",
+    file: "apps/worker/src/jobs/publish-posts.ts",
+    from: "    if (!verdict.send) {",
+    to: "    if (false) {",
+    pkg: "@le/worker",
+  },
+  {
+    id: "posts/never-twice",
+    rule: "A published post is never published a second time — LinkedIn has no idempotency key here",
+    file: "packages/shared/src/posts.ts",
+    from: '  if (post.published_at || post.status === "published") {',
+    to: "  if (false) {",
+    pkg: "@le/shared",
+  },
+  {
+    id: "posts/length-dropped-not-trimmed",
+    rule: "A post over LinkedIn's ceiling is dropped, never truncated mid-sentence",
+    file: "packages/shared/src/posts.ts",
+    from: "  if (body.length > POST_MAX_CHARS) {",
+    to: "  if (false) {",
+    pkg: "@le/shared",
+  },
+  {
+    id: "posts/posting-hours",
+    rule: "An unscheduled post waits for the rep's own working hours",
+    file: "packages/shared/src/posts.ts",
+    from: "  if (window && !isWithinWorkingHours(now, window.hours, window.timezone)) {",
+    to: "  if (false) {",
+    pkg: "@le/shared",
+  },
+  {
+    id: "posts/writer-approves-nothing",
+    rule: "The post writer never approves its own work",
+    file: "apps/worker/src/jobs/write-posts.ts",
+    from: "    approved_at: null,\n    approved_by: null,\n  }));",
+    to: '    approved_at: new Date().toISOString(),\n    approved_by: input.userId,\n  }));',
+    pkg: "@le/worker",
+  },
+  {
+    id: "posts/keeps-what-was-read",
+    rule: "Writing a new set never throws away a post somebody already approved or published",
+    file: "apps/worker/src/jobs/write-posts.ts",
+    from: '    .eq("status", "draft")\n    .is("approved_at", null);',
+    to: '    .is("approved_at", null);',
+    pkg: "@le/worker",
+  },
+
+  /*
+   * Several businesses in one workspace.
+   *
+   * `business_profiles` has been one-to-many since migration 0001. Resolving
+   * "the" business as the oldest row and reading every strategy in the
+   * workspace files a second business's segments under the first, drops a
+   * segment because the *other* business already uses that name — so it can
+   * only ever report zero — and numbers priorities across both lists.
+   */
+  {
+    id: "business/expand-scoped-to-one",
+    rule: "New strategies go to the business that was asked for, not the workspace's oldest",
+    file: "apps/worker/src/jobs/strategy.ts",
+    from: "  const business = await loadBusinessProfile(ctx.db, workspaceId, businessProfileId);",
+    to: "  const business = await loadBusinessProfile(ctx.db, workspaceId);",
+    pkg: "@le/worker",
+  },
+  {
+    id: "business/duplicates-are-per-business",
+    rule: "A segment is not dropped as a duplicate because another business uses that name",
+    file: "apps/worker/src/jobs/strategy.ts",
+    from: '    .eq("business_profile_id", business.id);',
+    to: "    ;",
+    pkg: "@le/worker",
+  },
+  {
+    id: "business/id-is-workspace-scoped",
+    rule: "A business id from a request is only ever read inside the caller's own workspace",
+    file: "packages/db/src/business.ts",
+    from: '      .eq("workspace_id", workspaceId)\n      .maybeSingle();',
+    to: "      .maybeSingle();",
+    pkg: "@le/db",
+  },
+
   {
     id: "hook/approved-only",
     rule: "Only an approved opener ever opens a conversation",
@@ -445,8 +546,8 @@ const MUTATIONS = [
     id: "posts/nothing-publishes-unapproved",
     rule: "A post reaches a real person's public profile only after somebody approved those exact words",
     file: "apps/worker/src/jobs/publish-posts.ts",
-    from: "    const verdict = mayPublish(row as PostRow, now);",
-    to: "    const verdict = { send: true } as const;",
+    from: "    const verdict = mayPublish(row as PostRow, now, {",
+    to: "    const verdict = { send: true } as const;\n    void ({",
     pkg: "@le/worker",
   },
   {
