@@ -23,12 +23,21 @@ export function SubmitButton({
   className = "btn",
   disabled = false,
   title,
+  formAction,
 }: {
   children: React.ReactNode;
   pendingLabel?: string;
   className?: string;
   disabled?: boolean;
   title?: string;
+  /**
+   * A different action for this button, on the same form's inputs.
+   *
+   * Two buttons that act on one row — approve it, throw it away — belong in one
+   * form: separate forms cannot share the hidden fields, so the layout ends up
+   * as two forms side by side that the flex rules then wrap into a staircase.
+   */
+  formAction?: (formData: FormData) => void | Promise<void>;
 }) {
   const { pending } = useFormStatus();
 
@@ -41,6 +50,7 @@ export function SubmitButton({
       disabled={disabled || pending}
       aria-busy={pending}
       title={title}
+      formAction={formAction}
     >
       {pending ? (
         <>

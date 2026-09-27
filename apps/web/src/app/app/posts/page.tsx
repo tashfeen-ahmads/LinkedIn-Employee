@@ -252,21 +252,41 @@ type PostRow = {
   created_at: string;
 };
 
-/** The first line, which is all LinkedIn shows before "see more". */
-function opener(body: string): string {
-  const first = body.trim().split(/\n+/)[0] ?? "";
-  return first.length > 120 ? `${first.slice(0, 120)}…` : first;
+/**
+ * A timestamp a person can read, in the rep's own zone.
+ *
+ * These rendered as raw ISO strings — "2026-09-24T21:44:34.606Z" under a post,
+ * which is a machine's answer to "when did this go out". The zone is the rep's
+ * because every other time on this screen is: a post held for posting hours is
+ * held against *their* clock, and two clocks on one card is how somebody
+ * concludes the schedule is an hour out.
+ */
+function when(value: string | null, timezone: string): string {
+  if (!value) return "";
+  const at = new Date(value);
+  if (Number.isNaN(at.getTime())) return value;
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: timezone,
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(at);
 }
 
 function PostCard({
   row,
   manage,
   verdict,
+  timezone,
 }: {
   row: PostRow;
   manage: boolean;
   /** What `mayPublish` says about this row right now, in the rep's own hours. */
   verdict: ReturnType<typeof mayPublish>;
+  /** The rep's zone, so every time on the card is on one clock. */
+  timezone: string;
 }) {
   const facts = Array.isArray(row.facts_used) ? (row.facts_used as string[]) : [];
   const links = extractLinks(row.body);
@@ -292,21 +312,34 @@ function PostCard({
             </SubmitButton>
           </form>
         ) : (
-          <div className="stack-2">
-            <h3>{opener(row.body)}</h3>
-            <p className="prose post-body">{row.body}</p>
-          </div>
+          /*
+           * The post, and nothing above it.
+           *
+           * This carried an `<h3>` of the first line, which on a read-only card
+           * printed that sentence twice running — the body starts with it. A
+           * post has no title; its opening *is* its title, which is exactly why
+           * LinkedIn shows two lines and hides the rest.
+           */
+          <p className="prose post-body">{row.body}</p>
         )}
 
         <p className="tiny subtle">
+          {/*
+            One sentence about where this row is, and one timestamp in it.
+            `mayPublish`'s reason for a scheduled post carries the raw ISO,
+            which is the right thing for the sweep's log and the wrong thing
+            here — printed beside a formatted one it reads as two different
+            times for the same post.
+          */}
           {published
-            ? `Published ${row.published_at ?? ""}`
-            : row.approved_at
-              ? verdict.send
-                ? "Approved — going out on the next sweep"
-                : `Approved — ${verdict.reason}`
-              : "Not approved"}
-          {row.scheduled_for && !published ? ` · scheduled for ${row.scheduled_for}` : ""}
+            ? `Published ${when(row.published_at, timezone)}`
+            : !row.approved_at
+              ? "Not approved"
+              : row.scheduled_for
+                ? `Approved — held until ${when(row.scheduled_for, timezone)}`
+                : verdict.send
+                  ? "Approved — going out on the next sweep"
+                  : `Approved — ${verdict.reason}`}
         </p>
 
         {row.error ? (
@@ -353,37 +386,45 @@ function PostCard({
         )}
 
         {manage && !published ? (
-          <div className="form-row">
-            {row.approved_at ? (
-              <form action={unapprove}>
-                <input type="hidden" name="id" value={row.id} />
-                <SubmitButton className="btn secondary small" pendingLabel="Holding…">
-                  Hold
-                </SubmitButton>
-              </form>
-            ) : (
-              <form action={approve} className="form-row">
-                <input type="hidden" name="id" value={row.id} />
-                <input type="hidden" name="body" value={row.body} />
-                <label className="field compact-wide">
-                  <span>Or hold it until</span>
-                  <input type="datetime-local" name="scheduled_for" />
-                  <span className="hint">In UTC. Leave it empty to go out in your posting hours.</span>
-                </label>
+          row.approved_at ? (
+            <form action={unapprove} className="form-row">
+              <input type="hidden" name="id" value={row.id} />
+              <SubmitButton className="btn secondary small" pendingLabel="Holding…">
+                Hold
+              </SubmitButton>
+            </form>
+          ) : (
+            /*
+             * One form, two buttons, because both act on the same row and the
+             * same hidden fields. As two forms they could not share them, and
+             * the flex rules then wrapped the date box, Approve and Throw away
+             * into a staircase down the right of the card.
+             */
+            <form action={approve} className="stack-3">
+              <input type="hidden" name="id" value={row.id} />
+              <input type="hidden" name="body" value={row.body} />
+              <label className="field compact-wide">
+                <span>Schedule it (optional)</span>
+                <input type="datetime-local" name="scheduled_for" />
+                <span className="hint">
+                  In UTC. Left empty it goes out in your posting hours, which is usually what you
+                  want.
+                </span>
+              </label>
+              <div className="form-row">
                 <SubmitButton className="btn small" pendingLabel="Approving…">
                   Approve
                 </SubmitButton>
-              </form>
-            )}
-            {!row.approved_at ? (
-              <form action={discard}>
-                <input type="hidden" name="id" value={row.id} />
-                <SubmitButton className="btn secondary small" pendingLabel="Discarding…">
+                <SubmitButton
+                  className="btn secondary small"
+                  pendingLabel="Discarding…"
+                  formAction={discard}
+                >
                   Throw away
                 </SubmitButton>
-              </form>
-            ) : null}
-          </div>
+              </div>
+            </form>
+          )
         ) : null}
       </div>
     </article>
@@ -451,7 +492,13 @@ export default async function PostsPage({ searchParams }: { searchParams: Promis
         {drafts.length ? (
           <div className="stack-3">
             {drafts.map((row) => (
-              <PostCard key={row.id} row={row} manage={manage} verdict={mayPublish(row, now, window)} />
+              <PostCard
+                key={row.id}
+                row={row}
+                manage={manage}
+                timezone={timezone}
+                verdict={mayPublish(row, now, window)}
+              />
             ))}
           </div>
         ) : (
@@ -486,12 +533,18 @@ export default async function PostsPage({ searchParams }: { searchParams: Promis
 
       <Section
         title={queued.length ? `Approved — ${queued.length}` : "Approved"}
-        description={`Approved posts go out in your own hours: ${describeWorkingHours(hours, timezone)}. That is deliberate — a post appearing on your profile at four in the morning reads as software posting for you. One you gave a time to goes at that time instead.`}
+        description={`These go out in your own working hours — a post appearing on your profile at four in the morning reads as software posting for you. One you gave a time to goes at that time instead. Yours: ${describeWorkingHours(hours, timezone)}.`}
       >
         {queued.length ? (
           <div className="stack-3">
             {queued.map((row) => (
-              <PostCard key={row.id} row={row} manage={manage} verdict={mayPublish(row, now, window)} />
+              <PostCard
+                key={row.id}
+                row={row}
+                manage={manage}
+                timezone={timezone}
+                verdict={mayPublish(row, now, window)}
+              />
             ))}
           </div>
         ) : (
@@ -509,7 +562,13 @@ export default async function PostsPage({ searchParams }: { searchParams: Promis
         >
           <div className="stack-3">
             {published.map((row) => (
-              <PostCard key={row.id} row={row} manage={manage} verdict={mayPublish(row, now, window)} />
+              <PostCard
+                key={row.id}
+                row={row}
+                manage={manage}
+                timezone={timezone}
+                verdict={mayPublish(row, now, window)}
+              />
             ))}
           </div>
         </Section>
