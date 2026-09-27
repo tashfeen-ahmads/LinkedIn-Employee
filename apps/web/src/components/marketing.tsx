@@ -111,9 +111,44 @@ export function Hero() {
           </figure>
         </Reveal>
       </div>
+
+      {/*
+        The four rules, immediately under the hero.
+
+        Two things were wrong with the space this now occupies. It was empty —
+        the left column ran out well above the panel's foot, so the page opened
+        with a headline and then two hundred pixels of nothing before the first
+        section. And the argument this product actually wins on — that it is
+        the careful one — was buried eight screens down under "Account safety",
+        where somebody deciding whether to keep scrolling never reached it.
+
+        Facts the product enforces in code, not claims: each one is a rule in
+        the codebase with a test behind it.
+      */}
+      <div className="container">
+        <ul className="proof">
+          {PROOF.map((item) => (
+            <li key={item.label}>
+              <span className="proof-value">{item.value}</span>
+              <span className="proof-label">{item.label}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
     </section>
   );
 }
+
+/**
+ * What the hero's strip says, and every line of it is enforced rather than
+ * promised — which is the only kind of claim worth putting under a headline.
+ */
+const PROOF = [
+  { value: "Every reply", label: "drafted for you to read before it sends, until you say otherwise" },
+  { value: "Day 1 → 35", label: "a warm-up ramp that starts at your first send, never at signup" },
+  { value: "Spread", label: "a day's invitations paced across your working hours, never in a burst" },
+  { value: "Never twice", label: "nobody your workspace has contacted is ever contacted again" },
+] as const;
 
 /**
  * The film, in a band of its own directly under the hero.
@@ -128,7 +163,7 @@ export function Film() {
     <section className="section">
       <div className="container stack-5">
         <div className="stack-3">
-          <p className="eyebrow">What it actually does</p>
+          <p className="eyebrow section-mark">What it actually does</p>
           <h2>Five things, in this order, every time.</h2>
         </div>
         <ProductFilm />
@@ -186,7 +221,7 @@ export function HowItWorks() {
       <div className="container stack-6">
         <Reveal>
           <div className="stack-3">
-            <p className="eyebrow">The four agents</p>
+            <p className="eyebrow section-mark">The four agents</p>
             <h2>Watch one campaign, day by day.</h2>
             <p className="lede prose">
               Each agent does one job and hands its work to the next. Step through a real one below — every beat names who acted, and the square markers are the moments
@@ -255,7 +290,7 @@ export function TheSequence() {
       <div className="container stack-6">
         <Reveal>
           <div className="stack-3 measure">
-            <p className="eyebrow">What they receive</p>
+            <p className="eyebrow section-mark">What they receive</p>
             <h2>A conversation, not a blast.</h2>
             <p className="lede prose">
               Every campaign runs the same shape. You write the words; the timing is a product rule,
@@ -302,7 +337,7 @@ export function TheGate() {
       <div className="container stack-6">
         <Reveal>
           <div className="stack-3">
-            <p className="eyebrow">The part that matters</p>
+            <p className="eyebrow section-mark">The part that matters</p>
             <h2>It knows when to stop.</h2>
             <p className="lede prose">
               Anyone can draft a reply. The reason this can be left running is what it refuses to
@@ -330,7 +365,7 @@ export function Volume() {
       <div className="container stack-6">
         <Reveal>
           <div className="stack-3">
-            <p className="eyebrow">What a month looks like</p>
+            <p className="eyebrow section-mark">What a month looks like</p>
             <h2>Move the sliders until it hits the ceiling.</h2>
             <p className="lede prose">
               The daily one stops at {LINKEDIN_LIMITS.invitesPerDayMax} because the product stops
@@ -354,7 +389,7 @@ export function Safety() {
       <div className="container stack-6">
         <Reveal>
           <div className="stack-3">
-            <p className="eyebrow">Account safety</p>
+            <p className="eyebrow section-mark">Account safety</p>
             <h2>Slow on purpose, for as long as it takes.</h2>
             <p className="lede prose">
               The failure that ends a pipeline is not a weak campaign — it is losing the account it
@@ -427,7 +462,7 @@ export function Signals() {
       <div className="container stack-6">
         <Reveal>
           <div className="stack-3">
-            <p className="eyebrow">Why this lead</p>
+            <p className="eyebrow section-mark">Why this lead</p>
             <h2>Every score shows its working.</h2>
             <p className="lede prose">
               Other tools print &ldquo;high intent&rdquo; and move on. A score you cannot interrogate
@@ -579,7 +614,7 @@ export function Pricing() {
     <section id="pricing" className="section">
       <div className="container stack-6">
         <div className="stack-3">
-          <p className="eyebrow">Pricing</p>
+          <p className="eyebrow section-mark">Pricing</p>
           <h2>Per seat, per month.</h2>
           <p className="lede prose">Seven-day free trial on every plan. No card to start.</p>
         </div>

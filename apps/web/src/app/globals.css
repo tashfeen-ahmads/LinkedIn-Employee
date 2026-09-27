@@ -347,7 +347,15 @@ p  { margin: 0; }
 /* Tiles that are one number each sit closer together than cards do. */
 .grid.tight { gap: var(--space-3); }
 
-.section { padding-block: var(--space-8); }
+/*
+ * A band of the landing page.
+ *
+ * Fluid rather than a fixed 4.5rem: at 4.5rem top and bottom, two neighbouring
+ * sections put 9rem of nothing between them on a phone, which is most of a
+ * screen of empty page, and not enough on a wide monitor. It scales with the
+ * viewport and stops at both ends.
+ */
+.section { padding-block: clamp(var(--space-7), 7vw, 6rem); }
 .divider { border: 0; border-top: 1px solid var(--border); margin: 0; }
 
 /* Every bulleted list in the app was setting its own indent inline, and they
@@ -1366,8 +1374,44 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 }
 
 
-/* A band of alternate ground, so sections read as separate without borders. */
-.band { background: var(--surface); border-block: 1px solid var(--border); }
+/*
+ * A band of alternate ground, so sections read as separate without borders.
+ *
+ * It carried a 1px rule top and bottom as well as the fill, which is two
+ * devices doing one job: the rule reads as a divider somebody drew and the
+ * fill reads as a section, and together they look like a table. The step
+ * between the two grounds is now visible on its own, which is what a band is
+ * for — and a soft seam at each edge lets one section become the next rather
+ * than being cut from it.
+ */
+.band {
+  background: var(--surface);
+  border-block: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+}
+
+/*
+ * The label above a section's headline, and the mark that anchors it.
+ *
+ * Eleven sections in a row, each opening with a grey uppercase line at the
+ * left margin, is eleven identical blocks — which is what reads as a page with
+ * no design in it. A short accent rule before the words gives every section
+ * one fixed, coloured anchor down the left edge of the page: the eye finds the
+ * next section without reading it.
+ */
+.section-mark {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--accent);
+}
+.section-mark::before {
+  content: "";
+  flex: none;
+  width: 1.75rem;
+  height: 2px;
+  border-radius: 1px;
+  background: currentColor;
+}
 
 /* Hero: copy leads, the product panel sits beside it and stacks under on a
    narrow screen rather than being hidden. */
@@ -1375,8 +1419,39 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   display: grid;
   gap: var(--space-7);
   grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
-  align-items: center;
+  /* Both columns start at the headline's line. Centred, the panel floated
+     against the taller column and left a wedge of empty page under whichever
+     one ran out first. */
+  align-items: start;
+  padding-bottom: var(--space-7);
 }
+
+/*
+ * The strip of rules under the hero.
+ *
+ * Four facts on one line, divided rather than boxed: a row of cards here would
+ * be a fifth kind of card before the visitor has seen the first section, and
+ * the point of the strip is that it reads as one statement in four parts.
+ */
+.proof {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: var(--space-5);
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-5);
+}
+.proof > li { display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; }
+.proof-value {
+  font-family: var(--font-display);
+  font-size: 1.125rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  color: var(--text);
+}
+.proof-label { font-size: 0.8125rem; line-height: 1.5; color: var(--text-muted); }
 @media (max-width: 900px) {
   .hero-grid { grid-template-columns: minmax(0, 1fr); gap: var(--space-6); }
 }
@@ -1403,9 +1478,39 @@ ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: none; }
    prices for the same thing. The list takes the slack instead. */
 .plan { border-radius: var(--radius-lg); height: 100%; }
 .plan .bullets { flex: 1; }
-.plan-featured { border-color: var(--accent-border); box-shadow: var(--shadow); }
-.price { font-size: 2.25rem; font-weight: 500; letter-spacing: -0.03em; line-height: 1; }
-.price .mono { font-size: inherit; }
+/*
+ * The plan's name and its badge share one row of fixed height, so the price
+ * below starts on the same line in all three cards. Badged, the featured plan
+ * pushed its own price six pixels down, and three prices that nearly line up
+ * is the single most obvious tell that a pricing table was assembled by hand.
+ */
+.plan > .between:first-child { min-height: 1.9rem; }
+/*
+ * The plan being recommended, and it has to look recommended. A paler border
+ * plus a slightly larger shadow is a difference nobody sees at a glance — so
+ * it takes the accent outline properly and stands a few pixels proud of the
+ * cards beside it, which is what every reader already expects the middle
+ * column to do.
+ */
+.plan-featured {
+  border-color: var(--accent);
+  box-shadow: var(--shadow), 0 0 0 1px var(--accent);
+}
+@media (min-width: 61rem) {
+  .plan-featured { transform: translateY(-0.75rem); }
+}
+/* The number, in the display face on its own tabular figures. It was set in
+   the monospace, which on a price is the one place a tool face reads as a
+   receipt rather than as an offer. */
+.price {
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums;
+  font-size: 2.5rem;
+  font-weight: 600;
+  letter-spacing: -0.035em;
+  line-height: 1;
+}
+.price .mono { font-family: inherit; font-size: inherit; }
 
 .faq { display: flex; flex-direction: column; }
 .faq details { border-top: 1px solid var(--border); padding-block: var(--space-4); }
@@ -1469,7 +1574,14 @@ ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: none; }
 /* One atmospheric wash behind the hero. Painted with a pseudo-element on the
    section rather than a div in the markup, so it cannot be tabbed to, read by
    a screen reader, or accidentally sit above the content. */
-.hero-wash { position: relative; isolation: isolate; }
+.hero-wash {
+  position: relative;
+  isolation: isolate;
+  /* The strip of rules closes the hero, so the section does not also need a
+     full band of padding under it — that was two hundred pixels of empty page
+     between the headline and the first thing the headline promised. */
+  padding-bottom: clamp(var(--space-6), 3.5vw, var(--space-7));
+}
 .hero-wash::before {
   content: "";
   position: absolute;
@@ -2234,15 +2346,23 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
 @media (max-width: 720px) { .film-stage { min-height: 19rem; } }
 
 .film-rows { display: flex; flex-direction: column; gap: var(--space-2); }
+/*
+ * A row inside a card, drawn by its edge rather than filled.
+ *
+ * Three of these at `--surface` on a white card are three solid grey bars with
+ * eight pixels between them — which is what somebody means by blocks inside a
+ * block running into each other. The fill is what makes them a slab; the
+ * border alone is what makes them rows.
+ */
 .film-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
-  padding: var(--space-2) var(--space-3);
+  padding: var(--space-3);
   border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
+  border-radius: var(--radius);
+  background: transparent;
 }
 .film-row-main { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
 .film-score { color: var(--accent); font-weight: 600; }
@@ -2263,7 +2383,7 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
 
 .film-chips { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; }
 
-.film-rail { display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--space-2); }
+.film-rail { display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--space-2); counter-reset: film-step; }
 @media (max-width: 720px) { .film-rail { grid-template-columns: repeat(2, 1fr); } }
 
 .film-tab {
@@ -2273,6 +2393,7 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
   padding: 0;
   border: 0;
   background: none;
+  counter-increment: film-step;
   text-align: left;
   cursor: pointer;
   color: var(--text-muted);
@@ -2281,7 +2402,20 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
 }
 .film-tab.is-active { color: var(--text); }
 .film-tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: var(--radius-sm); }
+/*
+ * The scene's number, because "five things, in this order, every time" is a
+ * claim the strip should be making rather than a sentence above it. Drawn with
+ * a counter rather than typed into the markup: the numbers cannot then drift
+ * from the order the scenes are actually in.
+ */
 .film-tab-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.film-tab-label::before {
+  content: counter(film-step) " ";
+  font-variant-numeric: tabular-nums;
+  color: var(--text-subtle);
+  margin-right: 0.35rem;
+}
+.film-tab.is-active .film-tab-label::before { color: var(--accent); }
 .film-tab-track { height: 2px; background: var(--border); border-radius: var(--radius-pill); overflow: hidden; }
 .film-tab-fill { display: block; height: 100%; width: 0; background: var(--accent); }
 .film-tab.is-active .film-tab-fill { animation-name: film-progress; animation-timing-function: linear; animation-fill-mode: forwards; }
@@ -2291,7 +2425,54 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
 /* Reduced motion gets every scene as a list rather than a frozen first frame:
    hiding four fifths of the argument from the people least able to chase it is
    not an accessibility accommodation. */
-.film-static { display: flex; flex-direction: column; gap: var(--space-4); }
+/*
+ * Numbered, and joined by a rail, because this list *is* the order the section
+ * claims. Five cards of identical shape stacked with a gap between them read
+ * as five unrelated blocks — the reader has to take "in this order" on trust
+ * from a headline rather than seeing it.
+ */
+.film-static {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  counter-reset: film-scene;
+  position: relative;
+  padding-left: 3rem;
+}
+.film-static > .film-card { counter-increment: film-scene; position: relative; }
+.film-static > .film-card::before {
+  content: counter(film-scene);
+  position: absolute;
+  left: -3rem;
+  top: var(--space-5);
+  width: 1.75rem;
+  height: 1.75rem;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid var(--accent-border);
+  font-size: 0.75rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+/* The rail joining one scene to the next, drawn behind the markers. Stopped
+   short of the last one, because there is nothing after it to point at. */
+.film-static::before {
+  content: "";
+  position: absolute;
+  left: calc(0.875rem - 1px);
+  top: var(--space-6);
+  bottom: var(--space-6);
+  width: 2px;
+  background: var(--border);
+}
+@media (max-width: 640px) {
+  .film-static { padding-left: 0; }
+  .film-static::before { display: none; }
+  .film-static > .film-card::before { position: static; margin-bottom: var(--space-1); }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .film-tab-fill { animation: none; }
@@ -2301,7 +2482,26 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
    strip. One border, not a fill: the point is that it belongs to the same set
    as the other two, and a coloured card would read as the advertisement it is
    trying not to be. */
-.alt-here { border-color: var(--accent-border); }
+.alt-here {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+/* The one column that is us, said in a word as well as in a colour — a tinted
+   card alone is a decoration somebody has to interpret. */
+.alt-here h3::after {
+  content: "You are here";
+  display: inline-block;
+  margin-left: var(--space-2);
+  padding: 0.1rem 0.4rem;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  color: var(--text-inverse);
+  font-size: 0.625rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  vertical-align: 0.1em;
+}
 
 /* ------------------------------------------------------------ the sequence
 
