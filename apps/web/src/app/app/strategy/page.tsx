@@ -135,13 +135,65 @@ async function saveProfile(formData: FormData) {
  * past the first handful. Pressing this adds four more, written against what
  * already exists so it does not hand back the same three with different nouns.
  */
-async function writeMoreStrategies() {
+async function writeMoreStrategies(formData: FormData) {
   "use server";
   const session = await requireSession();
+  // Which business they are adding to. Absent is the workspace's first, which
+  // is every workspace that has only ever had one — and the reason the id
+  // travels at all is that a workspace with two had its new segments filed
+  // under whichever business happened to be oldest.
+  const businessProfileId = String(formData.get("businessProfileId") ?? "").trim() || undefined;
+
   const queued = await callWorker("/jobs/strategy", {
     workspaceId: session.workspaceId,
     userId: session.userId,
     expand: true,
+    businessProfileId,
+  });
+  if (!queued.ok) redirect(errorQuery("/app/strategy", queued.error));
+
+  revalidatePath("/app/strategy");
+  redirect(
+    noticeQuery(
+      businessProfileId ? `/app/strategy?business=${businessProfileId}` : "/app/strategy",
+      "Writing four more. They arrive on this page in a minute or two, unapproved like the others — nothing is searched for until you read one.",
+    ),
+  );
+}
+
+/**
+ * A second business, with its own profile and its own strategies.
+ *
+ * Deliberately not `expand`. Rule 37 is explicit that adding *strategies* must
+ * extend the business profile already here rather than inserting a second one,
+ * because the profile is what every strategy hangs off and a workspace with two
+ * has its list split across both. This is the other thing — somebody who really
+ * does run a cleaning company and an estate agency, and needs the split.
+ *
+ * So it is a separate button with a separate word on it, and it asks for the
+ * website: a business profile written from nothing is a fluent invention
+ * offered for approval as though it came from somewhere.
+ */
+async function addBusiness(formData: FormData) {
+  "use server";
+  const session = await requireSession();
+  if (!["owner", "admin"].includes(session.role)) {
+    redirect(errorQuery("/app/strategy", "Only an owner or admin can add a business."));
+  }
+
+  const websiteUrl = String(formData.get("websiteUrl") ?? "").trim();
+  const description = String(formData.get("description") ?? "").trim();
+  if (!websiteUrl && !description) {
+    redirect(
+      errorQuery("/app/strategy", "Give the agent a website or a description — it will not invent a business."),
+    );
+  }
+
+  const queued = await callWorker("/jobs/strategy", {
+    workspaceId: session.workspaceId,
+    userId: session.userId,
+    websiteUrl: websiteUrl || undefined,
+    description: description || undefined,
   });
   if (!queued.ok) redirect(errorQuery("/app/strategy", queued.error));
 
@@ -149,7 +201,7 @@ async function writeMoreStrategies() {
   redirect(
     noticeQuery(
       "/app/strategy",
-      "Writing four more. They arrive on this page in a minute or two, unapproved like the others — nothing is searched for until you read one.",
+      "Reading that site now. The new business and its strategies appear here in a minute or two, unapproved — and they keep their own list, so nothing changes for the business you already run.",
     ),
   );
 }
@@ -200,7 +252,7 @@ async function findProspects(formData: FormData) {
 export default async function StrategyPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; notice?: string }>;
+  searchParams: Promise<{ error?: string; notice?: string; business?: string }>;
 }) {
   const params = await searchParams;
   const session = await requireSession();
@@ -221,17 +273,27 @@ export default async function StrategyPage({
     .limit(1)
     .maybeSingle();
 
-  const [{ data: businessRow }, { data: profileRows }, { data: account }] = await Promise.all([
+  /*
+   * Every business this workspace runs, oldest first — not the newest one.
+   *
+   * `business_profiles` has been one-to-many on `workspace_id` since migration
+   * 0001 and this page read `order created_at desc limit 1`, so a workspace
+   * with two showed the second business's profile above *both* businesses'
+   * strategies, unlabelled. Oldest-first matches `loadBusinessProfile`, which
+   * is what every writer resolves through: the first business is the one the
+   * workspace was set up around, not the one somebody added last night.
+   */
+  const [{ data: businessRows }, { data: profileRows }, { data: account }] = await Promise.all([
     supabase
       .from("business_profiles")
-      .select("id, spec, created_at")
+      .select("id, spec, website_url, created_at")
       .eq("workspace_id", session.workspaceId)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
+      .order("created_at", { ascending: true }),
     supabase
       .from("customer_profiles")
-      .select("id, name, spec, priority, approved_at, do_not_pursue, cta_kind, cta_label, cta_url")
+      .select(
+        "id, name, spec, priority, approved_at, do_not_pursue, cta_kind, cta_label, cta_url, business_profile_id",
+      )
       .eq("workspace_id", session.workspaceId)
       .order("priority", { ascending: true }),
     supabase
@@ -241,6 +303,12 @@ export default async function StrategyPage({
       .eq("user_id", session.userId)
       .maybeSingle(),
   ]);
+
+  const businesses = businessRows ?? [];
+  // `?business=` picks one, and an id that is not this workspace's falls back
+  // to the first rather than to an empty page: a stale bookmark should show
+  // something true, not "nothing here yet".
+  const businessRow = businesses.find((row) => row.id === params.business) ?? businesses[0] ?? null;
 
   if (!businessRow) {
     // "Has not finished yet, or it has not run" was the whole of what this page
@@ -310,11 +378,33 @@ export default async function StrategyPage({
   }
 
   const business = BusinessProfileSchema.safeParse(businessRow.spec);
-  const profiles = (profileRows ?? []).map((row) => ({
-    row,
-    spec: parseCustomerProfile(row.spec),
-  }));
+  const profiles = (profileRows ?? [])
+    // This business's strategies, not the workspace's. Unfiltered, a workspace
+    // running two showed one business's profile above both lists, so a rep
+    // approving "Chamber leaders" could not tell which company it was for.
+    .filter((row) => !businessRow.id || row.business_profile_id === businessRow.id)
+    .map((row) => ({ row, spec: parseCustomerProfile(row.spec) }));
   const connected = account?.status === "active";
+
+  /**
+   * What to call a business in a tab.
+   *
+   * `spec.companyName` rather than a column: the name is already a field on the
+   * profile the agent wrote, and a second place to store it is a second place
+   * for it to be wrong. The host of the site it was read from is the fallback,
+   * because that is the one thing a rep certainly recognises.
+   */
+  const labelOf = (row: { spec: unknown; website_url: string | null }): string => {
+    const spec = row.spec as { companyName?: unknown } | null;
+    if (typeof spec?.companyName === "string" && spec.companyName.trim()) return spec.companyName;
+    if (row.website_url) return row.website_url.replace(/^https?:\/\//i, "").replace(/\/.*$/, "");
+    return "Untitled business";
+  };
+  const strategyCount = new Map<string, number>();
+  for (const row of profileRows ?? []) {
+    const id = row.business_profile_id;
+    if (id) strategyCount.set(id, (strategyCount.get(id) ?? 0) + 1);
+  }
 
   return (
     <>
@@ -324,6 +414,7 @@ export default async function StrategyPage({
         lede="Written by the Strategy Agent from what you publish. Nothing is searched for until you approve one, and every message the writer sends is grounded in what is on this page — so it is worth reading properly once."
         actions={
           <form action={writeMoreStrategies}>
+            <input type="hidden" name="businessProfileId" value={businessRow.id} />
             <SubmitButton pendingLabel="Writing…" className="btn secondary small">
               Write more strategies
             </SubmitButton>
@@ -332,6 +423,26 @@ export default async function StrategyPage({
       />
 
       <PageNotice error={params.error} notice={params.notice} />
+
+      {/*
+        Silent for a workspace with one business, which is almost all of them.
+        A tab row that never has a second tab is a control that only ever says
+        "you are where you already were".
+      */}
+      {businesses.length > 1 ? (
+        <nav className="tabs" aria-label="Which business these strategies are for">
+          {businesses.map((row) => (
+            <a
+              key={row.id}
+              className={`pill ${row.id === businessRow.id ? "accent" : ""}`}
+              href={`/app/strategy?business=${row.id}`}
+              aria-current={row.id === businessRow.id ? "page" : undefined}
+            >
+              {labelOf(row)} ({strategyCount.get(row.id) ?? 0})
+            </a>
+          ))}
+        </nav>
+      ) : null}
 
       {/* Reported whether or not the run failed loudly: the interesting case is
           the one that succeeded at doing nothing. */}
@@ -602,6 +713,53 @@ export default async function StrategyPage({
           })}
         </div>
       </Section>
+
+      {/*
+        A second business, for somebody who really runs two.
+
+        Below the strategies rather than beside "Write more strategies", because
+        they are different things and the wrong one is expensive. Adding
+        strategies extends the business already here — rule 37 is explicit that
+        inserting a second profile splits a workspace's list across both, which
+        is what a plain re-run used to do. This creates that split on purpose.
+      */}
+      {["owner", "admin"].includes(session.role) ? (
+        <Section
+          id="add-business"
+          title="Another business"
+          description="Each business keeps its own profile, its own strategies and its own copy. A workspace running a cleaning company and an estate agency should not post one's claims in the other's voice — and a segment named for one must not be dropped as a duplicate of the other's."
+        >
+          <div className="card">
+            <form action={addBusiness} className="stack-3">
+              <label className="field">
+                <span>Its website</span>
+                <input type="url" name="websiteUrl" placeholder="https://…" />
+                <span className="hint">
+                  The agent reads the site and writes that business its own profile and three to five
+                  strategies, unapproved — exactly as it did the first time.
+                </span>
+              </label>
+              <label className="field">
+                <span>Or describe it</span>
+                <textarea
+                  name="description"
+                  rows={3}
+                  maxLength={2000}
+                  placeholder="What it sells, and who buys it."
+                />
+                <span className="hint">
+                  One or the other is required. The agent will not invent a business from nothing, and
+                  a profile written from nothing is a fluent invention offered for approval as though
+                  it came from somewhere.
+                </span>
+              </label>
+              <SubmitButton className="btn secondary" pendingLabel="Reading the site…">
+                Add this business
+              </SubmitButton>
+            </form>
+          </div>
+        </Section>
+      ) : null}
     </>
   );
 }

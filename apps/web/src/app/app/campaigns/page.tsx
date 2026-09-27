@@ -14,7 +14,7 @@ export default async function CampaignsPage({
   const session = await requireSession();
   const supabase = await createClient();
 
-  const [{ data: campaigns }, counts, { data: strategies }] = await Promise.all([
+  const [{ data: campaigns }, counts, { data: strategies }, { data: businesses }] = await Promise.all([
     supabase
       .from("campaigns")
       .select(
@@ -36,9 +36,18 @@ export default async function CampaignsPage({
     ),
     supabase
       .from("customer_profiles")
-      .select("id, name, priority")
+      .select("id, name, priority, business_profile_id")
       .eq("workspace_id", session.workspaceId)
       .order("priority", { ascending: true }),
+    // Which business each strategy belongs to, for a workspace running more
+    // than one. A campaign for the cleaning company and one for the estate
+    // agency sat side by side with nothing on the screen telling them apart,
+    // and both are addressed under the same rep's name.
+    supabase
+      .from("business_profiles")
+      .select("id, spec, website_url")
+      .eq("workspace_id", session.workspaceId)
+      .order("created_at", { ascending: true }),
   ]);
 
   const byCampaign = new Map<string, { queued: number; total: number }>();
@@ -86,10 +95,30 @@ export default async function CampaignsPage({
   // Strategy page ranks them in: two screens disagreeing about which market
   // matters most is a small thing that costs trust every time it is noticed.
   const strategyOrder = strategies ?? [];
+
+  /*
+   * Which business a group belongs to, named only when there is more than one.
+   *
+   * `spec.companyName` rather than a column: the name is already a field on the
+   * profile the agent wrote, and a second place to store it is a second place
+   * for it to be wrong. Silent for a workspace with one business, which is
+   * almost all of them — a label that is the same on every row is noise.
+   */
+  const businessList = businesses ?? [];
+  const businessLabel = (id: string | null | undefined): string | null => {
+    if (businessList.length < 2 || !id) return null;
+    const row = businessList.find((b) => b.id === id);
+    if (!row) return null;
+    const spec = row.spec as { companyName?: unknown } | null;
+    if (typeof spec?.companyName === "string" && spec.companyName.trim()) return spec.companyName;
+    return row.website_url?.replace(/^https?:\/\//i, "").replace(/\/.*$/, "") ?? null;
+  };
+
   const grouped = strategyOrder
     .map((s) => ({
       id: s.id as string | null,
       name: s.name as string,
+      business: businessLabel(s.business_profile_id),
       campaigns: campaigns.filter((c) => c.customer_profile_id === s.id),
     }))
     .filter((group) => group.campaigns.length > 0);
@@ -98,7 +127,7 @@ export default async function CampaignsPage({
   // is running and invisible is the worst row on this page.
   const orphaned = campaigns.filter((c) => !strategyOrder.some((s) => s.id === c.customer_profile_id));
   if (orphaned.length) {
-    grouped.push({ id: null, name: "No strategy", campaigns: orphaned });
+    grouped.push({ id: null, name: "No strategy", business: null, campaigns: orphaned });
   }
 
   return (
@@ -125,7 +154,10 @@ export default async function CampaignsPage({
         */
         <Section
           key={group.id ?? "none"}
-          title={group.name}
+          // The business first, because it is the coarser fact: two strategies
+          // with similar names under different companies is exactly the pair a
+          // rep needs to tell apart before pressing Launch.
+          title={group.business ? `${group.business} · ${group.name}` : group.name}
           action={
             <p className="tiny subtle">
               {group.campaigns.length} {group.campaigns.length === 1 ? "campaign" : "campaigns"}

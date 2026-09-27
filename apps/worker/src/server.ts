@@ -99,6 +99,15 @@ const StrategyRequest = z
     existingCustomers: z.array(z.string()).optional(),
     /** Add to the strategies this workspace has rather than writing its first. */
     expand: z.boolean().optional(),
+    /**
+     * Which business to add them to, for a workspace running several.
+     *
+     * Only ever read through `loadBusinessProfile`, which scopes by workspace
+     * as well as by id — the worker holds the service role, so an id taken
+     * from a request and trusted alone is one mistake away from writing
+     * strategies into another tenant's business.
+     */
+    businessProfileId: z.string().uuid().optional(),
   })
   // The agent refuses to invent an ICP from nothing, so a request carrying
   // nothing would enqueue a job that fails three times and dies unseen. Reject

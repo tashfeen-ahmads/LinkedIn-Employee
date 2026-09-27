@@ -1,4 +1,5 @@
 import { cleanWebsiteText, runStrategyAgent } from "@le/agents";
+import { loadBusinessProfile } from "@le/db";
 import { welcomeEmail } from "@le/email";
 import type { WorkerContext } from "../context.js";
 import { recordEvent } from "../context.js";
@@ -57,7 +58,9 @@ async function strategy(ctx: WorkerContext, job: StrategyJob): Promise<string> {
    * off, so a workspace ended up with two of them and a strategy list split
    * across both.
    */
-  const existing = job.expand ? await readExistingStrategies(ctx, job.workspaceId) : null;
+  const existing = job.expand
+    ? await readExistingStrategies(ctx, job.workspaceId, job.businessProfileId)
+    : null;
   if (job.expand && !existing) {
     throw new Error("nothing to add to: this workspace has no business profile yet");
   }
@@ -161,29 +164,41 @@ async function strategy(ctx: WorkerContext, job: StrategyJob): Promise<string> {
   return businessProfileId;
 }
 
-/** The business profile to add to, and the strategies already hanging off it. */
+/**
+ * The business profile to add to, and the strategies already hanging off **it**.
+ *
+ * Both halves are scoped to one business, and both used not to be. The profile
+ * was always the workspace's oldest row and the strategies were every strategy
+ * in the workspace, which for a workspace running two businesses meant three
+ * wrong answers at once: new segments filed under the first business whatever
+ * the rep picked, a name the *other* business already used dropped as a
+ * duplicate — so a real segment could only ever report zero — and priorities
+ * numbered across both lists, so "pursue this first" meant nothing in either.
+ *
+ * `loadBusinessProfile` is what resolves the id, because it scopes by
+ * workspace as well: the id arrives on a request, and the worker holds the
+ * service role.
+ */
 async function readExistingStrategies(
   ctx: WorkerContext,
   workspaceId: string,
+  businessProfileId?: string,
 ): Promise<{
   id: string;
   spec: unknown;
   profiles: { name: string }[];
   highestPriority: number;
 } | null> {
-  const { data: business } = await ctx.db
-    .from("business_profiles")
-    .select("id, spec")
-    .eq("workspace_id", workspaceId)
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
+  const business = await loadBusinessProfile(ctx.db, workspaceId, businessProfileId);
   if (!business) return null;
 
   const { data: profiles } = await ctx.db
     .from("customer_profiles")
     .select("name, priority")
-    .eq("workspace_id", workspaceId);
+    .eq("workspace_id", workspaceId)
+    // This business's own. Unscoped, a workspace's second business inherits the
+    // first's duplicate list and its priority numbering.
+    .eq("business_profile_id", business.id);
 
   return {
     id: business.id,

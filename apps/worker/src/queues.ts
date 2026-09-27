@@ -49,6 +49,22 @@ export interface StrategyJob {
    * creating a second one.
    */
   expand?: boolean;
+  /**
+   * Which business the new strategies belong to.
+   *
+   * A workspace may run several — the column and its index have been in
+   * migration 0001 since the first week, and `customer_profiles` has always
+   * carried a `business_profile_id`. What the code did was resolve "the"
+   * business profile as the oldest row and read *every* strategy in the
+   * workspace, so a second business meant: new strategies filed under the
+   * first one, a name already used by the other business silently dropped as a
+   * duplicate, and priorities numbered across both lists at once.
+   *
+   * Absent on an expanding run still means the oldest, which is every
+   * workspace that has only ever had one. Absent on a first run means create
+   * a new one, which is how a second business is added.
+   */
+  businessProfileId?: string;
   websiteUrl?: string;
   linkedinCompanyUrl?: string;
   description?: string;

@@ -344,3 +344,144 @@ describe("runStrategyJob, adding to a workspace", () => {
     ).rejects.toThrow(/no business profile/i);
   });
 });
+
+/*
+ * A workspace that really runs two businesses.
+ *
+ * `business_profiles` has been one-to-many on `workspace_id` since migration
+ * 0001 and `customer_profiles` has always carried a `business_profile_id`, so
+ * the schema always allowed it. The code did not: an expanding run resolved
+ * "the" business profile as the workspace's oldest row and read *every*
+ * strategy in the workspace, which is three wrong answers at once — new
+ * segments filed under the first business whatever the rep picked, a name the
+ * other business already used dropped as a duplicate, and priorities numbered
+ * across both lists so "pursue this first" meant nothing in either.
+ */
+describe("runStrategyJob across two businesses", () => {
+  async function twoBusinesses() {
+    const { db, ctx } = harness();
+    const { runStrategyJob } = await import("../src/jobs/strategy.js");
+
+    // The first: Acme, with the three strategies OUTPUT carries.
+    const first = await runStrategyJob(ctx, {
+      workspaceId: WORKSPACE,
+      userId: USER,
+      websiteUrl: "https://acme.test",
+    });
+
+    // The second, added the way the screen adds one: a fresh run with a
+    // website and no `expand`, which is what creates a separate profile.
+    strategyMock.mockResolvedValue({
+      ...OUTPUT,
+      businessProfile: { ...OUTPUT.businessProfile, companyName: "Brightwork" },
+      customerProfiles: [profile("Letting agents", 1), profile("Landlords", 2)],
+    });
+    const second = await runStrategyJob(ctx, {
+      workspaceId: WORKSPACE,
+      userId: USER,
+      websiteUrl: "https://brightwork.test",
+    });
+
+    return { db, ctx, runStrategyJob, first, second };
+  }
+
+  it("gives the second business its own profile and its own strategies", async () => {
+    const { db, first, second } = await twoBusinesses();
+
+    expect(second).not.toBe(first);
+    expect(db.rows("business_profiles")).toHaveLength(2);
+    const mine = db.rows("customer_profiles").filter((r) => r.business_profile_id === second);
+    expect(mine.map((r) => r.name).sort()).toEqual(["Landlords", "Letting agents"]);
+  });
+
+  it("adds new strategies to the business it was told, not to the oldest", async () => {
+    /*
+     * The whole point. Unscoped, `readExistingStrategies` took the workspace's
+     * oldest business profile, so a rep on the second business's tab pressing
+     * "write more" filed the new segments under the first one — where they are
+     * then searched for using the wrong company's proposition.
+     */
+    const { db, ctx, runStrategyJob, first, second } = await twoBusinesses();
+    strategyMock.mockResolvedValue({ ...OUTPUT, customerProfiles: [profile("Block managers", 1)] });
+
+    await runStrategyJob(ctx, {
+      workspaceId: WORKSPACE,
+      userId: USER,
+      expand: true,
+      businessProfileId: second,
+    });
+
+    const added = db.rows("customer_profiles").find((r) => r.name === "Block managers");
+    expect(added?.business_profile_id, "filed under the wrong business").toBe(second);
+    expect(added?.business_profile_id).not.toBe(first);
+    expect(db.rows("business_profiles"), "a third business profile appeared").toHaveLength(2);
+  });
+
+  it("does not drop a segment because the other business already uses that name", async () => {
+    /*
+     * Two businesses can legitimately both sell to "Ops leaders" — they are
+     * different companies. Dropped as a duplicate it is a strategy that can
+     * only ever report zero, and nothing on any screen says why.
+     */
+    const { db, ctx, runStrategyJob, second } = await twoBusinesses();
+    strategyMock.mockResolvedValue({ ...OUTPUT, customerProfiles: [profile("Ops leaders", 1)] });
+
+    await runStrategyJob(ctx, {
+      workspaceId: WORKSPACE,
+      userId: USER,
+      expand: true,
+      businessProfileId: second,
+    });
+
+    const named = db.rows("customer_profiles").filter((r) => r.name === "Ops leaders");
+    expect(named, "the second business lost a segment to the first's name").toHaveLength(2);
+    expect(named.map((r) => r.business_profile_id).sort()).toEqual(
+      [named[0]!.business_profile_id, second].sort(),
+    );
+  });
+
+  it("numbers priorities within one business, not across both", async () => {
+    // Priorities carried across both lists means "pursue this first" is a
+    // ranking against segments belonging to another company.
+    const { db, ctx, runStrategyJob, second } = await twoBusinesses();
+    strategyMock.mockResolvedValue({ ...OUTPUT, customerProfiles: [profile("Block managers", 1)] });
+
+    await runStrategyJob(ctx, {
+      workspaceId: WORKSPACE,
+      userId: USER,
+      expand: true,
+      businessProfileId: second,
+    });
+
+    const theirs = db
+      .rows("customer_profiles")
+      .filter((r) => r.business_profile_id === second)
+      .map((r) => Number(r.priority))
+      .sort((a, b) => a - b);
+    // Two existing, so the new one is third — not fourth, fifth or sixth,
+    // which is what counting the other business's segments would give.
+    expect(theirs).toEqual([1, 2, 3]);
+  });
+
+  it("only ever reads a business this workspace owns", async () => {
+    /*
+     * The id arrives on a request and the worker holds the service role, so a
+     * query trusting it alone is one mistake away from writing strategies into
+     * another tenant's business. `loadBusinessProfile` scopes by workspace too,
+     * and falls back to this workspace's own first business.
+     */
+    const { db, ctx, runStrategyJob, first } = await twoBusinesses();
+    strategyMock.mockResolvedValue({ ...OUTPUT, customerProfiles: [profile("Someone else", 1)] });
+
+    await runStrategyJob(ctx, {
+      workspaceId: WORKSPACE,
+      userId: USER,
+      expand: true,
+      businessProfileId: "99999999-9999-4999-8999-999999999999",
+    });
+
+    const added = db.rows("customer_profiles").find((r) => r.name === "Someone else");
+    expect(added?.business_profile_id).toBe(first);
+    expect(db.rows("business_profiles")).toHaveLength(2);
+  });
+});
