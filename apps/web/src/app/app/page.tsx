@@ -17,7 +17,6 @@ import { StrategyStatus } from "@/components/strategy-status";
 import { DailyReportSection } from "./report-section";
 import { LimitsSection } from "./limits-section";
 import { ResultsSection } from "./analytics-section";
-import { SpendSection } from "./usage-section";
 /**
  * The morning screen: what to do, and whether what was done is working.
  *
@@ -234,9 +233,6 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
       */}
       <PageGroup id="results">
         <ResultsSection />
-      </PageGroup>
-      <PageGroup id="spend">
-        <SpendSection />
       </PageGroup>
     </>
   );

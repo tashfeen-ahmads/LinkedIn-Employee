@@ -9,6 +9,7 @@ import { readSetupState } from "@/lib/setup-state";
 import { markFor, type NavMarks } from "@/lib/nav-marks";
 import { loadNeedsYou } from "@/lib/needs-you-data";
 import { entitlementFor, entitlementMessage } from "@le/billing";
+import { isPlatformAdmin } from "@/lib/admin";
 
 /**
  * Twelve links in one flat list is a list you read rather than a nav you use.
@@ -118,6 +119,9 @@ async function signOut() {
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await requireSession();
   const supabase = await createClient();
+  // Whether to offer the operator console at all. False on error, because
+  // the privilege is what is being asked about (rule 54).
+  const admin = await isPlatformAdmin();
 
   /*
    * The count that decides whether a rep opens the app, so it lives in the nav
@@ -241,6 +245,25 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <Link className="app-top-icon" href="/app/support" aria-label="Support">
               <NavIcon name="support" className="nav-icon" />
             </Link>
+            {/*
+              The way into the operator console, for the people who have one.
+
+              There was no link at all: an admin had to know the URL and type
+              it. That is rule 8 — repair must never depend on somebody finding
+              a button, and it certainly must not depend on them remembering a
+              path that nothing in the product links to.
+
+              Rendered from isPlatformAdmin, which returns false when the check
+              itself fails: the privilege is the thing being asked about, so a
+              failed check falls to the smaller answer (rule 54). This is a
+              link and not a permission — /admin re-checks on every page it
+              serves, because a control that is merely hidden is not a control.
+            */}
+            {admin ? (
+              <Link className="app-top-icon" href="/admin" aria-label="Operator console">
+                <NavIcon name="shield" className="nav-icon" />
+              </Link>
+            ) : null}
             <Link className="app-top-who" href="/app/profile">
               {/* Initials rather than a photograph: this product has never
                   asked anybody for one, and a grey silhouette is worse than

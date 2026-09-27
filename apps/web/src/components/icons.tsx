@@ -36,6 +36,12 @@ function Glyph({ children, ...rest }: SVGProps<SVGSVGElement>) {
 }
 
 const PATHS: Record<string, React.ReactNode> = {
+  /* The operator console. A shield, because what it guards is other
+     people's data — the console can see that a workspace exists, never
+     what it says (rule 15). */
+  shield: (
+    <path d="M12 3l7 3v5c0 4.4-2.9 8.4-7 9.5C7.9 19.4 5 15.4 5 11V6l7-3z" />
+  ),
   /* Overview — the four panels of a dashboard. */
   overview: (
     <>
