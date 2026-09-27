@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase-server";
 import { PageNotice } from "@/components/page-notice";
 import { PageHeader, Section, Empty } from "@/components/page";
 import { Availability } from "./availability";
+import { profileHref } from "@le/shared";
 
 export const dynamic = "force-dynamic";
 
@@ -177,7 +178,7 @@ export default async function MeetingsPage({
                         {prospect?.linkedin_url ? (
                           <a
                             className="btn ghost small"
-                            href={prospect.linkedin_url}
+                            href={profileHref(prospect.linkedin_url) ?? undefined}
                             target="_blank"
                             rel="noreferrer noopener"
                           >

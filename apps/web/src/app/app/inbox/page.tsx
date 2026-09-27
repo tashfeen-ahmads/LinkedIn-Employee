@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase-server";
 import { callWorker, errorQuery, noticeQuery } from "@/lib/worker";
 import { redirect } from "next/navigation";
 import { PageNotice, type NoticeParams } from "@/components/page-notice";
+import { profileHref } from "@le/shared";
 
 /**
  * Everything waiting on a person.
@@ -448,7 +449,7 @@ export default async function InboxPage({
                   <tr key={row.id}>
                     <td>
                       {p?.linkedin_url ? (
-                        <a href={p.linkedin_url as string} target="_blank" rel="noreferrer">
+                        <a href={profileHref(p.linkedin_url as string) ?? undefined} target="_blank" rel="noreferrer">
                           {nameOf(p as never)}
                         </a>
                       ) : (

@@ -144,3 +144,34 @@ export function isPublicProfileUrl(url: string | null | undefined, providerId?: 
   // a row whose provider id was lost still does not become a broken link.
   return !/^acoaa/i.test(slug);
 }
+
+/**
+ * The address to put in an `href` for a prospect's profile.
+ *
+ * Every `linkedin_url` in this database is stored without a scheme
+ * (`linkedin.com/in/someone`), because that is the shape LinkedIn's own search
+ * returns. A bare string like that in an `href` is a **relative** URL, so the
+ * browser resolves it against the current page and the rep lands on
+ * `/app/linkedin.com/in/someone` — a 404 on our own domain, under a link that
+ * looks exactly right until it is clicked.
+ *
+ * Four screens render that value and only two of them normalised it, so the
+ * link worked on Prospects and on a campaign and was broken in the Inbox and on
+ * Meetings — the two screens a rep opens when a real person has just replied.
+ * One definition, for the same reason `isPublicProfileUrl` above is one: a rule
+ * written out four times is a rule that is right three times.
+ *
+ * Returns null for a prospect with no address, so a caller renders plain text
+ * rather than a link to nowhere (rule 13: a person whose profile we cannot open
+ * is real, and must not be presented as clickable).
+ */
+export function profileHref(url: string | null | undefined): string | null {
+  const trimmed = (url ?? "").trim();
+  if (!trimmed) return null;
+  // Anything already absolute is left exactly as it is: rewriting a scheme
+  // somebody stored on purpose is how http://localhost test data turns into a
+  // live link.
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  // A protocol-relative or accidentally-rooted value is still not ours.
+  return `https://${trimmed.replace(/^\/+/, "")}`;
+}

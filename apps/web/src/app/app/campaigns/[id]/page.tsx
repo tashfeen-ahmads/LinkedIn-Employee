@@ -22,7 +22,7 @@ import { callWorker, errorQuery, noticeQuery } from "@/lib/worker";
 import { SubmitButton } from "@/components/submit-button";
 import { describeSearch } from "./search-state";
 import { describePacing } from "@/lib/pacing";
-import { MIN_SENDS_TO_COMPARE, comparisonReady, standings } from "@le/shared";
+import { MIN_SENDS_TO_COMPARE, comparisonReady, standings, profileHref } from "@le/shared";
 import { PageNotice, type NoticeParams } from "@/components/page-notice";
 import { CONNECTION_NOTE_MAX, daysToSendAll, launchBlockers } from "@/lib/campaign";
 
@@ -1170,7 +1170,7 @@ export default async function CampaignPage({
                     <div className="stack-1 grow">
                       <div className="cluster">
                         <a
-                          href={`https://${prospect.linkedin_url.replace(/^https?:\/\//, "")}`}
+                          href={profileHref(prospect.linkedin_url) ?? undefined}
                           target="_blank"
                           rel="noreferrer"
                         >

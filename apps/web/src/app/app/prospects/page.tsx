@@ -3,7 +3,7 @@ import { Empty, PageHeader } from "@/components/page";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { callWorker, errorQuery, noticeQuery } from "@/lib/worker";
-import { isPublicProfileUrl } from "@le/shared";
+import { isPublicProfileUrl, profileHref } from "@le/shared";
 import { redirect } from "next/navigation";
 import { PageNotice } from "@/components/page-notice";
 
@@ -297,7 +297,7 @@ export default async function ProspectsPage({
                     {isPublicProfileUrl(prospect.linkedin_url, prospect.provider_id) ? (
                       <a
                         className="strongish"
-                        href={prospect.linkedin_url.startsWith("http") ? prospect.linkedin_url : `https://${prospect.linkedin_url}`}
+                        href={profileHref(prospect.linkedin_url) ?? undefined}
                         target="_blank"
                         rel="noreferrer noopener"
                       >
