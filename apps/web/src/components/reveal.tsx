@@ -40,15 +40,32 @@ export function Reveal({
   as?: "div" | "li" | "section";
 }) {
   const reduced = useReducedMotion();
-  if (reduced) return <>{children}</>;
 
+  /*
+   * Reduced motion turns the animation off, never the element.
+   *
+   * `useReducedMotion()` returns null on the server and true on a
+   * reduced-motion client, and this used to return a bare fragment in that
+   * case — so the server sent a wrapper the client did not render, React
+   * called it a hydration mismatch and regenerated the entire tree on the
+   * client. Which is the exact failure the note above this file exists to
+   * prevent: a landing page that is whole in the markup and then thrown away
+   * and rebuilt, for every visitor who has asked their system to calm down.
+   *
+   * The cure is not a second branch on `reduced`: framer writes `initial` into
+   * the server's inline style, so gating `initial` on it mismatches the
+   * *attribute* instead of the element, which React reports as "won't be
+   * patched up" and leaves the page rendered from the wrong values. Both sides
+   * send identical markup and reduced motion only takes the duration to zero —
+   * the element still arrives, it simply does not travel.
+   */
   const Tag = motion[as];
   return (
     <Tag
       initial={{ y: 10 }}
       whileInView={{ y: 0 }}
       viewport={{ once: true, margin: "-60px" }}
-      transition={{ duration: 0.5, delay, ease: EASE }}
+      transition={reduced ? { duration: 0 } : { duration: 0.5, delay, ease: EASE }}
     >
       {children}
     </Tag>
@@ -72,8 +89,8 @@ const item: Variants = {
  */
 export function Stagger({ children, className }: { children: ReactNode; className?: string }) {
   const reduced = useReducedMotion();
-  if (reduced) return <div className={className}>{children}</div>;
 
+  // Same markup either way — see `Reveal`. Only the stagger's timing goes.
   return (
     <motion.div
       className={className}
@@ -81,6 +98,7 @@ export function Stagger({ children, className }: { children: ReactNode; classNam
       initial="hidden"
       whileInView="shown"
       viewport={{ once: true, margin: "-60px" }}
+      transition={reduced ? { duration: 0, staggerChildren: 0, delayChildren: 0 } : undefined}
     >
       {children}
     </motion.div>
@@ -89,9 +107,12 @@ export function Stagger({ children, className }: { children: ReactNode; classNam
 
 export function StaggerItem({ children, className }: { children: ReactNode; className?: string }) {
   const reduced = useReducedMotion();
-  if (reduced) return <div className={className}>{children}</div>;
   return (
-    <motion.div className={className} variants={item}>
+    <motion.div
+      className={className}
+      variants={item}
+      transition={reduced ? { duration: 0 } : undefined}
+    >
       {children}
     </motion.div>
   );
@@ -103,8 +124,9 @@ export function StaggerItem({ children, className }: { children: ReactNode; clas
  */
 export function DrawPath({ d, className }: { d: string; className?: string }) {
   const reduced = useReducedMotion();
-  if (reduced) return <path d={d} className={className} />;
 
+  // `motion.path` with no animation props is a plain path, so the element is
+  // the same on both sides and only the drawing stops.
   return (
     <motion.path
       d={d}
@@ -117,7 +139,7 @@ export function DrawPath({ d, className }: { d: string; className?: string }) {
       initial={{ pathLength: 0 }}
       whileInView={{ pathLength: 1 }}
       viewport={{ once: true, margin: "-40px" }}
-      transition={{ duration: 0.9, ease: "easeInOut" }}
+      transition={reduced ? { duration: 0 } : { duration: 0.9, ease: "easeInOut" }}
     />
   );
 }
