@@ -1427,6 +1427,11 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 
 .app-brand { display: flex; flex-direction: column; gap: 0.1rem; padding: 0 var(--space-2) var(--space-1); }
 .app-brand a { font-weight: 650; font-size: 0.9375rem; letter-spacing: -0.015em; }
+/* The mark sits on the wordmark's optical centre rather than its box centre:
+   the plate is a square with a radius and the text has a descender, so aligning
+   the boxes leaves the logo reading a pixel high. */
+.app-brand-name { display: flex; align-items: center; gap: 0.5rem; }
+.app-brand-name .logo-mark { flex: none; }
 .app-brand a:hover { text-decoration: none; color: var(--accent); }
 
 .nav-group { display: flex; flex-direction: column; gap: 2px; }

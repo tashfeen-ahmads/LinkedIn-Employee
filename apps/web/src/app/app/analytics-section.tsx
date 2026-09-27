@@ -16,10 +16,8 @@ import {
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { readFunnelData } from "@/lib/funnel-data";
-import { fetchAllRows } from "@/lib/rows";
 import { PageHeader, Section, Empty } from "@/components/page";
 import { FunnelChart, Kpi, RankedBars, TrendChart } from "@/components/charts";
-import { formatUsd } from "@/lib/admin";
 
 export const dynamic = "force-dynamic";
 
@@ -32,15 +30,24 @@ export const dynamic = "force-dynamic";
  * whichever they happened to open — so the dashboard now leads with the next
  * action and links here, and every number lives on this page.
  *
- * It answers four questions, in the order they get asked: is it running, what
- * is it producing, which strategy is producing it, and what is it costing.
+ * It answers three questions, in the order they get asked: is it running, what
+ * is it producing, and which strategy is producing it.
+ *
+ * Not what it costs. What the agents cost is our margin, not the customer's
+ * bill: a rep pays a seat price that does not move with it, so a token total on
+ * their dashboard is a number they cannot act on, cannot change, and will
+ * reasonably read as something they are being charged for. `/app/usage` was
+ * redirected away for exactly that reason and the tile stayed behind, which is
+ * the worse half of the two — a removed screen is obvious, a surviving number
+ * on the screen everybody opens is not. It lives in the operator console, on
+ * `platform_workspace_spend()`, where somebody can do something about it.
  */
 export async function ResultsSection() {
   const session = await requireSession();
   const supabase = await createClient();
   const now = Date.now();
 
-  const [funnel, { data: profiles }, { data: memberships }, spend] = await Promise.all([
+  const [funnel, { data: profiles }, { data: memberships }] = await Promise.all([
     readFunnelData(supabase, session.workspaceId),
     supabase
       .from("customer_profiles")
@@ -48,16 +55,6 @@ export async function ResultsSection() {
       .eq("workspace_id", session.workspaceId)
       .order("priority", { ascending: true }),
     supabase.from("memberships").select("user_id, role").eq("workspace_id", session.workspaceId),
-    // Paged: llm_calls gains a row per agent call, so it is the first table
-    // here to pass PostgREST's silent thousand-row cap.
-    fetchAllRows<{ cost_usd: number | null; agent: string; created_at: string }>((from, to) =>
-      supabase
-        .from("llm_calls")
-        .select("cost_usd, agent, created_at")
-        .eq("workspace_id", session.workspaceId)
-        .order("id", { ascending: true })
-        .range(from, to),
-    ),
   ]);
 
   const report = funnelReport(funnel.rows, funnel.goals, now);
@@ -119,14 +116,6 @@ export async function ResultsSection() {
     .sort((a, b) => b.value - a.value)
     .slice(0, 8);
 
-  // What it cost. A model missing from the price table stores null rather than
-  // zero, so an unpriced call stays out of the total instead of being counted
-  // as free — and the count of priced calls is what says how much of the total
-  // is real.
-  const priced = spend.rows.filter((r) => r.cost_usd !== null);
-  const totalSpend = priced.reduce((sum, r) => sum + Number(r.cost_usd), 0);
-  const perOutcome = report.counts.invited > 0 ? totalSpend / report.counts.invited : null;
-
   const funnelSteps = report.stages.map((stage) => ({
     label: stage.label,
     value: report.counts[stage.key],
@@ -172,15 +161,6 @@ export async function ResultsSection() {
             value={rateValue(report.reply)}
             tone={toneFor(report.reply)}
             note={describeRate(report.reply)}
-          />
-          <Kpi
-            label="Agent spend"
-            value={formatUsd(totalSpend)}
-            note={
-              perOutcome === null
-                ? `${priced.length.toLocaleString()} priced calls`
-                : `${formatUsd(perOutcome)} per person invited`
-            }
           />
         </div>
       </Section>
@@ -326,12 +306,7 @@ export async function ResultsSection() {
         ) : null}
         <p className="tiny subtle">
           {(memberships ?? []).length} member{(memberships ?? []).length === 1 ? "" : "s"} ·{" "}
-          {funnel.campaigns.length} campaign{funnel.campaigns.length === 1 ? "" : "s"} ·{" "}
-          {priced.length.toLocaleString()} priced agent call
-          {priced.length === 1 ? "" : "s"}
-          {priced.length < spend.rows.length
-            ? ` (${(spend.rows.length - priced.length).toLocaleString()} unpriced, left out of the total rather than counted as free)`
-            : ""}
+          {funnel.campaigns.length} campaign{funnel.campaigns.length === 1 ? "" : "s"}
         </p>
       </Section>
     </>

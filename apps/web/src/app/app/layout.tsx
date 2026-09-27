@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase-server";
 import { AppNav, type NavGroup } from "@/components/app-nav";
 import { AppSearch } from "@/components/app-search";
 import { NavIcon } from "@/components/icons";
+import { LogoMark } from "@/components/logo";
 import { readSetupState } from "@/lib/setup-state";
 import { markFor, type NavMarks } from "@/lib/nav-marks";
 import { loadNeedsYou } from "@/lib/needs-you-data";
@@ -172,8 +173,21 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <div className="app">
       <aside className="app-aside">
+        {/*
+          The funnel mark, which the marketing header and the browser tab have
+          carried since the first week and the application's own rail did not.
+          A product whose every other surface shows a logo and whose main screen
+          shows a line of text reads as two different products — and the rail is
+          the one surface a customer looks at every day.
+
+          `LogoMark` rather than a second drawing of it: one definition, so the
+          tab, the site header and the rail cannot drift apart.
+        */}
         <div className="app-brand">
-          <Link href="/app">LinkedIn&nbsp;Employee</Link>
+          <Link href="/app" className="app-brand-name">
+            <LogoMark size={22} />
+            <span>LinkedIn&nbsp;Employee</span>
+          </Link>
           <p className="tiny subtle">{session.workspaceName}</p>
         </div>
 
