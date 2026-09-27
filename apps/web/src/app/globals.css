@@ -1123,15 +1123,27 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
  * does not belong in a rail whose job is telling them where they can go.
  */
 .app-top {
-  display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-3) clamp(var(--space-3), 4vw, var(--space-5));
   border-bottom: 1px solid var(--border);
   background: var(--surface-raised);
   position: sticky;
   top: 0;
   z-index: 15;
+}
+/*
+ * The bar spans the frame; its contents keep the page's measure.
+ *
+ * `.app-body` is a centred 1100px column with a fluid gutter. A bar with its
+ * own padding therefore starts its search box fifty pixels to the left of the
+ * page title sitting directly underneath it — the same fault the banners had,
+ * reintroduced the same way. Same width, same gutter, same column.
+ */
+.app-top-inner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  width: min(1100px, 100%);
+  margin-inline: auto;
+  padding: var(--space-3) clamp(var(--space-3), 4vw, var(--space-5));
 }
 .app-top-actions { display: flex; align-items: center; gap: var(--space-2); margin-left: auto; }
 
@@ -1471,7 +1483,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
      and the same fact is already on the billing page and in the banner. */
   .app-upsell { display: none; }
   /* The search is in the top bar, which the phone keeps. */
-  .app-top { padding-inline: var(--space-4); }
+  .app-top-inner { padding-inline: var(--space-4); }
   .app-top-who-text { display: none; }
 
   /* Wrapping twelve links puts four rows of navigation above every page. One
@@ -1511,9 +1523,24 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   }
   .nav a[aria-current="page"] { box-shadow: none; }
 
-  /* A tap target, not a mouse target. 44px is the floor every platform's
-     guidance agrees on, and these were 30. */
-  .nav a, .btn.small { min-height: 2.75rem; }
+  /*
+   * A tap target, not a mouse target. 44px is the floor every platform's
+   * guidance agrees on.
+   *
+   * The rule named `.nav a` and `.btn.small` and stopped there, so the one set
+   * of controls a rep touches most on a phone — the filter chips above every
+   * list, which are pills rather than buttons — stayed at thirty pixels. A
+   * rule that lists the controls it covers misses the next one added; these
+   * are every control on the page that is not a field.
+   */
+  .nav a,
+  .btn.small,
+  .tabs a,
+  .chip {
+    min-height: 2.75rem;
+    display: inline-flex;
+    align-items: center;
+  }
 
   /* The page's own gutter shrinks on a phone; the banners follow it rather
      than keeping a desktop inset the content no longer has. */
@@ -2513,11 +2540,11 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
  * it sizes itself to the container without distortion, and the label under it
  * costs nothing.
  */
-.bars { position: relative; display: block; padding-left: 2.5rem; }
+.bars { position: relative; display: block; padding-left: 3rem; }
 .bars-scale { position: absolute; inset: 0 0 1.5rem 0; pointer-events: none; }
 .bars-gridline {
   position: absolute;
-  left: 2.5rem;
+  left: 3rem;
   right: 0;
   border-top: 1px solid var(--viz-grid);
 }
@@ -2530,6 +2557,13 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
   font-size: 0.6875rem;
   color: var(--text-subtle);
   font-variant-numeric: tabular-nums;
+  /* The label grows leftwards into the gutter, so the gutter has to be able
+     to hold it. Capped and right-aligned: a five-figure axis would otherwise
+     run out past the edge of the chart rather than wrapping. */
+  max-width: 2.5rem;
+  overflow: hidden;
+  text-align: right;
+  white-space: nowrap;
 }
 .bars-plot {
   position: relative;

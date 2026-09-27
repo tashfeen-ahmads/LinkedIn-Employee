@@ -217,8 +217,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           there gives the rail back to the twelve places they can go.
         */}
         <header className="app-top">
-          <AppSearch />
-          <div className="app-top-actions">
+          {/*
+            The bar spans the frame; its contents keep the page's measure.
+
+            Written without this wrapper the bar had its own padding, so the
+            search box started fifty pixels left of the page title directly
+            under it — on every screen in the product. That is the same fault
+            the banners had, reintroduced by the same shortcut: a full-bleed
+            surface has to carry the background and the rule, and the column
+            inside it has to carry the measure.
+          */}
+          <div className="app-top-inner">
+            <AppSearch />
+            <div className="app-top-actions">
             <Link
               className="app-top-icon"
               href="/app/inbox"
@@ -241,7 +252,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 <span className="small strongish">{session.fullName ?? session.email}</span>
                 <span className="tiny subtle">{session.workspaceName}</span>
               </span>
-            </Link>
+              </Link>
+            </div>
           </div>
         </header>
 

@@ -138,6 +138,18 @@ export default async function ProspectsPage({
   }
   const strategyNames = new Map(strategyList.map((s) => [s.id, s.name]));
 
+  /*
+   * Whether anybody on this list has an intent signal at all.
+   *
+   * Signals arrive from campaign activity, so a workspace in its first
+   * fortnight has none — and the "Why" column stood over a row of empty cells
+   * on the screen a rep reads to decide who to write to next. Width taken from
+   * the columns that do have something in them.
+   */
+  const anySignals = (prospects ?? []).some(
+    (prospect) => Array.isArray(prospect.signals) && prospect.signals.length > 0,
+  );
+
   if (!prospects?.length && showing === "all") {
     return (
       <>
@@ -250,8 +262,19 @@ export default async function ProspectsPage({
             <tr>
               <th>Person</th>
               <th className="num">Fit</th>
-              <th className="num">Intent</th>
-              <th>Why</th>
+              {/*
+                Intent and its reasons arrive together or not at all.
+
+                Signals come from campaign activity, so a workspace in its
+                first fortnight has none — and these two columns stood over a
+                row of zeros and a row of blanks on the screen a rep reads to
+                decide who to write to next. Width taken from the columns that
+                do have something in them. They come back the moment there is
+                anything to put in them, together, because a score with no
+                reason beside it is a number nobody can act on.
+              */}
+              {anySignals ? <th className="num">Intent</th> : null}
+              {anySignals ? <th>Why</th> : null}
               <th>Status</th>
               <th />
             </tr>
@@ -320,17 +343,19 @@ export default async function ProspectsPage({
                       </span>
                     ) : null}
                   </td>
-                  <td className="num">{prospect.intent_score ?? 0}</td>
-                  <td className="medium">
-                    <div className="cluster">
-                      {signals.slice(0, 3).map((signal, index) => (
-                        <span key={index} className="pill accent" title={signal.detail}>
-                          {SIGNAL_LABELS[signal.type] ?? signal.type}
-                        </span>
-                      ))}
-                    </div>
-                    <span className="small muted">{reasons.join("; ")}</span>
-                  </td>
+                  {anySignals ? <td className="num">{prospect.intent_score ?? 0}</td> : null}
+                  {anySignals ? (
+                    <td className="medium">
+                      <div className="cluster">
+                        {signals.slice(0, 3).map((signal, index) => (
+                          <span key={index} className="pill accent" title={signal.detail}>
+                            {SIGNAL_LABELS[signal.type] ?? signal.type}
+                          </span>
+                        ))}
+                      </div>
+                      <span className="small muted">{reasons.join("; ")}</span>
+                    </td>
+                  ) : null}
                   <td>
                     {prospect.do_not_contact ? (
                       <span className="pill danger">Do not contact</span>

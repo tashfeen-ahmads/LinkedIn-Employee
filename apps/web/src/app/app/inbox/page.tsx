@@ -273,7 +273,16 @@ export default async function InboxPage({
       {/* One row of stages, each carrying its own count. A stage with nobody in
           it still shows, because "zero replied" is an answer and a missing tab
           is not. */}
-      <nav className="cluster" aria-label="Funnel stage">
+      {/*
+        `tabs`, which is what this row of filters is called everywhere else.
+
+        Prospects and Meetings both build this pattern with `.tabs`; the inbox
+        built the identical thing out of `.cluster`. One component written two
+        ways means a fix reaches one of them — the tap-target floor for a phone
+        landed on `.tabs` and left the inbox's chips at thirty pixels, on the
+        screen a rep opens more than any other.
+      */}
+      <nav className="tabs" aria-label="Funnel stage">
         {STAGES.map((s) => (
           <Link
             key={s.key}
