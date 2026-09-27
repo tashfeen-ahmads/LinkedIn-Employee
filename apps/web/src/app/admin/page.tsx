@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase-server";
+import { PageHeader } from "@/components/page";
 import { requirePlatformAdmin, statsByWorkspace, daysUntil, formatUsd, type WorkspaceStats } from "@/lib/admin";
 
 export const dynamic = "force-dynamic";
@@ -58,12 +59,11 @@ export default async function AdminWorkspacesPage() {
 
   return (
     <>
-      <div className="page-head">
-        <h1>Workspaces</h1>
-        <p className="muted small">
-          {workspaces?.length ?? 0} total · {everSent} have ever sent · {formatUsd(totalSpend)} of model spend
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Operator"
+        title="Workspaces"
+        lede={`${workspaces?.length ?? 0} total · ${everSent} have ever sent · ${formatUsd(totalSpend)} of model spend`}
+      />
 
       {!workspaces?.length ? (
         <div className="notice">

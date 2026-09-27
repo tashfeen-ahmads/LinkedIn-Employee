@@ -513,38 +513,40 @@ export default async function AgentPage({
               recognisable line beats a clever one: <code>{DEFAULT_OPENER_TEMPLATE}</code>
             </Empty>
           ) : approvedOpeners.length === 0 ? null : (
-            <table className="table">
-              <thead>
-                <tr>
-                  <th scope="col">Opener</th>
-                  <th scope="col">Written by</th>
-                  <th scope="col">
-                    <span className="sr-only">Actions</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {approvedOpeners.map((opener) => (
-                  <tr key={opener.id}>
-                    <td>
-                      {opener.body}
-                      {opener.angle ? <div className="small muted">{opener.angle}</div> : null}
-                    </td>
-                    <td className="small muted">{opener.written_by}</td>
-                    <td className="row-actions">
-                      <form action={retireLine}>
-                        <input type="hidden" name="id" value={id} />
-                        <input type="hidden" name="table" value="hooks" />
-                        <input type="hidden" name="line" value={opener.id} />
-                        <SubmitButton className="btn secondary small" pendingLabel="Retiring…">
-                          Retire
-                        </SubmitButton>
-                      </form>
-                    </td>
+            <div className="table-scroll">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th scope="col">Opener</th>
+                    <th scope="col">Written by</th>
+                    <th scope="col">
+                      <span className="sr-only">Actions</span>
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {approvedOpeners.map((opener) => (
+                    <tr key={opener.id}>
+                      <td>
+                        {opener.body}
+                        {opener.angle ? <div className="small muted">{opener.angle}</div> : null}
+                      </td>
+                      <td className="small muted">{opener.written_by}</td>
+                      <td className="row-actions">
+                        <form action={retireLine}>
+                          <input type="hidden" name="id" value={id} />
+                          <input type="hidden" name="table" value="hooks" />
+                          <input type="hidden" name="line" value={opener.id} />
+                          <SubmitButton className="btn secondary small" pendingLabel="Retiring…">
+                            Retire
+                          </SubmitButton>
+                        </form>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
 
           <form action={writeLines} className="card">
@@ -610,33 +612,35 @@ export default async function AgentPage({
               hears a different proposition, and none of them was read by anyone.
             </Empty>
           ) : approvedOffers.length === 0 ? null : (
-            <table className="table">
-              <thead>
-                <tr>
-                  <th scope="col">Offer line</th>
-                  <th scope="col">
-                    <span className="sr-only">Actions</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {approvedOffers.map((offer) => (
-                  <tr key={offer.id}>
-                    <td>{offer.body}</td>
-                    <td className="row-actions">
-                      <form action={retireLine}>
-                        <input type="hidden" name="id" value={id} />
-                        <input type="hidden" name="table" value="pitches" />
-                        <input type="hidden" name="line" value={offer.id} />
-                        <SubmitButton className="btn secondary small" pendingLabel="Retiring…">
-                          Retire
-                        </SubmitButton>
-                      </form>
-                    </td>
+            <div className="table-scroll">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th scope="col">Offer line</th>
+                    <th scope="col">
+                      <span className="sr-only">Actions</span>
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {approvedOffers.map((offer) => (
+                    <tr key={offer.id}>
+                      <td>{offer.body}</td>
+                      <td className="row-actions">
+                        <form action={retireLine}>
+                          <input type="hidden" name="id" value={id} />
+                          <input type="hidden" name="table" value="pitches" />
+                          <input type="hidden" name="line" value={offer.id} />
+                          <SubmitButton className="btn secondary small" pendingLabel="Retiring…">
+                            Retire
+                          </SubmitButton>
+                        </form>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
 
           <form action={writeLines} className="card">
@@ -726,40 +730,42 @@ export default async function AgentPage({
             Always available: {MERGE_FIELDS.map((f) => `{{${f}}}`).join(", ")}
           </p>
           {customFields.length > 0 ? (
-            <table className="table">
-              <thead>
-                <tr>
-                  <th scope="col">Field</th>
-                  <th scope="col">Means</th>
-                  <th scope="col">When empty</th>
-                  <th scope="col">
-                    <span className="sr-only">Actions</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {customFields.map((field) => (
-                  <tr key={field.key}>
-                    <td>
-                      <code>{`{{${field.key}}}`}</code>
-                    </td>
-                    <td>{field.label}</td>
-                    <td className="small muted">
-                      {field.fallback || <span className="warn">placeholder stays visible</span>}
-                    </td>
-                    <td className="row-actions">
-                      <form action={removeCustomField}>
-                        <input type="hidden" name="id" value={id} />
-                        <input type="hidden" name="key" value={field.key} />
-                        <SubmitButton className="btn secondary small" pendingLabel="Removing…">
-                          Remove
-                        </SubmitButton>
-                      </form>
-                    </td>
+            <div className="table-scroll">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th scope="col">Field</th>
+                    <th scope="col">Means</th>
+                    <th scope="col">When empty</th>
+                    <th scope="col">
+                      <span className="sr-only">Actions</span>
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {customFields.map((field) => (
+                    <tr key={field.key}>
+                      <td>
+                        <code>{`{{${field.key}}}`}</code>
+                      </td>
+                      <td>{field.label}</td>
+                      <td className="small muted">
+                        {field.fallback || <span className="warn">placeholder stays visible</span>}
+                      </td>
+                      <td className="row-actions">
+                        <form action={removeCustomField}>
+                          <input type="hidden" name="id" value={id} />
+                          <input type="hidden" name="key" value={field.key} />
+                          <SubmitButton className="btn secondary small" pendingLabel="Removing…">
+                            Remove
+                          </SubmitButton>
+                        </form>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           ) : null}
 
           <form action={addCustomField} className="card">

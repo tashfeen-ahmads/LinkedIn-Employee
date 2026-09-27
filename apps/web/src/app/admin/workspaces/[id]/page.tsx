@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase-server";
 import { requirePlatformAdmin, statsByWorkspace, daysUntil, formatUsd, type WorkspaceStats } from "@/lib/admin";
 import { dailyInviteCap } from "@le/linkedin";
 import { LINKEDIN_LIMITS } from "@le/shared";
+import { PageHeader, Section } from "@/components/page";
 
 export const dynamic = "force-dynamic";
 
@@ -60,20 +61,18 @@ export default async function AdminWorkspacePage({ params }: { params: Promise<{
 
   return (
     <>
-      <div className="page-head">
-        <div className="between">
-          <div className="stack-1">
-            <h1>{workspace.name}</h1>
-            <p className="tiny subtle mono">{workspace.slug}</p>
-          </div>
+      <PageHeader
+        eyebrow="Operator"
+        title={workspace.name}
+        lede={<span className="mono tiny subtle">{workspace.slug}</span>}
+        actions={
           <Link href="/admin" className="btn ghost small">
             All workspaces
           </Link>
-        </div>
-      </div>
+        }
+      />
 
-      <section className="card">
-        <h2>Plan</h2>
+      <Section title="Plan">
         <div className="grid grid-4">
           <Stat label="Plan" value={workspace.plan} />
           <Stat label="Seats" value={String(workspace.seats)} />
@@ -91,10 +90,9 @@ export default async function AdminWorkspacePage({ params }: { params: Promise<{
           />
           <Stat label="Signed up" value={new Date(workspace.created_at).toLocaleDateString()} />
         </div>
-      </section>
+      </Section>
 
-      <section className="card">
-        <h2>People</h2>
+      <Section title="People">
         {!members?.length ? (
           <p className="small muted">No members. This workspace cannot be used by anyone.</p>
         ) : (
@@ -151,10 +149,9 @@ export default async function AdminWorkspacePage({ params }: { params: Promise<{
             </table>
           </div>
         )}
-      </section>
+      </Section>
 
-      <section className="card">
-        <h2>Work done</h2>
+      <Section title="Work done">
         <div className="grid grid-4">
           <Stat label="Prospects" value={String(s?.prospects ?? 0)} />
           <Stat label="Messages sent" value={String(s?.messages_sent ?? 0)} />
@@ -165,10 +162,9 @@ export default async function AdminWorkspacePage({ params }: { params: Promise<{
           Counts only. The rows behind these are the workspace&rsquo;s own customers&rsquo; data and are not
           readable from here.
         </p>
-      </section>
+      </Section>
 
-      <section className="card">
-        <h2>Campaigns</h2>
+      <Section title="Campaigns">
         {!campaigns?.length ? (
           <p className="small muted">
             None built yet. A campaign is created by the Targeting Agent once a customer profile is
@@ -204,10 +200,9 @@ export default async function AdminWorkspacePage({ params }: { params: Promise<{
             </table>
           </div>
         )}
-      </section>
+      </Section>
 
-      <section className="card">
-        <h2>Model spend</h2>
+      <Section title="Model spend">
         <div className="grid grid-4">
           <Stat label="Total" value={formatUsd(totalSpend)} />
           <Stat label="Calls" value={String((spend ?? []).length)} />
@@ -220,10 +215,9 @@ export default async function AdminWorkspacePage({ params }: { params: Promise<{
             {unpriced === 1 ? " it is" : " they are"} excluded rather than counted as zero.
           </p>
         ) : null}
-      </section>
+      </Section>
 
-      <section className="card">
-        <h2>Recent activity</h2>
+      <Section title="Recent activity">
         {!events?.length ? (
           <p className="small muted">Nothing recorded yet.</p>
         ) : (
@@ -236,7 +230,7 @@ export default async function AdminWorkspacePage({ params }: { params: Promise<{
             ))}
           </ul>
         )}
-      </section>
+      </Section>
     </>
   );
 }

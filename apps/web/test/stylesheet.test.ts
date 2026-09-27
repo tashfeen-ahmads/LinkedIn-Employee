@@ -317,10 +317,26 @@ describe("globals.css", () => {
     expect(body, "table { width: 100% } is assumed by this check").toMatch(
       /(^|\n)table\s*\{[^}]*width:\s*100%/,
     );
-    expect(
-      body,
-      "a table inside .table-scroll needs a min-width, or the container only clips",
-    ).toMatch(/\.table-scroll table\s*\{[^}]*min-width:/);
+    /*
+     * Both wrappers, not just the one. `.scroll-box` is the other scroller in
+     * this sheet — a tall list capped at 60vh — and the campaign builder's
+     * prospect table sits in it. It was given the vertical scroll and not the
+     * width floor, so that table crushed itself exactly as described above
+     * while the rule written for the problem sat one selector away. A check
+     * naming one of two containers is how the second one drifts.
+     */
+    for (const container of [".table-scroll", ".app .scroll-box"]) {
+      const rule = new RegExp(
+        // The selector may be grouped, so allow other selectors either side of
+        // this one inside the same comma-separated list.
+        String.raw`(^|\n|,)\s*` + container.replace(/\./g, String.raw`\.`) +
+          String.raw` table\s*(,[^{]*)?\{[^}]*min-width:`,
+      );
+      expect(
+        body,
+        `a table inside ${container} needs a min-width, or the container only clips`,
+      ).toMatch(rule);
+    }
   });
 
   it("hides every group heading in the mobile nav, or none", () => {

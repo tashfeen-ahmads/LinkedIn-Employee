@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase-server";
 import { requirePlatformAdmin, daysUntil } from "@/lib/admin";
 import { errorQuery, noticeQuery } from "@/lib/worker";
+import { PageHeader, Section } from "@/components/page";
 import { PageNotice, type NoticeParams } from "@/components/page-notice";
 import { SubmitButton } from "@/components/submit-button";
 import { describeTicketContext } from "@/lib/support";
@@ -91,13 +92,11 @@ export default async function AdminSupportPage({ searchParams }: { searchParams:
   return (
     <>
       <PageNotice error={params.error} notice={params.notice} />
-      <div className="page-head">
-        <h1>Needs attention</h1>
-        <p className="muted small">
-          States that stop a workspace working. Nobody reports these, because from the inside they
-          look like the product being quiet.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Operator"
+        title="Needs attention"
+        lede="States that stop a workspace working. Nobody reports these, because from the inside they look like the product being quiet."
+      />
 
       {nothing ? (
         <div className="notice positive">
@@ -109,12 +108,10 @@ export default async function AdminSupportPage({ searchParams }: { searchParams:
       ) : null}
 
       {open.length ? (
-        <section className="stack-3">
-          <h2>Open tickets</h2>
-          <p className="small muted">
-            Each one carries what the product believed at the moment it was raised, so the first
-            question an operator would ask is already answered.
-          </p>
+        <Section
+          title="Open tickets"
+          description="Each one carries what the product believed at the moment it was raised, so the first question an operator would ask is already answered."
+        >
           {open.map((ticket) => (
             <article key={ticket.id} className="card">
               <div className="between">
@@ -148,12 +145,11 @@ export default async function AdminSupportPage({ searchParams }: { searchParams:
               </form>
             </article>
           ))}
-        </section>
+        </Section>
       ) : null}
 
       {answered.length ? (
-        <section className="card">
-          <h2>Answered</h2>
+        <Section title="Answered">
           <div className="table-scroll">
             <table>
               <thead>
@@ -184,12 +180,11 @@ export default async function AdminSupportPage({ searchParams }: { searchParams:
               </tbody>
             </table>
           </div>
-        </section>
+        </Section>
       ) : null}
 
       {accounts?.length ? (
-        <section className="card">
-          <h2>LinkedIn accounts not sending</h2>
+        <Section title="LinkedIn accounts not sending">
           <div className="table-scroll">
             <table>
               <thead>
@@ -224,12 +219,11 @@ export default async function AdminSupportPage({ searchParams }: { searchParams:
               </tbody>
             </table>
           </div>
-        </section>
+        </Section>
       ) : null}
 
       {expiring.length ? (
-        <section className="card">
-          <h2>Trials ending</h2>
+        <Section title="Trials ending">
           <div className="table-scroll">
             <table>
               <thead>
@@ -252,12 +246,11 @@ export default async function AdminSupportPage({ searchParams }: { searchParams:
               </tbody>
             </table>
           </div>
-        </section>
+        </Section>
       ) : null}
 
       {failures?.length ? (
-        <section className="card">
-          <h2>Failed agent calls</h2>
+        <Section title="Failed agent calls">
           <p className="small muted">
             The most recent 25. A refusal or a schema failure here means a draft that never appeared.
           </p>
@@ -295,7 +288,7 @@ export default async function AdminSupportPage({ searchParams }: { searchParams:
               </tbody>
             </table>
           </div>
-        </section>
+        </Section>
       ) : null}
     </>
   );

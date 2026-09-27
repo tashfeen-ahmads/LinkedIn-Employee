@@ -202,65 +202,67 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
             stranger reads anything.
           </Empty>
         ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th scope="col">Agent</th>
-                <th scope="col">Model</th>
-                <th scope="col">Openers</th>
-                <th scope="col">Offer lines</th>
-                <th scope="col">Campaigns</th>
-                <th scope="col">
-                  <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {(agents ?? []).map((agent) => {
-                const openerCount = openerCounts.get(agent.id) ?? 0;
-                const offerCount = offerCounts.get(agent.id) ?? 0;
-                return (
-                  <tr key={agent.id}>
-                    <td>
-                      <Link href={`/app/agents/${agent.id}`}>{agent.name}</Link>
-                      {agent.is_default ? <span className="small subtle"> · default</span> : null}
-                      {agent.from_name ? (
-                        <div className="small muted">Writes as {agent.from_name}</div>
-                      ) : null}
-                    </td>
-                    <td>
-                      {/* A model nobody can price cannot be run, because its spend
-                          reports as null and a reader takes that for free. */}
-                      {isSelectableModel(agent.model) ? (
-                        agent.model
-                      ) : (
-                        <span className="small warn">Pick a model</span>
-                      )}
-                    </td>
-                    <td className="num">{openerCount || <span className="small warn">none</span>}</td>
-                    <td className="num">{offerCount}</td>
-                    <td className="num">{campaignCounts.get(agent.id) ?? 0}</td>
-                    <td className="row-actions">
-                      {agent.is_default ? null : (
-                        <form action={makeDefault}>
+          <div className="table-scroll">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th scope="col">Agent</th>
+                  <th scope="col">Model</th>
+                  <th scope="col">Openers</th>
+                  <th scope="col">Offer lines</th>
+                  <th scope="col">Campaigns</th>
+                  <th scope="col">
+                    <span className="sr-only">Actions</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {(agents ?? []).map((agent) => {
+                  const openerCount = openerCounts.get(agent.id) ?? 0;
+                  const offerCount = offerCounts.get(agent.id) ?? 0;
+                  return (
+                    <tr key={agent.id}>
+                      <td>
+                        <Link href={`/app/agents/${agent.id}`}>{agent.name}</Link>
+                        {agent.is_default ? <span className="small subtle"> · default</span> : null}
+                        {agent.from_name ? (
+                          <div className="small muted">Writes as {agent.from_name}</div>
+                        ) : null}
+                      </td>
+                      <td>
+                        {/* A model nobody can price cannot be run, because its spend
+                            reports as null and a reader takes that for free. */}
+                        {isSelectableModel(agent.model) ? (
+                          agent.model
+                        ) : (
+                          <span className="small warn">Pick a model</span>
+                        )}
+                      </td>
+                      <td className="num">{openerCount || <span className="small warn">none</span>}</td>
+                      <td className="num">{offerCount}</td>
+                      <td className="num">{campaignCounts.get(agent.id) ?? 0}</td>
+                      <td className="row-actions">
+                        {agent.is_default ? null : (
+                          <form action={makeDefault}>
+                            <input type="hidden" name="id" value={agent.id} />
+                            <SubmitButton className="btn secondary small" pendingLabel="Saving…">
+                              Make default
+                            </SubmitButton>
+                          </form>
+                        )}
+                        <form action={archiveAgent}>
                           <input type="hidden" name="id" value={agent.id} />
-                          <SubmitButton className="btn secondary small" pendingLabel="Saving…">
-                            Make default
+                          <SubmitButton className="btn secondary small" pendingLabel="Retiring…">
+                            Retire
                           </SubmitButton>
                         </form>
-                      )}
-                      <form action={archiveAgent}>
-                        <input type="hidden" name="id" value={agent.id} />
-                        <SubmitButton className="btn secondary small" pendingLabel="Retiring…">
-                          Retire
-                        </SubmitButton>
-                      </form>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </Section>
     </>

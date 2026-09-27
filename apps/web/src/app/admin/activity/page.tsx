@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase-server";
+import { PageHeader } from "@/components/page";
 import { requirePlatformAdmin } from "@/lib/admin";
 
 export const dynamic = "force-dynamic";
@@ -34,13 +35,11 @@ export default async function AdminActivityPage() {
 
   return (
     <>
-      <div className="page-head">
-        <h1>Activity</h1>
-        <p className="muted small">
-          The 100 most recent events across every workspace, from the same audit trail the app writes
-          as it works.
-        </p>
-      </div>
+      <PageHeader
+        eyebrow="Operator"
+        title="Activity"
+        lede="The 100 most recent events across every workspace, from the same audit trail the app writes as it works."
+      />
 
       {!events?.length ? (
         <div className="notice">

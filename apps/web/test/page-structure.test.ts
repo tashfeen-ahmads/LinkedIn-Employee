@@ -170,3 +170,64 @@ describe("marketing page structure", () => {
     }
   });
 });
+
+/*
+ * The operator console, which this file never looked at either.
+ *
+ * Every rule above is scoped to `src/app/app` and `src/app/(marketing)`, so all
+ * four `/admin` pages still wore the shape rule 34 replaced: a
+ * `<div className="page-head">` with a bare `<h1>` inside it, and eleven
+ * hand-rolled `<h2>`s between them. `.page-head` is a plain flex column with a
+ * small gap; `.app .page-header` is the frame, with its own spacing and its own
+ * rules for an eyebrow, a lede and page actions. So the console's headings sat
+ * at different spacing from every other screen in the same shell — which is the
+ * whole of "some screens have a lot of padding, some have none", on the four
+ * screens nothing was checking.
+ *
+ * It is the operator's console rather than the customer's, and that is exactly
+ * why it drifted: nobody reads it daily. A convention nothing enforces drifts
+ * back within a month (see the top of this file), and scoping the enforcement
+ * away from a directory is the same as not having it there.
+ */
+const adminDir = join(dirname(fileURLToPath(import.meta.url)), "../src/app/admin");
+
+describe("operator console page structure", () => {
+  const ADMIN = pages(adminDir);
+  const rel = (p: string) => p.slice(adminDir.length + 1);
+
+  it("finds the pages", () => {
+    expect(ADMIN.length).toBeGreaterThanOrEqual(4);
+  });
+
+  it("never hand-rolls an h1", () => {
+    for (const page of ADMIN) {
+      const source = readFileSync(page, "utf8");
+      expect(source, `${rel(page)} writes its own <h1>`).not.toMatch(/<h1[\s>]/);
+    }
+  });
+
+  it("leaves the h2 to Section", () => {
+    for (const page of ADMIN) {
+      const source = readFileSync(page, "utf8")
+        .replace(/\{?\/\*[\s\S]*?\*\/\}?/g, "")
+        .replace(/^\s*\/\/.*$/gm, "");
+      const found = source.match(/<h2[\s>]/g)?.length ?? 0;
+      expect(found, `${rel(page)} writes ${found} <h2> of its own`).toBe(0);
+    }
+  });
+
+  it("gives every page a PageHeader", () => {
+    for (const page of ADMIN) {
+      const source = readFileSync(page, "utf8");
+      expect((source.match(/<PageHeader\b/g) ?? []).length, `${rel(page)} has no PageHeader`)
+        .toBeGreaterThan(0);
+    }
+  });
+
+  it("leaves no page still using the old ad-hoc header", () => {
+    for (const page of ADMIN) {
+      const source = readFileSync(page, "utf8");
+      expect(source, `${rel(page)} still uses page-head`).not.toContain('className="page-head"');
+    }
+  });
+});

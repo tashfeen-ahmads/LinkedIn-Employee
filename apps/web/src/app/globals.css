@@ -584,7 +584,14 @@ input, select, textarea, button { margin: 0; }
 
 .app .scroll-box {
   max-height: 60vh;
-  overflow-y: auto;
+  /*
+   * Both axes, said rather than inferred. `overflow-y: auto` alone already
+   * scrolls sideways — a `visible` on the other axis computes to `auto` when
+   * its partner is not visible — but a reader cannot check a rule that is not
+   * written, and the table inside still needs the min-width below or its
+   * columns squeeze to nothing instead of scrolling.
+   */
+  overflow: auto;
   overscroll-behavior: contain;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -995,7 +1002,8 @@ table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
  * combination worse than either. A floor makes the container do its job: the
  * columns keep a width somebody can read and the row scrolls sideways.
  */
-.table-scroll table { min-width: 34rem; }
+.table-scroll table,
+.app .scroll-box table { min-width: 34rem; }
 /*
  * A column heading is a label, not data.
  *
@@ -1536,7 +1544,12 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   .nav a,
   .btn.small,
   .tabs a,
-  .chip {
+  .chip,
+  /* `.between` is a layout row, so a link that is its direct child is a
+     control standing on its own rather than a word inside a sentence — which
+     is what the comment above predicted and what a sweep of every route found:
+     one 22px link, the only way from a support ticket to its workspace. */
+  .between > a {
     min-height: 2.75rem;
     display: inline-flex;
     align-items: center;
