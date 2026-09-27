@@ -1,3 +1,4 @@
+import { loadBusinessProfile } from "@le/db";
 import {
   AgentPlaybookSchema,
   BusinessProfileSchema,
@@ -116,7 +117,14 @@ export async function runAgentTest(
 
   const [{ data: business }, { data: profiles }, { data: openerRows }, { data: profile }] =
     await Promise.all([
-      db.from("business_profiles").select("spec").eq("workspace_id", input.workspaceId).maybeSingle(),
+      /*
+       * `maybeSingle()` here was not a choice between businesses, it was a
+       * crash: PostgREST answers PGRST116 for more than one row, so the
+       * agent test would stop working outright the first time a workspace
+       * ran a second business. Through the one definition instead, which
+       * picks deliberately and cannot throw for having a choice.
+       */
+      loadBusinessProfile(db, input.workspaceId).then((row) => ({ data: row })),
       db
         .from("customer_profiles")
         .select("spec, approved_at")

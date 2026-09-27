@@ -1,4 +1,5 @@
 import { personalizeInvites } from "@le/agents";
+import { loadBusinessProfile } from "@le/db";
 import {
   BusinessProfileSchema,
   parseCustomerProfile,
@@ -81,13 +82,7 @@ export async function rewriteCampaignNotes(
     };
   }
 
-  const { data: profileRow } = await db
-    .from("business_profiles")
-    .select("spec")
-    .eq("workspace_id", input.workspaceId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const profileRow = await loadBusinessProfile(db, input.workspaceId);
   const business = BusinessProfileSchema.safeParse(profileRow?.spec);
   if (!business.success) {
     return { ok: false, reason: "Tell us what you sell first — the notes are written from your business profile." };

@@ -1,4 +1,5 @@
 import { writePitch, PITCH_PROMPT_VERSION } from "@le/agents";
+import { loadBusinessProfile } from "@le/db";
 import { BusinessProfileSchema } from "@le/shared";
 import type { WorkerContext } from "../context.js";
 import { recordEvent } from "../context.js";
@@ -38,13 +39,7 @@ export async function writeWorkspacePitch(
   ctx: WorkerContext,
   input: WritePitchInput,
 ): Promise<WritePitchResult> {
-  const { data: profileRow } = await ctx.db
-    .from("business_profiles")
-    .select("spec")
-    .eq("workspace_id", input.workspaceId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const profileRow = await loadBusinessProfile(ctx.db, input.workspaceId);
 
   const parsed = BusinessProfileSchema.safeParse(profileRow?.spec);
   if (!parsed.success) {
