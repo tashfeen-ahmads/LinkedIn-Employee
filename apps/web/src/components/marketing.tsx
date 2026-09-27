@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PlatformDiagram } from "./platform-diagram";
 import { SiteNav } from "./site-nav";
 import { Sequence, sequenceFor } from "@/components/sequence";
 import { LINKEDIN_LIMITS } from "@le/shared";
@@ -97,9 +98,24 @@ export function Hero() {
           </div>
         </Reveal>
 
-        {/* The product's whole argument in one panel: it wrote the reply, and it
-            stopped rather than sending it. Saying that is weaker than showing it. */}
-        <Reveal delay={0.12}>
+        {/*
+          The pipeline first, the moment second.
+
+          The panel below is the best *moment* in the product — it wrote the
+          reply and then stopped — and on its own it is not the product.
+          Somebody landing cold cannot tell from one message that a list was
+          built before it, or that the sending is paced, or that anything
+          happens after. The headline claims a pipeline and the only picture
+          under it showed a single inbox.
+
+          So the diagram carries the mechanism and the panel carries the proof,
+          in that order, because that is the order the claim is made in.
+        */}
+        <Reveal delay={0.08}>
+          <PlatformDiagram />
+        </Reveal>
+
+        <Reveal delay={0.16}>
           <figure className="card raised hero-panel stack-4">
             <figcaption className="between">
               <span className="eyebrow">Your inbox</span>

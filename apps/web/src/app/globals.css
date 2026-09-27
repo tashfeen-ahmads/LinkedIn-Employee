@@ -2365,7 +2365,30 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
 }
 
 /* The model each agent runs on, set apart from the prose above it. */
-.agent-io { margin-top: auto; padding-top: var(--space-3); border-top: 1px solid var(--border); width: 100%; }
+/*
+ * The rule across a row of cards sits at one height.
+ *
+ * `margin-top: auto` pins the footer's *bottom* to the card's, so a footer
+ * whose label wraps to two lines starts higher than one that does not — and
+ * measured across the four agent cards the divider sat at 278px in three of
+ * them and 306px in the fourth. Four cards of equal height with the line
+ * inside them at two different heights is what somebody reads as a block
+ * inside a block that does not line up, and it is not a value anybody typed
+ * wrong: it is a footer sized by its own content.
+ *
+ * A floor of two lines is what the tallest of them needs. The short one keeps
+ * its label at the top of that space rather than centring in it, so the rules
+ * agree and the labels agree too.
+ */
+.agent-io {
+  margin-top: auto;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+  width: 100%;
+  min-height: 4.5rem;
+  align-items: flex-start;
+  align-content: flex-start;
+}
 
 /* A rule with a label in it, for "or use an email link". */
 .or-rule { display: flex; align-items: center; gap: var(--space-3); margin-block: var(--space-4); }
@@ -3106,3 +3129,53 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
 }
 
 .app .cal-note { color: var(--text-muted); text-align: center; margin: 0; }
+
+/* ------------------------------------------------- the platform diagram
+ *
+ * The hero's picture. Every colour is a token so it reads in both themes,
+ * and the type sizes are the SVG's own because a `font-size` in user units
+ * scales with the drawing rather than fighting it.
+ */
+.platform { margin: 0; width: 100%; }
+.platform-svg { overflow: visible; }
+
+.platform-spine { stroke: var(--border-strong); stroke-width: 2; }
+.platform-arrow { fill: var(--border-strong); }
+
+.platform-box {
+  fill: var(--surface-raised);
+  stroke: var(--border);
+  stroke-width: 1.5;
+}
+/* The end of the line earns the accent; the stages before it do not, or the
+   whole row is emphasis and none of it is. */
+.platform-box.is-end { stroke: var(--accent); stroke-width: 2; }
+
+.platform-step {
+  fill: var(--text-subtle);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  font-family: var(--font-mono);
+}
+.platform-title { fill: var(--text); font-size: 16px; font-weight: 640; }
+.platform-line { fill: var(--text-muted); font-size: 12.5px; }
+.platform-sub { fill: var(--text-subtle); font-size: 11.5px; }
+
+/* The two stops. Same shape as each other because they are the same kind of
+   thing — the product declining to continue — and different from a stage. */
+.platform-gate line,
+.platform-cap line { stroke: var(--border-strong); stroke-width: 1.5; stroke-dasharray: 3 3; }
+.platform-gate rect { fill: var(--accent-soft); stroke: var(--accent-border); stroke-width: 1; }
+.platform-cap rect { fill: var(--surface-sunken); stroke: var(--border-strong); stroke-width: 1; }
+.platform-gate text,
+.platform-cap text { font-size: 11.5px; font-weight: 560; text-anchor: middle; }
+.platform-gate text { fill: var(--accent); }
+.platform-cap text { fill: var(--text-muted); }
+
+@media (max-width: 720px) {
+  /* Five stages across a phone is 60px each, which is a diagram nobody can
+     read. It scrolls sideways in its own box instead — the page does not. */
+  .platform { overflow-x: auto; }
+  .platform-svg { min-width: 40rem; }
+}
