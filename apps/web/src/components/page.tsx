@@ -32,7 +32,7 @@ export function PageHeader({
   return (
     <header className="page-header">
       <div className="page-header-text">
-        {eyebrow ? <p className="eyebrow">{eyebrow}</p> : null}
+        {eyebrow ? <p className="page-eyebrow">{eyebrow}</p> : null}
         <h1>{title}</h1>
         {lede ? <p className="muted prose">{lede}</p> : null}
       </div>

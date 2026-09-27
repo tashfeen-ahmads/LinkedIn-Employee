@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { NavIcon } from "./icons";
 
 export interface NavItem {
   href: string;
@@ -19,6 +20,14 @@ export interface NavItem {
   state?: "next" | "attention";
   /** Said out loud for a screen reader, which cannot see a coloured dot. */
   stateLabel?: string;
+  /**
+   * Which glyph sits at this row's left edge (see `components/icons.tsx`).
+   *
+   * Named by the destination rather than by the drawing — `inbox`, not
+   * `tray` — so renaming the picture never means editing the sidebar, and a
+   * name with nothing drawn for it falls back to a dot rather than to a gap.
+   */
+  icon?: string;
 }
 
 export interface NavGroup {
@@ -175,7 +184,8 @@ export function AppNav({ groups }: { groups: NavGroup[] }) {
                     href={item.href}
                     aria-current={isCurrent(pathname, item.href) ? "page" : undefined}
                   >
-                    <span>{item.label}</span>
+                    <NavIcon name={item.icon ?? "dot"} className="nav-icon" />
+                    <span className="nav-label">{item.label}</span>
                     {item.state ? (
                       <span className={`nav-dot ${item.state}`} aria-hidden="true" />
                     ) : null}

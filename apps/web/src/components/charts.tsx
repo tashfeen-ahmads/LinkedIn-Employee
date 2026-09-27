@@ -352,7 +352,7 @@ export interface StackedDay {
 export function StackedDays({
   days,
   series,
-  height = 120,
+  height = 168,
 }: {
   days: StackedDay[];
   /** Fixed order, and the legend's order. Never more than four. */
@@ -360,42 +360,63 @@ export function StackedDays({
   height?: number;
 }) {
   const totals = days.map((d) => d.values.reduce((sum, v) => sum + v, 0));
-  const top = Math.max(1, ...totals);
-  const width = Math.max(1, days.length) * 12;
+  const top = niceCeiling(Math.max(1, ...totals));
 
   return (
     <figure className="viz">
-      <svg
-        viewBox={`0 0 ${width} ${height}`}
-        preserveAspectRatio="none"
-        className="viz-svg viz-bars"
-        role="img"
-        aria-label={`${series.join(", ")} per day over ${days.length} days`}
-      >
-        {days.map((day, i) => {
-          let y = height;
-          return (
-            <g key={day.date}>
-              {day.values.map((value, s) => {
-                if (value <= 0) return null;
-                const h = (value / top) * (height - 2);
-                y -= h;
-                return (
-                  <rect
-                    key={s}
-                    x={i * 12 + 2}
-                    y={y}
-                    width={8}
-                    height={Math.max(1, h - 2)}
-                    fill={seriesColor(s)}
-                    rx={1}
-                  />
-                );
-              })}
-            </g>
-          );
-        })}
-      </svg>
+      <div className="bars" style={{ ["--bars-h" as string]: `${height}px` }}>
+        {/*
+          The scale, drawn as three lines behind the data and labelled at the
+          left. Without it a column is a shape: "is 15 a lot" has no answer on
+          a chart with no axis, and this one had none at all.
+        */}
+        <div className="bars-scale" aria-hidden="true">
+          {[1, 0.5, 0].map((f) => (
+            <div className="bars-gridline" key={f} style={{ bottom: `${f * 100}%` }}>
+              <span className="bars-tick">{Math.round(top * f).toLocaleString()}</span>
+            </div>
+          ))}
+        </div>
+
+        <div className="bars-plot">
+          {days.map((day) => {
+            const total = day.values.reduce((sum, v) => sum + v, 0);
+            return (
+              <div className="bars-col" key={day.date}>
+                <div
+                  className="bars-stack"
+                  title={`${dayLabel(day.date)} — ${series
+                    .map((name, i) => `${name}: ${day.values[i] ?? 0}`)
+                    .join(", ")}`}
+                >
+                  {/*
+                    Bottom-first, so the largest series is the base the others
+                    sit on rather than a block floating above a gap.
+                  */}
+                  {day.values.map((value, i) =>
+                    value > 0 ? (
+                      <span
+                        key={i}
+                        className="bars-seg"
+                        style={{ height: `${(value / top) * 100}%`, background: seriesColor(i) }}
+                      />
+                    ) : null,
+                  )}
+                  {/*
+                    A day that sent nothing keeps its slot and says so with a
+                    flat mark on the baseline. An empty column and a missing
+                    column look identical, and dropping the quiet days joins
+                    Friday to Monday and draws a weekend as steady sending.
+                  */}
+                  {total === 0 ? <span className="bars-none" aria-hidden="true" /> : null}
+                </div>
+                <span className="bars-label tiny subtle">{dayLabel(day.date)}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
       {/*
         A legend is always present for two or more series (rule 35): identity
         must never rest on colour alone. `.viz-legend` rather than a second
@@ -412,4 +433,25 @@ export function StackedDays({
       </figcaption>
     </figure>
   );
+}
+
+/**
+ * A round number at or above the peak, so the top gridline is a number a person
+ * reads rather than whatever the busiest day happened to be. An axis topping
+ * out at 37 makes every chart look different from the last one.
+ */
+function niceCeiling(peak: number): number {
+  const magnitude = 10 ** Math.floor(Math.log10(peak));
+  for (const step of [1, 1.5, 2, 3, 5, 10]) {
+    const candidate = step * magnitude;
+    if (candidate >= peak) return candidate;
+  }
+  return 10 * magnitude;
+}
+
+/** Mon, Tue — the axis label this chart never had. */
+function dayLabel(iso: string): string {
+  const date = new Date(`${iso}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return iso;
+  return date.toLocaleDateString(undefined, { weekday: "short", timeZone: "UTC" });
 }

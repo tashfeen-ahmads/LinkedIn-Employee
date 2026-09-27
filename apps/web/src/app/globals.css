@@ -13,14 +13,26 @@
 :root {
   color-scheme: light;
 
-  /* Neutrals carry a slight cool cast so they sit with the accent rather than
-     fighting it. A pure grey next to a blue always looks like an accident. */
-  --bg:              #FBFBFD;
-  --surface:         #F2F3F7;
+  /*
+   * Neutrals carry a slight cool cast so they sit with the accent rather than
+   * fighting it. A pure grey next to a blue always looks like an accident.
+   *
+   * The steps between them are the whole of figure and ground. `--bg` was
+   * #FBFBFD against a #FFFFFF card — a one percent difference, which is to say
+   * none: every card on every screen was a hairline rectangle drawn on the
+   * same sheet of paper, and a person reads that as blocks running into each
+   * other rather than as a card. The ground is now a real tint, so a white
+   * card lifts off it without needing a shadow to say so.
+   */
+  --bg:              #F4F5F9;
+  --surface:         #EDEFF5;
   --surface-raised:  #FFFFFF;
-  --surface-sunken:  #EAECF2;
-  --border:          #DEE1EA;
-  --border-strong:   #C4C9D6;
+  --surface-sunken:  #E6E9F1;
+  /* The application frame — sidebar and rails — sits behind the page rather
+     than on it, so it takes its own step below the ground. */
+  --chrome:          #FAFBFD;
+  --border:          #E1E4EC;
+  --border-strong:   #C3C9D6;
 
   --text:            #0F1117;
   --text-muted:      #565E70;
@@ -81,9 +93,20 @@
   --radius-lg: 16px;
   --radius-pill: 999px;
 
-  /* Two elevations. A third would be spent on something that does not need it. */
-  --shadow-sm: 0 1px 2px rgba(15, 17, 23, .05);
-  --shadow:    0 1px 2px rgba(15, 17, 23, .05), 0 8px 24px -8px rgba(15, 17, 23, .12);
+  /*
+   * Three elevations, each a layered shadow rather than one blur.
+   *
+   * A single soft blur reads as a smudge; a tight contact shadow plus a wider
+   * ambient one is what makes an object look like it is resting on something.
+   * `--shadow-xs` is the resting state of an ordinary card — barely there, and
+   * the difference between a card and a drawn rectangle. `--shadow` is for the
+   * one thing on a screen that is genuinely above the rest, and `--shadow-lg`
+   * for something that floats over it.
+   */
+  --shadow-xs: 0 1px 1px rgba(16, 19, 33, .03), 0 1px 3px rgba(16, 19, 33, .04);
+  --shadow-sm: 0 1px 2px rgba(16, 19, 33, .05), 0 2px 6px -1px rgba(16, 19, 33, .06);
+  --shadow:    0 1px 2px rgba(16, 19, 33, .05), 0 10px 24px -10px rgba(16, 19, 33, .18);
+  --shadow-lg: 0 2px 4px rgba(16, 19, 33, .05), 0 20px 48px -16px rgba(16, 19, 33, .22);
 
   /* The marketing site's voice. Character, read once. */
   --font-sans:    var(--font-instrument, ui-sans-serif), system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -99,12 +122,16 @@
   :root:not([data-theme="light"]) {
     color-scheme: dark;
 
-    --bg:             #0B0D12;
-    --surface:        #14171F;
-    --surface-raised: #171B24;
-    --surface-sunken: #0F1218;
-    --border:         #262B37;
-    --border-strong:  #39404F;
+    --bg:             #0A0C11;
+    --surface:        #151922;
+    /* A raised surface in the dark has to be *lighter* than its ground by a
+       visible step, because a shadow cannot be seen on a dark page — lift is
+       the only cue left. */
+    --surface-raised: #191E29;
+    --surface-sunken: #0E1117;
+    --chrome:         #0D1016;
+    --border:         #262C39;
+    --border-strong:  #3A4251;
 
     --text:           #ECEEF3;
     --text-muted:     #A2AAB9;
@@ -128,19 +155,22 @@
     --danger:         #F08076;
     --danger-soft:    #2E1614;
 
-    --shadow-sm: 0 1px 2px rgba(0, 0, 0, .4);
-    --shadow:    0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -8px rgba(0, 0, 0, .6);
+    --shadow-xs: 0 1px 2px rgba(0, 0, 0, .35);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, .4), 0 2px 6px -1px rgba(0, 0, 0, .35);
+    --shadow:    0 1px 2px rgba(0, 0, 0, .45), 0 10px 24px -10px rgba(0, 0, 0, .65);
+    --shadow-lg: 0 2px 4px rgba(0, 0, 0, .5), 0 20px 48px -16px rgba(0, 0, 0, .7);
   }
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg:             #0B0D12;
-  --surface:        #14171F;
-  --surface-raised: #171B24;
-  --surface-sunken: #0F1218;
-  --border:         #262B37;
-  --border-strong:  #39404F;
+  --bg:             #0A0C11;
+  --surface:        #151922;
+  --surface-raised: #191E29;
+  --surface-sunken: #0E1117;
+  --chrome:         #0D1016;
+  --border:         #262C39;
+  --border-strong:  #3A4251;
   --text:           #ECEEF3;
   --text-muted:     #A2AAB9;
   --text-subtle:    #79808F;
@@ -160,8 +190,10 @@
   --warning-soft:   #2C2110;
   --danger:         #F08076;
   --danger-soft:    #2E1614;
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, .4);
-  --shadow:    0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -8px rgba(0, 0, 0, .6);
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, .35);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, .4), 0 2px 6px -1px rgba(0, 0, 0, .35);
+  --shadow:    0 1px 2px rgba(0, 0, 0, .45), 0 10px 24px -10px rgba(0, 0, 0, .65);
+  --shadow-lg: 0 2px 4px rgba(0, 0, 0, .5), 0 20px 48px -16px rgba(0, 0, 0, .7);
 }
 
 /* ------------------------------------------------------------------ base */
@@ -383,6 +415,23 @@ p  { margin: 0; }
   padding-bottom: var(--space-4);
   border-bottom: 1px solid var(--border);
 }
+/*
+ * The one word above a page title, and its own word rather than a scoped
+ * `.eyebrow`.
+ *
+ * `.app .page-header .eyebrow` would have set only `color` and inherited the
+ * size, tracking and case from the unscoped rule — which is rule 53's trap
+ * exactly: it reads as deliberate, and the day somebody changes `.eyebrow` for
+ * the landing page this quietly changes with it. A different thing gets a
+ * different name.
+ */
+.page-eyebrow {
+  font-size: 0.6875rem;
+  font-weight: 650;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
 .app .page-header-text { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
 /* `justify-content: space-between` puts the action right while the header is
    one line, and abandons it the moment the row wraps — which is every screen
@@ -395,6 +444,24 @@ p  { margin: 0; }
   gap: var(--space-2);
   flex-wrap: wrap;
   margin-left: auto;
+}
+/*
+ * A ghost button is borderless, which is right beside another button and wrong
+ * on its own: alone at the top corner of a page it reads as a stray link
+ * rather than as the thing you do to this screen. In the page header it
+ * borrows the secondary button's outline.
+ */
+.app .page-header-actions .btn.ghost {
+  border-color: var(--border);
+  background: var(--surface-raised);
+  color: var(--text);
+}
+.app .page-header-actions .btn.ghost:hover { background: var(--surface); border-color: var(--border-strong); }
+
+/* Stacked, the action belongs under the lede at the left margin — pushed right
+   on its own line it floats in the middle of nowhere. */
+@media (max-width: 640px) {
+  .app .page-header-actions { margin-left: 0; }
 }
 
 /*
@@ -439,6 +506,10 @@ p  { margin: 0; }
   flex-wrap: wrap;
 }
 .app .section-header-text { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+/* The heading leads and its sentence recedes, or the two are one object and
+   the section has no title. */
+.app .section-header h2 { color: var(--text); }
+.app .section-header-text p { color: var(--text-muted); }
 .app .section-header-action { display: flex; align-items: center; gap: var(--space-2); margin-left: auto; }
 
 /*
@@ -488,17 +559,29 @@ p  { margin: 0; }
 }
 
 /* An empty list says why, and what to do. Never the word "None". */
+/*
+ * A dashed rectangle is what a *placeholder* looks like — the thing a builder
+ * leaves behind. An empty list is a real state with a real sentence in it, so
+ * it gets a real surface, centred, with room around the words.
+ */
 .app .empty {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
+  text-align: center;
   gap: var(--space-2);
-  padding: var(--space-6) var(--space-5);
-  border: 1px dashed var(--border-strong);
-  border-radius: var(--radius);
-  background: var(--surface);
+  padding: var(--space-7) var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-xs);
 }
-.app .empty-title { font-weight: 600; }
+/* A shorter measure than running prose wants, because this paragraph is
+   centred: a 65ch line centred under a short title reads as a block of text
+   with a heading lost on top of it. An element selector, so it cannot collide
+   with the `.prose` the marketing pages own. */
+.app .empty > p { max-width: 42ch; }
+.app .empty-title { font-weight: 600; font-size: 0.9375rem; }
 
 /* --------------------------------------------------------------- buttons */
 
@@ -585,15 +668,23 @@ p  { margin: 0; }
   gap: var(--space-4);
   background: var(--surface-raised);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
   /* A fixed 1.5rem inset leaves a phone-width card with more padding than
      content. It shrinks with the screen and stops there. */
   padding: clamp(var(--space-4), 3.5vw, var(--space-5));
+  /* The resting state of a card, and the reason it reads as one. A hairline
+     border on a ground the same colour as the fill draws a rectangle; a
+     contact shadow under that border makes an object. */
+  box-shadow: var(--shadow-xs);
 }
 /* Elevation is spent on the one thing that needs lifting, not on every block. */
 .card.raised { box-shadow: var(--shadow); }
-.card.flat { background: var(--surface); }
+.card.flat { background: var(--surface); box-shadow: none; }
 .card.tight { padding: var(--space-4); gap: var(--space-3); }
+/* A hairline between rows of one list, drawn by the list rather than by each
+   row — which is what stops the last row carrying a rule to nowhere. */
+.rows { display: flex; flex-direction: column; }
+.rows > * + * { border-top: 1px solid var(--border); }
 
 /* A card modifier, so it belongs with the cards. It was declared 200 lines
    above `.card`, and `.prospect-card { gap }` is (0,1,0) exactly as `.card`
@@ -608,23 +699,36 @@ p  { margin: 0; }
    own radius. */
 .panel {
   padding: var(--space-3);
-  background: var(--surface);
-  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
 }
 .panel.scroll { max-height: 13.75rem; overflow-y: auto; }
 
-/* A number that is the point of its tile. */
-.stat { display: flex; flex-direction: column; gap: 0.125rem; }
-.stat-label { font-size: 0.8125rem; color: var(--text-muted); }
-.stat-value {
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  font-size: 1.75rem;
-  font-weight: 500;
-  line-height: 1.1;
-  letter-spacing: -0.02em;
+/*
+ * A number that is the point of its tile.
+ *
+ * Set in the UI face rather than the monospace: Geist has real tabular
+ * figures, so a column lines up without the number having to look like code —
+ * which is what a monospaced headline number reads as on a dashboard.
+ */
+.stat { display: flex; flex-direction: column; gap: 0.2rem; }
+.stat-label {
+  font-size: 0.75rem;
+  font-weight: 550;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
 }
-.stat-note { font-size: 0.8125rem; color: var(--text-subtle); }
+.stat-value {
+  font-family: var(--font-ui);
+  font-variant-numeric: tabular-nums;
+  font-size: 2rem;
+  font-weight: 600;
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+}
+.stat-note { font-size: 0.8125rem; color: var(--text-muted); }
 
 /* ----------------------------------------------------------------- forms */
 
@@ -835,8 +939,10 @@ form { display: flex; flex-direction: column; gap: var(--space-4); }
     radial-gradient(farthest-side at 0 50%, var(--border-strong), transparent) left center / 0.75rem 100% no-repeat scroll,
     radial-gradient(farthest-side at 100% 50%, var(--border-strong), transparent) right center / 0.75rem 100% no-repeat scroll;
   background-color: var(--surface-raised);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
 }
-table { width: 100%; border-collapse: collapse; font-size: 0.9375rem; }
+table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
 /*
  * `width: 100%` inside a scrolling container is a table that never scrolls.
  *
@@ -847,20 +953,38 @@ table { width: 100%; border-collapse: collapse; font-size: 0.9375rem; }
  * columns keep a width somebody can read and the row scrolls sideways.
  */
 .table-scroll table { min-width: 34rem; }
+/*
+ * A column heading is a label, not data.
+ *
+ * It was set in the monospace, which made the header row look like the output
+ * of a command — the single thing that most made these tables read as code
+ * rather than as a report. Same face as everything else, smaller, tracked and
+ * quiet.
+ */
 thead th {
-  font-family: var(--font-mono);
+  font-family: var(--font-ui);
   font-size: 0.6875rem;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.06em;
   color: var(--text-subtle);
-  font-weight: 500;
+  font-weight: 600;
   background: var(--surface);
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
 }
-th, td { text-align: left; padding: 0.7rem 0.875rem; vertical-align: top; }
+/* A header that stays while the rows scroll. Forty prospects in and the column
+   a number belongs to is off the top of the screen. */
+.table-scroll thead th { position: sticky; top: 0; z-index: 1; }
+th, td { text-align: left; padding: 0.75rem 0.875rem; vertical-align: middle; }
+/* A cell holding a paragraph rather than a value still aligns to its first
+   line, so a two-line description does not push its row's other cells down. */
+td.top, th.top { vertical-align: top; }
 tbody tr + tr td { border-top: 1px solid var(--border); }
+tbody tr { transition: background 110ms ease; }
 tbody tr:hover td { background: var(--surface); }
+/* Numbers line up on the right, on their own figures. A column of counts set
+   ragged-left is a column nobody can compare down. */
+th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 
 /* --------------------------------------------------------------- notices */
@@ -902,19 +1026,37 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr);
   min-height: 100vh;
+  /*
+   * The frame's own colour, so the sidebar's column runs the full height of
+   * the page rather than stopping wherever the nav's content ends. A sticky
+   * sidebar is exactly one viewport tall, so on a long screen its background
+   * used to end mid-page and leave a seam down the left — which reads as a
+   * layout that broke rather than as a nav that follows you.
+   */
+  background: var(--chrome);
   /* Geist has real tabular figures, which is most of why it is here: a column
      of numbers lines up without being set in a monospace. */
   font-variant-numeric: tabular-nums;
 }
 .app-aside {
   border-right: 1px solid var(--border);
-  background: var(--surface);
-  padding: var(--space-5) var(--space-4);
+  /* Its own step, behind the page rather than on it. Sharing `--surface` with
+     the sunken blocks inside a card meant the frame and the content were made
+     of the same material. */
+  background: var(--chrome);
+  padding: var(--space-5) var(--space-3);
   display: flex;
   flex-direction: column;
-  gap: var(--space-5);
+  gap: var(--space-4);
+  /* The nav travels with the page. A twelve-link sidebar that scrolls away
+     leaves a rep at the bottom of a prospect list with no way anywhere. */
+  position: sticky;
+  top: 0;
+  align-self: start;
+  height: 100vh;
+  overflow-y: auto;
 }
-.app-main { min-width: 0; display: flex; flex-direction: column; }
+.app-main { min-width: 0; display: flex; flex-direction: column; background: var(--bg); }
 .app-body {
   display: flex;
   flex-direction: column;
@@ -924,7 +1066,11 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   /* Named, because a group nested inside the page has to use the same value —
      two numbers for one rhythm is how the merged sections came to sit tighter
      than everything around them. */
-  --app-gap: clamp(var(--space-5), 3vw, var(--space-6));
+  /* Comfortably larger than a section's own internal gap (`--space-4`). When
+     the two are close, a heading is as far from its own table as from the
+     section above it — and the page reads as one undivided column, which is
+     what "the blocks merge into each other" describes. */
+  --app-gap: clamp(var(--space-6), 3.5vw, var(--space-7));
   gap: var(--app-gap);
   padding: clamp(var(--space-4), 3vw, var(--space-6))
            clamp(var(--space-3), 4vw, var(--space-5))
@@ -958,33 +1104,66 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 }
 /* The page. One per screen. */
 :where(.app) h1 {
-  font-size: 1.375rem;
+  font-size: 1.5rem;
+  letter-spacing: -0.02em;
   /* Never the landing page's 18ch measure: a page title here is a label above
      a table, and that measure wraps it for no reason anybody can see. */
   max-width: none;
 }
-/* A section of it. Deliberately close to body size: a section heading is a
-   label on a group, not an announcement. */
-:where(.app) h2 { font-size: 1rem; letter-spacing: -0.008em; }
+/*
+ * A section of it, and it has to lead.
+ *
+ * This was 1rem — the same size as the sentence under it and the same size as
+ * the body text in the card below. Three things at one size is three things at
+ * no level, which is precisely what somebody reads as "a title, a mini title
+ * and a title under the title" and as sections merging into each other. A
+ * heading earns its level by being visibly above what it introduces.
+ */
+:where(.app) h2 { font-size: 1.125rem; letter-spacing: -0.014em; }
 /* A card inside a section. */
 :where(.app) h3 { font-size: 0.9375rem; letter-spacing: -0.004em; }
-:where(.app) h4 { font-size: 0.875rem; font-weight: 600; letter-spacing: 0; }
+:where(.app) h4 { font-size: 0.8125rem; font-weight: 600; letter-spacing: 0.01em; text-transform: none; }
 
 
-.nav { display: flex; flex-direction: column; gap: 1px; }
+.nav { display: flex; flex-direction: column; gap: 2px; }
 .nav a {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--space-2);
-  padding: 0.4rem 0.6rem;
+  padding: 0.45rem 0.6rem;
   border-radius: var(--radius-sm);
-  font-size: 0.9rem;
+  font-size: 0.875rem;
   color: var(--text-muted);
   transition: background 120ms ease, color 120ms ease;
 }
-.nav a:hover { background: var(--surface-raised); color: var(--text); text-decoration: none; }
-.nav a[aria-current="page"] { background: var(--surface-raised); color: var(--text); font-weight: 550; box-shadow: var(--shadow-sm); }
+/* The label takes the slack so a count or a dot keeps the right edge, whatever
+   the label's length. `justify-content: space-between` did that only while the
+   row had exactly two children. */
+.nav-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/*
+ * An icon per link, and it is not decoration.
+ *
+ * Twelve lines of grey text at one size is a paragraph with links in it — a
+ * list to read rather than a map to aim at. A glyph gives each row a fixed
+ * anchor at the left edge, which is what lets somebody find Inbox without
+ * reading the word.
+ */
+.nav-icon { flex: none; width: 16px; height: 16px; color: var(--text-subtle); transition: color 120ms ease; }
+.nav a:hover { background: var(--surface); color: var(--text); text-decoration: none; }
+.nav a:hover .nav-icon { color: var(--text-muted); }
+/*
+ * The page you are standing on, said three ways: a fill, the text colour, and
+ * a rail down the left edge. It was a white pill on a grey sidebar, which is
+ * the same treatment `:hover` gave every other row — so the current page was
+ * only obvious while the pointer was somewhere else.
+ */
+.nav a[aria-current="page"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 550;
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+.nav a[aria-current="page"] .nav-icon { color: var(--accent); }
 .nav-count {
   font-family: var(--font-mono);
   font-size: 0.6875rem;
@@ -994,12 +1173,13 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   color: var(--text-inverse);
 }
 
-.app-brand { display: flex; flex-direction: column; gap: var(--space-1); }
-.app-brand a { font-weight: 600; }
+.app-brand { display: flex; flex-direction: column; gap: 0.1rem; padding: 0 var(--space-2) var(--space-1); }
+.app-brand a { font-weight: 650; font-size: 0.9375rem; letter-spacing: -0.015em; }
+.app-brand a:hover { text-decoration: none; color: var(--accent); }
 
-.nav-group { display: flex; flex-direction: column; gap: 1px; }
+.nav-group { display: flex; flex-direction: column; gap: 2px; }
 .nav-group + .nav-group { margin-top: var(--space-3); }
-.nav-items { display: flex; flex-direction: column; gap: 1px; }
+.nav-items { display: flex; flex-direction: column; gap: 2px; }
 
 /*
  * A group heading is the strongest thing in the sidebar.
@@ -1011,10 +1191,11 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
  * recede.
  */
 .nav-group-label {
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
   font-weight: 650;
-  letter-spacing: 0.02em;
-  color: var(--text);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
 }
 .nav-group-toggle {
   display: flex;
@@ -1041,15 +1222,15 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   .nav-chevron { transition: none; }
 }
 
-/* A group that is open still reads as a group: its links are indented under
-   the heading, the way a list sits under its own title. */
-.nav-items a { padding-left: 1.1rem; }
+/* The icons form the left column, so the links no longer need an indent to
+   read as a group — and one taken out is 16px of a 240px sidebar given back to
+   the labels. */
 
 /* Pushed to the bottom of the column: it is the last thing you reach for, and
    it must be reachable from every page. */
 .app-account {
   margin-top: auto;
-  padding-top: var(--space-4);
+  padding: var(--space-3) var(--space-2) 0;
   border-top: 1px solid var(--border);
   display: flex;
   align-items: center;
@@ -1059,15 +1240,46 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .app-account-who { min-width: 0; }
 .app-account-who p { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.app-banners { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-4) var(--space-5) 0; }
+/*
+ * Aligned to the page, not to the frame.
+ *
+ * The banners had their own fixed padding while `.app-body` is a centred
+ * measure with a fluid gutter, so a trial warning started and ended at two
+ * different places from the title underneath it — which reads as a block that
+ * does not belong to the page it is sitting on. Same measure, same gutter,
+ * same column.
+ */
+.app-banners {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: min(1100px, 100%);
+  margin-inline: auto;
+  padding: clamp(var(--space-4), 3vw, var(--space-6))
+           clamp(var(--space-3), 4vw, var(--space-5)) 0;
+}
+/* The body opens with its own top padding; with a banner above it, that
+   padding is the gap between the two and does not need doubling. */
+.app-banners + .app-body { padding-top: var(--space-4); }
 
 @media (max-width: 820px) {
-  .app { grid-template-columns: 1fr; }
+  .app { grid-template-columns: 1fr; background: var(--bg); }
   .app-aside {
     border-right: 0;
     border-bottom: 1px solid var(--border);
-    padding: var(--space-4);
+    padding: var(--space-3) var(--space-4);
     gap: var(--space-3);
+    /* The desktop column is one viewport tall and follows the page. A bar is
+       neither: left as-is, `height: 100vh` gave a phone a full screen of empty
+       sidebar before the first word of the page. */
+    height: auto;
+    overflow: visible;
+    /* It still travels, as a bar at the top rather than a column at the side,
+       so the Inbox is one thumb away from anywhere in a long list. */
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    background: var(--chrome);
     /* The account row's `margin-top: auto` belongs to a full-height column. In
        a bar it would push sign-out to the far side of the viewport. */
     display: grid;
@@ -1106,11 +1318,26 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
      labels one group out of five labels nothing. */
   .nav-group-label { display: none; }
   .nav-items { flex-direction: row; gap: var(--space-1); }
-  .nav a { white-space: nowrap; padding-left: 0.6rem; }
+  /* Each link becomes its own tappable chip. On one scrolling line the
+     desktop's accent *rail* has nothing to sit against, so the current page is
+     marked by the fill alone — and the fill has to be the whole chip. */
+  .nav a {
+    white-space: nowrap;
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--radius-pill);
+  }
+  .nav a[aria-current="page"] { box-shadow: none; }
+  /* The search field belongs to a twelve-row column, not to a bar that already
+     shows every link at once. */
+  .nav-search { display: none; }
 
   /* A tap target, not a mouse target. 44px is the floor every platform's
      guidance agrees on, and these were 30. */
   .nav a, .btn.small { min-height: 2.75rem; }
+
+  /* The page's own gutter shrinks on a phone; the banners follow it rather
+     than keeping a desktop inset the content no longer has. */
+  .app-banners { padding-top: var(--space-4); }
 }
 
 /* --------------------------------------------------------------- motion */
@@ -1778,10 +2005,27 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
 .app .allowance[data-tone="close"] .allowance-fill { background: var(--warning); }
 .app .allowance[data-tone="spent"] .allowance-fill { background: var(--danger); }
 .app .allowance-note { margin: 0; }
+/*
+ * Three allowances read as three things, or as one block with three labels in
+ * it. A rule between the columns is what separates them; the padding around it
+ * is what stops the rule reading as a table border.
+ */
 .app .allowance-row {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  gap: var(--space-4) var(--space-5);
+  gap: var(--space-5);
+}
+.app .allowance-row > .allowance + .allowance {
+  padding-left: var(--space-5);
+  border-left: 1px solid var(--border);
+}
+/* Stacked on a narrow screen the rule belongs above, not beside. */
+@media (max-width: 660px) {
+  .app .allowance-row > .allowance + .allowance {
+    padding: var(--space-5) 0 0;
+    border-left: 0;
+    border-top: 1px solid var(--border);
+  }
 }
 
 /* Bars stretch where a line does not.
@@ -1793,20 +2037,30 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
    geometry the code describes. */
 .app .viz-bars { height: 140px; }
 
-.funnel-chart { display: flex; flex-direction: column; gap: var(--space-4); }
-.funnel-row { display: flex; flex-direction: column; gap: var(--space-1); }
+.funnel-chart { display: flex; flex-direction: column; gap: var(--space-5); }
+.funnel-row { display: flex; flex-direction: column; gap: 0.4rem; }
 .funnel-row-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
-.funnel-label { font-size: 0.875rem; font-weight: 550; }
-.funnel-value { font-size: 1.0625rem; font-weight: 600; }
+.funnel-label { font-size: 0.8125rem; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; color: var(--text-muted); }
+/* The number, set in the UI face on its tabular figures rather than in the
+   monospace: a stage total is a headline, not a code listing. */
+.funnel-value { font-family: var(--font-ui); font-size: 1.375rem; font-weight: 650; letter-spacing: -0.02em; }
 .funnel-track {
-  height: 10px;
+  height: 12px;
   border-radius: var(--radius-pill);
   background: var(--surface-sunken);
   overflow: hidden;
 }
 /* Anchored to the baseline with a rounded data-end, so the bar reads as a
-   quantity growing from zero rather than a floating pill. */
-.funnel-bar { display: block; height: 100%; border-radius: 0 4px 4px 0; }
+   quantity growing from zero rather than a floating pill.
+
+   One hue throughout — a funnel is one quantity shrinking, not four
+   categories, and four categorical colours down a funnel would claim the
+   stages are unrelated. The stages lighten as they descend, which is the
+   sequential ramp doing the work colour is for. */
+.funnel-bar { display: block; height: 100%; border-radius: var(--radius-pill); }
+.funnel-row:nth-child(2) .funnel-bar { opacity: 0.85; }
+.funnel-row:nth-child(3) .funnel-bar { opacity: 0.7; }
+.funnel-row:nth-child(4) .funnel-bar { opacity: 0.55; }
 .funnel-rate { align-self: flex-start; }
 
 .ranked { display: flex; flex-direction: column; gap: var(--space-3); }
@@ -1821,20 +2075,35 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
 .kpi {
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
-  padding: var(--space-4);
+  gap: 0.2rem;
+  padding: var(--space-5) var(--space-4) var(--space-4);
   background: var(--surface-raised);
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
   min-width: 0;
+  /* The label sits at the top of the tile and the note at the bottom, so four
+     tiles of unequal note lengths still line their numbers up across the row.
+     Ragged numbers are what makes a metric row look assembled by hand. */
+  justify-content: flex-start;
 }
-.kpi-label { font-size: 0.8125rem; color: var(--text-muted); }
-.kpi-value {
-  font-size: 1.625rem;
+/* The label is a caption on the number, so it reads as one — small, tracked,
+   quiet. At 0.8125rem in the body colour it was competing with its own
+   figure. */
+.kpi-label {
+  font-size: 0.6875rem;
   font-weight: 600;
-  letter-spacing: -0.02em;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+}
+.kpi-value {
+  font-size: 2rem;
+  font-weight: 650;
+  letter-spacing: -0.035em;
   font-variant-numeric: tabular-nums;
-  line-height: 1.15;
+  line-height: 1.1;
+  margin-top: 0.15rem;
 }
 .kpi-value.is-positive { color: var(--positive); }
 .kpi-value.is-warning { color: var(--warning); }
@@ -1843,7 +2112,76 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
 
 /* A row of KPI tiles. Auto-fit rather than a fixed column count, so four
    tiles never leave one stranded alone on a second row. */
-.kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: var(--space-3); }
+.kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: var(--space-3); }
+
+/*
+ * A column chart with an axis, which is what the old one was missing entirely.
+ *
+ * It was an SVG with `preserveAspectRatio="none"` — correct for a line, wrong
+ * for a rectangle: eight-unit bars stretched across eleven hundred pixels came
+ * out as slabs nearly touching each other, and the day each one belonged to
+ * was written nowhere at all. So a column is a real element in a real grid:
+ * it sizes itself to the container without distortion, and the label under it
+ * costs nothing.
+ */
+.bars { position: relative; display: block; padding-left: 2.5rem; }
+.bars-scale { position: absolute; inset: 0 0 1.5rem 0; pointer-events: none; }
+.bars-gridline {
+  position: absolute;
+  left: 2.5rem;
+  right: 0;
+  border-top: 1px solid var(--viz-grid);
+}
+/* The value the line stands for, outside the plot so it never sits on the
+   data. */
+.bars-tick {
+  position: absolute;
+  right: calc(100% + 0.5rem);
+  transform: translateY(-50%);
+  font-size: 0.6875rem;
+  color: var(--text-subtle);
+  font-variant-numeric: tabular-nums;
+}
+.bars-plot {
+  position: relative;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  align-items: end;
+  gap: 2px;
+  height: var(--bars-h, 168px);
+}
+.bars-col { display: flex; flex-direction: column; justify-content: flex-end; height: 100%; min-width: 0; }
+/* Bottom-up, and capped in width so a week of data does not draw seven slabs:
+   a bar wider than it is interesting stops being a measurement and becomes a
+   block of colour. */
+.bars-stack {
+  display: flex;
+  flex-direction: column-reverse;
+  justify-content: flex-start;
+  align-items: center;
+  height: calc(100% - 1.5rem);
+  gap: 2px;
+}
+.bars-seg {
+  display: block;
+  width: min(100%, 2.25rem);
+  border-radius: 2px;
+  min-height: 2px;
+}
+/* The topmost segment carries the rounded cap, so a stack reads as one column
+   rather than as a pile of separate tiles. */
+.bars-stack > .bars-seg:first-child { border-radius: 3px 3px 2px 2px; }
+/* A day that sent nothing. Visible, flat, on the baseline — an absent column
+   and an empty one must never look the same. */
+.bars-none {
+  display: block;
+  width: min(100%, 2.25rem);
+  height: 2px;
+  border-radius: 1px;
+  background: var(--border-strong);
+}
+.bars-label { height: 1.5rem; display: flex; align-items: center; justify-content: center; }
 
 /* A meeting row: time, who, what you can do. Scanned down the left edge
    rather than read across, so the time is a column of its own. */
@@ -1863,17 +2201,17 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
 
 /* The sidebar's own search. Full width so it reads as part of the nav rather
    than a control floating above it. */
-.nav-search { padding: 0 0 var(--space-3); }
+.nav-search { padding: 0 var(--space-1) var(--space-2); }
 .nav-search input {
   width: 100%;
-  padding: var(--space-2) var(--space-3);
+  padding: 0.4rem var(--space-3);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: var(--surface);
+  background: var(--surface-raised);
   color: var(--text);
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
 }
-.nav-search input::placeholder { color: var(--text-muted); }
+.nav-search input::placeholder { color: var(--text-subtle); }
 .nav-empty { padding: 0 var(--space-3) var(--space-3); }
 
 /* ------------------------------------------------------------ product film
@@ -2030,30 +2368,51 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
   gap: var(--space-2);
 }
 
+/*
+ * One row per job, and the tone is carried by a rail rather than by a fill.
+ *
+ * A whole card tinted red for a blocker turns the most important row on the
+ * screen into the one hardest to read — and beside two untinted rows it looks
+ * like an error message rather than like the first item on a list. The rail
+ * says which kind it is, the surface stays a surface, and the row keeps the
+ * same shape as its neighbours so the list still reads as a list.
+ */
 .app .needs-you-item {
   display: flex;
   align-items: center;
   /* The button drops under the text on a phone rather than squeezing it. */
   flex-wrap: wrap;
   gap: var(--space-3);
-  padding: var(--space-4);
+  padding: var(--space-4) var(--space-5);
   background: var(--surface-raised);
   border: 1px solid var(--border);
+  border-left: 3px solid var(--border-strong);
   border-radius: var(--radius);
+  box-shadow: var(--shadow-xs);
+  transition: box-shadow 140ms ease, border-color 140ms ease;
 }
+.app .needs-you-item:hover { box-shadow: var(--shadow-sm); }
 /* The text takes the slack so the button keeps its own width. */
 .app .needs-you-text { flex: 1 1 18rem; display: flex; flex-direction: column; gap: 0.2rem; }
-.app .needs-you-title { margin: 0; font-weight: 500; }
+.app .needs-you-title { margin: 0; font-weight: 600; font-size: 0.9375rem; letter-spacing: -0.004em; }
 .app .needs-you-text p:last-child { margin: 0; }
 
 /* Severity as a left rail rather than a filled row: a wash of colour behind
    running text costs contrast, and the rail reads at a glance without it. */
-.app .needs-you-item.warning { border-left: 3px solid var(--warning); }
-.app .needs-you-item.blocker { border-left: 3px solid var(--danger); background: var(--danger-soft); }
+.app .needs-you-item.warning { border-left-color: var(--warning); }
+.app .needs-you-item.blocker { border-left-color: var(--danger); }
+/* The one row nothing can proceed past says so in its title, not by shouting
+   in its background. */
+.app .needs-you-item.blocker .needs-you-title { color: var(--danger); }
 
 /* Nothing waiting is a result, not an empty state. Bordered like the
    set-up-complete card so the good day looks deliberate. */
-.app .needs-you-clear { gap: var(--space-2); border-color: var(--positive); }
+.app .needs-you-clear {
+  gap: var(--space-2);
+  border-color: var(--positive);
+  border-left: 3px solid var(--positive);
+  background: var(--positive-soft);
+}
 .app .needs-you-clear h2 { margin: 0; }
 
 /* ------------------------------------------------------------ daily report

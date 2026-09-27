@@ -44,9 +44,9 @@ function navGroups(waiting: number, marks: NavMarks): NavGroup[] {
       label: "Work",
       alwaysOpen: true,
       items: [
-        { href: "/app", label: "Overview" },
-        { href: "/app/inbox", label: "Inbox", count: waiting },
-        { href: "/app/campaigns", label: "Campaigns", ...next("/app/campaigns", "Campaigns") },
+        { href: "/app", label: "Overview", icon: "overview" },
+        { href: "/app/inbox", label: "Inbox", icon: "inbox", count: waiting },
+        { href: "/app/campaigns", label: "Campaigns", icon: "campaigns", ...next("/app/campaigns", "Campaigns") },
       ],
     },
     /*
@@ -61,11 +61,11 @@ function navGroups(waiting: number, marks: NavMarks): NavGroup[] {
     {
       label: "Setup",
       items: [
-        { href: "/app/strategy", label: "Strategies", ...next("/app/strategy", "Strategies") },
-        { href: "/app/agents", label: "Agents", ...next("/app/agents", "Agents") },
-        { href: "/app/cta", label: "Calls to action" },
-        { href: "/app/exclusions", label: "Do not contact" },
-        { href: "/app/profile", label: "Profile & team", ...next("/app/profile", "Profile & team") },
+        { href: "/app/strategy", label: "Strategies", icon: "strategies", ...next("/app/strategy", "Strategies") },
+        { href: "/app/agents", label: "Agents", icon: "agents", ...next("/app/agents", "Agents") },
+        { href: "/app/cta", label: "Calls to action", icon: "cta" },
+        { href: "/app/exclusions", label: "Do not contact", icon: "exclusions" },
+        { href: "/app/profile", label: "Profile & team", icon: "profile", ...next("/app/profile", "Profile & team") },
       ],
     },
     /*
@@ -77,11 +77,11 @@ function navGroups(waiting: number, marks: NavMarks): NavGroup[] {
     {
       label: "More",
       items: [
-        { href: "/app/prospects", label: "Prospects" },
-        { href: "/app/meetings", label: "Meetings" },
-        { href: "/app/tutorial", label: "How it works" },
-        { href: "/app/system", label: "System check" },
-        { href: "/app/support", label: "Support" },
+        { href: "/app/prospects", label: "Prospects", icon: "prospects" },
+        { href: "/app/meetings", label: "Meetings", icon: "meetings" },
+        { href: "/app/tutorial", label: "How it works", icon: "tutorial" },
+        { href: "/app/system", label: "System check", icon: "system" },
+        { href: "/app/support", label: "Support", icon: "support" },
       ],
     },
   ];
