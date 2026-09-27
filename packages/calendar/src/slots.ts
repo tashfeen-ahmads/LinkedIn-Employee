@@ -23,7 +23,22 @@ export interface SlotOptions {
  * the model is never allowed to invent a time, so this is the only source of
  * the datetimes that reach a prospect.
  */
-export function findFreeSlots(options: SlotOptions): string[] {
+/**
+ * Every start in the range this rep could actually be offered, uncapped.
+ *
+ * `findFreeSlots` below is this plus two rules for a *reply*: at most one
+ * option per day, and at most three in all. A calendar needs the same question
+ * answered without those — every bookable time in a week, not the three the
+ * agent would pick — and the one thing it must not do is work it out for
+ * itself.
+ *
+ * Rule 6 says this file produces the only times that reach a prospect. A
+ * screen that computed its own would drift from it, and the screen's answer is
+ * the one a rep believes: they would block a Tuesday that was never offered,
+ * or see a gap the agent will not use and conclude the product is broken. Both
+ * readings come from here, so they cannot disagree.
+ */
+export function offerableStarts(options: SlotOptions): string[] {
   const {
     from,
     to,
@@ -33,7 +48,6 @@ export function findFreeSlots(options: SlotOptions): string[] {
     busy,
     minNoticeHours = 12,
     bufferMinutes = 15,
-    maxSlots = 3,
   } = options;
 
   const durationMs = durationMinutes * 60_000;
@@ -44,30 +58,47 @@ export function findFreeSlots(options: SlotOptions): string[] {
     end: Date.parse(interval.end) + bufferMs,
   }));
 
-  const slots: string[] = [];
+  const starts: string[] = [];
   const step = 30 * 60_000;
   // Align to the next half hour: nobody offers a meeting at 14:07.
   let cursor = Math.ceil(earliest.getTime() / step) * step;
-  const offeredDays = new Set<string>();
 
-  while (cursor + durationMs <= to.getTime() && slots.length < maxSlots) {
+  while (cursor + durationMs <= to.getTime()) {
     const start = new Date(cursor);
     const end = new Date(cursor + durationMs);
-
     if (
       isWithinWorkingHours(start, workingHours, timezone) &&
+      // The last minute of the meeting, not the first minute after it: a 30
+      // minute slot ending exactly at 17:00 finishes inside the window.
       isWithinWorkingHours(new Date(end.getTime() - 60_000), workingHours, timezone) &&
       !overlapsAny(cursor, cursor + durationMs, blocks)
     ) {
-      // At most one slot per day, so three options span three days rather than
-      // three consecutive half hours on the same afternoon.
-      const dayKey = dayKeyFor(start, timezone);
-      if (!offeredDays.has(dayKey)) {
-        offeredDays.add(dayKey);
-        slots.push(start.toISOString());
-      }
+      starts.push(start.toISOString());
     }
     cursor += step;
+  }
+
+  return starts;
+}
+
+/**
+ * Free slots the Reply Agent may offer. Deliberately deterministic and pure:
+ * the model is never allowed to invent a time, so this is the only source of
+ * the datetimes that reach a prospect.
+ */
+export function findFreeSlots(options: SlotOptions): string[] {
+  const { timezone, maxSlots = 3 } = options;
+  const slots: string[] = [];
+  const offeredDays = new Set<string>();
+
+  for (const start of offerableStarts(options)) {
+    if (slots.length >= maxSlots) break;
+    // At most one slot per day, so three options span three days rather than
+    // three consecutive half hours on the same afternoon.
+    const dayKey = dayKeyFor(new Date(start), timezone);
+    if (offeredDays.has(dayKey)) continue;
+    offeredDays.add(dayKey);
+    slots.push(start);
   }
 
   return slots;

@@ -26,6 +26,9 @@ importers:
       '@le/billing':
         specifier: workspace:*
         version: link:../../packages/billing
+      '@le/calendar':
+        specifier: workspace:*
+        version: link:../../packages/calendar
       '@le/db':
         specifier: workspace:*
         version: link:../../packages/db

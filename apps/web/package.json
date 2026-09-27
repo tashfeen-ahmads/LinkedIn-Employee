@@ -13,6 +13,7 @@
   "dependencies": {
     "@le/agents": "workspace:*",
     "@le/billing": "workspace:*",
+    "@le/calendar": "workspace:*",
     "@le/db": "workspace:*",
     "@le/email": "workspace:*",
     "@le/linkedin": "workspace:*",

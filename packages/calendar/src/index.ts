@@ -7,3 +7,4 @@ export * from "./own.js";
 export * from "./ics.js";
 export * from "./ics-parse.js";
 export * from "./feed-url.js";
+export * from "./plan.js";

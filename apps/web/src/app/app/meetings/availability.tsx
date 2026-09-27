@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { callWorker, errorQuery, noticeQuery } from "@/lib/worker";
+import { planDays } from "@le/calendar";
+import { AvailabilityCalendar } from "@/components/availability-calendar";
 
 /**
  * When this rep will take a call, and when they will not.
@@ -175,7 +177,19 @@ export async function Availability() {
   const session = await requireSession();
   const supabase = await createClient();
 
-  const [{ data: row }, { data: blackouts }, { data: feed }] = await Promise.all([
+  /*
+   * A fortnight is what the calendar draws.
+   *
+   * Long enough that a rep can see past this week's bookings — which is when
+   * the notice period stops being the reason a day is empty — and short enough
+   * that it is one screen rather than a scrolling year.
+   */
+  const WINDOW_DAYS = 14;
+  const windowFrom = new Date();
+  const windowTo = new Date(windowFrom.getTime() + WINDOW_DAYS * 86_400_000);
+
+  const [{ data: row }, { data: blackouts }, { data: feed }, { data: booked }, { data: feedBusy }] =
+    await Promise.all([
     supabase
       .from("availability")
       .select("timezone, working_hours, meeting_minutes, min_notice_hours, buffer_minutes, max_per_day, location")
@@ -199,13 +213,99 @@ export async function Availability() {
       .eq("workspace_id", session.workspaceId)
       .eq("user_id", session.userId)
       .maybeSingle(),
+    /*
+     * Meetings this product booked, which are both busy time and the one kind
+     * of block worth naming on the screen: "Dana Rizzo" tells a rep something
+     * that a grey bar does not.
+     *
+     * Only this rep's. A workspace's other reps have their own availability
+     * and drawing their meetings here would show a diary that is not theirs.
+     */
+    supabase
+      .from("meetings")
+      .select("id, prospect_id, starts_at, ends_at, status")
+      .eq("workspace_id", session.workspaceId)
+      .eq("rep_user_id", session.userId)
+      .neq("status", "cancelled")
+      .gte("ends_at", windowFrom.toISOString())
+      .lte("starts_at", windowTo.toISOString())
+      .order("starts_at", { ascending: true }),
+    // The feed's busy time, expanded at sync rather than parsed here.
+    supabase
+      .from("calendar_feed_busy")
+      .select("starts_at, ends_at")
+      .eq("workspace_id", session.workspaceId)
+      .eq("user_id", session.userId)
+      .gte("ends_at", windowFrom.toISOString())
+      .lte("starts_at", windowTo.toISOString()),
   ]);
 
   const current = { ...DEFAULTS, ...(row ?? {}) };
   const hours = parseHours(current.working_hours);
 
+  /*
+   * Who each meeting is with, fetched by id rather than through an embedded
+   * join. PostgREST would return the related row and the in-memory double
+   * cannot, so a join here is a query the tests cannot reproduce — which is
+   * how a caller came to take its "no such record" branch in silence.
+   */
+  const prospectIds = [...new Set((booked ?? []).map((m) => m.prospect_id).filter(Boolean))];
+  const { data: people } = prospectIds.length
+    ? await supabase.from("prospects").select("id, first_name, last_name").in("id", prospectIds)
+    : { data: [] as Array<{ id: string; first_name: string | null; last_name: string | null }> };
+  const nameById = new Map(
+    (people ?? []).map((p) => [p.id, [p.first_name, p.last_name].filter(Boolean).join(" ").trim()]),
+  );
+
+  const week = planDays({
+    from: windowFrom,
+    days: WINDOW_DAYS,
+    durationMinutes: current.meeting_minutes,
+    workingHours: hours,
+    timezone: current.timezone,
+    meetings: (booked ?? []).map((m) => ({
+      id: m.id,
+      // A meeting whose prospect row has gone is still a meeting; it is drawn
+      // without a name rather than dropped, or the rep sees a free hour they
+      // are not free in.
+      who: nameById.get(m.prospect_id) || null,
+      start: m.starts_at,
+      end: m.ends_at,
+    })),
+    blocked: [
+      ...(blackouts ?? []).map((b) => ({ start: b.starts_at, end: b.ends_at })),
+      ...(feedBusy ?? []).map((b) => ({ start: b.starts_at, end: b.ends_at })),
+    ],
+    minNoticeHours: current.min_notice_hours,
+    bufferMinutes: current.buffer_minutes,
+    maxPerDay: current.max_per_day,
+  });
+
   return (
     <>
+      {/*
+        The answer first, then the rule that produced it.
+        The settings below are what a rep *configures*; this is what a prospect
+        will actually be shown, which is the thing they came here to find out.
+        It sat behind five number fields for months, so the only way to know
+        what Thursday looked like was to book a meeting and see.
+      */}
+      <section className="card stack-4">
+        <div className="stack-1">
+          <h3>The next two weeks</h3>
+          <p className="small muted prose">
+            Exactly what the Reply Agent can offer, drawn from the same rule it uses — so nothing
+            here is a time it would refuse, and nothing it offers is missing here.
+          </p>
+        </div>
+        <AvailabilityCalendar
+          days={week}
+          timezone={current.timezone}
+          openHour={hours.start}
+          closeHour={hours.end}
+        />
+      </section>
+
       <section className="card stack-4">
         <div className="stack-1">
           <h3>When you will take a call</h3>
