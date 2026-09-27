@@ -220,6 +220,15 @@ export interface LinkedInProvider {
   }): Promise<{ invitations: PendingInvitation[]; raw: unknown; truncated: boolean }>;
   withdrawInvitation(input: { accountId: string; invitationId: string }): Promise<ActionResult>;
   sendMessage(input: { accountId: string; chatId?: string; providerId?: string; text: string }): Promise<ActionResult>;
+  /**
+   * Publish a post to the account holder's own profile.
+   *
+   * Separate from sendMessage because the audience is: a message reaches
+   * one named person, a post reaches everyone who follows the rep and
+   * stays on their profile. Nothing calls this without an approval row
+   * behind it — see mayPublish in @le/shared.
+   */
+  publishPost(input: { accountId: string; text: string }): Promise<ActionResult>;
   listNewMessages(input: { accountId: string; since: string }): Promise<InboundMessage[]>;
   /**
    * The account's connections, newest first. This is how an accepted

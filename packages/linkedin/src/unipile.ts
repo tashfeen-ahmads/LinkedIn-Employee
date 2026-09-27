@@ -37,6 +37,7 @@ const ROUTES = {
   invitationsSent: "/api/v1/users/invite/sent",
   withdrawInvite: (id: string) => `/api/v1/users/invite/${id}`,
   chats: "/api/v1/chats",
+  posts: "/api/v1/posts",
   chatMessages: (id: string) => `/api/v1/chats/${id}/messages`,
   messages: "/api/v1/messages",
   relations: "/api/v1/users/relations",
@@ -597,6 +598,27 @@ export class UnipileProvider implements LinkedInProvider {
         }),
       });
       return { ok: true, providerId: res.message_id ?? res.chat_id };
+    } catch (err) {
+      return toActionError(err);
+    }
+  }
+
+  /**
+   * Publish to the account holder's own profile.
+   *
+   * The failure is handed back rather than thrown, exactly as every other
+   * action here does: the provider's own sentence — "422: ..." — is the most
+   * useful thing in a refusal, and it used to end up in a log on a host the
+   * person who pressed the button cannot reach (rule 25). The caller writes
+   * it onto the row so the screen can say what happened.
+   */
+  async publishPost(input: { accountId: string; text: string }): Promise<ActionResult> {
+    try {
+      const res = await this.request<{ post_id?: string; id?: string }>(ROUTES.posts, {
+        method: "POST",
+        body: JSON.stringify({ account_id: input.accountId, text: input.text }),
+      });
+      return { ok: true, providerId: res.post_id ?? res.id };
     } catch (err) {
       return toActionError(err);
     }

@@ -168,6 +168,14 @@ export class MockLinkedInProvider implements LinkedInProvider {
     return { ok: true, providerId: `msg_${this.sentMessages.length}` };
   }
 
+  /** Posts this mock was asked to publish, so a test can read them back. */
+  publishedPosts: Array<{ accountId: string; text: string }> = [];
+
+  async publishPost(input: { accountId: string; text: string }): Promise<ActionResult> {
+    this.publishedPosts.push(input);
+    return { ok: true, providerId: `post_${this.publishedPosts.length}` };
+  }
+
   async listNewMessages(): Promise<InboundMessage[]> {
     const out = this.inbox;
     this.inbox = [];

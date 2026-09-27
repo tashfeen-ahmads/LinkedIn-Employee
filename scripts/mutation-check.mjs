@@ -442,6 +442,14 @@ const MUTATIONS = [
     pkg: "@le/worker",
   },
   {
+    id: "posts/nothing-publishes-unapproved",
+    rule: "A post reaches a real person's public profile only after somebody approved those exact words",
+    file: "apps/worker/src/jobs/publish-posts.ts",
+    from: "    const verdict = mayPublish(row as PostRow, now);",
+    to: "    const verdict = { send: true } as const;",
+    pkg: "@le/worker",
+  },
+  {
     id: "billing/canceled-subscription",
     rule: "A canceled subscription stops sending",
     file: "packages/billing/src/entitlement.ts",

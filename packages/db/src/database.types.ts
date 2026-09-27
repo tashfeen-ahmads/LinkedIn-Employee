@@ -180,6 +180,23 @@ export type LinkedinAccountRow = {
   created_at: string;
 };
 
+export type LinkedInPostRow = {
+  id: string;
+  workspace_id: string;
+  user_id: string;
+  business_profile_id: string | null;
+  body: string;
+  facts_used: Json;
+  status: string;
+  approved_at: string | null;
+  approved_by: string | null;
+  scheduled_for: string | null;
+  published_at: string | null;
+  provider_post_id: string | null;
+  error: string | null;
+  created_at: string;
+  updated_at: string;
+};
 export type BusinessProfileRow = {
   id: string;
   workspace_id: string;
@@ -769,6 +786,7 @@ export type Database = {
       pitches: Table<PitchRow>;
       hooks: Table<HookRow>;
       agents: Table<AgentRow>;
+      linkedin_posts: Table<LinkedInPostRow>;
       agent_test_runs: Table<AgentTestRunRow>;
       support_tickets: Table<SupportTicketRow>;
       worker_heartbeats: Table<WorkerHeartbeatRow>;
