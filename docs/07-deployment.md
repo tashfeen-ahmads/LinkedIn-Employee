@@ -178,9 +178,23 @@ worker has. In Supabase → Authentication → URL Configuration, add
 **Signing up hands back a session only when the project does not require a
 confirmed address.** With Authentication → Sign In / Providers → Email →
 *Confirm email* on, `signUp` returns a user and no session, and `/signup`
-correctly sends the person to their inbox instead of on to onboarding. Turning
-it off is what makes "set a password and carry on" actually carry on. Neither
-is a code change; the project decides and the page reads the answer.
+correctly sends the person to their inbox; the link lands on `/auth/callback`,
+which exchanges it for a session and continues to onboarding. Turning it off is
+what makes "set a password and carry on" carry on in one step.
+
+This is a project setting and not a code path, and it is worth knowing which
+credential reaches it. The database is reachable with the service key and the
+connection string; **the project's auth configuration is not** — it lives
+behind the Management API, which takes a personal access token. So it cannot
+be changed from a migration, from SQL, or from anything this repo holds.
+
+It could be worked around in code — the worker has the service key and could
+stamp `email_confirmed_at` on the account signup just made — but that is an
+email-verification bypass wearing a convenience's clothes, and it should be a
+decision somebody makes on purpose rather than a thing that appears in a diff.
+As of this deployment, confirmation is **on**: `auth.users` shows
+`confirmation_sent_at` populated and `email_confirmed_at` arriving eight to
+twenty-six seconds later, which is somebody clicking a link.
 
 ### Builds cost money, so batch them
 
@@ -191,10 +205,12 @@ afternoon:
 - `[skip ci]` anywhere in the commit message takes the commit without building
   it. That is how work gets off an ephemeral container without spending a
   build, and the next ordinary push deploys the batch.
-- **A force-push does not trigger a build.** Netlify will not re-fire for a ref
-  it has already processed, so amending a `[skip ci]` commit to remove the
-  marker and force-pushing lands the code and builds nothing. Releasing a held
-  batch needs a new commit on top, not a rewritten one.
+- **A force-push does trigger a build**, and it is slower to show than you
+  expect. The project's `currentDeploy` reports the last *published* deploy, so
+  a build in flight is invisible through it — a held commit released by
+  amending out the marker and force-pushing looks for several minutes exactly
+  like a push that did nothing. Wait for it rather than pushing again to force
+  the issue; that is how one release becomes two builds.
 
 ## Verifying it end to end
 
