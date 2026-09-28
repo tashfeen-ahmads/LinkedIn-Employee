@@ -363,20 +363,65 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
     return continuing.id;
   }
 
-  const plan = await buildCampaign(ctx.agentsFor(job.workspaceId), {
-    business,
-    profile,
-    repName,
-    dailyInviteCap: Math.min(LINKEDIN_LIMITS.invitesPerDayMax, 20),
-    // Inherited from the strategy, because the copy is written toward the ask.
-    // Changing it afterwards on the campaign leaves a sequence whose first two
-    // messages were building to something else.
-    cta: {
-      kind: profileRow.cta_kind,
-      label: profileRow.cta_label,
-      url: profileRow.cta_url,
-    },
-  });
+  /*
+   * The one call in this job where failing throws away work already paid for.
+   *
+   * By the time it runs, this run has spent a LinkedIn search page and a
+   * profile lookup for every candidate that arrived without a public address —
+   * both off a Sales Navigator seat somebody pays for (rule 20) — and a
+   * scoring call per prospect. The prospects are not written until after this
+   * returns, so an exception here discards all of it and leaves a campaign
+   * row with nobody on it. That is not hypothetical: this deployment has two
+   * such campaigns, from four `targeting.campaign: model returned no parsable
+   * output` failures in one afternoon.
+   *
+   * `callStructured` deliberately retries truncation and nothing else, and
+   * that is right in general — a model ignoring its schema needs a different
+   * prompt, not another identical call. But "in general" is about a persistent
+   * mismatch, and one stochastic miss is a different thing: a second attempt
+   * usually parses, and the alternative is discarding a page of real people
+   * off a paid seat. So the retry lives here, at the one call site where that
+   * is the trade, rather than loosening the rule for every call in the
+   * product. Once only: twice means it is the prompt.
+   */
+  const askForPlan = () =>
+    buildCampaign(ctx.agentsFor(job.workspaceId), {
+      business,
+      profile,
+      repName,
+      dailyInviteCap: Math.min(LINKEDIN_LIMITS.invitesPerDayMax, 20),
+      // Inherited from the strategy, because the copy is written toward the
+      // ask. Changing it afterwards on the campaign leaves a sequence whose
+      // first two messages were building to something else.
+      cta: {
+        kind: profileRow.cta_kind,
+        label: profileRow.cta_label,
+        url: profileRow.cta_url,
+      },
+    });
+
+  let plan: Awaited<ReturnType<typeof buildCampaign>>;
+  try {
+    plan = await askForPlan();
+  } catch (err) {
+    const reason = (err as { message?: string })?.message ?? "unknown";
+    console.warn("the campaign writer failed; asking once more before losing the search", {
+      workspaceId: job.workspaceId,
+      reason,
+    });
+    // Recorded whether or not the second attempt works, because a run that
+    // needed two goes is worth knowing about and a silent retry is how a
+    // prompt problem stays invisible until it is permanent.
+    await recordEvent(ctx.db, {
+      workspaceId: job.workspaceId,
+      name: "targeting.campaign.retried",
+      actorUserId: job.userId,
+      subjectType: "customer_profile",
+      subjectId: profileRow.id,
+      payload: { reason },
+    });
+    plan = await askForPlan();
+  }
 
   /*
    * Read here rather than carried in the job: a campaign built weeks after
@@ -935,14 +980,43 @@ async function attachProspects(
     { onConflict: "campaign_id,prospect_id", ignoreDuplicates: true },
   );
 
-  if (writerFailed) {
+  /*
+   * How many people actually got a note, not just whether the writer threw.
+   *
+   * `writerFailed` is set from a caught exception, so it only ever described
+   * the all-or-nothing case. A run where the writer returns fewer notes than
+   * it was given prospects throws nothing — and that is the case this
+   * deployment actually hit: a live campaign built with ten people on it and
+   * three personalised notes. Seven real people queued to receive the generic
+   * template under a real rep's name, with no event, no count and nothing on
+   * the campaign header.
+   *
+   * Rule 27 is explicit that degrading silently is the other way this goes
+   * wrong. Per-prospect the screen is honest — each one carries a "campaign
+   * template" pill — but that is ten cards to scroll to learn a number, and
+   * the number is the thing somebody needs before pressing Launch.
+   *
+   * Recorded whenever anybody was missed, with the reason when there was one
+   * and `partial` when the writer simply came back short. Nobody missed is
+   * the ordinary case and writes nothing.
+   */
+  const missed = insertedProspects.length - notes.size;
+  if (writerFailed || missed > 0) {
     await recordEvent(db, {
       workspaceId: job.workspaceId,
       name: "campaign.notes_missing",
       actorUserId: job.userId,
       subjectType: "campaign",
       subjectId: input.campaignId,
-      payload: { reason: writerFailed, prospects: insertedProspects.length },
+      payload: {
+        reason: writerFailed ?? "partial",
+        prospects: insertedProspects.length,
+        written: notes.size,
+        // The number the review screen reads. Derivable from the two above,
+        // and stated anyway: a consumer that has to subtract is a consumer
+        // that can subtract wrongly.
+        missing: Math.max(0, missed),
+      },
     });
   }
 

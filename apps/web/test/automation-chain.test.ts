@@ -8,6 +8,7 @@ const read = (p: string) => readFileSync(join(here, p), "utf8");
 
 const strategyPage = read("../src/app/app/strategy/page.tsx");
 const strategyJob = read("../../worker/src/jobs/strategy.ts");
+const campaignPage = read("../src/app/app/campaigns/[id]/page.tsx");
 
 /**
  * The links a claim about automation rests on, asserted at the call sites.
@@ -62,5 +63,32 @@ describe("what onboarding collects reaches the agent", () => {
     // invitations.
     expect(strategyJob).toMatch(/\.select\("full_name, bio"\)/);
     expect(strategyJob).toMatch(/repBio: owner\?\.bio \?\? null/);
+  });
+});
+
+/**
+ * How many of these people are getting the generic note, before Launch.
+ *
+ * Every card already says so on its own, and that is ten cards to scroll to
+ * learn a number somebody needs before pressing a button that cannot be taken
+ * back. A live campaign here was built with ten people on it and three
+ * personalised notes, and nothing above the list said so — which is rule 27's
+ * "the review screen shows a campaign that reads as personalised and is not",
+ * arrived at by a route the rule did not anticipate: the writer came back
+ * short rather than failing.
+ */
+describe("the review screen counts the generic notes", () => {
+  it("counts them from the rows it is about to show", () => {
+    // From the rows, not from the worker's event: a human may have written one
+    // by hand since, and a count taken from anywhere else can disagree with
+    // the list printed underneath it.
+    expect(campaignPage).toMatch(/const onTemplate = rows\.filter\(\(row\) => !row\.invite_note\)\.length;/);
+  });
+
+  it("says the number above the list, not only on each card", () => {
+    expect(campaignPage).toMatch(/\{onTemplate\} of \{rows\.length\}/);
+    // And says nothing at all when everybody has one, because a notice that is
+    // always there is a notice nobody reads.
+    expect(campaignPage).toMatch(/\{onTemplate > 0 \?/);
   });
 });

@@ -1192,6 +1192,123 @@ describe("a run that half-finished", () => {
     expect((said?.payload as { reason: string }).reason).toMatch(/no parsable output/);
   });
 
+  it("says so when the writer comes back short, not only when it throws", async () => {
+    /*
+     * The case this deployment actually hit.
+     *
+     * `writerFailed` is set from a caught exception, so it only ever described
+     * the all-or-nothing failure. A run where the writer returns fewer notes
+     * than it was given prospects throws nothing — and a live campaign here
+     * was built with ten people on it and three personalised notes. Seven real
+     * people queued for the generic template under a real rep's name, with no
+     * event and no count anywhere.
+     */
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    linkedin.candidates = {
+      items: [
+        candidate("p1", "https://www.linkedin.com/in/jane-one"),
+        candidate("p2", "https://www.linkedin.com/in/jane-two"),
+      ],
+      cursor: null,
+      droppedFilters: [],
+    };
+    scoreMock.mockResolvedValue([
+      ranked("https://www.linkedin.com/in/jane-one", "p1", 90),
+      ranked("https://www.linkedin.com/in/jane-two", "p2", 88),
+    ]);
+    // Comes back with one note for two people, and does not throw.
+    notesMock.mockResolvedValue(
+      new Map([["p1", { note: "Hi Jane, about Acme.", grounding: ["headline"], promptVersion: "v1" }]]),
+    );
+
+    await runTargetingJob(ctx, job);
+
+    const said = db.rows("events").find((e) => e.name === "campaign.notes_missing");
+    expect(said, "a partial shortfall must not be silent").toBeTruthy();
+    const payload = said?.payload as { reason: string; prospects: number; written: number; missing: number };
+    // "partial" rather than an error message, because nothing failed.
+    expect(payload.reason).toBe("partial");
+    expect(payload.missing).toBe(1);
+    expect(payload.written).toBe(1);
+    expect(payload.prospects).toBe(2);
+  });
+
+  it("stays quiet when everybody got a note", async () => {
+    // The ordinary case writes nothing. An event on every successful run is a
+    // log nobody can read a fault out of.
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    linkedin.candidates = {
+      items: [candidate("p1", "https://www.linkedin.com/in/jane-one")],
+      cursor: null,
+      droppedFilters: [],
+    };
+    scoreMock.mockResolvedValue([ranked("https://www.linkedin.com/in/jane-one", "p1", 90)]);
+    notesMock.mockResolvedValue(
+      new Map([["p1", { note: "Hi Jane, about Acme.", grounding: ["headline"], promptVersion: "v1" }]]),
+    );
+
+    await runTargetingJob(ctx, job);
+
+    expect(db.rows("events").find((e) => e.name === "campaign.notes_missing")).toBeFalsy();
+  });
+
+  it("asks the campaign writer once more rather than losing a paid-for search", async () => {
+    /*
+     * By the time the campaign writer runs, this job has spent a LinkedIn
+     * search page and a profile lookup per address-less candidate — both off a
+     * Sales Navigator seat — and a scoring call per prospect. The prospects
+     * are not written until after it returns, so one exception discards all of
+     * it and leaves a campaign with nobody on it. This deployment has two such
+     * campaigns, from four "model returned no parsable output" failures in one
+     * afternoon.
+     */
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    linkedin.candidates = {
+      items: [candidate("p1", "https://www.linkedin.com/in/jane-one")],
+      cursor: null,
+      droppedFilters: [],
+    };
+    scoreMock.mockResolvedValue([ranked("https://www.linkedin.com/in/jane-one", "p1", 90)]);
+
+    const good = campaignMock.getMockImplementation();
+    campaignMock.mockRejectedValueOnce(new Error("targeting.campaign: model returned no parsable output"));
+
+    await runTargetingJob(ctx, job);
+
+    // The run finished: the person the search paid for is on a campaign.
+    expect(db.rows("campaign_prospects").length).toBe(1);
+    expect(campaignMock).toHaveBeenCalledTimes(2);
+    // And the retry is on the record, because a silent one is how a prompt
+    // problem stays invisible until it is permanent.
+    expect(db.rows("events").find((e) => e.name === "targeting.campaign.retried")).toBeTruthy();
+    expect(good).toBeDefined();
+  });
+
+  it("gives up after the second failure rather than looping", async () => {
+    // Twice means it is the prompt, not a stochastic miss.
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    linkedin.candidates = {
+      items: [candidate("p1", "https://www.linkedin.com/in/jane-one")],
+      cursor: null,
+      droppedFilters: [],
+    };
+    scoreMock.mockResolvedValue([ranked("https://www.linkedin.com/in/jane-one", "p1", 90)]);
+    campaignMock.mockRejectedValue(new Error("targeting.campaign: model returned no parsable output"));
+
+    // It rethrows, which is how the queue retries it and how the failure is
+    // recorded rather than turned into a quiet "nothing to do".
+    await expect(runTargetingJob(ctx, job)).rejects.toThrow(/no parsable output/);
+
+    // Twice, not three times and not a loop.
+    expect(campaignMock).toHaveBeenCalledTimes(2);
+    // And it still says why it stopped.
+    expect(db.rows("events").find((e) => e.name === "targeting.stopped")).toBeTruthy();
+  });
+
   it("records which strategy found each person", async () => {
     // A fit score is a fact about a person AND a strategy. Stored without the
     // strategy it was scored against, the number cannot be interpreted.

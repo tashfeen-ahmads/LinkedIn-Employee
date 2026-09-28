@@ -613,6 +613,22 @@ export default async function CampaignPage({
   ]);
 
   const rows = members ?? [];
+  /*
+   * How many of these are getting the campaign's generic template.
+   *
+   * Every card already says so on its own — "campaign template" — and that is
+   * ten cards to scroll to learn a number somebody needs *before* pressing
+   * Launch. A live campaign here was built with ten people on it and three
+   * personalised notes; nothing above the list said so, so it read as a
+   * personalised campaign, which is precisely what rule 27 says must not
+   * happen.
+   *
+   * Counted from the rows rather than from the event the worker records: the
+   * rows are the thing being sent, a human may have written a note by hand
+   * since, and a count taken from anywhere else can disagree with the list
+   * underneath it.
+   */
+  const onTemplate = rows.filter((row) => !row.invite_note).length;
   const queued = rows.filter((row) => row.status === "queued");
   // A failed row is finished as far as the pacing loop is concerned — it reads
   // `queued` and nothing else — so these need a way back or they are stranded.
@@ -1065,6 +1081,20 @@ export default async function CampaignPage({
           </p>
         }
       >
+        {onTemplate > 0 ? (
+          <div className="notice">
+            <strong>
+              {onTemplate} of {rows.length} {onTemplate === 1 ? "person is" : "people are"} getting
+              the campaign&rsquo;s generic note.
+            </strong>
+            <p className="small">
+              The writer came back without a note for {onTemplate === 1 ? "them" : "them"}, so they
+              fall back to the template with their first name filled in — which works, and reads
+              like everyone else&rsquo;s. Each one is marked below. You can write{" "}
+              {onTemplate === 1 ? "it" : "them"} yourself before launching, or launch as it is.
+            </p>
+          </div>
+        ) : null}
 
         {searchNotice ? (
           <div className={searchNotice.tone === "danger" ? "notice danger" : "notice"}>
