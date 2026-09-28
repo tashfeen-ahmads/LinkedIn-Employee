@@ -780,7 +780,6 @@ input, select, textarea, button { margin: 0; }
   display: grid;
   align-items: stretch;
 }
-.auth-split > .auth-page { grid-area: form; }
 .auth-aside { display: none; }
 
 @media (min-width: 60em) {
@@ -815,7 +814,15 @@ input, select, textarea, button { margin: 0; }
   .auth-aside .lede { color: var(--auth-panel-ink); }
   /* The column keeps its own measure instead of the page's centred one: two
      columns each centring their contents leaves a canyon down the middle. */
-  .auth-split > .auth-page { margin-inline: 0; padding-inline: clamp(var(--space-5), 4vw, var(--space-8)); width: min(27rem, 100%); justify-self: end; }
+  /*
+   * The area is named only where the areas exist.
+   *
+   * Set unconditionally it was a name with no grid to match below 60em, which
+   * the browser resolves by creating an implicit area — and an item in one is
+   * placed *after* everything auto-placed, so on a phone the panel came first
+   * and the form somebody opened this page to fill in was underneath it.
+   */
+  .auth-split > .auth-page { grid-area: form; margin-inline: 0; padding-inline: clamp(var(--space-5), 4vw, var(--space-8)); width: min(27rem, 100%); justify-self: end; }
   .auth-split > .auth-page.wide { width: min(35rem, 100%); }
 }
 
@@ -828,6 +835,72 @@ input, select, textarea, button { margin: 0; }
  * Offset and tilted a degree or two so they read as a stack somebody could
  * pick up, which is the whole difference between a card and a box.
  */
+/*
+ * A long form with its length made legible.
+ *
+ * Onboarding is four sections on one page — deliberately, because a wizard
+ * hides how much is being asked and makes changing an earlier answer a chore.
+ * The cost of that choice is a page whose end a person cannot see, so each
+ * section carries its position: a number they can count down, rather than a
+ * scrollbar they have to guess from.
+ *
+ * The number is `aria-hidden` and the heading carries the same fact in words,
+ * because "1" read aloud before a heading is a digit with no sentence around
+ * it.
+ */
+.form-step { display: flex; align-items: baseline; gap: var(--space-3); }
+.form-step-n {
+  flex: none;
+  width: 1.75rem;
+  height: 1.75rem;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-border);
+  color: var(--accent-hover);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * What the answers are for, beside the form that asks for them.
+ *
+ * Onboarding is the one screen where somebody types a lot before seeing
+ * anything happen, and the page said nothing about what any of it was for —
+ * so it read as a registration form rather than as the thing that teaches the
+ * agent. The rail follows the scroll because the form is longer than a screen
+ * and the reason has to still be there at the bottom of it.
+ */
+.setup-rail { display: flex; flex-direction: column; gap: var(--space-5); }
+@media (min-width: 60em) {
+  /*
+   * The same column the sign-in panel uses, so one frame serves both. Without
+   * the area it is an item with no place in a two-area grid, which the browser
+   * resolves by inventing a row underneath — the rail lands below the form and
+   * the "beside" is gone.
+   */
+  .setup-rail {
+    grid-area: aside;
+    position: sticky;
+    top: var(--space-6);
+    align-self: start;
+    padding: var(--space-8) clamp(var(--space-5), 4vw, var(--space-7));
+    max-width: 30rem;
+  }
+}
+.setup-step { display: flex; gap: var(--space-3); }
+.setup-step-mark {
+  flex: none;
+  margin-block-start: 0.3rem;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--accent);
+}
+.setup-step-body { display: flex; flex-direction: column; gap: 2px; }
+
 /*
  * A run of fields that belong together, with the reason said once.
  *

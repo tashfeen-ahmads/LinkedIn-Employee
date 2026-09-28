@@ -4,6 +4,7 @@ import { isAppConfigured } from "@/lib/config";
 import { callWorker, errorQuery } from "@/lib/worker";
 import { isValidTimezone } from "@le/shared";
 import { TimezoneSelect } from "@/components/timezone-select";
+import { SetupRail } from "@/components/setup-rail";
 import { SubmitButton } from "@/components/submit-button";
 
 /**
@@ -163,13 +164,14 @@ export default async function OnboardingPage({
   if (pendingInvite) redirect(`/invite/${pendingInvite.token}`);
 
   return (
+    <div className="auth-split">
     <main className="auth-page wide">
       <header>
         <h1>Set up your agent</h1>
         <p className="muted">
-          Everything on this page is what the agent works from — the words it writes in, the hours
-          it may send in, and who it looks for. Answer it once; it all lands on your profile, where
-          you can change any of it later.
+          Four sections, one form, one button. This is what the agent works from — the words it
+          writes in, the hours it may send in, and who it looks for. Answer it once; it all lands
+          on your profile, where you can change any of it later.
         </p>
       </header>
 
@@ -183,7 +185,10 @@ export default async function OnboardingPage({
       */}
       <form action={createWorkspace} className="stack-5">
         <section className="card">
-          <h2>Your business</h2>
+          <div className="form-step">
+            <span className="form-step-n" aria-hidden="true">1</span>
+            <h2>Your business</h2>
+          </div>
           <p className="small muted">
             The Strategy Agent reads what you publish and drafts your business profile and three to
             five customer profiles. You read and approve them before anything is searched for.
@@ -215,7 +220,10 @@ export default async function OnboardingPage({
         </section>
 
         <section className="card">
-          <h2>How you sound</h2>
+          <div className="form-step">
+            <span className="form-step-n" aria-hidden="true">2</span>
+            <h2>How you sound</h2>
+          </div>
           <p className="small muted">
             Invitations and replies go out under your name, so this is the voice they are written
             in. Left blank the agent falls back to your business profile, which sounds like a
@@ -250,7 +258,10 @@ export default async function OnboardingPage({
         </section>
 
         <section className="card">
-          <h2>When it may send</h2>
+          <div className="form-step">
+            <span className="form-step-n" aria-hidden="true">3</span>
+            <h2>When it may send</h2>
+          </div>
           <p className="small muted">
             Nothing leaves your account outside these hours, in your own timezone. This is the
             single most common reason a new campaign looks like it is doing nothing: a window set in
@@ -289,7 +300,10 @@ export default async function OnboardingPage({
         </section>
 
         <section className="card">
-          <h2>How it searches, and what it does with an answer</h2>
+          <div className="form-step">
+            <span className="form-step-n" aria-hidden="true">4</span>
+            <h2>How it searches, and what it does with an answer</h2>
+          </div>
           <p className="small muted">
             Two settings the agent cannot guess. Both can be changed later, and both are wrong by
             default for somebody: the search tier is a paid seat we cannot see, and how much rope
@@ -328,5 +342,7 @@ export default async function OnboardingPage({
         </SubmitButton>
       </form>
     </main>
+    <SetupRail />
+    </div>
   );
 }
