@@ -175,6 +175,27 @@ anon key, `APP_URL`, `WORKER_URL`, and the same `INTERNAL_API_SECRET` the
 worker has. In Supabase → Authentication → URL Configuration, add
 `$APP_URL/auth/callback` as a redirect URL or magic links will not return.
 
+**Signing up hands back a session only when the project does not require a
+confirmed address.** With Authentication → Sign In / Providers → Email →
+*Confirm email* on, `signUp` returns a user and no session, and `/signup`
+correctly sends the person to their inbox instead of on to onboarding. Turning
+it off is what makes "set a password and carry on" actually carry on. Neither
+is a code change; the project decides and the page reads the answer.
+
+### Builds cost money, so batch them
+
+The production branch on Netlify is the working branch, not `main` — a push to
+it builds and deploys. Two things worth knowing before pushing five times in an
+afternoon:
+
+- `[skip ci]` anywhere in the commit message takes the commit without building
+  it. That is how work gets off an ephemeral container without spending a
+  build, and the next ordinary push deploys the batch.
+- **A force-push does not trigger a build.** Netlify will not re-fire for a ref
+  it has already processed, so amending a `[skip ci]` commit to remove the
+  marker and force-pushing lands the code and builds nothing. Releasing a held
+  batch needs a new commit on top, not a rewritten one.
+
 ## Verifying it end to end
 
 Run this before the first real prospect:
