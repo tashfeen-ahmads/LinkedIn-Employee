@@ -330,6 +330,8 @@ const MUTATIONS = [
     // constrains the other, so mutating one is a no-op that proves nothing.
     from:
       "      isWithinWorkingHours(start, workingHours, timezone) &&\n" +
+      "      // The last minute of the meeting, not the first minute after it: a 30\n" +
+      "      // minute slot ending exactly at 17:00 finishes inside the window.\n" +
       "      isWithinWorkingHours(new Date(end.getTime() - 60_000), workingHours, timezone) &&",
     to: "      true &&",
     pkg: "@le/calendar",

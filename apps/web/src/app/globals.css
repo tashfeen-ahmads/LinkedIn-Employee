@@ -2771,6 +2771,25 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
   transition: opacity 120ms ease;
 }
 .bars-tip strong { color: var(--text); }
+/*
+ * At the two ends it opens inward, because a centred tooltip on the last
+ * column hangs half its own width past the chart.
+ *
+ * Invisible is not the same as absent: the tip is laid out whether or not
+ * anybody is hovering, so the one on Monday's column widened the document by
+ * thirteen pixels and every screen carrying this chart scrolled sideways on a
+ * phone — a whole page shifting under the thumb, for a box nobody had asked to
+ * see. Clipping it would have cut the tooltip in half on the hover it exists
+ * for, so it is anchored to the column's inner edge instead and stays whole.
+ * Two columns in from either side, because one was not enough: the tip is
+ * wider than two of these columns, so the second from the end still cleared
+ * the edge by a couple of pixels — and two pixels of sideways scroll is the
+ * same bug as thirteen. Anchored to the inner edge it grows across the chart,
+ * where there is always room; the middle columns stay centred on their own
+ * bar, which is where a tooltip belongs when it can be.
+ */
+.bars-col:nth-child(-n + 2) .bars-tip { left: 0; transform: none; }
+.bars-col:nth-last-child(-n + 2) .bars-tip { left: auto; right: 0; transform: none; }
 .bars-col:hover .bars-tip { opacity: 1; }
 @media (prefers-reduced-motion: reduce) { .bars-tip { transition: none; } }
 /* Bottom-up, and capped in width so a week of data does not draw seven slabs:
@@ -2816,6 +2835,19 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
   justify-content: center;
   white-space: nowrap;
   overflow: visible;
+}
+/*
+ * On a phone, half of them.
+ *
+ * Eight dates is the right number on a laptop and roughly twice what fits
+ * across 390 pixels: "Sep 15Sep 19Sep 23" ran together into one grey smear
+ * along the axis, which reads as a rendering fault rather than as a scale —
+ * and an axis nobody can read is an axis that is not there. Hidden rather
+ * than removed, so every column keeps its slot and the bars stay on the grid
+ * they were drawn against.
+ */
+@media (max-width: 30em) {
+  .bars-label:not(.bars-label-major) { visibility: hidden; }
 }
 
 /* A meeting row: time, who, what you can do. Scanned down the left edge

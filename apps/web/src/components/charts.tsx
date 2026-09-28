@@ -377,6 +377,13 @@ export function StackedDays({
   // About eight labels, whatever the range: enough to place yourself, few
   // enough that none of them touch.
   const step = Math.max(1, Math.ceil(days.length / 8));
+  // And about four on a phone, where eight dates do touch — "Sep 15Sep 19Sep 23"
+  // run together into one grey smear along the axis, which is worse than four
+  // dates and a gap. Every other one of the labelled columns, so the survivors
+  // are a subset of the same grid rather than a second set of positions that
+  // move as the width changes; the stylesheet hides the rest under 30em and
+  // the slot stays, so the columns do not shift.
+  const major = step * 2;
 
   return (
     <figure className="viz">
@@ -454,7 +461,7 @@ export function StackedDays({
                     </span>
                   ))}
                 </span>
-                <span className="bars-label tiny subtle">
+                <span className={`bars-label tiny subtle${i % major === 0 ? " bars-label-major" : ""}`}>
                   {i % step === 0 ? axisLabel(day.date, days.length) : ""}
                 </span>
               </div>
