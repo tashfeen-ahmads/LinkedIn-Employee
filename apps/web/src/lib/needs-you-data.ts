@@ -6,6 +6,7 @@ import {
   PACING_STALE_MS,
   effectiveCta,
   needsYou,
+  readWebhookRefusal,
   type NeedsYouFacts,
   type NeedsYouItem,
 } from "@le/shared";
@@ -112,15 +113,10 @@ export async function loadNeedsYou(
 
   const stamped = beat?.beat_at ? Date.parse(beat.beat_at) : null;
 
-  /*
-   * Only a refusal counts. A delivery that verified, and an endpoint nobody has
-   * ever called, are both "nothing to do here" — and reporting the second as a
-   * fault would put a permanent red row on the screen of every workspace whose
-   * first campaign has not had a reply yet.
-   */
-  const hook = (webhookBeat?.detail ?? null) as { ok?: boolean; hadSignature?: boolean } | null;
-  const webhookRefused =
-    hook && hook.ok === false ? (hook.hadSignature ? "bad_signature" : "no_signature") : null;
+  // One reading, shared with the operator console. Two copies of this
+  // expression is one rule with two answers, and the screen somebody happens
+  // to be looking at becomes the true one.
+  const webhookRefused = readWebhookRefusal(webhookBeat?.detail ?? null);
 
   let heldReplies = 0;
   let heldBookings = 0;

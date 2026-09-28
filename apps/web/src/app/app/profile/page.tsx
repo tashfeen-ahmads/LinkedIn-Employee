@@ -152,6 +152,7 @@ async function saveProfile(formData: FormData) {
   /* ---- who you are, and how the agent sounds ---- */
   const bio = String(formData.get("bio") ?? "").trim();
   const timezone = String(formData.get("timezone") ?? "").trim();
+  const address = String(formData.get("address") ?? "").trim();
 
   const raw = String(formData.get("bookingUrl") ?? "").trim();
   let bookingUrl: string | null = null;
@@ -168,6 +169,7 @@ async function saveProfile(formData: FormData) {
     .from("profiles")
     .update({
       bio: bio || null,
+      address: address || null,
       booking_url: bookingUrl,
       ...(isKnownTimezone(timezone) ? { timezone } : {}),
     })
@@ -309,7 +311,11 @@ export default async function ProfilePage({
       .eq("workspace_id", session.workspaceId)
       .eq("user_id", session.userId)
       .maybeSingle(),
-    supabase.from("profiles").select("bio, timezone, booking_url").eq("id", session.userId).maybeSingle(),
+    supabase
+      .from("profiles")
+      .select("bio, timezone, booking_url, username, address")
+      .eq("id", session.userId)
+      .maybeSingle(),
   ]);
 
   // A row still `connecting` has no provider id, so nothing can send from it.
@@ -384,6 +390,23 @@ export default async function ProfilePage({
                     defaultValue={me?.bio ?? ""}
                     placeholder="Twelve years in logistics ops before this. I care about the boring parts."
                   />
+                </label>
+                {/*
+                  Asked at signup, and this is where it changes. Left off the
+                  profile it was a field somebody typed into once and could
+                  then never see again, let alone correct — which is the same
+                  disease as research that is gathered, scored, stored and then
+                  dropped at the moment it matters.
+                */}
+                <label className="field">
+                  <span>Business address</span>
+                  <textarea
+                    name="address"
+                    rows={2}
+                    autoComplete="street-address"
+                    defaultValue={me?.address ?? ""}
+                  />
+                  <span className="hint">For invoices, and for knowing which rules apply to you.</span>
                 </label>
                 {/*
                   The link the agent sends when a campaign is asking for a
@@ -525,11 +548,17 @@ export default async function ProfilePage({
             <Panel>
               <dl className="facts">
                 <Fact label="Name">{session.fullName || "—"}</Fact>
+                <Fact label="Username">
+                  {me?.username || <span className="subtle">Not set</span>}
+                </Fact>
                 <Fact label="Role">{session.role}</Fact>
                 <Fact label="How you describe yourself" wide>
                   {me?.bio || <span className="subtle">Nothing yet — the agent falls back to your business profile.</span>}
                 </Fact>
-                <Fact label="Your scheduling link">
+                {/* A URL has no spaces in it, so in a third of a row it breaks
+                    wherever the column happens to end — "…/15mi" above a lone
+                    "n". A whole row is the width the value actually needs. */}
+                <Fact label="Your scheduling link" wide>
                   {me?.booking_url ? (
                     <a href={me.booking_url} target="_blank" rel="noreferrer">
                       {me.booking_url}
@@ -539,6 +568,9 @@ export default async function ProfilePage({
                   )}
                 </Fact>
                 <Fact label="Timezone">{me?.timezone || "UTC"}</Fact>
+                <Fact label="Business address" wide>
+                  {me?.address || <span className="subtle">Not set</span>}
+                </Fact>
               </dl>
             </Panel>
           </Section>

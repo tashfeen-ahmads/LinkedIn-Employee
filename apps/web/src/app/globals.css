@@ -712,6 +712,23 @@ input, select, textarea, button { margin: 0; }
 }
 .auth-page.wide { width: min(35rem, 100% - 2 * var(--space-4)); }
 .auth-page > header { display: flex; flex-direction: column; gap: var(--space-2); }
+/*
+ * A link in a sentence here has to look like one.
+ *
+ * Site-wide an anchor inherits its colour and underlines on hover, which is
+ * right for a nav row or a card somebody is already pointing at and wrong for
+ * one word inside a paragraph. "New here? Create an account." is the only way
+ * from Sign in to Sign up and it rendered in the same muted grey as the
+ * sentence holding it — so the one route between the two pages was a piece of
+ * text nobody had any reason to click. Buttons in this column are excluded
+ * because they already read as controls; this is for prose.
+ */
+.auth-page p a:not(.btn) {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-thickness: from-font;
+}
 /* Down here the display face at its clamped size is louder than the page. */
 .auth-page h1 { font-size: clamp(1.5rem, 1.2rem + 1.4vw, 1.9rem); }
 /*

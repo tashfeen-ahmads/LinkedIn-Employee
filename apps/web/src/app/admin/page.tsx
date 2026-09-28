@@ -2,7 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase-server";
 import { PageHeader } from "@/components/page";
 import { requirePlatformAdmin, statsByWorkspace, daysUntil, formatUsd, type WorkspaceStats } from "@/lib/admin";
-import { MESSAGE_WEBHOOK_BEAT } from "@le/shared";
+import { MESSAGE_WEBHOOK_BEAT, readWebhookRefusal } from "@le/shared";
 
 export const dynamic = "force-dynamic";
 
@@ -69,9 +69,8 @@ export default async function AdminWorkspacesPage() {
     accountsByWorkspace.set(a.workspace_id, list);
   }
 
-  const hook = (webhookBeat?.detail ?? null) as { ok?: boolean; hadSignature?: boolean } | null;
-  const webhook =
-    hook && hook.ok === false ? (hook.hadSignature ? "bad_signature" : "no_signature") : null;
+  // The same reading the overview's facts use — one rule, one answer.
+  const webhook = readWebhookRefusal(webhookBeat?.detail ?? null);
   const webhookAt = webhookBeat?.beat_at ?? null;
 
   const totalSpend = [...costs.values()].reduce((sum, n) => sum + n, 0);

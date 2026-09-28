@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { NOTHING_NEEDS_YOU, needsYou, type NeedsYouFacts } from "../src/needs-you.js";
+import {
+  NOTHING_NEEDS_YOU,
+  needsYou,
+  readWebhookRefusal,
+  type NeedsYouFacts,
+} from "../src/needs-you.js";
 
 /**
  * What needs a person, as one ordered list.
@@ -205,5 +210,50 @@ describe("every row", () => {
     expect(needsYou({ ...CALM, heldReplies: 2 })[0]?.title).toBe("2 replies are waiting for you.");
     expect(needsYou({ ...CALM, strategiesUnapproved: 1 })[0]?.title).toContain("1 strategy is");
     expect(needsYou({ ...CALM, strategiesUnapproved: 2 })[0]?.title).toContain("2 strategies are");
+  });
+});
+
+/**
+ * The quietest failure in the product, read the same way by both screens.
+ *
+ * Deliveries being refused looks like nothing from every angle: campaigns
+ * send, invitations are accepted, and the replies simply never arrive, so the
+ * funnel reads a plausible zero. Two screens report it — the operator console
+ * and the facts behind the overview — and until this function existed each
+ * carried its own copy of the expression, which is one rule with two answers
+ * waiting to disagree.
+ */
+describe("readWebhookRefusal", () => {
+  it("reports no fault for a delivery that verified", () => {
+    expect(readWebhookRefusal({ ok: true, hadSignature: true })).toBeNull();
+  });
+
+  it("reports no fault for an endpoint nobody has ever called", () => {
+    // The row is absent, so there is no detail at all. Calling this a fault
+    // would put a permanent red mark on every workspace whose first campaign
+    // has not had a reply yet — rule 46 read from the other side.
+    expect(readWebhookRefusal(null)).toBeNull();
+    expect(readWebhookRefusal(undefined)).toBeNull();
+  });
+
+  it("tells the two refusals apart, because they are two different jobs", () => {
+    // No header at all: the webhook was configured without a signing secret.
+    expect(readWebhookRefusal({ ok: false, hadSignature: false })).toBe("no_signature");
+    // A header that did not verify: the wrong secret on one side. Telling
+    // somebody to re-copy a secret that was already correct is its own
+    // wasted afternoon, so these must never be merged.
+    expect(readWebhookRefusal({ ok: false, hadSignature: true })).toBe("bad_signature");
+  });
+
+  it("never invents a fault from a detail it cannot read", () => {
+    // `detail` is jsonb, so a string, a number or an array can land in that
+    // column, and a row written before `ok` existed carries neither key.
+    // Unknown is not a refusal: reporting one because we could not look is
+    // rule 17's disease with the sign flipped.
+    expect(readWebhookRefusal("nope")).toBeNull();
+    expect(readWebhookRefusal(42)).toBeNull();
+    expect(readWebhookRefusal([])).toBeNull();
+    expect(readWebhookRefusal({})).toBeNull();
+    expect(readWebhookRefusal({ hadSignature: false })).toBeNull();
   });
 });

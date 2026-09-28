@@ -2665,11 +2665,24 @@ const MUTATIONS = [
     pkg: "@le/worker",
   },
   {
-    id: "needs-you/a-refused-webhook-is-surfaced",
-    rule: "Deliveries being refused is the quietest failure in the product — everything looks healthy and the replies simply never arrive — so it belongs on the overview, not behind a visit to /app/system (rules 8 and 46)",
+    // The row left the customer's overview deliberately: naming our plumbing
+    // on a business owner's dashboard, with "tell us" as the only action, is
+    // rule 54's disease. What did not move is the reading — both the operator
+    // console and the overview's facts ask this one function, and telling the
+    // two refusals apart is the whole point of asking.
+    id: "needs-you/the-two-webhook-refusals-stay-apart",
+    rule: "No signature and a signature that does not verify are two different people doing two different things; merged, somebody re-copies a secret that was already correct (rule 46)",
     file: "packages/shared/src/needs-you.ts",
-    from: "  if (facts.webhookRefused) {",
-    to: "  if (false) {",
+    from: '  return beat.hadSignature ? "bad_signature" : "no_signature";',
+    to: '  return "no_signature";',
+    pkg: "@le/shared",
+  },
+  {
+    id: "needs-you/an-unreadable-beat-is-not-a-refusal",
+    rule: "A detail we cannot read is unknown, never a fault — reporting one because we could not look is rule 17's disease with the sign flipped, and it would mark every workspace whose first campaign has not had a reply yet",
+    file: "packages/shared/src/needs-you.ts",
+    from: "  if (beat.ok !== false) return null;",
+    to: "  if (beat.ok === true) return null;",
     pkg: "@le/shared",
   },
   {
@@ -2855,8 +2868,13 @@ const MUTATIONS = [
     id: "pacing/a-finished-warm-up-is-not-a-throttle",
     rule: "A campaign that has warmed its whole list reported a throttle on every tick for ever, sending somebody to investigate an account that was fine",
     file: "apps/worker/src/jobs/campaign-tick.ts",
-    from: "    if (!anyone?.length) return { enqueued: 0, reason: null };",
-    to: "",
+    // The question grew: "is anybody left" became "is anybody left that this
+    // warm-up could still act on", because a row warmed an hour ago is on the
+    // list and is not waiting for a view. Neutering the condition is what
+    // reproduces the original bug — the finished campaign falls through and
+    // prints the throttle sentence on every tick.
+    from: "    if (!(anyone ?? []).some((row) => !warmStillCounts(row.warmed_at, now))) {",
+    to: "    if (false) {",
     pkg: "@le/worker",
   },
   {

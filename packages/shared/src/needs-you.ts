@@ -36,6 +36,39 @@
  */
 
 /** The stable name of a thing that can be waiting. Used by tests and the nav. */
+/**
+ * What the webhook endpoint recorded about the last delivery, read once.
+ *
+ * Two screens ask this question — the operator console, and the facts behind
+ * the overview — and they were asking it with two copies of the same
+ * expression, which is the shape a rule takes just before the copies drift
+ * and whichever one somebody happens to be looking at becomes the truth.
+ *
+ * Only a **refusal** counts. A delivery that verified and an endpoint nobody
+ * has ever called are both "nothing to do here", and reporting the second as
+ * a fault would put a permanent red row on every workspace whose first
+ * campaign has not had a reply yet — rule 46's "never called reports
+ * `waiting`, never `ok`", read from the other side.
+ *
+ * The two refusals are never merged, because they are two different people
+ * doing two different things: **no header at all** is the webhook configured
+ * without a signing secret, and **a header that does not verify** is the
+ * wrong secret on one side. Telling somebody to re-copy a secret that was
+ * already correct is its own wasted afternoon.
+ */
+export type WebhookRefusal = "no_signature" | "bad_signature" | null;
+
+export function readWebhookRefusal(detail: unknown): WebhookRefusal {
+  if (!detail || typeof detail !== "object") return null;
+  const beat = detail as { ok?: unknown; hadSignature?: unknown };
+  // `ok !== false` rather than "`ok` is falsy": the column is jsonb, so a row
+  // whose detail never carried `ok` reads as unknown — and unknown is not a
+  // refusal. Inventing one is the mirror of rule 17's disease: reporting a
+  // fault because we could not look.
+  if (beat.ok !== false) return null;
+  return beat.hadSignature ? "bad_signature" : "no_signature";
+}
+
 export type NeedsYouKind =
   | "loop_stalled"
   | "linkedin_disconnected"
@@ -87,7 +120,7 @@ export interface NeedsYouFacts {
    * somebody to re-copy a secret that is already correct is its own wasted
    * afternoon.
    */
-  webhookRefused: "no_signature" | "bad_signature" | null;
+  webhookRefused: WebhookRefusal;
   /** Conversations held right now for a reply, and for a manual booking. */
   heldReplies: number;
   heldBookings: number;
