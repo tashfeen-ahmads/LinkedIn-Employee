@@ -360,7 +360,20 @@ export function StackedDays({
   height?: number;
 }) {
   const totals = days.map((d) => d.values.reduce((sum, v) => sum + v, 0));
-  const top = niceCeiling(Math.max(1, ...totals));
+  /*
+   * Two, not one, is the smallest scale this chart will draw.
+   *
+   * The axis is a top, a midpoint and a baseline. With a top of 1 the midpoint
+   * is `round(0.5)` = 1, so the chart printed "1 / 1 / 0" — the same number
+   * twice, on two lines at different heights, one of them claiming a value it
+   * is not at. A young campaign that has sent one invitation lives exactly
+   * there, so this is the state the chart is in on the day somebody first
+   * looks at it.
+   *
+   * A 0–2 axis for a peak of 1 is honest and reads correctly; inventing a
+   * fractional tick would not be.
+   */
+  const top = niceCeiling(Math.max(2, ...totals));
   // About eight labels, whatever the range: enough to place yourself, few
   // enough that none of them touch.
   const step = Math.max(1, Math.ceil(days.length / 8));
