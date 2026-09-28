@@ -31,7 +31,7 @@ export function SiteHeader() {
         Skip to content
       </a>
       <div className="container site-header-inner">
-        <Link href="/" aria-label="LinkedIn Employee, home">
+        <Link href="/" className="site-home" aria-label="LinkedIn Employee, home">
           <Wordmark />
         </Link>
 

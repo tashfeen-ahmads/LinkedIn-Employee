@@ -399,9 +399,20 @@ export function StackedDays({
             const total = day.values.reduce((sum, v) => sum + v, 0);
             return (
               <div className="bars-col" key={day.date}>
+                {/*
+                  `aria-label` rather than `title`, and a drawn tip beside it.
+
+                  The native tooltip is placed by the operating system, not by
+                  this page: hovering the empty top of a column — and the stack
+                  is full height, so most of it is empty — put a grey OS box
+                  over the allowance figures above the chart. It is also
+                  unstyleable, so it looked like a browser artefact sitting on
+                  the product. `aria-label` keeps the same sentence for a
+                  screen reader; `.bars-tip` draws it where we choose.
+                */}
                 <div
                   className="bars-stack"
-                  title={`${dayLabel(day.date)} — ${series
+                  aria-label={`${dayLabel(day.date)} — ${series
                     .map((name, i) => `${name}: ${day.values[i] ?? 0}`)
                     .join(", ")}`}
                 >
@@ -435,6 +446,14 @@ export function StackedDays({
                   one; the rest keep the slot so the columns stay on their
                   grid.
                 */}
+                <span className="bars-tip tiny" aria-hidden="true">
+                  <strong>{dayLabel(day.date)}</strong>
+                  {series.map((name, n) => (
+                    <span key={name}>
+                      {name} {day.values[n] ?? 0}
+                    </span>
+                  ))}
+                </span>
                 <span className="bars-label tiny subtle">
                   {i % step === 0 ? axisLabel(day.date, days.length) : ""}
                 </span>
@@ -480,7 +499,21 @@ function niceCeiling(peak: number): number {
 function dayLabel(iso: string): string {
   const date = new Date(`${iso}T00:00:00Z`);
   if (Number.isNaN(date.getTime())) return iso;
-  return date.toLocaleDateString(undefined, { weekday: "short", timeZone: "UTC" });
+  /*
+   * The weekday and the date, not the weekday alone.
+   *
+   * "Tue" is unambiguous across a week and says nothing across a month: this
+   * chart draws thirty columns, so four of them are Tuesdays and the tooltip
+   * named all four identically. The axis under it is already dated, and a tip
+   * that cannot be matched to the label beneath it is a tip that has to be
+   * counted along the row.
+   */
+  return date.toLocaleDateString(undefined, {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  });
 }
 
 /**

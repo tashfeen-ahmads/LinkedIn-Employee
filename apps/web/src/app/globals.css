@@ -2191,13 +2191,38 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
   align-items: center;
   gap: var(--space-5);
   height: 64px;
-  padding-inline: var(--space-4) var(--space-2);
+  /*
+   * Symmetric, and that is the whole fix for "the button is merging with the
+   * border".
+   *
+   * The right inset was `--space-2` against the left's `--space-4`: 8px
+   * against 16px. On a 64px bar with a pill radius the corner is a 32px
+   * quarter-circle, so at the top and bottom of a 34px button the edge has
+   * already curved inward by about 5px — which left the trial button roughly
+   * four pixels from a border that is visibly bending towards it. Measured, it
+   * sat 9px from the right and 17px from the left, and it read as an overflow
+   * rather than as a deliberate asymmetry.
+   */
+  padding-inline: var(--space-4);
   border-radius: var(--radius-pill);
   background: color-mix(in srgb, var(--surface-raised) 92%, transparent);
   border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
   box-shadow: var(--shadow);
   backdrop-filter: saturate(140%) blur(12px);
 }
+/*
+ * The home link is a flex box, so the wordmark sits on the bar's own centre.
+ *
+ * It was a bare `<a>`, which is `display: block` and therefore builds a line
+ * box: 35px tall around a 28px lockup, with the extra seven pixels of leading
+ * and descender space sitting *below* the glyphs. The grid centred the 35px
+ * anchor faithfully and the visible mark came out three pixels high — measured
+ * at centre 41 while the nav, the sign-in link and the trial button were all
+ * at 44. That is the "logo and nav not in line with each other", and no amount
+ * of nudging the wordmark fixes it, because the slack is in the box around it.
+ */
+.site-home { display: flex; align-items: center; }
+
 .site-nav { display: flex; justify-content: center; gap: var(--space-1); }
 .site-nav-link {
   font-size: 0.9rem;
@@ -2702,7 +2727,41 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
   gap: 2px;
   height: var(--bars-h, 168px);
 }
-.bars-col { display: flex; flex-direction: column; justify-content: flex-end; height: 100%; min-width: 0; }
+.bars-col { position: relative; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; min-width: 0; }
+
+/* The day's figures, drawn where this page decides rather than where the
+   operating system does.
+
+   A `title` attribute hands placement to the browser, and the stack is the
+   full height of the plot — so hovering the empty space above a short bar,
+   which is most of the chart, put a grey OS tooltip across the allowance
+   numbers above it. This one is anchored to its own column and opens
+   downward-ish from the baseline, so it can never reach the text above the
+   chart. It is `aria-hidden` because the stack itself carries the same
+   sentence as an `aria-label`. */
+.bars-tip {
+  position: absolute;
+  left: 50%;
+  bottom: 1.75rem;
+  transform: translateX(-50%);
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.4rem 0.55rem;
+  white-space: nowrap;
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow);
+  color: var(--text-muted);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+.bars-tip strong { color: var(--text); }
+.bars-col:hover .bars-tip { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .bars-tip { transition: none; } }
 /* Bottom-up, and capped in width so a week of data does not draw seven slabs:
    a bar wider than it is interesting stops being a measurement and becomes a
    block of colour. */
@@ -2732,7 +2791,21 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
   border-radius: 1px;
   background: var(--border-strong);
 }
-.bars-label { height: 1.5rem; display: flex; align-items: center; justify-content: center; }
+/* One line, allowed to spill into the empty slots either side.
+
+   The box is one column wide — 30px at this width — and "Aug 30" needs about
+   forty-two, so with wrapping allowed the date broke onto a second line and
+   fell straight out of its 1.5rem box onto the baseline and the zero tick.
+   Only every fourth column carries a label, so its neighbours are empty and
+   there is nothing for the overflow to collide with. */
+.bars-label {
+  height: 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  overflow: visible;
+}
 
 /* A meeting row: time, who, what you can do. Scanned down the left edge
    rather than read across, so the time is a column of its own. */
