@@ -2665,6 +2665,30 @@ const MUTATIONS = [
     pkg: "@le/worker",
   },
   {
+    id: "onboarding/the-bio-reaches-the-agent",
+    rule: "Onboarding asks how you would describe yourself and says invitations and replies go out in that voice; the invite writer got the business profile and nothing about the sender, so the answer was kept for replies and dropped for the first thing a stranger ever reads (rule 16)",
+    file: "apps/worker/src/jobs/seed-agent.ts",
+    from: "  if (bio) {",
+    to: "  if (false && bio) {",
+    pkg: "@le/worker",
+  },
+  {
+    id: "onboarding/the-strategy-job-selects-the-bio",
+    rule: "The name and the bio are on one row; selecting only the name is how the promise was broken, and the SELECT is the whole of the link",
+    file: "apps/worker/src/jobs/strategy.ts",
+    from: '.select("full_name, bio")',
+    to: '.select("full_name")',
+    pkg: "@le/web",
+  },
+  {
+    id: "strategy/approving-starts-the-search",
+    rule: "Approving a strategy is the decision, so it starts the search; setting a flag and waiting for a second button made an approved workspace indistinguishable from one that had approved nothing",
+    file: "apps/web/src/app/app/strategy/page.tsx",
+    from: "  const started = await queueSearch(session.workspaceId, session.userId, supabase, id);",
+    to: "  const started = { ok: true } as const;",
+    pkg: "@le/web",
+  },
+  {
     // The row left the customer's overview deliberately: naming our plumbing
     // on a business owner's dashboard, with "tell us" as the only action, is
     // rule 54's disease. What did not move is the reading — both the operator

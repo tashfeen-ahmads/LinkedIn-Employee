@@ -44,6 +44,8 @@ export async function seedWorkspaceAgent(
     business: BusinessProfile;
     /** The name a prospect reads. The rep's own, not the company's. */
     repName: string | null;
+    /** How the rep described themselves at onboarding, for the agent's voice. */
+    repBio?: string | null;
   },
 ): Promise<string | null> {
   const { data: already } = await db
@@ -66,7 +68,7 @@ export async function seedWorkspaceAgent(
       // which is the one value that cannot be wrong: a model this deployment
       // cannot serve is a failed call, not a slower agent.
       model: null,
-      system_prompt: voiceFrom(input.business, seed.systemPrompt ?? ""),
+      system_prompt: voiceFrom(input.business, seed.systemPrompt ?? "", input.repBio),
       from_name: input.repName,
       playbook: {
         objective: input.business.oneLiner?.trim().slice(0, 500) ?? "",
@@ -220,9 +222,35 @@ function offerFrom(business: BusinessProfile): string {
 }
 
 /** How it writes: the shipped baseline, plus this business's own tone. */
-function voiceFrom(business: BusinessProfile, baseline: string): string {
+function voiceFrom(business: BusinessProfile, baseline: string, repBio?: string | null): string {
   const tone = business.toneOfVoice?.trim();
-  return tone ? `${baseline}\n\nHow this business sounds: ${tone}` : baseline;
+  const bio = repBio?.trim();
+  let voice = baseline;
+  if (tone) voice += `\n\nHow this business sounds: ${tone}`;
+  /*
+   * Who the messages come from, in their own words.
+   *
+   * Onboarding asks "how would you describe yourself to a prospect" and says,
+   * on that same screen, that invitations and replies go out under your name
+   * and this is the voice they are written in. Half of that was true: the
+   * answer reached the Reply Agent through `repBio`, and the invite writer —
+   * which writes the first thing a stranger ever reads — was handed the
+   * business profile and the agent's tone and nothing about the person
+   * sending. Written, stored, shown on the profile, then dropped at the one
+   * moment it mattered, which is the failure this codebase keeps finding.
+   *
+   * It goes into the agent's voice rather than into each call, because the
+   * agent row is what owns everything a prospect reads: one place to put it,
+   * and both writers already read from there.
+   *
+   * Marked as background on purpose. A note is written about the person
+   * receiving it (rule 16), and a bio pasted into a 200-character invitation
+   * is the rep talking about themselves to a stranger.
+   */
+  if (bio) {
+    voice += `\n\nWho you are writing as, for tone and background only — never quote or summarise this at a prospect: ${bio}`;
+  }
+  return voice;
 }
 
 /**
@@ -262,13 +290,18 @@ export async function seedMissingAgents(db: Db, limit = 500): Promise<number> {
     // name: a message signed with a company reads as a mailshot, which is the
     // one thing the opener exists to avoid.
     let repName: string | null = null;
+    // And the bio, for the same reason the single seed reads it: an agent
+    // backfilled by this sweep is the only agent most of these workspaces will
+    // ever have, so anything it is not given here it is never given.
+    let repBio: string | null = null;
     if (profile.created_by) {
       const { data: owner } = await db
         .from("profiles")
-        .select("full_name")
+        .select("full_name, bio")
         .eq("id", profile.created_by)
         .maybeSingle();
       repName = owner?.full_name ?? null;
+      repBio = owner?.bio ?? null;
     }
 
     try {
@@ -277,6 +310,7 @@ export async function seedMissingAgents(db: Db, limit = 500): Promise<number> {
         userId: profile.created_by ?? null,
         business: business.data,
         repName,
+        repBio,
       });
       if (id) seeded += 1;
     } catch (err) {

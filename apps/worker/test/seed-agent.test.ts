@@ -365,3 +365,71 @@ describe("a workspace that already has a default line", () => {
     expect(db.rows("hooks").filter((h) => h.agent_id === id && h.is_default)).toHaveLength(0);
   });
 });
+
+/**
+ * The bio onboarding asked for reaches the agent that writes the invitations.
+ *
+ * Onboarding asks "how would you describe yourself to a prospect" and says, on
+ * that same screen, that invitations and replies go out under your name and
+ * this is the voice they are written in. Half of that was true. The answer
+ * reached the Reply Agent through `repBio`; the invite writer — which writes
+ * the first thing a stranger ever reads — was handed the business profile and
+ * the agent's tone and nothing about the person sending, because the strategy
+ * job selected `full_name` and not `bio` from the same row.
+ *
+ * Written, stored, shown on the profile, then dropped at the one moment it
+ * mattered. Asserted on the agent's own voice, because that is the row both
+ * writers read from — a test that only checked the strategy job's SELECT would
+ * pass while the value went nowhere.
+ */
+describe("the rep's own words", () => {
+  it("are carried into the agent's voice", async () => {
+    const db = new FakeDb();
+    await seedWorkspaceAgent(db.asDb(), {
+      workspaceId: WORKSPACE,
+      userId: USER,
+      business: BUSINESS,
+      repName: "Tashfeen",
+      repBio: "Twelve years in logistics ops before this. I care about the boring parts.",
+    });
+
+    const agent = db.rows("agents")[0]! as { system_prompt: string };
+    expect(agent.system_prompt).toContain("Twelve years in logistics ops");
+    // The business's tone is still there: the bio is added to the voice, not
+    // swapped in for it.
+    expect(agent.system_prompt).toContain(BUSINESS.toneOfVoice);
+  });
+
+  it("are background for tone, never something to recite at a prospect", async () => {
+    // A note is written about the person receiving it (rule 16). A bio pasted
+    // into a 200-character invitation is the rep talking about themselves to a
+    // stranger, so the voice has to say which of the two this is.
+    const db = new FakeDb();
+    await seedWorkspaceAgent(db.asDb(), {
+      workspaceId: WORKSPACE,
+      userId: USER,
+      business: BUSINESS,
+      repName: "Tashfeen",
+      repBio: "I care about the boring parts.",
+    });
+
+    const agent = db.rows("agents")[0]! as { system_prompt: string };
+    expect(agent.system_prompt).toMatch(/never quote or summarise this at a prospect/i);
+  });
+
+  it("leave the voice alone when nobody wrote one", async () => {
+    // Most workspaces have no bio. An empty one must not add a dangling
+    // instruction about a person the agent was told nothing about.
+    const db = new FakeDb();
+    await seedWorkspaceAgent(db.asDb(), {
+      workspaceId: WORKSPACE,
+      userId: USER,
+      business: BUSINESS,
+      repName: "Tashfeen",
+      repBio: "   ",
+    });
+
+    const agent = db.rows("agents")[0]! as { system_prompt: string };
+    expect(agent.system_prompt).not.toMatch(/never quote or summarise/i);
+  });
+});

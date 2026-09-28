@@ -134,9 +134,12 @@ async function strategy(ctx: WorkerContext, job: StrategyJob): Promise<string> {
    * Idempotent and never fatal: a workspace that already has one is left
    * alone, and a failure to seed loses a convenience rather than the run.
    */
+  // The bio as well as the name, off the same row. Onboarding collects it and
+  // promises it is the voice invitations are written in; selecting only the
+  // name is how that promise was kept for replies and broken for invitations.
   const { data: owner } = await ctx.db
     .from("profiles")
-    .select("full_name")
+    .select("full_name, bio")
     .eq("id", job.userId)
     .maybeSingle();
   await seedWorkspaceAgent(ctx.db, {
@@ -144,6 +147,7 @@ async function strategy(ctx: WorkerContext, job: StrategyJob): Promise<string> {
     userId: job.userId,
     business: output.businessProfile,
     repName: owner?.full_name ?? null,
+    repBio: owner?.bio ?? null,
   });
 
   await recordEvent(ctx.db, {
