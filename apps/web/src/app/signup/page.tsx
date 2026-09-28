@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase-server";
 import { isAppConfigured } from "@/lib/config";
 import { SiteFooter, SiteHeader } from "@/components/marketing";
 import { GoogleGlyph } from "@/components/google-glyph";
+import { AuthAside } from "@/components/auth-aside";
+import { PasswordField } from "@/components/password-field";
 import { SubmitButton } from "@/components/submit-button";
 import { checkEmail, checkPassword, checkUsername, PASSWORD_MIN } from "@/lib/auth-fields";
 
@@ -69,7 +71,7 @@ async function signUp(formData: FormData) {
     ? `${base}/auth/callback?invite=${encodeURIComponent(invite)}`
     : `${base}/auth/callback`;
 
-  const { error } = await supabase.auth.signUp({
+  const { data: created, error } = await supabase.auth.signUp({
     email: (email as { value: string }).value,
     password: (password as { value: string }).value,
     options: {
@@ -81,6 +83,34 @@ async function signUp(formData: FormData) {
   });
 
   if (error) back(error.message);
+
+  /*
+   * Signing up signs you in, when the project lets it.
+   *
+   * This threw the session away and redirected to a "check your inbox" screen
+   * — so somebody who had just chosen a password could not carry on, and the
+   * password they set was beside the point: the only way in was still a link
+   * in an email. That is the shape of the flow this replaced, wearing a
+   * password field.
+   *
+   * Supabase decides which of the two this is, and it says so in the answer:
+   * a session means the address needs no confirming and the person is already
+   * signed in, so the only correct next step is the work. No session with a
+   * user means the project requires confirmation, and then the inbox really is
+   * the next step — reported honestly rather than pretended past, because a
+   * screen that says "you are in" over a session that does not exist sends
+   * somebody to a login that will refuse them.
+   *
+   * Read from the response rather than from an environment variable naming
+   * the setting: the project is the thing that decides, and a second reading
+   * of somebody else's setting is one that can disagree with it.
+   */
+  if (created.session) {
+    // Straight to setting the business up. `/onboarding` sends them on to the
+    // app if they somehow already have a workspace, so this cannot strand
+    // anybody on a form they have already filled in.
+    redirect(invite ? `/invite/${encodeURIComponent(invite)}` : "/onboarding");
+  }
 
   redirect(`/signup?sent=${encodeURIComponent((email as { value: string }).value)}`);
 }
@@ -114,6 +144,7 @@ export default async function SignupPage({
     return (
       <>
         <SiteHeader />
+        <div className="auth-split">
         <main className="auth-page">
           <header>
             <h1>Not open yet</h1>
@@ -127,6 +158,8 @@ export default async function SignupPage({
             <Link href="/">Back to the site</Link>
           </p>
         </main>
+        <AuthAside />
+        </div>
         <SiteFooter />
       </>
     );
@@ -143,6 +176,7 @@ export default async function SignupPage({
     return (
       <>
         <SiteHeader />
+        <div className="auth-split">
         <main className="auth-page">
           <header>
             <h1>Confirm your email</h1>
@@ -161,6 +195,8 @@ export default async function SignupPage({
             Already confirmed? <Link href="/login">Sign in</Link>
           </p>
         </main>
+        <AuthAside />
+        </div>
         <SiteFooter />
       </>
     );
@@ -169,7 +205,8 @@ export default async function SignupPage({
   return (
     <>
       <SiteHeader />
-      <main className="auth-page">
+      <div className="auth-split">
+      <main className="auth-page wide">
         <header>
           <h1>Create your account</h1>
           <p className="muted">
@@ -221,7 +258,10 @@ export default async function SignupPage({
           <label className="field">
             <span>Work email</span>
             <input type="email" name="email" required autoComplete="email" placeholder="you@company.com" />
-            <span className="hint">We send a confirmation link here before the account can do anything.</span>
+            <span className="hint">
+              Where anything about your account goes. If this project asks for a
+              confirmation, we will say so on the next screen.
+            </span>
           </label>
 
           <label className="field">
@@ -239,24 +279,20 @@ export default async function SignupPage({
           </label>
 
           <div className="form-row">
-            <label className="field">
-              <span>Password</span>
-              <input
-                type="password"
-                name="password"
-                required
-                autoComplete="new-password"
-                minLength={PASSWORD_MIN}
-              />
-            </label>
-            <label className="field">
-              <span>Again</span>
-              <input type="password" name="confirm" required autoComplete="new-password" minLength={PASSWORD_MIN} />
-            </label>
+            {/* Both boxes can be read, which is the fix for the most common
+                way a signup is abandoned: typing a passphrase blind into two
+                fields and being told afterwards that they disagree. */}
+            <PasswordField
+              name="password"
+              label="Password"
+              hint={`At least ${PASSWORD_MIN} characters.`}
+            />
+            <PasswordField name="confirm" label="Again" />
           </div>
           <span className="tiny subtle">
-            At least {PASSWORD_MIN} characters. A short phrase you will remember beats a short one
-            you will not.
+            A short phrase you will remember beats a short one you will not. We check the length and
+            nothing else — a rule demanding a capital, a digit and a symbol produces
+            &ldquo;Password1!&rdquo;, which every cracking dictionary already has.
           </span>
 
           <SubmitButton className="btn block" pendingLabel="Creating your account…">
@@ -268,6 +304,8 @@ export default async function SignupPage({
           Already have an account? <Link href="/login">Sign in</Link>
         </p>
       </main>
+      <AuthAside />
+      </div>
       <SiteFooter />
     </>
   );

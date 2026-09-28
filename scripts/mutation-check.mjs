@@ -2705,6 +2705,14 @@ const MUTATIONS = [
     pkg: "@le/web",
   },
   {
+    id: "signup/a-password-signs-you-in",
+    rule: "signUp returns a session when the project needs no confirmed address; discarding it and redirecting to check-your-inbox means somebody who just chose a password still cannot get in, and the only way through is a link in an email — the flow this replaced, wearing a password field",
+    file: "apps/web/src/app/signup/page.tsx",
+    from: "  if (created.session) {",
+    to: "  if (false) {",
+    pkg: "@le/web",
+  },
+  {
     id: "strategy/approving-starts-the-search",
     rule: "Approving a strategy is the decision, so it starts the search; setting a flag and waiting for a second button made an approved workspace indistinguishable from one that had approved nothing",
     file: "apps/web/src/app/app/strategy/page.tsx",

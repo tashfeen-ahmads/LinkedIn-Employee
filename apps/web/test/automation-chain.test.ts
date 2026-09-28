@@ -9,6 +9,7 @@ const read = (p: string) => readFileSync(join(here, p), "utf8");
 const strategyPage = read("../src/app/app/strategy/page.tsx");
 const strategyJob = read("../../worker/src/jobs/strategy.ts");
 const campaignPage = read("../src/app/app/campaigns/[id]/page.tsx");
+const signupPage = read("../src/app/signup/page.tsx");
 
 /**
  * The links a claim about automation rests on, asserted at the call sites.
@@ -90,5 +91,35 @@ describe("the review screen counts the generic notes", () => {
     // And says nothing at all when everybody has one, because a notice that is
     // always there is a notice nobody reads.
     expect(campaignPage).toMatch(/\{onTemplate > 0 \?/);
+  });
+});
+
+/**
+ * Setting a password signs you in.
+ *
+ * `signUp` returns a session when the project does not require a confirmed
+ * address, and this discarded it and redirected to "check your inbox" — so
+ * somebody who had just chosen a password still could not get in, and the
+ * password was beside the point: the only way through was a link in an email.
+ * That is the flow this replaced, wearing a password field.
+ *
+ * Which of the two it is comes from the response, never from an environment
+ * variable naming the setting: the project decides, and a second reading of
+ * somebody else's setting is one that can disagree with it.
+ */
+describe("signing up", () => {
+  it("keeps the session rather than throwing it away", () => {
+    expect(signupPage).toMatch(/const \{ data: created, error \} = await supabase\.auth\.signUp\(/);
+  });
+
+  it("goes straight on when there is a session", () => {
+    expect(signupPage).toMatch(/if \(created\.session\) \{[\s\S]{0,400}?redirect\(/);
+    expect(signupPage).toMatch(/"\/onboarding"/);
+  });
+
+  it("still says to check the inbox when confirmation really is required", () => {
+    // A screen that says "you are in" over a session that does not exist
+    // sends somebody to a login that will refuse them.
+    expect(signupPage).toMatch(/redirect\(`\/signup\?sent=/);
   });
 });

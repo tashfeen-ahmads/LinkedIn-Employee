@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase-server";
 import { isAppConfigured } from "@/lib/config";
 import { SiteFooter, SiteHeader } from "@/components/marketing";
 import { GoogleGlyph } from "@/components/google-glyph";
+import { AuthAside } from "@/components/auth-aside";
+import { PasswordField } from "@/components/password-field";
 import { SubmitButton } from "@/components/submit-button";
 
 /**
@@ -117,6 +119,7 @@ export default async function LoginPage({
     return (
       <>
         <SiteHeader />
+        <div className="auth-split">
         <main className="auth-page">
           <header>
             <h1>Not open yet</h1>
@@ -130,6 +133,8 @@ export default async function LoginPage({
             <a href="/">Back to the site</a>
           </p>
         </main>
+        <AuthAside />
+        </div>
         <SiteFooter />
       </>
     );
@@ -138,6 +143,7 @@ export default async function LoginPage({
   return (
     <>
       <SiteHeader />
+      <div className="auth-split">
       <main className="auth-page">
         <header>
           <h1>Sign in</h1>
@@ -169,10 +175,7 @@ export default async function LoginPage({
             <span>Work email</span>
             <input type="email" name="email" required autoComplete="email" placeholder="you@company.com" />
           </label>
-          <label className="field">
-            <span>Password</span>
-            <input type="password" name="password" required autoComplete="current-password" />
-          </label>
+          <PasswordField name="password" label="Password" autoComplete="current-password" />
           <SubmitButton className="btn block" pendingLabel="Signing in…">
             Sign in
           </SubmitButton>
@@ -198,6 +201,8 @@ export default async function LoginPage({
           </form>
         </details>
       </main>
+      <AuthAside />
+      </div>
       <SiteFooter />
     </>
   );

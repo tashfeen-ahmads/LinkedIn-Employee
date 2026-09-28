@@ -747,6 +747,83 @@ input, select, textarea, button { margin: 0; }
   .auth-page { padding-block: var(--space-8); }
 }
 
+/*
+ * Sign in and sign up: the form on one side, what it is for on the other.
+ *
+ * A form alone on a wide screen is a column of boxes floating in grey, and
+ * the moment somebody is deciding whether to type their details is the one
+ * moment the page has nothing to say for itself. The panel is not decoration:
+ * it carries the numbers this product is actually built around, which is the
+ * argument, and it is the last thing read before the button.
+ *
+ * One column below 60em. The panel goes rather than stacking, because on a
+ * phone the job is the form and a marketing block above it is something to
+ * scroll past.
+ */
+.auth-split {
+  display: grid;
+  align-items: stretch;
+}
+.auth-split > .auth-page { grid-area: form; }
+.auth-aside { display: none; }
+
+@media (min-width: 60em) {
+  .auth-split {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas: "form aside";
+  }
+  .auth-aside {
+    grid-area: aside;
+    display: flex;
+    flex-direction: column;
+    /* Top, not centre. The signup form is much taller than this panel, and a
+       centred column put the argument halfway down a screen of empty grey —
+       below the fold on a laptop, which is where the reader is not. */
+    justify-content: flex-start;
+    gap: var(--space-5);
+    /* Its own ground, so the split reads as two surfaces rather than as a
+       form that happens to have text beside it. */
+    background: var(--surface-sunken, var(--surface));
+    border-left: 1px solid var(--border);
+    padding: var(--space-8) clamp(var(--space-5), 4vw, var(--space-8));
+  }
+  /* The column keeps its own measure instead of the page's centred one: two
+     columns each centring their contents leaves a canyon down the middle. */
+  .auth-split > .auth-page { margin-inline: 0; padding-inline: clamp(var(--space-5), 4vw, var(--space-8)); width: min(27rem, 100%); justify-self: end; }
+  .auth-split > .auth-page.wide { width: min(35rem, 100%); }
+}
+
+/* The numbers, set as a list of facts rather than as prose: somebody reading
+   this is scanning, not reading. */
+.auth-points { display: flex; flex-direction: column; gap: var(--space-4); }
+.auth-point { display: flex; flex-direction: column; gap: 2px; }
+.auth-point strong { font-size: 1.05rem; }
+
+/*
+ * A password field you can look at, and the toggle that does it.
+ *
+ * The button sits inside the box rather than beside it, so the control reads
+ * as part of the field it belongs to; `padding-inline-end` on the input is
+ * what stops a long passphrase running underneath it.
+ */
+.password-box { position: relative; display: block; }
+.password-box input { width: 100%; padding-inline-end: 4.25rem; }
+.password-peek {
+  position: absolute;
+  top: 50%;
+  right: 0.35rem;
+  transform: translateY(-50%);
+  border: 0;
+  background: none;
+  cursor: pointer;
+  padding: 0.35rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font: inherit;
+  font-size: 0.8125rem;
+  color: var(--text-muted);
+}
+.password-peek:hover { color: var(--text); background: var(--surface); }
+
 /* --------------------------------------------------------------- surfaces */
 
 /* A card lays its own children out.
