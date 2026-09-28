@@ -378,6 +378,20 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
     },
   });
 
+  /*
+   * Read here rather than carried in the job: a campaign built weeks after
+   * signup should still open with the answer the rep actually gave.
+   */
+  const { data: wsRow } = await ctx.db
+    .from("workspaces")
+    .select("onboarding")
+    .eq("id", job.workspaceId)
+    .maybeSingle();
+  const onboardingAutonomy =
+    (wsRow?.onboarding as { autonomy?: string } | null)?.autonomy === "autonomous"
+      ? "autonomous"
+      : "supervised";
+
   const { data: campaign, error } = await db
     .from("campaigns")
     .insert({
@@ -400,6 +414,18 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
         searchTier,
         droppedFilters: page.droppedFilters,
         filterNotes: page.filterNotes ?? [],
+        /*
+         * How much the agent finishes on its own, from what onboarding was
+         * told (migration 0038).
+         *
+         * Without it every campaign was born `supervised` whatever the rep
+         * answered at signup, and the setting only took effect once they
+         * found the profile screen and set it a second time — so an answer
+         * given on day one did nothing until day three. `applyRules` reads
+         * this field and nothing else (rule 41), so this is the whole of
+         * making the answer real.
+         */
+        autonomy: onboardingAutonomy,
       } as never,
     })
     .select("id")

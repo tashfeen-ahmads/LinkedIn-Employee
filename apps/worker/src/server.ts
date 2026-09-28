@@ -629,12 +629,43 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
       return c.json({ error: describeProviderFailure(err) }, 502);
     }
 
+    /*
+     * The account row takes what onboarding was already told.
+     *
+     * Sending hours and the Sales Navigator tick are answered at signup, when
+     * no account exists to hold them — they wait on `workspaces.onboarding`
+     * (migration 0038) and land here, the first moment there is a row. Without
+     * this the answers are collected and then quietly ignored, and the rep is
+     * asked for them a second time on the profile screen: exactly the
+     * re-asking onboarding was rebuilt to stop.
+     *
+     * Read fresh rather than trusted from the request: these decide when an
+     * account may act and which search tier it gets, and a request is not
+     * where either belongs.
+     */
+    const { data: ws } = await ctx.db
+      .from("workspaces")
+      .select("onboarding")
+      .eq("id", parsed.data.workspaceId)
+      .maybeSingle();
+    const answers = (ws?.onboarding ?? null) as
+      | { workingHours?: { start: number; end: number; days: number[] } | null; hasSalesNavigator?: boolean }
+      | null;
+
     await ctx.db.from("linkedin_accounts").upsert(
       {
         workspace_id: parsed.data.workspaceId,
         user_id: parsed.data.userId,
         provider: ctx.linkedin.name,
         status: "connecting",
+        // Only when onboarding actually answered. Spreading an absent value
+        // would overwrite a window the rep has since edited on their profile
+        // with a default nobody chose — a reconnect must not silently reset
+        // the hours (rule 8's habit: repair never makes things worse).
+        ...(answers?.workingHours ? { working_hours: answers.workingHours as never } : {}),
+        ...(typeof answers?.hasSalesNavigator === "boolean"
+          ? { has_sales_navigator: answers.hasSalesNavigator }
+          : {}),
       },
       { onConflict: "workspace_id,user_id" },
     );

@@ -57,6 +57,15 @@ export type SubscriptionStatus = "active" | "trialing" | "past_due" | "canceled"
 export type ExclusionKindDb = "company" | "person";
 
 export type WorkspaceRow = {
+  /**
+   * Answers from onboarding that had nowhere to live yet (migration 0038).
+   *
+   * The sending window and the Sales Navigator tick belong to the LinkedIn
+   * account, which does not exist at signup. This is the holding area, not a
+   * source of truth: once the account row is made it takes these and
+   * `linkedin_accounts.working_hours` is the answer from then on.
+   */
+  onboarding: { workingHours: { start: number; end: number; days: number[] } | null; hasSalesNavigator: boolean; autonomy: string } | null;
   id: string;
   name: string;
   slug: string;
