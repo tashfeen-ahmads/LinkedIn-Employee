@@ -60,6 +60,22 @@
 
   /* One saturated hue, spent deliberately. Deliberately not LinkedIn's blue:
      this is a tool that works on LinkedIn, it is not part of it. */
+  /*
+   * The sign-in panel's own world.
+   *
+   * Deliberately one world in both themes, like a dark hero: it is a single
+   * surface a person looks at once on the way in, and flipping it to a light
+   * ground in light mode would leave the white cards on it invisible. Named
+   * here rather than written into the component, because a hex in a component
+   * rule is a colour that only works on one ground (rule 38).
+   */
+  --auth-panel-top:    #1E1C52;
+  --auth-panel-bottom: #0B0A24;
+  --auth-panel-ink:    #EEEDFF;
+  --auth-panel-muted:  #A9A5D8;
+  --auth-panel-card:   #FFFFFF;
+  --auth-panel-line:   rgba(255, 255, 255, 0.14);
+
   --accent:          #3730E8;
   --accent-hover:    #2A24C4;
   --accent-soft:     #ECEBFE;
@@ -776,28 +792,86 @@ input, select, textarea, button { margin: 0; }
     grid-area: aside;
     display: flex;
     flex-direction: column;
-    /* Top, not centre. The signup form is much taller than this panel, and a
-       centred column put the argument halfway down a screen of empty grey —
-       below the fold on a laptop, which is where the reader is not. */
-    justify-content: flex-start;
-    gap: var(--space-5);
-    /* Its own ground, so the split reads as two surfaces rather than as a
-       form that happens to have text beside it. */
-    background: var(--surface-sunken, var(--surface));
-    border-left: 1px solid var(--border);
-    padding: var(--space-8) clamp(var(--space-5), 4vw, var(--space-8));
+    justify-content: center;
+    gap: var(--space-6);
+    /*
+     * Its own world, lit from one corner.
+     *
+     * A flat grey column beside a form is a form with text next to it. The
+     * gradient plus a single off-centre glow gives the panel a light source,
+     * which is what lets the cards on it read as objects sitting on a surface
+     * rather than as boxes drawn on paper — and it is the one place on this
+     * site allowed any theatre, because it is what somebody looks at while
+     * deciding whether to type their details.
+     */
+    background:
+      radial-gradient(90% 70% at 18% 8%, rgba(120, 112, 255, 0.42), transparent 60%),
+      linear-gradient(160deg, var(--auth-panel-top), var(--auth-panel-bottom));
+    color: var(--auth-panel-ink);
+    padding: var(--space-8) clamp(var(--space-5), 4vw, var(--space-7));
+    overflow: hidden;
   }
+  .auth-aside .eyebrow { color: var(--auth-panel-muted); }
+  .auth-aside .lede { color: var(--auth-panel-ink); }
   /* The column keeps its own measure instead of the page's centred one: two
      columns each centring their contents leaves a canyon down the middle. */
   .auth-split > .auth-page { margin-inline: 0; padding-inline: clamp(var(--space-5), 4vw, var(--space-8)); width: min(27rem, 100%); justify-self: end; }
   .auth-split > .auth-page.wide { width: min(35rem, 100%); }
 }
 
-/* The numbers, set as a list of facts rather than as prose: somebody reading
-   this is scanning, not reading. */
-.auth-points { display: flex; flex-direction: column; gap: var(--space-4); }
-.auth-point { display: flex; flex-direction: column; gap: 2px; }
-.auth-point strong { font-size: 1.05rem; }
+/*
+ * The product, as three things it actually did.
+ *
+ * A list of claims is a list of claims. These are the shapes off the real
+ * screens — an allowance against its cap, an acceptance, a reply waiting for a
+ * person — so the panel shows the product working rather than describing it.
+ * Offset and tilted a degree or two so they read as a stack somebody could
+ * pick up, which is the whole difference between a card and a box.
+ */
+.auth-stack { display: flex; flex-direction: column; gap: var(--space-3); }
+.auth-card {
+  background: var(--auth-panel-card);
+  color: var(--text);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  box-shadow: 0 18px 40px -22px rgba(6, 5, 24, 0.9);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+/* Each one a little out of line with the last. Not random: a fixed offset per
+   position, so the stack looks the same every time somebody loads the page. */
+.auth-card:nth-child(1) { margin-inline-end: var(--space-6); transform: rotate(-0.6deg); }
+.auth-card:nth-child(2) { margin-inline-start: var(--space-5); transform: rotate(0.5deg); }
+.auth-card:nth-child(3) { margin-inline-end: var(--space-4); transform: rotate(-0.3deg); }
+@media (prefers-reduced-motion: reduce) { .auth-card { transform: none; } }
+
+.auth-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
+.auth-card-label { font-size: 0.75rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-subtle); }
+.auth-card-value { font-size: 0.9375rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.auth-card-note { font-size: 0.8125rem; color: var(--text-muted); }
+
+/*
+ * An allowance against its cap, never against the largest number on screen.
+ *
+ * `.auth-gauge` rather than `.meter`: that name is already a 4px progress bar
+ * with `overflow: hidden`, and a second rule sharing its final class name is
+ * rule 53's collision — the one that renders a component as a clipped sliver
+ * and looks deliberate because it is scoped.
+ */
+.auth-gauge { height: 6px; border-radius: 999px; background: var(--surface-sunken); overflow: hidden; }
+.auth-gauge > span { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
+
+.auth-pill {
+  align-self: flex-start;
+  font-size: 0.75rem;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-hover);
+  border: 1px solid var(--accent-border);
+}
+.auth-foot { font-size: 0.75rem; color: var(--auth-panel-muted); border-top: 1px solid var(--auth-panel-line); padding-top: var(--space-4); }
 
 /*
  * A password field you can look at, and the toggle that does it.
