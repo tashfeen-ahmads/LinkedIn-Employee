@@ -218,7 +218,6 @@ const STEPS = [
   {
     n: "01",
     agent: "Strategy Agent",
-    model: "Claude Opus, once per workspace",
     lead: "Tell it about your business once.",
     points: [
       "Share your website and LinkedIn page.",
@@ -228,7 +227,6 @@ const STEPS = [
   {
     n: "02",
     agent: "Targeting Agent",
-    model: "Claude Haiku for scoring, Opus for copy",
     lead: "Pick who to pursue.",
     points: [
       "It builds a ranked prospect list, showing the fit score and the intent signals behind every row.",
@@ -238,7 +236,6 @@ const STEPS = [
   {
     n: "03",
     agent: "Reply Agent",
-    model: "Claude Haiku to classify, Opus to write",
     lead: "Set the rules, then let it work.",
     points: [
       "Decide when it may answer and when a human must step in: pricing, legal, negative sentiment, anything it is unsure about.",
@@ -248,7 +245,6 @@ const STEPS = [
   {
     n: "04",
     agent: "You",
-    model: "Judgement",
     lead: "Close.",
     points: [
       "Meetings land in your calendar with a one-page brief on who you are meeting and why they matched.",
@@ -294,10 +290,6 @@ export function HowItWorks() {
                     <li key={point}>{point}</li>
                   ))}
                 </ul>
-                <div className="cluster agent-io">
-                  <span className="tiny subtle">Runs on</span>
-                  <span className="pill plain">{step.model}</span>
-                </div>
               </article>
             </StaggerItem>
           ))}

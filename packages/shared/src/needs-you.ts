@@ -165,40 +165,24 @@ export function needsYou(facts: NeedsYouFacts): NeedsYouItem[] {
   }
 
   /*
-   * Deliveries being refused, which is the quietest failure in the product.
+   * Deliveries being refused is deliberately NOT a row here.
    *
-   * Every other row here is something visibly undone. This one looks exactly
-   * like a working deployment that nobody has replied to yet: LinkedIn holds
-   * the reply, the worker answers 401 exactly as it should, and the funnel
-   * reports a zero that reads as an audience problem.
+   * It used to be, written carefully in the customer's own words — "replies
+   * are not reaching your inbox" — with "tell us" as its action, because
+   * naming a webhook and a signing secret on a business owner's dashboard was
+   * worse (rule 54). But the action was still the give-away: the only thing
+   * the reader could do was report a fault to the people who already have the
+   * telemetry. That is not a to-do, it is us asking the customer to notice our
+   * plumbing for us, in the one list that is supposed to mean "these are the
+   * things only you can do".
+   *
+   * So it belongs to the operator, and `facts.webhookRefused` is still
+   * gathered and still tells the two refusals apart — `/admin` renders it, and
+   * `/app/system` keeps it behind the platform-admin flag. Removing it from
+   * this list is only safe because somebody else is looking; a fault nobody
+   * can see is rule 8's disease, and moving it without a home would be worse
+   * than leaving it here.
    */
-  if (facts.webhookRefused) {
-    items.push({
-      kind: "webhook_refused",
-      title: "Replies from LinkedIn are not reaching your inbox.",
-      /*
-       * Said as what it costs them, never as what is broken in here.
-       *
-       * This row named a webhook, a signing secret and "the provider" — our
-       * vendor, our plumbing, on a business owner's dashboard. They do not
-       * know what any of it is, cannot change a single part of it, and do not
-       * need to learn our supply chain to use the product. The two refusals
-       * still differ and an operator still needs to know which; that belongs
-       * on the system check, behind the admin flag, where somebody can act on
-       * it.
-       *
-       * A row whose action the reader cannot perform is rule 8 one step worse:
-       * repair that waits not for somebody to find a button, but for somebody
-       * who could never press it. So the action is the one thing they really
-       * can do — tell us.
-       */
-      why: "Somebody may have answered on LinkedIn without it showing up here. Your campaigns are still sending; it is the replies coming back that are affected, and this one is ours to fix rather than yours.",
-      href: "/app/support",
-      action: "Let us know",
-      tone: "blocker",
-      count: 1,
-    });
-  }
 
   /*
    * A conversation stopped mid-flow, which is the most expensive row here.

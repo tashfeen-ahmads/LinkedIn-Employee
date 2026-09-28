@@ -35,43 +35,31 @@ describe("a day with nothing waiting", () => {
 });
 
 describe("a webhook refusing deliveries", () => {
-  it("is a blocker, because it is the quietest failure there is", () => {
+  it("is never a row on the customer's list, on either refusal", () => {
     /*
-     * Every other row is something visibly undone. This one looks exactly like
-     * a working deployment nobody has replied to yet: LinkedIn holds the reply,
-     * the worker answers 401 exactly as it should, and the funnel reports a
-     * zero that reads as an audience problem. It sat on `/app/system` where
-     * only somebody already suspicious would look.
-     */
-    const items = needsYou({ ...CALM, webhookRefused: "no_signature" });
-    expect(items[0]?.kind).toBe("webhook_refused");
-    expect(items[0]?.tone).toBe("blocker");
-  });
-
-  it("says what it costs them, never what is broken in here", () => {
-    /*
-     * It named a webhook, a signing secret and "the provider" — our vendor and
-     * our plumbing, on a business owner's dashboard. They do not know what any
-     * of that is and cannot change a single part of it. The distinction between
-     * the two refusals is real and belongs on the system check behind the admin
-     * flag, where somebody can act on it.
+     * It used to be one, written carefully in their own words — "replies are
+     * not reaching your inbox" — with "tell us" as the action, because naming
+     * a webhook and a signing secret on a business owner's dashboard was worse
+     * (rule 54). But that action was the give-away: the only thing the reader
+     * could do was report a fault to the people who already have the
+     * telemetry. This list means "things only you can do", and asking the
+     * customer to notice our plumbing for us is not one of them.
+     *
+     * `facts.webhookRefused` is still gathered and still tells the two
+     * refusals apart, because /admin renders it and /app/system keeps it
+     * behind the platform-admin flag. Removing it from here is only safe
+     * because somebody else is looking.
      */
     for (const kind of ["no_signature", "bad_signature"] as const) {
-      const row = needsYou({ ...CALM, webhookRefused: kind })[0]!;
-      const text = `${row.title} ${row.why}`;
-      for (const jargon of ["webhook", "signature", "signing secret", "provider", "deployment", "endpoint"]) {
-        expect(text.toLowerCase()).not.toContain(jargon);
-      }
+      expect(kinds({ ...CALM, webhookRefused: kind })).toEqual([]);
     }
   });
 
-  it("asks for the only thing they can actually do", () => {
-    // A row whose action the reader cannot perform is rule 8 one step worse:
-    // repair waiting not for somebody to find a button, but for somebody who
-    // could never press it.
-    const row = needsYou({ ...CALM, webhookRefused: "no_signature" })[0]!;
-    expect(row.href).toBe("/app/support");
-    expect(row.why).toContain("ours to fix rather than yours");
+  it("does not silence the rows that really are the customer's", () => {
+    // Dropping a row must not drop the list. A refusal alongside real work
+    // leaves the real work exactly where it was.
+    const items = needsYou({ ...CALM, webhookRefused: "no_signature", heldReplies: 2 });
+    expect(items.map((i) => i.kind)).toEqual(["held_reply"]);
   });
 
   it("says nothing when deliveries are fine, or when none has ever arrived", () => {
