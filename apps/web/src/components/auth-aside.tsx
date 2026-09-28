@@ -17,7 +17,7 @@ import { PUBLIC_LIMITS } from "@/lib/site";
  * Hidden below 60em, where the job is the form and a marketing block above it
  * is something to scroll past.
  */
-export function AuthAside() {
+export function AuthAside({ variant = "signin" }: { variant?: "signin" | "signup" }) {
   // Drawn against the cap, never against the largest number on screen: a meter
   // scaled to its own data always looks full, and 10 of 35 and 10 of 10 are
   // then the same picture (rule 51).
@@ -27,11 +27,23 @@ export function AuthAside() {
 
   return (
     <aside className="auth-aside" aria-label="What this product does">
+      {/*
+        The two pages arrive at this panel from different places. Somebody
+        signing in has already decided; somebody signing up is deciding, and
+        the first thing they want to know is what it costs to find out. One
+        component either way, because two would drift — and the cards below are
+        the same on both, since the product is the same product.
+      */}
+      {variant === "signup" ? (
+        <p className="auth-badge">Seven days free · no card</p>
+      ) : null}
+
       <div className="stack-3">
         <p className="eyebrow">An AI SDR that works inside the limits</p>
         <p className="lede prose">
-          It finds the people, writes to each one by name, answers what comes back and books the
-          call — at a pace that keeps a LinkedIn account alive.
+          {variant === "signup"
+            ? "Give it your website and it writes who to go after. You approve a strategy, approve the words, and press launch — it finds the people, writes to each one by name, and answers what comes back."
+            : "It finds the people, writes to each one by name, answers what comes back and books the call — at a pace that keeps a LinkedIn account alive."}
         </p>
       </div>
 

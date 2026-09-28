@@ -828,6 +828,37 @@ input, select, textarea, button { margin: 0; }
  * Offset and tilted a degree or two so they read as a stack somebody could
  * pick up, which is the whole difference between a card and a box.
  */
+/*
+ * A run of fields that belong together, with the reason said once.
+ *
+ * Six inputs in a flat column, each carrying a sentence justifying itself,
+ * reads as prose with slots in it rather than as a form — and the reader's job
+ * is to fill it in, not to study it. Two groups with one small label each say
+ * what the run is for, and then the fields can be short.
+ *
+ * A label rather than a heading: these sit inside a card that already has the
+ * page's `<h1>` above it, and a third level here would be a heading under a
+ * heading under a title (rule 34).
+ */
+.field-group { display: flex; flex-direction: column; gap: var(--space-3); }
+.field-group + .field-group { margin-block-start: var(--space-4); padding-block-start: var(--space-4); border-block-start: 1px solid var(--border); }
+.field-group-label { font-size: 0.75rem; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-subtle); }
+
+/* The line above the cards that says what the trial costs. Its own rule
+   because it sits on the panel's dark ground, where `.notice` would not. */
+.auth-badge {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.8125rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--auth-panel-line);
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--auth-panel-ink);
+}
+
 .auth-stack { display: flex; flex-direction: column; gap: var(--space-3); }
 .auth-card {
   background: var(--auth-panel-card);

@@ -143,6 +143,14 @@ export default async function OnboardingPage({
   const { data: existing } = await supabase.from("memberships").select("workspace_id").eq("user_id", user.id).limit(1);
   if (existing?.length) redirect("/app");
 
+  // What signing up already stored, so this page can show it back rather than
+  // ask for it again. The trigger writes `full_name` from the signup form.
+  const { data: me } = await supabase
+    .from("profiles")
+    .select("full_name")
+    .eq("id", user.id)
+    .maybeSingle();
+
   // Someone with a pending invitation is joining a team, not starting one.
   const { data: pendingInvite } = await supabase
     .from("invitations")
@@ -215,7 +223,15 @@ export default async function OnboardingPage({
           </p>
           <label className="field">
             <span>Your name</span>
-            <input name="fullName" placeholder="Jane Doe" autoComplete="name" />
+            {/* Filled in from the account, not asked again. Signing up stored
+                this, and a blank box on the next screen is the product asking
+                a second time for something it already has. */}
+            <input
+              name="fullName"
+              placeholder="Jane Doe"
+              autoComplete="name"
+              defaultValue={me?.full_name ?? ""}
+            />
             <span className="hint">What a prospect sees the invitation come from.</span>
           </label>
           <label className="field">

@@ -158,7 +158,7 @@ export default async function SignupPage({
             <Link href="/">Back to the site</Link>
           </p>
         </main>
-        <AuthAside />
+        <AuthAside variant="signup" />
         </div>
         <SiteFooter />
       </>
@@ -195,7 +195,7 @@ export default async function SignupPage({
             Already confirmed? <Link href="/login">Sign in</Link>
           </p>
         </main>
-        <AuthAside />
+        <AuthAside variant="signup" />
         </div>
         <SiteFooter />
       </>
@@ -210,8 +210,8 @@ export default async function SignupPage({
         <header>
           <h1>Create your account</h1>
           <p className="muted">
-            Seven days free. We ask for this once — it is what the agent writes as, and what your
-            profile is made of.
+            Two things: who the messages come from, and how you sign back in. Everything about your
+            business is asked once, on the next screen.
           </p>
         </header>
 
@@ -229,71 +229,68 @@ export default async function SignupPage({
           <span className="tiny subtle">or with an email and password</span>
         </div>
 
+        {/*
+          Two groups, not six boxes in a row.
+          Every field used to carry a paragraph justifying itself, so a form of
+          six inputs read as a page of prose with slots in it — and the
+          business address was asked for here, at onboarding and again on the
+          profile, three times for one value. Signup is the moment to get
+          somebody in; the detail belongs where it is already asked properly.
+          What is left is the smallest set that makes an account: who the
+          messages come from, and how to sign back in.
+        */}
         <form action={signUp} className="card">
           {params.invite ? <input type="hidden" name="invite" value={params.invite} /> : null}
 
-          <label className="field">
-            <span>Your name</span>
-            <input type="text" name="fullName" required autoComplete="name" placeholder="Sam Patel" />
-            <span className="hint">
-              What a prospect sees the invitation come from. It is your name, not your company&rsquo;s.
-            </span>
-          </label>
+          <div className="field-group">
+            <p className="field-group-label">Who the messages come from</p>
 
-          <label className="field">
-            <span>Username</span>
-            <input
-              type="text"
-              name="username"
-              required
-              autoComplete="username"
-              placeholder="sampatel"
-              minLength={3}
-              maxLength={30}
-              pattern="[A-Za-z0-9._-]+"
-            />
-            <span className="hint">Letters, numbers, dots, underscores or hyphens. No spaces.</span>
-          </label>
+            <label className="field">
+              <span>Your name</span>
+              <input type="text" name="fullName" required autoComplete="name" placeholder="Sam Patel" />
+              <span className="hint">Yours, not your company&rsquo;s — a prospect reads it on the invitation.</span>
+            </label>
 
-          <label className="field">
-            <span>Work email</span>
-            <input type="email" name="email" required autoComplete="email" placeholder="you@company.com" />
-            <span className="hint">
-              Where anything about your account goes. If this project asks for a
-              confirmation, we will say so on the next screen.
-            </span>
-          </label>
-
-          <label className="field">
-            <span>Address</span>
-            <textarea
-              name="address"
-              rows={2}
-              autoComplete="street-address"
-              placeholder="12 Mill Lane, Bristol BS1 4ST, United Kingdom"
-            />
-            <span className="hint">
-              Your business address. It goes on invoices and it is what tells us which rules apply
-              to you — optional now, and on your profile whenever you want to change it.
-            </span>
-          </label>
-
-          <div className="form-row">
-            {/* Both boxes can be read, which is the fix for the most common
-                way a signup is abandoned: typing a passphrase blind into two
-                fields and being told afterwards that they disagree. */}
-            <PasswordField
-              name="password"
-              label="Password"
-              hint={`At least ${PASSWORD_MIN} characters.`}
-            />
-            <PasswordField name="confirm" label="Again" />
+            <label className="field">
+              <span>Username</span>
+              <input
+                type="text"
+                name="username"
+                required
+                autoComplete="username"
+                placeholder="sampatel"
+                minLength={3}
+                maxLength={30}
+                pattern="[A-Za-z0-9._-]+"
+              />
+              <span className="hint">Letters, numbers, dots, underscores or hyphens.</span>
+            </label>
           </div>
-          <span className="tiny subtle">
-            A short phrase you will remember beats a short one you will not. We check the length and
-            nothing else — a rule demanding a capital, a digit and a symbol produces
-            &ldquo;Password1!&rdquo;, which every cracking dictionary already has.
-          </span>
+
+          <div className="field-group">
+            <p className="field-group-label">How you sign back in</p>
+
+            <label className="field">
+              <span>Work email</span>
+              <input type="email" name="email" required autoComplete="email" placeholder="you@company.com" />
+            </label>
+
+            <div className="form-row">
+              {/* Both boxes can be read, which is the fix for the most common
+                  way a signup is abandoned: typing a passphrase blind into two
+                  fields and being told afterwards that they disagree. */}
+              <PasswordField
+                name="password"
+                label="Password"
+                hint={`At least ${PASSWORD_MIN} characters.`}
+              />
+              <PasswordField name="confirm" label="Again" />
+            </div>
+            <span className="hint">
+              Length is the only rule. A demand for a capital, a digit and a symbol produces
+              &ldquo;Password1!&rdquo;, which every cracking dictionary already has.
+            </span>
+          </div>
 
           <SubmitButton className="btn block" pendingLabel="Creating your account…">
             Create account
@@ -304,7 +301,7 @@ export default async function SignupPage({
           Already have an account? <Link href="/login">Sign in</Link>
         </p>
       </main>
-      <AuthAside />
+      <AuthAside variant="signup" />
       </div>
       <SiteFooter />
     </>
