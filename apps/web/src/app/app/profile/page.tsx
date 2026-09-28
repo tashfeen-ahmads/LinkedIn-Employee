@@ -209,6 +209,36 @@ async function saveProfile(formData: FormData) {
   const wanted = formData.get("autonomy");
   if (wanted && ["owner", "admin", "manager"].includes(session.role)) {
     const autonomy = wanted === "autonomous" ? "autonomous" : "supervised";
+
+    /*
+     * The workspace's answer, as well as every campaign already running on it.
+     *
+     * Only the campaigns were written, and the Targeting Agent builds a new
+     * one from `workspaces.onboarding` — the answer given at signup. So a rep
+     * who switched this to "autonomous" changed every campaign they had and
+     * every campaign they were ever going to build reverted to the signup
+     * answer, silently, while this screen went on reporting "autonomous"
+     * because one of the old campaigns still said so. Two readings of one
+     * setting, and the screen's is the one somebody believes.
+     *
+     * Merged rather than replaced, exactly as the campaign rules below are:
+     * the same row holds the sending window and the search tier, and a
+     * wholesale write would drop them.
+     */
+    const { data: ws } = await supabase
+      .from("workspaces")
+      .select("onboarding")
+      .eq("id", session.workspaceId)
+      .maybeSingle();
+    const answers = (ws?.onboarding && typeof ws.onboarding === "object" ? ws.onboarding : {}) as Record<
+      string,
+      unknown
+    >;
+    await supabase
+      .from("workspaces")
+      .update({ onboarding: { ...answers, autonomy } as never })
+      .eq("id", session.workspaceId);
+
     const { data: campaigns } = await supabase
       .from("campaigns")
       .select("id, rules")
@@ -256,20 +286,28 @@ export default async function ProfilePage({
   const supabase = await createClient();
 
   /*
-   * What the workspace's campaigns actually say, so the control shows the
-   * setting rather than a default. Read from the campaigns themselves because
-   * that is where the agent reads it: a screen showing one value while the
-   * worker obeys another is the drift this codebase keeps finding.
+   * The workspace's own answer first, and what its campaigns say only when it
+   * has none.
+   *
+   * The campaigns used to be the only source, on the reasoning that they are
+   * where the agent reads it — true of a campaign already running, and false
+   * of the next one, which the Targeting Agent builds from the workspace's
+   * answer. It also read "supervised" on a brand new workspace that had chosen
+   * "autonomous" during onboarding, because there were no campaigns yet to
+   * ask. Saving writes both, so the two cannot drift; a workspace from before
+   * that still falls back to its campaigns rather than to a guess.
    */
-  const { data: ruleRows } = await supabase
-    .from("campaigns")
-    .select("rules")
-    .eq("workspace_id", session.workspaceId);
-  const autonomy = (ruleRows ?? []).some(
-    (row) => (row.rules as { autonomy?: string } | null)?.autonomy === "autonomous",
-  )
-    ? "autonomous"
-    : "supervised";
+  const [{ data: wsRow }, { data: ruleRows }] = await Promise.all([
+    supabase.from("workspaces").select("onboarding").eq("id", session.workspaceId).maybeSingle(),
+    supabase.from("campaigns").select("rules").eq("workspace_id", session.workspaceId),
+  ]);
+  const stated = (wsRow?.onboarding as { autonomy?: string } | null)?.autonomy;
+  const autonomy =
+    stated === "autonomous" || stated === "supervised"
+      ? stated
+      : (ruleRows ?? []).some((row) => (row.rules as { autonomy?: string } | null)?.autonomy === "autonomous")
+        ? "autonomous"
+        : "supervised";
 
   // Coming back from the provider's hosted login, and also on any arrival while
   // this rep's account is not working.
