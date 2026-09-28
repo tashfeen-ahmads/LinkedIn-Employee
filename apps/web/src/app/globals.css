@@ -3172,6 +3172,15 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
    block, and the review screen shows something the reader never sees. */
 .app .post-body { white-space: pre-wrap; }
 
+/* The fallback way in, folded away.
+
+   A second email form sitting open under the password form is two boxes
+   asking for the same address, and somebody fills the wrong one. Closed, it is
+   a sentence that answers the question people arrive with. */
+.auth-alt { margin-top: var(--space-4); }
+.auth-alt summary { cursor: pointer; }
+.auth-alt[open] summary { margin-bottom: var(--space-3); }
+
 /* A profile's facts: what it is called, and what it says.
 
    A definition list rather than disabled inputs showing their own values, which

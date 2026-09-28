@@ -117,6 +117,17 @@ export type ProfileRow = {
   id: string;
   email: string;
   full_name: string | null;
+  /**
+   * The handle somebody chose at signup (migration 0037).
+   *
+   * `citext` with a unique index, so "Sam" and "sam" are one account rather
+   * than two. Nullable because every account that predates the column has
+   * none, and inventing a handle nobody chose is worse than an empty field
+   * they can fill.
+   */
+  username: string | null;
+  /** Business address, collected at signup and editable on the profile. */
+  address: string | null;
   avatar_url: string | null;
   bio: string | null;
   timezone: string;
