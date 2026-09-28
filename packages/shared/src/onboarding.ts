@@ -89,13 +89,17 @@ export const ONBOARDING_STEPS: readonly OnboardingStep[] = [
     required: true,
   },
   {
+    // Not a chore any more. Approving a strategy starts the search itself, so
+    // by the time somebody reads this the agent is already working — and a
+    // checklist telling them to go and press a button that fires on its own is
+    // a step the product invented for itself.
     key: "hasCampaign",
-    action: "Open strategies",
-    label: "Build your first campaign",
+    action: "See progress",
+    label: "The agent is building your campaign",
     done: "your first campaign",
-    why: "The Targeting Agent finds the people and writes the messages.",
+    why: "It searches LinkedIn, scores everyone against your strategy and writes a note for each person. About a minute.",
     href: "/app/strategy",
-    nudge: "One click on an approved profile and the Targeting Agent builds the list and the copy for you.",
+    nudge: "Your strategy is approved and the agent is building the list. Nothing is needed from you until it hands you a campaign to read.",
     required: true,
   },
   {

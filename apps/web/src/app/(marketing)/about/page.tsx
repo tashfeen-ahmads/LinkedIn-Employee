@@ -47,11 +47,17 @@ export default function AboutPage() {
               across the whole team so two reps never arrive in the same inbox.
             </p>
             <p>
-              The second decision was that a person stays in the loop at every handover. The agents
-              draft; you approve. Pricing questions, legal questions, anything negative and anything
-              the model is unsure about stop and wait for you, on every plan, including the one called
-              autopilot. That is not a limitation we plan to remove — it is the reason the thing can
-              be left running at all.
+              The second decision was that judgement stays yours and typing does not. Three things
+              need you — the strategy, the words, the launch — and each is a gate in the code rather
+              than a promise in a paragraph. Everything after them can run unattended.
+            </p>
+            <p>
+              How much it finishes on its own is your call, per workspace. Hold pricing, legal and
+              anything negative for yourself, or let it answer and book. Two holds you cannot switch
+              off, and they are not the same kind of thing: a message the agent did not understand,
+              because a reply written from a misread one reaches a real person just as fast as a
+              good one; and a prospect who asks to speak to a human, because that one is not our
+              caution, it is their wish. Somebody asking to remove them stops everything, always.
             </p>
             <p>
               We publish the numbers we enforce, and we do not publish results we have not measured.

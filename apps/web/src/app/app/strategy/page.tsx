@@ -29,6 +29,60 @@ import { SubmitButton } from "@/components/submit-button";
 
 const HOW_MANY = 50;
 
+/**
+ * Start the search for one approved strategy.
+ *
+ * One definition, two callers — approving, and the button for a deliberate
+ * re-run. They were the same twelve lines written twice, which in this codebase
+ * is the shape a rule takes just before the copies drift.
+ *
+ * It never throws. Approving must succeed even when the search cannot start,
+ * because the approval is the thing the person actually did and losing it to a
+ * disconnected LinkedIn account would be the product refusing a decision it
+ * already has.
+ */
+async function queueSearch(
+  workspaceId: string,
+  userId: string,
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  profileId: string,
+): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const { data: account } = await supabase
+    .from("linkedin_accounts")
+    .select("id, status")
+    .eq("workspace_id", workspaceId)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (account?.status !== "active") {
+    return { ok: false, reason: "Connect your LinkedIn account and the search will run." };
+  }
+
+  const queued = await callWorker("/jobs/targeting", {
+    workspaceId,
+    userId,
+    customerProfileId: profileId,
+    linkedinAccountId: account.id,
+    limit: HOW_MANY,
+  });
+  return queued.ok ? { ok: true } : { ok: false, reason: queued.error };
+}
+
+/**
+ * Approving is the decision, so approving is what starts the work.
+ *
+ * It used to set a flag and stop. The person then had to find a second button
+ * on the same card and press it to make anything happen — and until they did,
+ * a workspace that had approved a strategy looked identical to one that had
+ * not. "Yes, go after these people" and "now go" are not two decisions; the
+ * second was a step the product asked for because of how it was built.
+ *
+ * The search is not started again for a strategy that already produced a
+ * campaign. Re-approving something after a look at it is not a request for a
+ * second list of the same people, and rule 24 means that second list finds
+ * nobody anyway. Growing an existing campaign is `Find more`, which is a
+ * deliberate act with its own button.
+ */
 async function approveProfile(formData: FormData) {
   "use server";
   const id = String(formData.get("profileId"));
@@ -41,7 +95,29 @@ async function approveProfile(formData: FormData) {
     .eq("id", id)
     .eq("workspace_id", session.workspaceId);
 
+  const { data: already } = await supabase
+    .from("campaigns")
+    .select("id")
+    .eq("workspace_id", session.workspaceId)
+    .eq("customer_profile_id", id)
+    .limit(1);
+
   revalidatePath("/app/strategy");
+  revalidatePath("/app/campaigns");
+
+  if (already?.length) {
+    redirect(noticeQuery("/app/strategy", "Approved. This strategy already has a campaign — use Find more to grow its list."));
+  }
+
+  const started = await queueSearch(session.workspaceId, session.userId, supabase, id);
+  redirect(
+    noticeQuery(
+      "/app/strategy",
+      started.ok
+        ? "Approved — the agent is searching now and will build you a campaign to review. It takes about a minute."
+        : `Approved, but the search has not started: ${started.reason}`,
+    ),
+  );
 }
 
 async function dropProfile(formData: FormData) {
@@ -212,26 +288,12 @@ async function findProspects(formData: FormData) {
   const session = await requireSession();
   const supabase = await createClient();
 
-  const { data: account } = await supabase
-    .from("linkedin_accounts")
-    .select("id, status")
-    .eq("workspace_id", session.workspaceId)
-    .eq("user_id", session.userId)
-    .maybeSingle();
-
-  if (account?.status !== "active") {
-    redirect("/app/strategy?error=" + encodeURIComponent("Connect your LinkedIn account on the Team page first."));
-  }
-
-  const queued = await callWorker("/jobs/targeting", {
-    workspaceId: session.workspaceId,
-    userId: session.userId,
-    customerProfileId: profileId,
-    linkedinAccountId: account.id,
-    limit: HOW_MANY,
-  });
-  if (!queued.ok) {
-    redirect(errorQuery("/app/strategy", `Could not start the search: ${queued.error}`));
+  // The same path approving takes. Kept as its own button because a deliberate
+  // re-run is a real thing to want — approving starts the search once, and
+  // this is how somebody asks for it again without un-approving anything.
+  const started = await queueSearch(session.workspaceId, session.userId, supabase, profileId);
+  if (!started.ok) {
+    redirect(errorQuery("/app/strategy", `Could not start the search: ${started.reason}`));
   }
 
   revalidatePath("/app/strategy");

@@ -34,9 +34,10 @@ export default async function TutorialPage() {
         title="How this works"
         lede={
           <>
-          Nine stages. You do five of them; the product does the rest and asks before anything
-          reaches a real person. Each one says what it cannot do as well as what it does — you are
-          going to meet those edges either way, and meeting them here is cheaper.
+          Three of these need a decision from you — approve a strategy, approve the words, press
+          launch. Two are answered once at signup. The agents run the rest, and you can take any of
+          it over by hand whenever you want to. Each stage says what it cannot do as well as what
+          it does: you are going to meet those edges either way, and meeting them here is cheaper.
           </>
         }
       />
@@ -60,7 +61,21 @@ export default async function TutorialPage() {
                   >
                     {status === "done" ? "done" : status === "current" ? "you are here" : "ahead"}
                   </span>
-                  {stage.youDo === null ? <span className="pill tiny">runs by itself</span> : null}
+                  {/*
+                    Whose the stage is, in its own words. Read off "does this
+                    have a youDo", signing up counted as recurring work and the
+                    reply stage — which the agent runs on its own once autopilot
+                    is on — was marked as the reader's. Six of nine titles then
+                    began with "You", which reads as a product that mostly needs
+                    you.
+                  */}
+                  {stage.owner === "agent" ? (
+                    <span className="pill tiny">runs by itself</span>
+                  ) : stage.owner === "setup" ? (
+                    <span className="pill tiny">once, at signup</span>
+                  ) : stage.owner === "decision" ? (
+                    <span className="pill tiny accent">your decision</span>
+                  ) : null}
                 </div>
 
                 {stage.youDo ? (

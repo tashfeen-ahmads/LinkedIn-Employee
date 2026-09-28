@@ -194,10 +194,17 @@ export async function TeamSection({
 
       <PageNotice error={params.error} notice={params.notice} />
 
+      {/*
+        Members and invitations are one section, not two.
+        Who is on this workspace and who has been asked to join are the same
+        question a minute apart — adding somebody and then looking for them in
+        a different card is a page describing its own storage rather than the
+        job. The invite form keeps its anchor so existing links still land.
+      */}
       <Section
         id="members"
-        title="Members"
-        description="A rep whose LinkedIn is not connected can be given campaigns, but nothing will leave their account."
+        title="Team"
+        description="Who is on this workspace, and who has been asked. A rep whose LinkedIn is not connected can be given campaigns, but nothing will leave their account."
       >
         <div className="table-scroll">
           <table>
@@ -250,14 +257,16 @@ export async function TeamSection({
             </tbody>
           </table>
         </div>
-      </Section>
 
       {canManage ? (
-        <Section
-          id="invites"
-          title="Invitations"
-          description={`A link is valid for ${INVITE_TTL_DAYS} days. Anyone holding it can join this workspace, so send it the way you would send a password.`}
-        >
+        <>
+          <div className="stack-2" id="invites">
+            <h3>Invite somebody</h3>
+            <p className="small muted">
+              A link is valid for {INVITE_TTL_DAYS} days. Anyone holding it can join this
+              workspace, so send it the way you would send a password.
+            </p>
+          </div>
           <div className="card">
             <form action={inviteMember} className="form-row">
               <label className="field grow">
@@ -326,8 +335,9 @@ export async function TeamSection({
               An invitation sent here appears in this list until it is accepted or revoked.
             </Empty>
           )}
-        </Section>
+        </>
       ) : null}
+      </Section>
     </>
   );
 }

@@ -735,7 +735,7 @@ export const FAQ_ITEMS = [
   },
   {
     q: "Can I approve every message?",
-    a: "Yes, and that is the default. The Reply Agent drafts, you approve with one click. Autopilot is a per-campaign switch you flip once you trust it.",
+    a: "Yes, and that is the default — the Reply Agent drafts, you approve with one click. Autopilot is a switch you flip once you trust it, and then it answers and books on its own. Two things always wait for you either way: somebody who asks to speak to a person, and a message the agent did not understand.",
   },
   {
     q: "What happens when a prospect asks something hard?",

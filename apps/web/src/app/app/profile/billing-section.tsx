@@ -1,5 +1,5 @@
 import { entitlementFor, entitlementMessage } from "@le/billing";
-import { PageHeader } from "@/components/page";
+import { PageHeader, Panel, Section } from "@/components/page";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { callWorker, errorQuery } from "@/lib/worker";
@@ -68,20 +68,25 @@ export async function BillingSection({ searchParams }: { searchParams: NoticePar
         </div>
       ) : null}
 
-      <section className="card">
-        <h3>Current plan</h3>
-        <p className="small muted">
-          {workspace?.plan ?? "trial"}
-          {workspace?.subscription_status ? ` · ${workspace.subscription_status}` : ""}
-          {workspace?.seats ? ` · ${workspace.seats} ${workspace.seats === 1 ? "seat" : "seats"}` : ""}
-          {workspace?.current_period_end
-            ? ` · renews ${new Date(workspace.current_period_end).toLocaleDateString()}`
-            : ""}
-        </p>
-      </section>
+      {/*
+        The plan, the plans and the export were four cards in a row under one
+        heading — the plan you are on in a box of its own, three price cards,
+        and a download in a fifth. One section: what you are on, what you could
+        move to, and the file you can take with you. They are one subject and
+        the page was already too many boxes.
+      */}
+      <Section id="plan" title="Plan" description="What this workspace is on, and what it can move to.">
+        <Panel>
+          <p className="small muted">
+            {workspace?.plan ?? "trial"}
+            {workspace?.subscription_status ? ` · ${workspace.subscription_status}` : ""}
+            {workspace?.seats ? ` · ${workspace.seats} ${workspace.seats === 1 ? "seat" : "seats"}` : ""}
+            {workspace?.current_period_end
+              ? ` · renews ${new Date(workspace.current_period_end).toLocaleDateString()}`
+              : ""}
+          </p>
 
-      <section className="grid grid-2"
-      >
+          <div className="grid grid-2">
         {PLANS.map((plan) => (
           <article key={plan.id} className="card">
             <h3>{plan.name}</h3>
@@ -102,10 +107,10 @@ export async function BillingSection({ searchParams }: { searchParams: NoticePar
             </form>
           </article>
         ))}
-      </section>
+          </div>
 
-      <section className="card">
-        <h3>Export everything</h3>
+          <hr className="divider" />
+          <h3>Export everything</h3>
         <p className="small muted">
           Every prospect, conversation, message, meeting and campaign in this workspace, as one JSON
           file. This is what answers a subject-access request, and it is here rather than behind a
@@ -125,7 +130,8 @@ export async function BillingSection({ searchParams }: { searchParams: NoticePar
         ) : (
           <p className="tiny subtle">An owner or an admin can download this.</p>
         )}
-      </section>
+        </Panel>
+      </Section>
 
       <p className="small muted">
         Cancelling stops outreach. Your prospects, conversations and booked meetings stay readable and

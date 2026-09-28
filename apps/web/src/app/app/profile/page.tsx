@@ -413,10 +413,18 @@ export default async function ProfilePage({
       */}
       {editing ? (
         <form action={saveProfile} className="stack-5">
+          {/*
+            One section and one Panel in edit mode too, matching the one it
+            edits. Three headings above one Save read as three forms — somebody
+            changes their bio and their hours, presses the Save under the first
+            group, and has no reason to believe the second was kept. The groups
+            are still there, as labelled blocks inside one card rather than as
+            three cards.
+          */}
           <Section
             id="sound"
-            title="How you sound"
-            description="The agent writes in your voice and sends inside your working day, so both of these change what a prospect receives."
+            title="You, and how your agent works"
+            description="Everything on this page is one form with one Save. The agent writes in your voice, sends inside your working day, and finishes as much as you let it."
           >
             <Panel>
               <div className="stack-4">
@@ -479,15 +487,14 @@ export default async function ProfilePage({
                   <TimezoneSelect value={me?.timezone} />
                 </label>
               </div>
-            </Panel>
-          </Section>
 
-          <Section
-            id="sending"
-            title="When it may send"
-            description="Nothing leaves this account outside these hours, in the timezone above."
-          >
-            <Panel>
+                <hr className="divider" />
+                <div className="stack-2" id="sending">
+                  <h3>When it may send</h3>
+                  <p className="small muted">
+                    Nothing leaves this account outside these hours, in the timezone above.
+                  </p>
+                </div>
               <div className="stack-4">
                 <p className="small">
                   <strong>{describeWorkingHours(hours, me?.timezone ?? "UTC")}</strong>
@@ -530,16 +537,17 @@ export default async function ProfilePage({
                   </span>
                 </label>
               </div>
-            </Panel>
-          </Section>
 
-          {canManage ? (
-            <Section
-              id="autonomy"
-              title="How much the agent finishes on its own"
-              description="A hold is not a pause, it is a full stop. A prospect who replies on a Friday and is never answered is a warm lead lost, and nothing on any screen explains why."
-            >
-              <Panel>
+              {canManage ? (
+                <>
+                <hr className="divider" />
+                <div className="stack-2" id="autonomy">
+                  <h3>How much the agent finishes on its own</h3>
+                  <p className="small muted">
+                    A hold is not a pause, it is a full stop. A prospect who replies on a Friday and
+                    is never answered is a warm lead lost, and nothing on any screen explains why.
+                  </p>
+                </div>
                 <label className="field">
                   <span>When a reply arrives</span>
                   <select name="autonomy" defaultValue={autonomy}>
@@ -554,9 +562,10 @@ export default async function ProfilePage({
                     hand from the Inbox.
                   </span>
                 </label>
-              </Panel>
-            </Section>
-          ) : null}
+                </>
+              ) : null}
+            </Panel>
+          </Section>
 
           {/*
             One Save, at the end, for everything above it. Sticky, because the
@@ -573,10 +582,21 @@ export default async function ProfilePage({
         </form>
       ) : (
         <>
+          {/*
+            One section, not three.
+            "How you sound", "When it may send" and "How much the agent
+            finishes on its own" were three cards, three headings and three
+            Edit buttons pointing at one form with one Save — three doors into
+            the same room, and a page that reads as a pile of boxes rather than
+            a profile. They are all one answer to one question: what the agent
+            is, working as you. The anchors stay on the groups inside, so every
+            existing link into #sending or #autonomy still lands in the right
+            place.
+          */}
           <Section
             id="sound"
-            title="How you sound"
-            description="What the agent knows about you, and what it sends on your behalf."
+            title="You, and how your agent works"
+            description="Everything the agent writes as, sends inside, and decides on its own. One Edit, one Save."
             action={
               <Link className="btn secondary small" href="/app/profile?edit=1#sound">
                 Edit
@@ -609,23 +629,8 @@ export default async function ProfilePage({
                 <Fact label="Business address" wide>
                   {me?.address || <span className="subtle">Not set</span>}
                 </Fact>
-              </dl>
-            </Panel>
-          </Section>
 
-          <Section
-            id="sending"
-            title="When it may send"
-            description="Nothing leaves this account outside these hours."
-            action={
-              <Link className="btn secondary small" href="/app/profile?edit=1#sending">
-                Edit
-              </Link>
-            }
-          >
-            <Panel>
-              <dl className="facts">
-                <Fact label="Sending hours" wide>
+                <Fact label="Sending hours" id="sending" wide>
                   {describeWorkingHours(hours, me?.timezone ?? "UTC")}
                 </Fact>
                 <Fact label="Sales Navigator" wide>
@@ -633,25 +638,8 @@ export default async function ProfilePage({
                     ? "Yes — the full customer profile is used in search."
                     : "No — search cannot filter on seniority or company size."}
                 </Fact>
-              </dl>
-            </Panel>
-          </Section>
 
-          <Section
-            id="autonomy"
-            title="How much the agent finishes on its own"
-            description="A hold is not a pause, it is a full stop."
-            action={
-              canManage ? (
-                <Link className="btn secondary small" href="/app/profile?edit=1#autonomy">
-                  Edit
-                </Link>
-              ) : null
-            }
-          >
-            <Panel>
-              <dl className="facts">
-                <Fact label="When a reply arrives" wide>
+                <Fact label="When a reply arrives" id="autonomy" wide>
                   {autonomy === "autonomous"
                     ? "The agent answers and books on its own."
                     : "Anything uncertain is held for you to read first."}
@@ -666,8 +654,16 @@ export default async function ProfilePage({
         </>
       )}
 
-      <section className="card">
-        <h3>Your LinkedIn account</h3>
+      {/*
+        The account sits under the settings it belongs to rather than in a card
+        of its own. It is the one block here that is operations rather than
+        settings — connecting, and asking the provider whether the connection
+        is still real — so it keeps its own heading and its own buttons, and
+        stops being a fifth box on a page somebody already reads as a pile of
+        boxes.
+      */}
+      <Section id="linkedin" title="Your LinkedIn account" description="The account every message goes out from.">
+        <Panel>
         {mine ? (
           <>
             <p className="small muted">
@@ -775,7 +771,8 @@ export default async function ProfilePage({
             </div>
           </>
         )}
-      </section>
+        </Panel>
+      </Section>
       {/*
         Team and billing live here rather than on tabs of their own.
         Somebody managing a workspace does all three in one sitting — who is on
@@ -805,14 +802,24 @@ function Fact({
   label,
   children,
   wide = false,
+  id,
 }: {
   label: string;
   children: React.ReactNode;
   /** A sentence rather than a word, so it takes the row to itself. */
   wide?: boolean;
+  /**
+   * An anchor, for a fact that used to be a section of its own.
+   *
+   * Merging three sections into one would otherwise break every link into
+   * #sending and #autonomy — the sidebar's, the overview's, and the ones in
+   * people's browser history. The heading they pointed at is gone; the fact it
+   * was really about is still here, so the anchor moves onto that.
+   */
+  id?: string;
 }) {
   return (
-    <div className={wide ? "fact is-wide" : "fact"}>
+    <div className={wide ? "fact is-wide" : "fact"} id={id}>
       <dt className="tiny subtle">{label}</dt>
       <dd>{children}</dd>
     </div>
