@@ -17,6 +17,7 @@ import { runTargetingJob } from "./jobs/targeting.js";
 import { detectAcceptedInvitations } from "./jobs/acceptance.js";
 import { publishApprovedPosts } from "./jobs/publish-posts.js";
 import { recoverThrottledProspects, unstickProspects } from "./jobs/unstick.js";
+import { recoverAccounts } from "./accounts.js";
 import { runMaintenance } from "./jobs/maintenance.js";
 import { seedMissingAgents } from "./jobs/seed-agent.js";
 import { runDailyDigest } from "./jobs/digest.js";
@@ -157,6 +158,22 @@ const workers = [
             // are checked on the same hourly beat rather than waiting for the
             // night.
             .then(() => recoverThrottledProspects(ctx.db))
+            /*
+             * An account whose provider id has moved is repaired within the
+             * hour, not overnight.
+             *
+             * This was nightly, and nightly is the wrong cadence for the one
+             * failure that stops everything: a rep reconnects, the provider
+             * issues a new account id, and until this runs the row holds a
+             * dead one — every job failing against it, the campaign reporting
+             * `running`, and nobody sending. Between a reconnect at six in the
+             * evening and the sweep at three in the morning, this product does
+             * nothing and says nothing.
+             *
+             * Cheap enough to do hourly: one list call, and each row only
+             * touched when what the provider holds disagrees with it.
+             */
+            .then(() => recoverAccounts(ctx.db, ctx.linkedin))
             .then(() => undefined)
         );
       }

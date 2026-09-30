@@ -753,3 +753,88 @@ describe("claiming an account from the hosted-auth redirect", () => {
     expect(db.find("linkedin_accounts", { id: ACCOUNT })?.provider_account_id).toBeNull();
   });
 });
+
+/**
+ * The delivery that cannot be verified, and the day it costs.
+ *
+ * The provider does not sign the `notify_url` handed to it on a hosted auth
+ * link, so the one delivery that says "a rep just connected" always fails the
+ * signature check. Refusing it is right — a forged body would bind a
+ * stranger's LinkedIn to a rep's row. Refusing it and then doing *nothing* is
+ * what left this deployment holding a dead account id: the only other paths to
+ * binding were a person loading an authenticated page, and a sweep that ran at
+ * three in the morning.
+ *
+ * So the ring makes us ask. Nothing from the body is read; the answer is still
+ * 401; and what binds comes from a list the worker fetched itself.
+ */
+describe("an account notice we cannot verify", () => {
+  /**
+   * The mock provider accepts any body, so the refusal has to be staged: this
+   * is what the real one does with a delivery carrying no signature, and it is
+   * the only state the `notify_url` ever arrives in.
+   */
+  function refusing(linkedin: MockLinkedInProvider): void {
+    linkedin.parseAccountWebhook = () => {
+      throw new Error("Invalid Unipile webhook signature");
+    };
+  }
+
+  const unsigned = (app: ReturnType<typeof createServer>) =>
+    app.request("/webhooks/unipile/accounts", {
+      method: "POST",
+      body: JSON.stringify({ account_id: "acct_new", name: USER, status: "OK" }),
+      headers: { "content-type": "application/json" },
+    });
+
+  it("still refuses the delivery, and binds from what the provider says instead", async () => {
+    const { db, app, linkedin } = harness({ provider_account_id: null, status: "connecting" });
+    linkedin.connectedAccounts = [{ providerAccountId: "acct_new", reference: USER, status: "ok" }];
+    refusing(linkedin);
+
+    const res = await unsigned(app);
+    expect(res.status).toBe(401);
+
+    // The pull runs beside the response rather than inside it.
+    await new Promise((r) => setTimeout(r, 20));
+
+    const account = db.find("linkedin_accounts", { id: ACCOUNT })!;
+    expect(account.provider_account_id).toBe("acct_new");
+    expect(account.status).toBe("active");
+  });
+
+  it("binds nothing the caller named that the provider does not have", async () => {
+    // The body claims acct_new. The provider has never heard of it. If any of
+    // that body were read, this row would end up holding a stranger's id.
+    const { db, app, linkedin } = harness({ provider_account_id: null, status: "connecting" });
+    linkedin.connectedAccounts = [];
+    refusing(linkedin);
+
+    expect((await unsigned(app)).status).toBe(401);
+    await new Promise((r) => setTimeout(r, 20));
+
+    expect(db.find("linkedin_accounts", { id: ACCOUNT })!.provider_account_id).toBeNull();
+  });
+
+  it("does not let an open endpoint become a way to hammer the provider", async () => {
+    const { db, app, linkedin } = harness({ provider_account_id: null, status: "connecting" });
+    linkedin.connectedAccounts = [{ providerAccountId: "acct_new", reference: USER, status: "ok" }];
+    refusing(linkedin);
+    let calls = 0;
+    const real = linkedin.listAccounts.bind(linkedin);
+    linkedin.listAccounts = async () => {
+      calls += 1;
+      return real();
+    };
+
+    for (let i = 0; i < 5; i += 1) {
+      expect((await unsigned(app)).status).toBe(401);
+      await new Promise((r) => setTimeout(r, 20));
+    }
+
+    // Anyone can POST here without authenticating, so the debounce is the whole
+    // defence against one open door becoming an amplifier.
+    expect(calls).toBe(1);
+    void db;
+  });
+});

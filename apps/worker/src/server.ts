@@ -28,7 +28,7 @@ import type IORedis from "ioredis";
 import type { WorkerContext } from "./context.js";
 import { bookFromLink, readBookingPage } from "./jobs/book.js";
 import { connectCalendarFeed, disconnectCalendarFeed } from "./jobs/calendar-feed.js";
-import { reconcileAccount } from "./accounts.js";
+import { reconcileAccount, recoverAccounts } from "./accounts.js";
 import { runDiagnostics } from "./jobs/diagnostics.js";
 import { eraseProspect, exportWorkspace } from "./jobs/retention.js";
 import { inviteEmail } from "@le/email";
@@ -763,6 +763,29 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
         bytes: body.length,
       });
       console.error("rejected account webhook", err);
+
+      /*
+       * A delivery we cannot verify is still a doorbell.
+       *
+       * Not a key: not one byte of that body is read, and the answer is still
+       * 401. But refusing it and learning nothing is what left this deployment
+       * holding a dead account id for days at a time. The provider does not
+       * sign the `notify_url` it is handed on a hosted auth link, so the one
+       * delivery that says "a rep just connected" can never verify — and the
+       * only other path to binding was a person loading an authenticated page
+       * before the nightly sweep. Miss that, and the row sits `connecting`
+       * while the account works perfectly at the provider.
+       *
+       * So the ring makes us *ask*. `recoverAccounts` pulls the list over our
+       * own authenticated call and matches only accounts carrying the rep's
+       * own user id — rule 8's binding rule, untouched. Nothing the caller
+       * sent can influence what is bound, which is what makes this safe to run
+       * for an unauthenticated request.
+       *
+       * Debounced, because the endpoint is open: without it, anyone who can
+       * POST here could make us call the provider as fast as they like.
+       */
+      void pullAfterUnverifiedNotice(ctx);
       return c.json({ error: "invalid signature" }, 401);
     }
 
@@ -1400,6 +1423,52 @@ function describeProviderFailure(err: unknown): string {
  * them writing a different status, or matching on something else, would mean a
  * connection that behaves differently depending on how it arrived.
  */
+/**
+ * How often an unverified delivery may make us call the provider.
+ *
+ * The endpoint answers before anyone is authenticated, so this is the whole
+ * defence against an open door turning into an amplifier. Thirty seconds is
+ * short enough that a real connection binds while the rep is still looking at
+ * the page, and long enough that a flood costs two provider calls a minute.
+ */
+const NOTICE_PULL_DEBOUNCE_MS = 30_000;
+
+/**
+ * Ask the provider what it actually has, because something says it changed.
+ *
+ * Never reads the delivery. The caller has already refused it; this only turns
+ * "somebody rang" into "so we looked", and what it looks at is a list we
+ * fetched ourselves. Failures are swallowed on purpose: this runs beside a
+ * response that has already been decided, and a provider outage must not turn
+ * a 401 into a 500.
+ */
+async function pullAfterUnverifiedNotice(ctx: WorkerContext): Promise<void> {
+  try {
+    const { data: last } = await ctx.db
+      .from("worker_heartbeats")
+      .select("beat_at")
+      .eq("name", "accounts:pull")
+      .maybeSingle();
+
+    const since = last?.beat_at ? Date.now() - new Date(last.beat_at).getTime() : Infinity;
+    if (since < NOTICE_PULL_DEBOUNCE_MS) return;
+
+    // Stamped before the work, not after: two deliveries arriving together
+    // would otherwise both read a stale timestamp and both call the provider.
+    await recordBeat(ctx.db, "accounts:pull", { at: new Date().toISOString(), trigger: "unverified-notice" });
+
+    const result = await recoverAccounts(ctx.db, ctx.linkedin);
+    await recordBeat(ctx.db, "accounts:pull", {
+      at: new Date().toISOString(),
+      trigger: "unverified-notice",
+      checked: result.checked,
+      repaired: result.repaired,
+    });
+  } catch (err) {
+    console.error("pull after unverified account notice failed", err);
+  }
+}
+
 async function bindAccounts(ctx: WorkerContext, accounts: ConnectedAccount[]): Promise<number> {
   let bound = 0;
   for (const account of accounts) {

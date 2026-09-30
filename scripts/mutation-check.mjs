@@ -2105,6 +2105,22 @@ const MUTATIONS = [
     pkg: "@le/worker",
   },
   {
+    id: "connect/an-unverifiable-notice-still-makes-us-look",
+    rule: "A refused account delivery still triggers a pull from the provider; the hosted flow's notify is never signed, so refusing and learning nothing leaves the row holding a dead id until the nightly sweep",
+    file: "apps/worker/src/server.ts",
+    from: "      void pullAfterUnverifiedNotice(ctx);",
+    to: "      void 0;",
+    pkg: "@le/worker",
+  },
+  {
+    id: "connect/the-open-endpoint-is-debounced",
+    rule: "The pull an unauthenticated caller can trigger is rate limited; without it one open door is a way to hammer the provider",
+    file: "apps/worker/src/server.ts",
+    from: "    if (since < NOTICE_PULL_DEBOUNCE_MS) return;",
+    to: "    if (false) return;",
+    pkg: "@le/worker",
+  },
+  {
     id: "connect/recovery-walks-the-active-rows",
     rule: "Recovery looks at accounts that still say active; a provider replacing one does not make the row unhealthy, so excluding active is excluding the common case",
     file: "apps/worker/src/accounts.ts",
