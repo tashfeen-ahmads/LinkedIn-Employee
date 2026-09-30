@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MockLinkedInProvider } from "@le/linkedin";
+import { MockLinkedInProvider, UnipileError } from "@le/linkedin";
 import { FakeDb } from "./fake-db.js";
 import { encryptJson } from "../src/crypto.js";
 import { createServer } from "../src/server.js";
@@ -1019,5 +1019,91 @@ describe("the link the rep is sent to LinkedIn with", () => {
     expect(new URL(asked.successUrl).searchParams.get("claim")).toBeTruthy();
     // And the failure still lands somewhere a person can act on.
     expect(asked.failureUrl).toContain("/app/profile");
+  });
+});
+
+/*
+ * Whose words come back to the browser when the provider refuses.
+ *
+ * `/auth/linkedin/link` and `/jobs/linkedin-claim` both answer the web app,
+ * and the web app puts `error` straight into `?error=` and renders it in the
+ * red banner on `/app/profile`. So this text is read by the rep who just
+ * pressed Connect LinkedIn — and for a 401 it used to read "its administrator
+ * needs to check the Unipile access token", and for a 404 "check the Unipile
+ * DSN, including its port".
+ *
+ * That is rule 54 exactly, outside the screen rule 54 was written about: our
+ * supply chain and our credentials printed on a customer's dashboard, with the
+ * repair assigned to somebody they are not, in the one flow every customer has
+ * to finish before the product does anything at all. And it was live — this
+ * deployment's token and DSN belong to two different Unipile tenants, so 401
+ * is the branch it actually hits.
+ *
+ * The sentence is not deleted, it is moved: `operatorProviderFailure` names
+ * the variable and goes to the worker's log.
+ */
+describe("a provider refusal, in the words the rep reads", () => {
+  /** Words that belong to whoever holds the credentials, and to nobody else. */
+  const OPERATOR_ONLY = ["unipile", "dsn", "access token", "administrator", "deployment", "credential"];
+
+  function refusing(status: number) {
+    const h = harness();
+    h.linkedin.createHostedAuthLink = async () => {
+      throw new UnipileError(`failed with ${status}`, status, "nope");
+    };
+    h.linkedin.listAccounts = async () => {
+      throw new UnipileError(`failed with ${status}`, status, "nope");
+    };
+    return h;
+  }
+
+  // Every status the function branches on, so no branch escapes by not being
+  // exercised — which is how the system-check guard missed four of these.
+  for (const status of [401, 403, 404, 500, 429]) {
+    it(`says nothing operator-only to the rep on a ${status}`, async () => {
+      const { app } = refusing(status);
+
+      const link = await app.request("/auth/linkedin/link", {
+        method: "POST",
+        body: JSON.stringify({ workspaceId: WORKSPACE, userId: USER }),
+        headers: { "content-type": "application/json", authorization: `Bearer ${INTERNAL_SECRET}` },
+      });
+      const body = (await link.json()) as { error?: string };
+
+      expect(body.error, `a ${status} must still say something`).toBeTruthy();
+      const said = (body.error ?? "").toLowerCase();
+      for (const word of OPERATOR_ONLY) {
+        expect(said, `a ${status} leaks "${word}" to the rep`).not.toContain(word);
+      }
+      // An environment variable is SHOUTED, which is how one is recognised
+      // without listing every name this deployment might gain. Matched on the
+      // real text, never a lowercased copy — that mistake made the identical
+      // guard on `/app/system` test nothing for its whole life.
+      expect(body.error ?? "").not.toMatch(/[A-Z][A-Z0-9]{3,}_[A-Z0-9_]+/);
+    });
+  }
+
+  it("still tells the rep it is ours rather than leaving them to guess", async () => {
+    // Moving the sentence must not turn into saying nothing: a refusal they
+    // cannot act on has to name that it is ours and where to tell us.
+    const { app } = refusing(401);
+    const link = await app.request("/auth/linkedin/link", {
+      method: "POST",
+      body: JSON.stringify({ workspaceId: WORKSPACE, userId: USER }),
+      headers: { "content-type": "application/json", authorization: `Bearer ${INTERNAL_SECRET}` },
+    });
+    const body = (await link.json()) as { error?: string };
+    expect(body.error).toMatch(/ours to fix/i);
+    expect(body.error).toMatch(/support/i);
+  });
+
+  it("gives the claim route the same treatment", async () => {
+    // The other route the browser reads, and the one the connect return trip
+    // runs on arrival.
+    const { app } = refusing(401);
+    const res = await claim(app, { workspaceId: WORKSPACE, userId: USER, accountId: "prov-1" });
+    const body = (await res.json()) as { error?: string };
+    expect((body.error ?? "").toLowerCase()).not.toContain("unipile");
+    expect(body.error ?? "").not.toMatch(/[A-Z][A-Z0-9]{3,}_[A-Z0-9_]+/);
   });
 });

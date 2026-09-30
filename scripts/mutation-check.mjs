@@ -2165,6 +2165,22 @@ const MUTATIONS = [
     pkg: "@le/worker",
   },
   {
+    id: "connect/the-rep-is-not-told-our-vendor",
+    rule: "The refusal the rep reads in the red banner names no vendor, no credential and no environment variable — rule 54, on the one flow every customer must finish before the product does anything; the version that does name them belongs to the log",
+    file: "apps/worker/src/server.ts",
+    from: '    return "We could not connect to LinkedIn on your behalf. This is ours to fix rather than yours — tell us from the Support page and we will.";',
+    to: '    return operatorProviderFailure(err);',
+    pkg: "@le/worker",
+  },
+  {
+    id: "connect/the-page-does-not-claim-a-connection-it-did-not-make",
+    rule: "Arriving back from the hosted flow reports what actually happened; the green \"LinkedIn is connected\" was shown unconditionally, so a refused claim produced a page contradicting the database with the reassuring half being the one somebody reads",
+    file: "apps/web/src/app/app/profile/claim.ts",
+    from: "  if (claim.ok && claim.data?.claimed) {",
+    to: "  if (true) {",
+    pkg: "@le/web",
+  },
+  {
     id: "accounts/a-refused-list-is-not-a-clean-sweep",
     rule: "Recovery reports that it could not ask the provider; `repaired: 0` from a refused call is otherwise identical to a night with nothing to fix, and the nightly record then writes down a sweep that never happened",
     file: "apps/worker/src/accounts.ts",

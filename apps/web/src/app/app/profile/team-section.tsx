@@ -4,6 +4,7 @@ import Link from "next/link";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { callWorker, errorQuery, noticeQuery } from "@/lib/worker";
+import { describeClaim } from "./claim";
 import { PLAN_SEATS } from "@le/billing";
 import { createInviteToken, inviteExpiry, INVITE_TTL_DAYS } from "@/lib/invitations";
 import { PageNotice } from "@/components/page-notice";
@@ -144,13 +145,32 @@ export async function TeamSection({
    * signing in and believes they are connected. Anything they have to press
    * after that is a step nobody told them about.
    */
+  /*
+   * And it reports what actually happened, which it did not.
+   *
+   * The result was discarded and the redirect said "LinkedIn is connected." —
+   * in the green notice, unconditionally. So a claim the worker refused, or a
+   * provider it could not reach at all, produced a page telling the rep they
+   * were connected while the row sat at `connecting`. That is the exact
+   * report this product spent three days chasing: a screen that contradicts
+   * the database, with the reassuring half being the one somebody reads.
+   *
+   * There is no version of this worth showing as success. A refusal names
+   * something to do; a provider failure says plainly that it is ours.
+   */
   if (params.connected && params.account_id) {
-    await callWorker("/jobs/linkedin-claim", {
+    const claim = await callWorker<{ claimed?: boolean; reason?: string }>("/jobs/linkedin-claim", {
       workspaceId: session.workspaceId,
       userId: session.userId,
       accountId: params.account_id,
     });
-    redirect("/app/profile?notice=" + encodeURIComponent("LinkedIn is connected."));
+
+    const said = describeClaim(claim);
+    redirect(
+      said.tone === "notice"
+        ? noticeQuery("/app/profile", said.message)
+        : errorQuery("/app/profile", said.message),
+    );
   }
 
   const [{ data: members }, { data: accounts }, { data: invitations }, { data: workspace }] =

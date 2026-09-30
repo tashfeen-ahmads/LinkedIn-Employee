@@ -657,8 +657,10 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
       });
     } catch (err) {
       // The provider's own body goes to the log, never to the browser: it is
-      // written for whoever holds the credentials, not for the rep.
-      console.error("hosted auth link failed", err);
+      // written for whoever holds the credentials, not for the rep. That was
+      // already the intention here and `describeProviderFailure` broke it —
+      // it named the vendor and the credential in the text this returns.
+      console.error("hosted auth link failed", operatorProviderFailure(err), err);
       return c.json({ error: describeProviderFailure(err) }, 502);
     }
 
@@ -940,7 +942,7 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
     try {
       accounts = await ctx.linkedin.listAccounts();
     } catch (err) {
-      console.error("listing provider accounts failed", err);
+      console.error("listing provider accounts failed", operatorProviderFailure(err), err);
       return c.json({ error: describeProviderFailure(err) }, 502);
     }
 
@@ -1425,28 +1427,70 @@ function decryptState(state: string, key: string): { workspaceId: string; userId
  * the DSN (which is per-account and includes a port, so it is the value people
  * get wrong), and a 5xx is nobody's to fix but will pass.
  */
+/**
+ * What went wrong with the provider, said to the person who clicked.
+ *
+ * This text goes into a redirect's `?error=` and is rendered in the red banner
+ * on `/app/profile`, so the reader is the rep who just pressed Connect
+ * LinkedIn. It used to tell them, in these words, that "its administrator
+ * needs to check the Unipile access token" — naming the vendor we buy LinkedIn
+ * access from, naming the credential, and assigning the repair to somebody
+ * they are not, on the single most-used screen in the product. Rule 54 moved
+ * exactly this off `/app/system`; it was still live here, in the one flow
+ * every customer has to complete before anything works at all.
+ *
+ * The distinction that matters is not how much detail to give, it is whose
+ * fault it is. A rejected credential and a misconfigured address are the
+ * deployment's; a provider outage is nobody's and will pass; a refusal with a
+ * status is worth reporting as a refusal. None of the three is a thing the rep
+ * can act on, so all three say so plainly and point at support rather than
+ * describing a remedy they cannot perform.
+ */
 function describeProviderFailure(err: unknown): string {
   const status = (err as { status?: number })?.status;
-  if (status === 401 || status === 403) {
-    return "LinkedIn's provider rejected this deployment's credentials. Its administrator needs to check the Unipile access token.";
-  }
-  if (status === 404) {
-    return "LinkedIn's provider could not be reached at the configured address. Its administrator needs to check the Unipile DSN, including its port.";
+  if (status === 401 || status === 403 || status === 404) {
+    // Ours, and the two cases are one sentence to them: nothing they do on
+    // this page will change it.
+    return "We could not connect to LinkedIn on your behalf. This is ours to fix rather than yours — tell us from the Support page and we will.";
   }
   if (typeof status === "number" && status >= 500) {
-    return "LinkedIn's provider is having a problem. Please try again in a few minutes.";
+    return "LinkedIn is having a problem on their side. Please try again in a few minutes.";
   }
   if (typeof status === "number") {
-    return `LinkedIn's provider refused the request (${status}).`;
+    return "LinkedIn refused the request. If it keeps happening, tell us from the Support page.";
+  }
+  return "We could not reach LinkedIn just now. Please try again, and tell us from the Support page if it keeps happening.";
+}
+
+/**
+ * The same fault for whoever runs the deployment.
+ *
+ * Moving the sentence is the point; deleting it is not (rule 54). Somebody
+ * still has to fix the credentials, and this is the version that names which
+ * ones — recorded in the worker's own log and on the operator's half of
+ * `/app/system`, never returned to the browser.
+ *
+ * A 401 and a 404 are different people doing different things: a rejected key
+ * is the access token, and a 404 is almost always the DSN, which is
+ * per-account and carries a port, so it is the value that gets pasted wrong.
+ * Telling somebody to re-copy a credential that was already correct is its own
+ * wasted afternoon.
+ */
+function operatorProviderFailure(err: unknown): string {
+  const status = (err as { status?: number })?.status;
+  const said = (err as { message?: string })?.message ?? "no message";
+  if (status === 401 || status === 403) {
+    return `The provider rejected this deployment's credentials (${status}). Check UNIPILE_ACCESS_TOKEN, and that it belongs to the same tenant as UNIPILE_DSN. Provider said: ${said}`;
+  }
+  if (status === 404) {
+    return `The provider could not be reached at the configured address (404). Check UNIPILE_DSN, including its port. Provider said: ${said}`;
+  }
+  if (typeof status === "number") {
+    return `The provider refused the request (${status}). Provider said: ${said}`;
   }
   // No status means no HTTP response at all — the request never completed, so
   // this is the address or the network rather than anything the provider said.
-  // The cause is a hostname and a failure code, neither of which is a secret,
-  // and it is the difference between guessing and knowing.
-  const cause = (err as { message?: string })?.message;
-  return cause
-    ? `Could not reach LinkedIn's provider: ${cause}`
-    : "Could not reach LinkedIn's provider. Please try again.";
+  return `No HTTP response from the provider, so this is the address or the network rather than anything it said: ${said}`;
 }
 
 /**
@@ -1506,6 +1550,7 @@ async function claimAccount(
   try {
     accounts = await ctx.linkedin.listAccounts();
   } catch (err) {
+    console.error("claim could not ask the provider", operatorProviderFailure(err), err);
     return { status: "provider_error", claimed: false, reason: describeProviderFailure(err) };
   }
 
