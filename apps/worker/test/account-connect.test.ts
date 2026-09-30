@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { MockLinkedInProvider } from "@le/linkedin";
 import { FakeDb } from "./fake-db.js";
+import { encryptJson } from "../src/crypto.js";
 import { createServer } from "../src/server.js";
 import { applyHealth, type AccountRecord } from "../src/accounts.js";
 import type { WorkerContext } from "../src/context.js";
@@ -10,6 +11,7 @@ const WORKSPACE = "11111111-1111-4111-8111-111111111111";
 const USER = "22222222-2222-4222-8222-222222222222";
 const ACCOUNT = "33333333-3333-4333-8333-333333333333";
 const INTERNAL_SECRET = "internal-secret-at-least-32-characters-long";
+const CREDENTIALS_KEY = "a".repeat(64);
 
 function harness(accountOverrides: Record<string, unknown> = {}) {
   const db = new FakeDb();
@@ -43,6 +45,10 @@ function harness(accountOverrides: Record<string, unknown> = {}) {
       // there: it names a workspace and a user, so an unauthenticated caller
       // could bind accounts in someone else's tenant.
       INTERNAL_API_SECRET: INTERNAL_SECRET,
+      // The connect return trip is authorised by a token this worker mints
+      // with this key rather than by a session, so a harness without one is
+      // testing a deployment that cannot connect at all.
+      CREDENTIALS_KEY: CREDENTIALS_KEY,
     } as WorkerContext["env"],
     agentsFor: () => ({ client: {} as never }),
   } as unknown as WorkerContext;
@@ -836,5 +842,133 @@ describe("an account notice we cannot verify", () => {
     // defence against one open door becoming an amplifier.
     expect(calls).toBe(1);
     void db;
+  });
+});
+
+/**
+ * Connecting must not depend on a cookie outliving the trip to LinkedIn.
+ *
+ * The hosted flow used to return straight to an app page, and that page read
+ * the signed-in session to know whose account to attach. So the whole
+ * connection hung on a cookie still being present several minutes later, on
+ * whichever host the redirect named. When it was not — an expired session, a
+ * different host, a browser that dropped it — the rep landed on /login, the
+ * claim never ran, and the row sat `connecting` holding nothing while the
+ * account worked perfectly at the provider. Pressing Connect again reproduced
+ * it exactly, which is what made it cost days rather than minutes.
+ *
+ * The return trip now carries a token this worker minted. Identity comes out
+ * of the token; everything it unlocks is still guarded by `claimAccount`.
+ */
+describe("the connect return trip", () => {
+  const token = (workspaceId = WORKSPACE, userId = USER, issuedAt = Date.now()) =>
+    encryptJson({ workspaceId, userId, issuedAt }, CREDENTIALS_KEY);
+
+  const done = (app: ReturnType<typeof createServer>, query: string) =>
+    app.request(`/auth/linkedin/done?${query}`);
+
+  it("binds the account with no session anywhere in the request", async () => {
+    const { db, app, linkedin } = harness({ provider_account_id: null, status: "connecting" });
+    linkedin.connectedAccounts = [{ providerAccountId: "acct_new", reference: "whoever", status: "ok" }];
+
+    const res = await done(app, `claim=${encodeURIComponent(token())}&account_id=acct_new`);
+
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toContain("/app/profile");
+    const account = db.find("linkedin_accounts", { id: ACCOUNT })!;
+    expect(account.provider_account_id).toBe("acct_new");
+    expect(account.status).toBe("active");
+  });
+
+  it("binds nothing without a token, and says so rather than rendering", async () => {
+    const { db, app, linkedin } = harness({ provider_account_id: null, status: "connecting" });
+    linkedin.connectedAccounts = [{ providerAccountId: "acct_new", reference: "whoever", status: "ok" }];
+
+    const res = await done(app, "account_id=acct_new");
+
+    expect(res.status).toBe(302);
+    expect(res.headers.get("location")).toContain("error=connection_incomplete");
+    expect(db.find("linkedin_accounts", { id: ACCOUNT })!.provider_account_id).toBeNull();
+  });
+
+  it("binds nothing for a token it did not mint", async () => {
+    // The token is the whole authorisation, so a forged one must buy nothing.
+    const { db, app, linkedin } = harness({ provider_account_id: null, status: "connecting" });
+    linkedin.connectedAccounts = [{ providerAccountId: "acct_new", reference: "whoever", status: "ok" }];
+    const forged = encryptJson({ workspaceId: WORKSPACE, userId: USER, issuedAt: Date.now() }, "b".repeat(64));
+
+    const res = await done(app, `claim=${encodeURIComponent(forged)}&account_id=acct_new`);
+
+    expect(res.headers.get("location")).toContain("error=connection_incomplete");
+    expect(db.find("linkedin_accounts", { id: ACCOUNT })!.provider_account_id).toBeNull();
+  });
+
+  it("binds nothing for a token that has gone stale", async () => {
+    const { db, app, linkedin } = harness({ provider_account_id: null, status: "connecting" });
+    linkedin.connectedAccounts = [{ providerAccountId: "acct_new", reference: "whoever", status: "ok" }];
+    const old = token(WORKSPACE, USER, Date.now() - 2 * 60 * 60_000);
+
+    const res = await done(app, `claim=${encodeURIComponent(old)}&account_id=acct_new`);
+
+    expect(res.headers.get("location")).toContain("error=connection_expired");
+    expect(db.find("linkedin_accounts", { id: ACCOUNT })!.provider_account_id).toBeNull();
+  });
+
+  it("cannot be pointed at an account another row already holds", async () => {
+    // The token names who started the flow; it does not licence taking
+    // somebody else's connection. That guard lives in claimAccount and has to
+    // still apply on this path.
+    const { db, app, linkedin } = harness({ provider_account_id: null, status: "connecting" });
+    db.seed("linkedin_accounts", [
+      {
+        id: "44444444-4444-4444-8444-444444444444",
+        workspace_id: WORKSPACE,
+        user_id: "99999999-9999-4999-8999-999999999999",
+        provider: "mock",
+        provider_account_id: "acct_theirs",
+        status: "active",
+      },
+    ]);
+    linkedin.connectedAccounts = [{ providerAccountId: "acct_theirs", reference: "whoever", status: "ok" }];
+
+    await done(app, `claim=${encodeURIComponent(token())}&account_id=acct_theirs`);
+
+    expect(db.find("linkedin_accounts", { id: ACCOUNT })!.provider_account_id).toBeNull();
+  });
+
+  it("does not depend on the provider labelling the account with the rep", async () => {
+    // The whole reason this path exists rather than a pull: the provider's
+    // account list carries nothing tying an account to whoever started the
+    // flow, so matching by reference can never work however it is spelled.
+    const { db, app, linkedin } = harness({ provider_account_id: null, status: "connecting" });
+    linkedin.connectedAccounts = [
+      { providerAccountId: "acct_new", reference: "Tashfeen Ahmad", status: "ok" },
+    ];
+
+    await done(app, `claim=${encodeURIComponent(token())}&account_id=acct_new`);
+
+    expect(db.find("linkedin_accounts", { id: ACCOUNT })!.provider_account_id).toBe("acct_new");
+  });
+});
+
+describe("the link the rep is sent to LinkedIn with", () => {
+  it("comes back to the worker carrying a token, not to a page needing a cookie", async () => {
+    const { ctx, app, linkedin } = harness();
+    void ctx;
+
+    const res = await app.request("/auth/linkedin/link", {
+      method: "POST",
+      body: JSON.stringify({ workspaceId: WORKSPACE, userId: USER }),
+      headers: { "content-type": "application/json", authorization: `Bearer ${INTERNAL_SECRET}` },
+    });
+    expect(res.status).toBe(200);
+
+    const asked = linkedin.lastHostedAuth!;
+    // The worker's own host: the return has to reach the thing holding the key
+    // that can read the token, and no page in between.
+    expect(asked.successUrl.startsWith("http://worker.test/auth/linkedin/done")).toBe(true);
+    expect(new URL(asked.successUrl).searchParams.get("claim")).toBeTruthy();
+    // And the failure still lands somewhere a person can act on.
+    expect(asked.failureUrl).toContain("/app/profile");
   });
 });

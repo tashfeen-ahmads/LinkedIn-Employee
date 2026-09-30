@@ -59,7 +59,22 @@ export class MockLinkedInProvider implements LinkedInProvider {
     return this.connectedAccounts;
   }
 
-  async createHostedAuthLink(): Promise<HostedAuthLink> {
+  /**
+   * What the last link was asked for, so a test can check the return trip.
+   *
+   * The success URL is where connecting either completes or dies, and it was
+   * the thing that killed it: a page that needed a session the browser no
+   * longer had. A mock that throws the input away cannot notice that changing.
+   */
+  lastHostedAuth: { userId: string; successUrl: string; failureUrl: string; notifyUrl?: string } | null = null;
+
+  async createHostedAuthLink(input: {
+    userId: string;
+    successUrl: string;
+    failureUrl: string;
+    notifyUrl?: string;
+  }): Promise<HostedAuthLink> {
+    this.lastHostedAuth = input;
     return { url: "https://example.test/hosted-auth", expiresAt: new Date(Date.now() + 3_600_000).toISOString() };
   }
 

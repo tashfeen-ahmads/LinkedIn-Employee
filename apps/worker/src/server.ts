@@ -223,7 +223,14 @@ async function assertMembership(
   return Boolean(data);
 }
 
-/** Signed state so the OAuth callback cannot be used to bind someone else's calendar. */
+/**
+ * Signed state so a callback cannot be used to bind somebody else's account.
+ *
+ * Used by the calendar OAuth flow and by the LinkedIn connect return trip.
+ * AES-GCM with the deployment's own key, so it is unforgeable rather than
+ * merely opaque, and it carries the moment it was minted so a stale one can be
+ * refused.
+ */
 function encodeState(workspaceId: string, userId: string, key: string): string {
   return encryptJson({ workspaceId, userId, issuedAt: Date.now() }, key);
 }
@@ -616,8 +623,34 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
     try {
       link = await ctx.linkedin.createHostedAuthLink({
         userId: parsed.data.userId,
-        successUrl: `${ctx.env.APP_URL}/app/team?connected=1`,
-        failureUrl: `${ctx.env.APP_URL}/app/team?error=connection_failed`,
+        /*
+         * The return trip carries who started it, so it cannot depend on a
+         * session surviving.
+         *
+         * It used to land straight on an app page, and that page read the
+         * signed-in session to know whose account to attach. Which means the
+         * whole connection hinged on a cookie still being there several
+         * minutes later, on the host the redirect happens to name — and when
+         * it was not, the rep landed on /login, the claim never ran, and the
+         * row sat `connecting` holding nothing while the account worked
+         * perfectly at the provider. Reconnecting produced the same dead end,
+         * every time, because pressing the button again changes none of that.
+         *
+         * So the success URL comes back *here*, carrying a token this worker
+         * minted and only this worker can read. Identity comes out of the
+         * token rather than out of a cookie. It is not weaker than the session
+         * it replaces: it is encrypted and authenticated with the deployment's
+         * own key, it expires in an hour, and everything it unlocks is still
+         * guarded by `claimAccount` — the provider is asked rather than
+         * believed, an account another row holds is refused, and only a row
+         * this rep's own Connect press left waiting can be filled.
+         *
+         * Without a key to mint one, the old behaviour stands rather than the
+         * connection being refused: a deployment missing CREDENTIALS_KEY keeps
+         * exactly what it had.
+         */
+        successUrl: claimReturnUrl(ctx, parsed.data.workspaceId, parsed.data.userId),
+        failureUrl: `${ctx.env.APP_URL}/app/profile?error=connection_failed#team`,
         // The redirect tells the rep's browser it worked. This tells us, and
         // until it arrives the account has no provider id, so every job skips it.
         notifyUrl: `${ctx.env.WORKER_URL}/webhooks/unipile/accounts`,
@@ -846,54 +879,54 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
       return c.json({ error: "not a member of that workspace" }, 403);
     }
 
-    // Asked, not assumed: an id from a query string is a claim about the
-    // provider, and the provider is the one that settles it.
-    let accounts;
+    const result = await claimAccount(ctx, { workspaceId, userId, accountId });
+    if (result.status === "provider_error") return c.json({ error: result.reason }, 502);
+    if (!result.claimed) return c.json({ claimed: false, reason: result.reason });
+    return c.json({ claimed: true, status: result.accountStatus });
+  });
+
+  /**
+   * Where the hosted flow lands, and the reason connecting now works first time.
+   *
+   * This is a public GET because the provider redirects a browser here, so it
+   * proves nothing by arriving. Everything it is allowed to do comes out of
+   * `claim`, which this worker minted with its own key and nobody else can
+   * forge or alter. A request without one, with a stale one, or with one that
+   * does not decrypt is sent to the app with an error rather than being told
+   * anything about what exists here.
+   *
+   * It never renders. Whatever happened, the rep ends up on the page they
+   * expect, with the outcome in the query string — including the refusals,
+   * because "we could not attach it" shown on a screen is the difference
+   * between a two-minute fix and the three days this cost.
+   */
+  app.get("/auth/linkedin/done", async (c) => {
+    const back = (query: string) => c.redirect(`${ctx.env.APP_URL}/app/profile?${query}#team`, 302);
+
+    const claim = c.req.query("claim");
+    const accountId = c.req.query("account_id");
+    if (!claim || !ctx.env.CREDENTIALS_KEY) return back("error=connection_incomplete");
+
+    let who: { workspaceId: string; userId: string; issuedAt: number };
     try {
-      accounts = await ctx.linkedin.listAccounts();
-    } catch (err) {
-      return c.json({ error: describeProviderFailure(err) }, 502);
+      who = decryptState(claim, ctx.env.CREDENTIALS_KEY);
+    } catch {
+      return back("error=connection_incomplete");
     }
-    const match = accounts.find((a) => a.providerAccountId === accountId);
-    if (!match) return c.json({ claimed: false, reason: "the provider has no such account" });
+    if (Date.now() - who.issuedAt > CLAIM_TOKEN_TTL_MS) return back("error=connection_expired");
 
-    // Somebody else's, and not available to be taken.
-    const { data: taken } = await ctx.db
-      .from("linkedin_accounts")
-      .select("id, user_id")
-      .eq("provider_account_id", accountId)
-      .maybeSingle();
-    if (taken && taken.user_id !== userId) {
-      return c.json({ claimed: false, reason: "that account is already attached to someone else" });
-    }
+    // The provider appends this itself. Without it there is nothing to attach,
+    // and the page's own check against the provider is the next thing to run.
+    if (!accountId) return back("connected=1");
 
-    const { data: pending } = await ctx.db
-      .from("linkedin_accounts")
-      .select("id")
-      .eq("workspace_id", workspaceId)
-      .eq("user_id", userId)
-      .in("status", ["connecting", "reauth_required", "restricted"])
-      .maybeSingle();
-    if (!pending) return c.json({ claimed: false, reason: "no connection was started here" });
+    const result = await claimAccount(ctx, { ...who, accountId });
+    if (result.claimed) return back("connected=1");
 
-    await ctx.db
-      .from("linkedin_accounts")
-      .update({
-        provider_account_id: match.providerAccountId,
-        display_name: match.displayName ?? null,
-        status: match.status === "ok" ? "active" : "reauth_required",
-        status_detail: null,
-        connected_at: new Date().toISOString(),
-        paused_at: null,
-      })
-      .eq("id", pending.id);
-
-    await recordBeat(ctx.db, "linkedin:claim", {
-      at: new Date().toISOString(),
-      claimed: true,
-      status: match.status,
-    });
-    return c.json({ claimed: true, status: match.status });
+    // A refusal still sends them to the page, which asks the provider again
+    // and says what it found. Silence here is what left somebody pressing a
+    // button that changed nothing.
+    console.error("claim on return failed", result.reason);
+    return back("connected=1");
   });
 
   app.post("/jobs/linkedin-refresh", async (c) => {
@@ -1431,6 +1464,93 @@ function describeProviderFailure(err: unknown): string {
  * short enough that a real connection binds while the rep is still looking at
  * the page, and long enough that a flood costs two provider calls a minute.
  */
+/**
+ * Where the hosted flow sends the rep back, and what it carries.
+ *
+ * Falls back to the app page when there is no key to mint a token with, so a
+ * deployment without CREDENTIALS_KEY keeps the behaviour it had rather than
+ * losing the ability to connect at all.
+ */
+function claimReturnUrl(ctx: WorkerContext, workspaceId: string, userId: string): string {
+  if (!ctx.env.CREDENTIALS_KEY) return `${ctx.env.APP_URL}/app/profile?connected=1#team`;
+  const claim = encodeState(workspaceId, userId, ctx.env.CREDENTIALS_KEY);
+  return `${ctx.env.WORKER_URL}/auth/linkedin/done?claim=${encodeURIComponent(claim)}`;
+}
+
+/** A claim token is good for an hour: long enough to sign in to LinkedIn, short enough to be worthless later. */
+const CLAIM_TOKEN_TTL_MS = 60 * 60_000;
+
+type ClaimOutcome =
+  | { status: "ok"; claimed: true; accountStatus: string }
+  | { status: "refused"; claimed: false; reason: string }
+  | { status: "provider_error"; claimed: false; reason: string };
+
+/**
+ * Attach the account the hosted flow produced to the row that is waiting for
+ * one.
+ *
+ * Lifted out of the route because it now has two callers and they arrive with
+ * the rep's identity established in different ways — a signed-in session on
+ * one, a token this worker minted on the other. Everything after that point is
+ * the same, and it is the part that must not differ: ask the provider rather
+ * than believe the id, never take an account another row already holds, and
+ * only ever fill a row this workspace's own Connect press left waiting.
+ */
+async function claimAccount(
+  ctx: WorkerContext,
+  input: { workspaceId: string; userId: string; accountId: string },
+): Promise<ClaimOutcome> {
+  // Asked, not assumed: an id from a query string is a claim about the
+  // provider, and the provider is the one that settles it.
+  let accounts;
+  try {
+    accounts = await ctx.linkedin.listAccounts();
+  } catch (err) {
+    return { status: "provider_error", claimed: false, reason: describeProviderFailure(err) };
+  }
+
+  const match = accounts.find((a) => a.providerAccountId === input.accountId);
+  if (!match) return { status: "refused", claimed: false, reason: "the provider has no such account" };
+
+  // Somebody else's, and not available to be taken.
+  const { data: taken } = await ctx.db
+    .from("linkedin_accounts")
+    .select("id, user_id")
+    .eq("provider_account_id", input.accountId)
+    .maybeSingle();
+  if (taken && taken.user_id !== input.userId) {
+    return { status: "refused", claimed: false, reason: "that account is already attached to someone else" };
+  }
+
+  const { data: pending } = await ctx.db
+    .from("linkedin_accounts")
+    .select("id")
+    .eq("workspace_id", input.workspaceId)
+    .eq("user_id", input.userId)
+    .in("status", ["connecting", "reauth_required", "restricted"])
+    .maybeSingle();
+  if (!pending) return { status: "refused", claimed: false, reason: "no connection was started here" };
+
+  await ctx.db
+    .from("linkedin_accounts")
+    .update({
+      provider_account_id: match.providerAccountId,
+      display_name: match.displayName ?? null,
+      status: match.status === "ok" ? "active" : "reauth_required",
+      status_detail: null,
+      connected_at: new Date().toISOString(),
+      paused_at: null,
+    })
+    .eq("id", pending.id);
+
+  await recordBeat(ctx.db, "linkedin:claim", {
+    at: new Date().toISOString(),
+    claimed: true,
+    status: match.status,
+  });
+  return { status: "ok", claimed: true, accountStatus: match.status };
+}
+
 const NOTICE_PULL_DEBOUNCE_MS = 30_000;
 
 /**
