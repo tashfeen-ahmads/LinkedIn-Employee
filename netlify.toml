@@ -38,3 +38,89 @@
     X-Content-Type-Options = "nosniff"
     Referrer-Policy = "strict-origin-when-cross-origin"
     Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+
+# Two hosts, one site.
+#
+# The marketing pages and the dashboard are one Next.js app, so without these
+# every screen answers on both domains: /app/campaigns on norasdr.com and on
+# app.norasdr.com, the same page at two URLs. A search engine reads that as
+# duplicate content, and a person reads it as two products — and the session
+# cookie is set on whichever host they happened to arrive at, so signing in on
+# one leaves them signed out on the other.
+#
+# Netlify matches an absolute `from` against the request's host, which is the
+# only way to say "this rule is for that domain" in this file.
+#
+# `force = true` on all of them: without it a redirect is skipped whenever a
+# file exists at that path, which for this app is always, so the rule would
+# never fire.
+#
+# The marketing pages are not redirected off the app host. Somebody landing on
+# app.norasdr.com/pricing should read the pricing page, not be bounced; only
+# the bare root is sent to the product, because that is the one path where
+# "app.norasdr.com" means "take me to my dashboard".
+
+# Everything that holds a session belongs on the app host.
+[[redirects]]
+  from = "https://norasdr.com/app/*"
+  to = "https://app.norasdr.com/app/:splat"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "https://www.norasdr.com/app/*"
+  to = "https://app.norasdr.com/app/:splat"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "https://norasdr.com/login"
+  to = "https://app.norasdr.com/login"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "https://norasdr.com/signup"
+  to = "https://app.norasdr.com/signup"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "https://norasdr.com/onboarding"
+  to = "https://app.norasdr.com/onboarding"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "https://norasdr.com/invite/*"
+  to = "https://app.norasdr.com/invite/:splat"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "https://norasdr.com/auth/*"
+  to = "https://app.norasdr.com/auth/:splat"
+  status = 301
+  force = true
+
+[[redirects]]
+  from = "https://norasdr.com/admin/*"
+  to = "https://app.norasdr.com/admin/:splat"
+  status = 301
+  force = true
+
+# The app host's front door is the dashboard, not the landing page. Anyone
+# typing app.norasdr.com wants the product; the sales pitch is the other host.
+[[redirects]]
+  from = "https://app.norasdr.com/"
+  to = "https://app.norasdr.com/app"
+  status = 302
+  force = true
+
+# One canonical host for the marketing site. www and the apex serving the same
+# pages is the same duplicate-content problem as above, one level up.
+[[redirects]]
+  from = "https://www.norasdr.com/*"
+  to = "https://norasdr.com/:splat"
+  status = 301
+  force = true

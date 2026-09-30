@@ -129,7 +129,7 @@ it prints → wait for Verified. Then API Keys → Create.
 | Value | Goes to | Shape |
 | --- | --- | --- |
 | `RESEND_API_KEY` | Render | `re_…` |
-| `EMAIL_FROM` | Render | `LinkedIn Employee <hello@yourdomain.com>` |
+| `EMAIL_FROM` | Render | `Nora <hello@norasdr.com>` |
 | `EMAIL_REPLY_TO` | Render, optional | a mailbox a human reads |
 | `EMAIL_PROVIDER` | Render, already `resend` in render.yaml | — |
 

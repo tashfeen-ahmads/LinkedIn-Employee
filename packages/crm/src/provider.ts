@@ -5,7 +5,7 @@ export interface CrmContact {
   jobTitle?: string;
   linkedinUrl: string;
   email?: string;
-  /** Free-form source label, e.g. "LinkedIn Employee". */
+  /** Free-form source label, e.g. the product name. */
   source: string;
 }
 

@@ -1,4 +1,5 @@
 export * from "./schemas.js";
+export * from "./brand.js";
 export * from "./constants.js";
 export * from "./agent.js";
 export * from "./audience.js";

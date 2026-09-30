@@ -1,3 +1,4 @@
+import { BRAND } from "@le/shared";
 import type { EmailMessage } from "./provider.js";
 import { escapeHtml, layout, list, paragraph } from "./render.js";
 
@@ -13,7 +14,7 @@ export interface InviteEmailInput {
 export function inviteEmail(input: InviteEmailInput): EmailMessage {
   const inviter = input.inviterName ?? "A colleague";
   const lines = [
-    `${inviter} has invited you to join ${input.workspaceName} on LinkedIn Employee as a ${input.role}.`,
+    `${inviter} has invited you to join ${input.workspaceName} on ${BRAND.name} as a ${input.role}.`,
     "You will connect your own LinkedIn account — nobody shares a login, and no two people on the team will ever message the same prospect.",
   ];
 
@@ -64,7 +65,7 @@ export function digestEmail(input: DigestEmailInput): EmailMessage {
       ? `${input.awaitingApproval} ${input.awaitingApproval === 1 ? "reply needs" : "replies need"} you`
       : input.meetingsBooked > 0
         ? `${input.meetingsBooked} ${input.meetingsBooked === 1 ? "meeting" : "meetings"} booked yesterday`
-        : "Your LinkedIn Employee digest";
+        : `Your ${BRAND.name} digest`;
 
   const stats = [
     `${input.invitesSent} ${input.invitesSent === 1 ? "invitation" : "invitations"} sent`,
@@ -107,7 +108,7 @@ export function digestEmail(input: DigestEmailInput): EmailMessage {
       title: subject,
       body: blocks,
       cta: { label: "Open the inbox", url: `${input.appUrl}/app/inbox` },
-      footer: "You are receiving this because you use LinkedIn Employee. Turn it off in your settings.",
+      footer: `You are receiving this because you use ${BRAND.name}. Turn it off in your settings.`,
     }),
     text: textLines.join("\n"),
   };
@@ -360,7 +361,7 @@ export function weeklyReportEmail(input: WeeklyReportInput): EmailMessage {
       ? `${input.accepted} ${input.accepted === 1 ? "person" : "people"} accepted this week`
       : input.invited > 0
         ? `Your week: ${input.invited} ${input.invited === 1 ? "invitation" : "invitations"}`
-        : "Your week on LinkedIn Employee";
+        : `Your week on ${BRAND.name}`;
 
   const blocks = [
     paragraph(greeting),
@@ -390,7 +391,7 @@ export function weeklyReportEmail(input: WeeklyReportInput): EmailMessage {
       title: subject,
       body: blocks,
       cta: { label: "Open your dashboard", url: `${input.appUrl}/app` },
-      footer: "You are receiving this because you use LinkedIn Employee. Turn it off in your settings.",
+      footer: `You are receiving this because you use ${BRAND.name}. Turn it off in your settings.`,
     }),
     text: textLines.join("\n"),
   };

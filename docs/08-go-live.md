@@ -165,7 +165,7 @@ web app needs the same value (step 7), and a mismatch makes the worker answer
 
 `resend.com` → add your sending domain → add the DKIM and SPF records it gives
 you → wait for verification. Then `EMAIL_FROM` as
-`LinkedIn Employee <hello@yourdomain.com>`.
+`Nora <hello@norasdr.com>`.
 
 Sending from an unverified domain is what puts the welcome email in spam, and
 the first email a customer never sees is the one explaining that the agent is

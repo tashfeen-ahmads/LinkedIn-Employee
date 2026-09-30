@@ -2,7 +2,8 @@ import Link from "next/link";
 import { PlatformDiagram } from "./platform-diagram";
 import { SiteNav } from "./site-nav";
 import { Sequence, sequenceFor } from "@/components/sequence";
-import { LINKEDIN_LIMITS } from "@le/shared";
+import { BRAND, LINKEDIN_LIMITS } from "@le/shared";
+import { SITE } from "@/lib/site";
 import { Pipeline, ReplyGate, WarmupRamp } from "./diagrams";
 import { Forecast } from "./forecast";
 import { GateSimulator } from "./gate-simulator";
@@ -31,17 +32,17 @@ export function SiteHeader() {
         Skip to content
       </a>
       <div className="container site-header-inner">
-        <Link href="/" className="site-home" aria-label="LinkedIn Employee, home">
+        <Link href="/" className="site-home" aria-label={`${BRAND.name}, home`}>
           <Wordmark />
         </Link>
 
         <SiteNav links={NAV_LINKS} />
 
         <div className="site-header-actions">
-          <Link href="/login" className="site-nav-link site-signin">
+          <Link href={`${SITE.app}/login`} className="site-nav-link site-signin">
             Sign in
           </Link>
-          <Link href="/login" className="btn small">
+          <Link href={`${SITE.app}/login`} className="btn small">
             Start free trial
           </Link>
         </div>
@@ -84,7 +85,7 @@ export function Hero() {
               </p>
             </div>
             <div className="cluster">
-              <Link href="/login" className="btn large">
+              <Link href={`${SITE.app}/login`} className="btn large">
                 Start 7-day free trial
               </Link>
               <a href="#how-it-works" className="btn secondary large">
@@ -708,7 +709,7 @@ export function Pricing({ standalone = false }: { standalone?: boolean } = {}) {
                 ))}
               </ul>
 
-              <Link href="/login" className={`btn${plan.highlight ? "" : " secondary"} block`}>
+              <Link href={`${SITE.app}/login`} className={`btn${plan.highlight ? "" : " secondary"} block`}>
                 Start free trial
               </Link>
             </article>
@@ -774,7 +775,7 @@ export function ClosingCta() {
           </p>
         </div>
         <div className="cluster">
-          <Link href="/login" className="btn large">
+          <Link href={`${SITE.app}/login`} className="btn large">
             Start free trial
           </Link>
           <Link href="/how-it-works" className="btn secondary large">
@@ -793,7 +794,9 @@ const FOOTER_COLUMNS = [
       { href: "/how-it-works", label: "How it works" },
       { href: "/pricing", label: "Pricing" },
       { href: "/security", label: "Security and data" },
-      { href: "/login", label: "Sign in" },
+      // Absolute: the dashboard is another host, and a relative /login here
+      // lands on a marketing page that cannot hold a session.
+      { href: `${SITE.app}/login`, label: "Sign in" },
     ],
   },
   {
@@ -811,7 +814,7 @@ export function SiteFooter() {
       <div className="container stack-6">
         <div className="footer-grid">
           <div className="stack-3">
-            <Link href="/" aria-label="LinkedIn Employee, home">
+            <Link href="/" aria-label={`${BRAND.name}, home`}>
               <Wordmark />
             </Link>
             <p className="small muted measure-short">
@@ -837,7 +840,7 @@ export function SiteFooter() {
         <hr className="divider" />
 
         <div className="footer-base">
-          <span className="tiny subtle">© {new Date().getFullYear()} LinkedIn Employee</span>
+          <span className="tiny subtle">© {new Date().getFullYear()} {BRAND.full}</span>
           <span className="tiny subtle">
             Not affiliated with LinkedIn Corporation. LinkedIn is a trademark of its owner, and
             automated access is against their user agreement — which is why the limits on this site

@@ -1,3 +1,4 @@
+import { BRAND } from "@le/shared";
 import { formatSlot } from "@le/calendar";
 import { firstMeetingEmail } from "@le/email";
 import type { CalendarBinding } from "../calendar.js";
@@ -55,7 +56,7 @@ export async function tryBookMeeting(ctx: WorkerContext, input: BookingInput): P
         endsAt,
         summary: `${prospectName}${prospect?.company ? ` (${prospect.company})` : ""} · intro call`,
         description: [
-          `Booked by LinkedIn Employee on behalf of ${rep?.full_name ?? "you"}.`,
+          `Booked by ${BRAND.name} on behalf of ${rep?.full_name ?? "you"}.`,
           prospect?.linkedin_url ? `LinkedIn: ${prospect.linkedin_url}` : "",
           "",
           "Their message:",

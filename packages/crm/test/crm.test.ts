@@ -21,7 +21,7 @@ describe("HubSpot contact upsert", () => {
     const provider = new HubSpotProvider({ fetchImpl });
     const id = await provider.upsertContact({
       accessToken: "token",
-      contact: { linkedinUrl: "linkedin.com/in/jane-doe", firstName: "Jane", source: "LinkedIn Employee" },
+      contact: { linkedinUrl: "linkedin.com/in/jane-doe", firstName: "Jane", source: "Test Source" },
     });
 
     expect(id).toBe("501");
@@ -38,7 +38,7 @@ describe("HubSpot contact upsert", () => {
     const provider = new HubSpotProvider({ fetchImpl });
     const id = await provider.upsertContact({
       accessToken: "token",
-      contact: { linkedinUrl: "linkedin.com/in/new-person", source: "LinkedIn Employee" },
+      contact: { linkedinUrl: "linkedin.com/in/new-person", source: "Test Source" },
     });
     expect(id).toBe("900");
   });

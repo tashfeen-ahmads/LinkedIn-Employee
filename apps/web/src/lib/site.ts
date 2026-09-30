@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { LINKEDIN_LIMITS } from "@le/shared";
+import { BRAND, LINKEDIN_LIMITS, appOrigin, siteOrigin } from "@le/shared";
 
 /**
  * One description of the site, used by every page's metadata, the sitemap, the
@@ -11,10 +11,20 @@ import { LINKEDIN_LIMITS } from "@le/shared";
  * object is how they stay consistent while pages get added.
  */
 export const SITE = {
-  name: "LinkedIn Employee",
-  /** Set NEXT_PUBLIC_SITE_URL in production; the fallback is the preview host. */
-  url: (process.env.NEXT_PUBLIC_SITE_URL ?? "https://lnkdn-agentic-employees.netlify.app").replace(/\/$/, ""),
-  tagline: "Your AI SDR for LinkedIn",
+  name: BRAND.name,
+  /** Set NEXT_PUBLIC_SITE_URL on a preview; the fallback is production. */
+  url: siteOrigin(process.env.NEXT_PUBLIC_SITE_URL),
+  /**
+   * The dashboard lives on its own host, so every link from a marketing page
+   * into the product has to be absolute. A relative /login on the marketing
+   * domain lands on a page that cannot hold a session — and the redirects in
+   * netlify.toml would catch it, but only as a hop somebody paid for.
+   *
+   * Read on the server, where APP_URL exists. Every caller is a server
+   * component; in a client one this would silently become production.
+   */
+  app: appOrigin(process.env.APP_URL),
+  tagline: BRAND.tagline,
   description:
     "An AI SDR that finds your buyers on LinkedIn, writes the outreach, answers the replies and books the meeting — inside daily limits that keep your account safe.",
   locale: "en_GB",
@@ -27,7 +37,7 @@ export function canonical(path: string): string {
 /**
  * Page metadata, with the parts that are easy to forget filled in: a canonical
  * that matches the sitemap, an OG image sized for a link preview, and a title
- * template so no page ships as just "LinkedIn Employee".
+ * template so no page ships as just the product name.
  */
 export function pageMeta(input: {
   title: string;

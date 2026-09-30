@@ -8,6 +8,7 @@ import {
   refreshSalesforceToken,
   type CrmProvider,
 } from "@le/crm";
+import { BRAND } from "@le/shared";
 import type { Db } from "@le/db";
 import type { Env } from "./config.js";
 import { loadRefreshedCredential } from "./oauth-credentials.js";
@@ -173,7 +174,7 @@ export async function syncMeetingToCrm(
         startsAt: meeting.starts_at,
         endsAt: meeting.ends_at,
         meetingUrl: meeting.meeting_url ?? undefined,
-        notes: "Booked by the LinkedIn Employee reply agent.",
+        notes: `Booked by the ${BRAND.name} reply agent.`,
       },
     });
 
@@ -221,7 +222,7 @@ async function resolveContactId(
       lastName: prospect.last_name ?? undefined,
       company: prospect.company ?? undefined,
       jobTitle: prospect.title ?? undefined,
-      source: "LinkedIn Employee",
+      source: BRAND.full,
     },
   });
 

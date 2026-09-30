@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { BRAND } from "@le/shared";
 import { MockEmailProvider } from "../src/mock.js";
 import { ResendProvider } from "../src/resend.js";
 import { EmailError } from "../src/provider.js";
@@ -83,7 +84,7 @@ describe("digestEmail", () => {
 
   it("still sends something sensible on a quiet day", () => {
     const quiet = digestEmail({ ...base, invitesSent: 0, accepted: 0, replies: 0, meetingsBooked: 0 });
-    expect(quiet.subject).toBe("Your LinkedIn Employee digest");
+    expect(quiet.subject).toBe(`Your ${BRAND.name} digest`);
     expect(quiet.text).toContain("0 accepted");
   });
 

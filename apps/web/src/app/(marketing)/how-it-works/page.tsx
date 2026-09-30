@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { BreadcrumbSchema } from "@/components/schema";
 import { Reveal } from "@/components/reveal";
-import { PUBLIC_LIMITS, pageMeta } from "@/lib/site";
+import { PUBLIC_LIMITS, SITE, pageMeta } from "@/lib/site";
 import { TOUR_STAGES, YOUR_DECISIONS } from "@le/shared";
 
 export const metadata: Metadata = pageMeta({
@@ -217,7 +217,7 @@ export default function HowItWorksPage() {
           </div>
 
           <div className="cluster">
-            <Link href="/login" className="btn large">
+            <Link href={`${SITE.app}/login`} className="btn large">
               Start 7-day free trial
             </Link>
             <Link href="/pricing" className="btn secondary large">

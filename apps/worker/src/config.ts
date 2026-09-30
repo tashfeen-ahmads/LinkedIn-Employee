@@ -128,7 +128,7 @@ const EnvSchema = z.object({
   STRIPE_PRICE_TEAMS: z.string().optional(),
   EMAIL_PROVIDER: z.enum(["resend", "mock", "off"]).default("off"),
   RESEND_API_KEY: z.string().optional(),
-  /** e.g. "LinkedIn Employee <hello@yourdomain.com>" */
+  /** e.g. "Nora <hello@norasdr.com>" */
   EMAIL_FROM: z.string().optional(),
   EMAIL_REPLY_TO: z.string().optional(),
   GOOGLE_CLIENT_ID: z.string().optional(),

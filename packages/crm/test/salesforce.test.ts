@@ -42,7 +42,7 @@ describe("SalesforceProvider.upsertContact", () => {
     const provider = new SalesforceProvider({ instanceUrl: INSTANCE, fetchImpl });
     const id = await provider.upsertContact({
       accessToken: "tok",
-      contact: { linkedinUrl: "linkedin.com/in/jane", firstName: "Jane", lastName: "Doe", company: "Northwind", source: "LinkedIn Employee" },
+      contact: { linkedinUrl: "linkedin.com/in/jane", firstName: "Jane", lastName: "Doe", company: "Northwind", source: "Test Source" },
     });
 
     expect(id).toBe("00Q000000000001");

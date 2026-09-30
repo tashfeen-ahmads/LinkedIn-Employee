@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { BRAND } from "@le/shared";
 import { weeklyReportEmail } from "../src/templates.js";
 
 /**
@@ -34,7 +35,7 @@ describe("the weekly report", () => {
   it("falls back to activity only when nothing was accepted", () => {
     expect(weeklyReportEmail({ ...base, accepted: 0 }).subject).toBe("Your week: 12 invitations");
     expect(weeklyReportEmail({ ...base, accepted: 0, invited: 0 }).subject).toBe(
-      "Your week on LinkedIn Employee",
+      `Your week on ${BRAND.name}`,
     );
   });
 

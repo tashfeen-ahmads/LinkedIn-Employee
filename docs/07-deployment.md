@@ -196,6 +196,50 @@ As of this deployment, confirmation is **on**: `auth.users` shows
 `confirmation_sent_at` populated and `email_confirmed_at` arriving eight to
 twenty-six seconds later, which is somebody clicking a link.
 
+### The domain: two hosts, one site
+
+`norasdr.com` is the marketing site and `app.norasdr.com` is the dashboard.
+They are one Netlify project and one Next.js app; the split is the block of
+absolute-URL redirects at the bottom of `netlify.toml`. Without them every
+screen answers on both domains, which is duplicate content to a search engine
+and a coin toss to a person — and worse than either, the session cookie is set
+on whichever host they arrived at, so signing in on one leaves them signed out
+on the other.
+
+DNS stays where the domain's nameservers already point (`ns1`/`ns2.vercel-dns.com`
+for this one). Nothing has to move to Netlify DNS; three records do the job:
+
+| Host | Type | Value |
+| --- | --- | --- |
+| `@` (apex) | `A` | `75.2.60.5` |
+| `www` | `CNAME` | `<netlify-site>.netlify.app` |
+| `app` | `CNAME` | `<netlify-site>.netlify.app` |
+
+Remove any existing `A`/`AAAA`/`CNAME` on those three names first, or the old
+host keeps answering for as long as its records are cached. Then add all three
+in **Netlify → Domain management → Add domain**: the apex as the primary, `www`
+and `app` as aliases. Certificates are issued per host, so `app.` has no HTTPS
+until it is named there — a DNS record on its own gets a certificate error, not
+a site.
+
+Three things break if they are not changed at the same time:
+
+- **`APP_URL` must be `https://app.norasdr.com`.** It is the origin Supabase
+  redirects to after a sign-in. Pointed at the apex, the redirect lands on a
+  host that gets 301'd to `app.` — and the hash fragment carrying the session
+  does not survive a redirect, so the person arrives signed out with no error
+  anywhere.
+- **`NEXT_PUBLIC_SITE_URL` must be `https://norasdr.com`.** Every canonical,
+  the sitemap and the OG images are built from it.
+- **Supabase → Authentication → URL Configuration.** Site URL becomes
+  `https://app.norasdr.com` and `https://app.norasdr.com/auth/callback` goes in
+  the redirect allowlist. This is the one that cannot be done from this repo:
+  it lives behind the Management API, which takes a personal access token.
+  Until it is changed, every sign-in bounces back to the old host.
+
+The old `*.netlify.app` address keeps working and is not redirected away.
+Breaking it would mean a bad DNS afternoon leaves no way in at all.
+
 ### Builds cost money, so batch them
 
 The production branch on Netlify is the working branch, not `main` — a push to

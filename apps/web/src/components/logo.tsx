@@ -1,3 +1,5 @@
+import { BRAND } from "@le/shared";
+
 /**
  * The mark is the funnel: three bars narrowing, and the last one — the meeting
  * — in the second hue, because that is the only stage that is a different kind
@@ -24,12 +26,24 @@ export function LogoMark({ size = 28 }: { size?: number }) {
   );
 }
 
+/**
+ * The name carries the weight and its qualifier sits back, which is the shape
+ * the type scale was already set for.
+ *
+ * Sliced off `BRAND.full` rather than retyped, because the wordmark is the one
+ * place the name is broken in two for typesetting — and therefore the one
+ * place a rename leaves half the old name behind, on the most looked-at
+ * element in the product.
+ */
+const QUALIFIER = BRAND.full.startsWith(BRAND.name) ? BRAND.full.slice(BRAND.name.length).trim() : "";
+
 export function Wordmark({ size = 28 }: { size?: number }) {
   return (
     <span className="wordmark">
       <LogoMark size={size} />
       <span className="wordmark-text">
-        LinkedIn<span className="wordmark-thin">&nbsp;Employee</span>
+        {BRAND.name}
+        {QUALIFIER ? <span className="wordmark-thin">&nbsp;{QUALIFIER}</span> : null}
       </span>
     </span>
   );

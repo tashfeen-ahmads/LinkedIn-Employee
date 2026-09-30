@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArticleSchema, BreadcrumbSchema, FaqSchema } from "@/components/schema";
-import { PUBLIC_LIMITS, pageMeta } from "@/lib/site";
+import { PUBLIC_LIMITS, SITE, pageMeta } from "@/lib/site";
 import { Reveal } from "@/components/reveal";
 
 const TITLE = "LinkedIn automation limits in 2026: the numbers that keep an account safe";
@@ -218,7 +218,7 @@ export default function LimitsPage() {
               only make them stricter.
             </p>
             <div className="cluster">
-              <Link href="/login" className="btn">
+              <Link href={`${SITE.app}/login`} className="btn">
                 Start 7-day free trial
               </Link>
               <Link href="/how-it-works" className="btn secondary">

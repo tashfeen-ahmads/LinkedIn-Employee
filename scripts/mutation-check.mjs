@@ -2113,7 +2113,7 @@ const MUTATIONS = [
     pkg: "@le/worker",
   },
   {
-    id: "connect/an-unlabelled-account-is-not-a-missing-one",
+    id: "connect/an-active-row-holds-an-unlabelled-id",
     rule: "A held id found anywhere in the provider's list is not gone, labelled to this rep or not; reading unlabelled as missing tears down a live connection",
     file: "apps/worker/src/accounts.ts",
     from: "  if (all.some((a) => a.providerAccountId === row.provider_account_id)) return false;",

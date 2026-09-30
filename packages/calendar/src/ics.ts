@@ -1,3 +1,5 @@
+import { BRAND } from "@le/shared";
+
 /**
  * An iCalendar invitation, built by hand.
  *
@@ -27,7 +29,7 @@ export function buildIcs(event: IcsEvent): string {
   const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
-    "PRODID:-//LinkedIn Employee//Booking//EN",
+    `PRODID:-//${BRAND.full}//Booking//EN`,
     "CALSCALE:GREGORIAN",
     `METHOD:${method}`,
     "BEGIN:VEVENT",

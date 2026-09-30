@@ -1,6 +1,6 @@
-# LinkedIn Employee
+# Nora
 
-An AI SDR for LinkedIn. It builds your customer profiles, finds high-fit and high-intent
+**Nora SDR** — norasdr.com. An AI SDR for LinkedIn. It builds your customer profiles, finds high-fit and high-intent
 prospects, starts conversations, and books meetings into your calendar. You show up and close.
 
 Modelled on the four-agent workflow popularised by CoPilot AI (Strategy, Targeting, Reply, Close),
