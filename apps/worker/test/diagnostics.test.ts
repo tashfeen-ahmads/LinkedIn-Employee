@@ -451,9 +451,17 @@ describe("the two audiences for a system check", () => {
        * whole describe block exists to prevent.
        */
       harness({ throws: ["getAccountHealth"] }),
-      harness({ throws: ["listAccounts"] }),
       harness({ throws: ["searchProspects"] }),
       harness({ throws: ["listPendingInvitations"] }),
+      /*
+       * `listAccounts` paired with a failing health probe, because the
+       * replacement row is only asked for once the provider check is already
+       * blocked. On its own the refusal never reached that branch, and the
+       * mutation planted there survived — which is the same "state I did not
+       * exercise" that hid all four of these in the first place, one level
+       * further in.
+       */
+      harness({ throws: ["getAccountHealth", "listAccounts"] }),
     ];
 
     // A signature that did not verify, and one that never arrived: the two
