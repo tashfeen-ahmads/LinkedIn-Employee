@@ -457,19 +457,47 @@ const MUTATIONS = [
     pkg: "@le/worker",
   },
   {
+    /*
+     * Both webhook parsers carry the identical pair of guards, so an anchor
+     * written as the bare `if` matched twice — and `String.replace` takes the
+     * first. Every webhook mutation therefore only ever broke the *message*
+     * parser, and `parseAccountWebhook` — where rule 8 says a forged delivery
+     * binds a stranger's LinkedIn account to a rep's row and sends every
+     * campaign message from it — was covered by nothing at all. The higher
+     * stake was the unguarded one.
+     *
+     * Each anchor now carries the line that tells the two apart: the parsers
+     * cast to `RawUnipileMessage` and `RawUnipileAccount` respectively.
+     */
     id: "webhook/signature",
-    rule: "An unsigned or wrongly signed webhook is rejected",
+    rule: "An unsigned or wrongly signed message webhook is rejected",
     file: "packages/linkedin/src/unipile.ts",
-    from: "if (!input.signature || !verifySignature(input.body, input.signature, this.webhookSecret)) {",
-    to: "if (false) {",
+    from: 'if (!input.signature || !verifySignature(input.body, input.signature, this.webhookSecret)) {\n      throw new Error("Invalid Unipile webhook signature");\n    }\n    const parsed = JSON.parse(input.body) as RawUnipileMessage',
+    to: 'if (false) {\n      throw new Error("Invalid Unipile webhook signature");\n    }\n    const parsed = JSON.parse(input.body) as RawUnipileMessage',
     pkg: "@le/linkedin",
   },
   {
     id: "webhook/fails-closed",
-    rule: "A missing webhook secret rejects rather than accepts",
+    rule: "A missing webhook secret rejects rather than accepts on the message webhook",
     file: "packages/linkedin/src/unipile.ts",
-    from: "if (!this.webhookSecret) {",
-    to: "if (false) {",
+    from: 'if (!this.webhookSecret) {\n      throw new Error("Unipile webhook secret is not configured; refusing to accept unverified deliveries");\n    }\n    if (!input.signature || !verifySignature(input.body, input.signature, this.webhookSecret)) {\n      throw new Error("Invalid Unipile webhook signature");\n    }\n    const parsed = JSON.parse(input.body) as RawUnipileMessage',
+    to: 'if (false) {\n      throw new Error("Unipile webhook secret is not configured; refusing to accept unverified deliveries");\n    }\n    if (!input.signature || !verifySignature(input.body, input.signature, this.webhookSecret)) {\n      throw new Error("Invalid Unipile webhook signature");\n    }\n    const parsed = JSON.parse(input.body) as RawUnipileMessage',
+    pkg: "@le/linkedin",
+  },
+  {
+    id: "webhook/accounts-signature",
+    rule: "An unsigned or wrongly signed ACCOUNTS webhook is rejected — a forged one binds a stranger's LinkedIn account to a rep's row, and every campaign message then leaves that account",
+    file: "packages/linkedin/src/unipile.ts",
+    from: 'if (!input.signature || !verifySignature(input.body, input.signature, this.webhookSecret)) {\n      throw new Error("Invalid Unipile webhook signature");\n    }\n\n    const parsed = JSON.parse(input.body) as RawUnipileAccount',
+    to: 'if (false) {\n      throw new Error("Invalid Unipile webhook signature");\n    }\n\n    const parsed = JSON.parse(input.body) as RawUnipileAccount',
+    pkg: "@le/linkedin",
+  },
+  {
+    id: "webhook/accounts-fails-closed",
+    rule: "A missing webhook secret rejects rather than accepts on the ACCOUNTS webhook",
+    file: "packages/linkedin/src/unipile.ts",
+    from: 'if (!this.webhookSecret) {\n      throw new Error("Unipile webhook secret is not configured; refusing to accept unverified deliveries");\n    }\n    if (!input.signature || !verifySignature(input.body, input.signature, this.webhookSecret)) {\n      throw new Error("Invalid Unipile webhook signature");\n    }\n\n    const parsed = JSON.parse(input.body) as RawUnipileAccount',
+    to: 'if (false) {\n      throw new Error("Unipile webhook secret is not configured; refusing to accept unverified deliveries");\n    }\n    if (!input.signature || !verifySignature(input.body, input.signature, this.webhookSecret)) {\n      throw new Error("Invalid Unipile webhook signature");\n    }\n\n    const parsed = JSON.parse(input.body) as RawUnipileAccount',
     pkg: "@le/linkedin",
   },
   {
@@ -1279,16 +1307,16 @@ const MUTATIONS = [
     id: "connect/claim-never-repoints-a-working-row",
     rule: "A claimed account_id never repoints a row that is already working",
     file: "apps/worker/src/server.ts",
-    from: '      .eq("user_id", userId)\n      .in("status", ["connecting", "reauth_required", "restricted"])',
-    to: '      .eq("user_id", userId)\n      .not("status", "is", null)',
+    from: '    .eq("user_id", input.userId)\n    .in("status", ["connecting", "reauth_required", "restricted"])',
+    to: '    .eq("user_id", input.userId)\n    .not("status", "is", null)',
     pkg: "@le/worker",
   },
   {
     id: "connect/claim-refuses-somebody-elses-account",
     rule: "A claimed account_id that another row already holds is refused",
     file: "apps/worker/src/server.ts",
-    from: "    if (taken && taken.user_id !== userId) {",
-    to: "    if (false) {",
+    from: "  if (taken && taken.user_id !== input.userId) {",
+    to: "  if (false) {",
     pkg: "@le/worker",
   },
   {
@@ -2380,8 +2408,10 @@ const MUTATIONS = [
     id: "config/dsn-must-be-a-url",
     rule: "A DSN that is not a URL is refused at boot, not at the first send",
     file: "apps/worker/src/config.ts",
-    from: "    .refine(isAbsoluteHttpUrl, {",
-    to: "    .refine(() => true, {",
+    // The DSN's own refine: `APP_URL` and `WORKER_URL` use the same guard on
+    // one line, so the bare anchor matched three places.
+    from: "    .refine(isAbsoluteHttpUrl, {\n      message:",
+    to: "    .refine(() => true, {\n      message:",
     pkg: "@le/worker",
   },
   {
@@ -2500,8 +2530,11 @@ const MUTATIONS = [
     id: "kpi/momentum-counts-only-what-was-sent",
     rule: "A prospect who was never invited is not counted as this week's sending",
     file: "packages/shared/src/kpi.ts",
-    from: "    if (!row.invited_at) continue;",
-    to: "    if (false) continue;",
+    // The momentum loop specifically: `kpi.ts` has the identical line in the
+    // by-day loop below it, and an ambiguous anchor is one refactor away from
+    // testing the wrong one of the two.
+    from: "    if (!row.invited_at) continue;\n    const at = new Date(row.invited_at).getTime();\n    if (!Number.isFinite(at)) continue;\n    // Half-open",
+    to: "    if (false) continue;\n    const at = new Date(row.invited_at).getTime();\n    if (!Number.isFinite(at)) continue;\n    // Half-open",
     pkg: "@le/shared",
   },
   {
@@ -2788,8 +2821,18 @@ const MUTATIONS = [
     id: "targeting/the-campaign-writer-is-asked-twice",
     rule: "By the time the campaign writer runs the job has spent a LinkedIn search page and a profile lookup per address-less candidate, both off a paid seat (rule 20); the prospects are written after it returns, so one unparsable response discards all of it and leaves a campaign with nobody on it — which is how this deployment got two empty campaigns",
     file: "apps/worker/src/jobs/targeting.ts",
-    from: "    plan = await askForPlan();\n  }",
-    to: "    throw err;\n  }",
+    /*
+     * Anchored on the retry inside the `catch`, not on the first attempt.
+     *
+     * The bare `plan = await askForPlan();\n  }` matched the first call too —
+     * `  }` being the start of `  } catch (err) {` — and `replace` takes the
+     * first. So the mutation rewrote the *first* attempt to `throw err`, where
+     * `err` is not in scope, and the package failed to compile. It was
+     * reported `caught` every time, by a type error rather than by any test
+     * of the retry. Green, and proving nothing.
+     */
+    from: "    });\n    plan = await askForPlan();\n  }",
+    to: "    });\n    throw err;\n  }",
     pkg: "@le/worker",
   },
   {

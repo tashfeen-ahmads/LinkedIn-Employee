@@ -93,3 +93,79 @@ describe("Unipile webhook verification", () => {
     expect(provider().parseWebhook({ body: own, signature: sign(own) })).toHaveLength(0);
   });
 });
+
+/**
+ * The same verification on the accounts webhook, which had none of it.
+ *
+ * Every test above covers `parseWebhook`. `parseAccountWebhook` carries a
+ * character-for-character copy of the two guards and was covered by nothing:
+ * deleting both — accepting any unsigned body from anyone — broke no test in
+ * the repo. It was found by giving it a mutation of its own and watching the
+ * mutation survive.
+ *
+ * And it is the worse of the two to lose. A forged *message* makes the Reply
+ * Agent answer something no prospect sent; a forged *account* delivery binds a
+ * stranger's LinkedIn account to a rep's row, and every message the campaign
+ * sends then leaves that stranger's account (rule 8). The higher stake was the
+ * untested one, which is the usual way round: the message parser was debugged
+ * live when real replies stopped arriving, so it accumulated tests, and this
+ * one has never visibly failed.
+ */
+describe("Unipile account webhook verification", () => {
+  const account = JSON.stringify({
+    account_id: "acct_new",
+    // The hosted flow sends the rep's user id as `name` and the notify
+    // webhook echoes it back there, which is the shape this parser sees.
+    name: "8ddd8b8a-ac56-45a6-87b3-b3a4526b4c8e",
+    account_name: "Sam Patel",
+    status: "OK",
+  });
+
+  it("accepts a correctly signed delivery", () => {
+    const accounts = provider().parseAccountWebhook({ body: account, signature: sign(account) });
+    expect(accounts).toHaveLength(1);
+    expect(accounts[0]?.providerAccountId).toBe("acct_new");
+    expect(accounts[0]?.reference).toBe("8ddd8b8a-ac56-45a6-87b3-b3a4526b4c8e");
+  });
+
+  it("accepts the body-only form too, so an older sender keeps verifying", () => {
+    expect(provider().parseAccountWebhook({ body: account, signature: signBodyOnly(account) })).toHaveLength(1);
+  });
+
+  it("rejects an unsigned delivery", () => {
+    // What this deployment has actually been receiving: every recorded
+    // delivery arrived with no signature header at all.
+    expect(() => provider().parseAccountWebhook({ body: account })).toThrow(/signature/i);
+  });
+
+  it("rejects a delivery signed with the wrong key", () => {
+    const forged = createHmac("sha256", "attacker").update(account).digest("hex");
+    expect(() => provider().parseAccountWebhook({ body: account, signature: forged })).toThrow(/signature/i);
+  });
+
+  it("rejects a body whose account id was swapped after signing", () => {
+    // The attack in one line: a valid signature over one account, replayed
+    // with a different id in the body.
+    const signature = sign(account);
+    const tampered = account.replace("acct_new", "acct_attacker");
+    expect(() => provider().parseAccountWebhook({ body: tampered, signature })).toThrow(/signature/i);
+  });
+
+  it("rejects a delivery whose timestamp was moved after signing", () => {
+    const signature = sign(account).replace("t=1710662400", "t=1710662999");
+    expect(() => provider().parseAccountWebhook({ body: account, signature })).toThrow(/signature/i);
+  });
+
+  it("fails closed when no secret is configured", () => {
+    expect(() =>
+      provider({ secret: undefined }).parseAccountWebhook({ body: account, signature: sign(account) }),
+    ).toThrow(/not configured/i);
+  });
+
+  it("drops an entry that names neither the account nor the rep", () => {
+    // Guessing which row a nameless entry meant is how the wrong account gets
+    // bound to the wrong person.
+    const anonymous = JSON.stringify({ status: "OK" });
+    expect(provider().parseAccountWebhook({ body: anonymous, signature: sign(anonymous) })).toHaveLength(0);
+  });
+});
