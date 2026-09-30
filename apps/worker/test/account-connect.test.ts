@@ -417,17 +417,114 @@ describe("recovering an account the provider has replaced", () => {
     void app;
   });
 
-  it("leaves a healthy account alone", async () => {
+  it("leaves an active account alone while the provider still has its id", async () => {
+    // The row is right, so there is nothing to repair. This is the case the
+    // active rows are walked for, and it has to be a no-op or every nightly
+    // run rewrites every healthy account on the deployment.
     const { db, linkedin } = harness({ provider_account_id: "acct_live", status: "active" });
-    linkedin.connectedAccounts = [{ providerAccountId: "acct_other", reference: USER, status: "ok" }];
+    linkedin.connectedAccounts = [
+      { providerAccountId: "acct_live", reference: USER, status: "ok" },
+      { providerAccountId: "acct_other", reference: USER, status: "ok" },
+    ];
     const { recoverAccounts } = await import("../src/accounts.js");
 
     const result = await recoverAccounts(db.asDb(), linkedin);
 
-    // Not in the list it looks at, so an active account is never re-pointed by
-    // a background job.
     expect(result.repaired).toBe(0);
     expect(db.find("linkedin_accounts", { id: ACCOUNT })!.provider_account_id).toBe("acct_live");
+  });
+
+  it("re-points an active account whose stored id the provider has dropped", async () => {
+    // The live failure: a new provider account is connected, ours keeps the old
+    // id, and because the row never stopped saying `active` nothing looked at
+    // it. Every send behind it fails under a green tick.
+    const { db, linkedin } = harness({ provider_account_id: "acct_gone", status: "active" });
+    linkedin.connectedAccounts = [{ providerAccountId: "acct_new", reference: USER, status: "ok" }];
+    const { recoverAccounts } = await import("../src/accounts.js");
+
+    const result = await recoverAccounts(db.asDb(), linkedin);
+
+    expect(result.repaired).toBe(1);
+    const account = db.find("linkedin_accounts", { id: ACCOUNT })!;
+    expect(account.provider_account_id).toBe("acct_new");
+    expect(account.status).toBe("active");
+  });
+
+  it("does not re-point an active account when the held id is merely unlabelled", async () => {
+    // An account connected in the provider's own dashboard carries no
+    // reference. Reading unlabelled as missing is what once tore down a live
+    // connection, so the id is looked for across the whole list.
+    const { db, linkedin } = harness({ provider_account_id: "acct_live", status: "active" });
+    linkedin.connectedAccounts = [
+      { providerAccountId: "acct_live", reference: null, status: "ok" },
+      { providerAccountId: "acct_new", reference: USER, status: "ok" },
+    ];
+    const { recoverAccounts } = await import("../src/accounts.js");
+
+    const result = await recoverAccounts(db.asDb(), linkedin);
+
+    expect(result.repaired).toBe(0);
+    expect(db.find("linkedin_accounts", { id: ACCOUNT })!.provider_account_id).toBe("acct_live");
+  });
+
+  it("refuses to guess which of several accounts replaced a working one", async () => {
+    // Same person, two LinkedIn accounts. Picking wrong sends a campaign from
+    // the wrong profile under a real rep's name, so it is reported instead.
+    const { db, linkedin } = harness({ provider_account_id: "acct_gone", status: "active" });
+    linkedin.connectedAccounts = [
+      { providerAccountId: "acct_one", reference: USER, status: "ok" },
+      { providerAccountId: "acct_two", reference: USER, status: "ok" },
+    ];
+    const { recoverAccounts } = await import("../src/accounts.js");
+
+    const result = await recoverAccounts(db.asDb(), linkedin);
+
+    expect(result.repaired).toBe(0);
+    expect(db.find("linkedin_accounts", { id: ACCOUNT })!.provider_account_id).toBe("acct_gone");
+    // Silence would leave the green tick with no explanation anywhere.
+    expect(db.find("events", { name: "linkedin.account.recovery_ambiguous" })).toBeTruthy();
+  });
+
+  it("re-points an unhealthy account without needing the held id to be gone", async () => {
+    // The pre-existing path: a row that already says it is broken is repaired
+    // against whatever the provider has for this rep, several or not.
+    const { db, linkedin } = harness({ provider_account_id: "acct_stale", status: "reauth_required" });
+    linkedin.connectedAccounts = [
+      { providerAccountId: "acct_a", reference: USER, status: "ok" },
+      { providerAccountId: "acct_b", reference: USER, status: "ok" },
+    ];
+    const { recoverAccounts } = await import("../src/accounts.js");
+
+    const result = await recoverAccounts(db.asDb(), linkedin);
+
+    expect(result.repaired).toBe(1);
+    expect(db.find("linkedin_accounts", { id: ACCOUNT })!.status).toBe("active");
+  });
+
+  it("keeps the throttle and the warm-up when an account is re-pointed", async () => {
+    // A new provider account is not a new LinkedIn account. The ramp reads
+    // `first_action_at` and the backoff reads `invites_paused_until`, and
+    // clearing either would hand a profile LinkedIn is already refusing its
+    // full allowance on the day it reconnected.
+    const paused = "2030-01-01T00:00:00.000Z";
+    const first = "2026-09-22T16:52:18.455Z";
+    const { db, linkedin } = harness({
+      provider_account_id: "acct_gone",
+      status: "active",
+      invites_paused_until: paused,
+      invite_throttle_streak: 4,
+      first_action_at: first,
+    });
+    linkedin.connectedAccounts = [{ providerAccountId: "acct_new", reference: USER, status: "ok" }];
+    const { recoverAccounts } = await import("../src/accounts.js");
+
+    await recoverAccounts(db.asDb(), linkedin);
+
+    const account = db.find("linkedin_accounts", { id: ACCOUNT })!;
+    expect(account.provider_account_id).toBe("acct_new");
+    expect(account.invites_paused_until).toBe(paused);
+    expect(account.invite_throttle_streak).toBe(4);
+    expect(account.first_action_at).toBe(first);
   });
 
   it("never attaches an account carrying someone else's reference", async () => {

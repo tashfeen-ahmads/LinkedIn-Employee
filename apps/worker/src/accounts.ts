@@ -247,10 +247,42 @@ export async function reconcileAccount(
  * dead. It never asks the only question that would have fixed it — does the
  * provider have an account for this rep at all?
  *
- * One list for the whole deployment, then each unhealthy row reconciled
- * against it. The binding rule is untouched: `reconcileAccount` is handed only
- * the accounts carrying that rep's own user id as their reference.
+ * One list for the whole deployment, then each row reconciled against it. The
+ * binding rule is untouched: `reconcileAccount` is handed only the accounts
+ * carrying that rep's own user id as their reference.
+ *
+ * `active` is in the list, and it is the case that matters most. The row does
+ * not go unhealthy when the provider replaces an account — nothing tells us —
+ * so it keeps saying `active` while holding an id that is gone, and the health
+ * poll asks about that id and fails rather than asking whether a live account
+ * is sitting beside it. An unhealthy row at least puts a button on the Team
+ * page; this one puts a green tick there and fails every send behind it, which
+ * is the state this deployment sat in and the reason a new provider account
+ * could be connected without anything here ever noticing.
+ *
+ * Re-pointing a working row needs evidence, and two conditions are the
+ * evidence. The id we hold is absent from the provider's *whole* list, not
+ * just this rep's labelled accounts — an account connected in the provider's
+ * own dashboard carries no label, and reading unlabelled as missing is what
+ * once tore down a live connection. And this rep has exactly one account:
+ * which of several is the replacement is not a question a background job can
+ * answer, and guessing sends a campaign from the wrong profile of the right
+ * person. Neither condition applies to an already-unhealthy row, which is
+ * repaired exactly as before.
  */
+/** The two conditions above, on their own so they can be read and tested. */
+export function canRepointWorkingAccount(
+  row: { provider_account_id: string | null },
+  mine: ConnectedAccount[],
+  all: ConnectedAccount[],
+): boolean {
+  // A row that never held an id is a half-finished connection, not a working
+  // account, and `reconcileAccount` completes those already.
+  if (!row.provider_account_id) return true;
+  if (all.some((a) => a.providerAccountId === row.provider_account_id)) return false;
+  return mine.length === 1;
+}
+
 export async function recoverAccounts(
   db: Db,
   provider: LinkedInProvider,
@@ -258,7 +290,7 @@ export async function recoverAccounts(
   const { data: rows } = await db
     .from("linkedin_accounts")
     .select("id, workspace_id, user_id, status, provider_account_id")
-    .in("status", ["connecting", "reauth_required", "restricted", "warning", "disconnected"]);
+    .in("status", ["active", "connecting", "reauth_required", "restricted", "warning", "disconnected"]);
 
   if (!rows?.length) return { checked: 0, repaired: 0 };
 
@@ -281,6 +313,26 @@ export async function recoverAccounts(
     // a specific status_detail with a generic one loses the only explanation
     // anybody has.
     if (mine.length === 0) continue;
+
+    if (row.status === "active" && !canRepointWorkingAccount(row, mine, accounts)) {
+      // Several candidates and the held id gone is the one case with no right
+      // answer. Silence would leave a green tick over a broken account, so it
+      // is recorded for the console rather than guessed at.
+      if (mine.length > 1) {
+        await recordEvent(db, {
+          workspaceId: row.workspace_id,
+          name: "linkedin.account.recovery_ambiguous",
+          subjectType: "linkedin_account",
+          subjectId: row.id,
+          payload: {
+            held: row.provider_account_id,
+            candidates: mine.length,
+            reason: "the provider no longer has the stored account and this rep has several others",
+          },
+        });
+      }
+      continue;
+    }
 
     const result = await reconcileAccount(db, row.workspace_id, row.user_id, mine, accounts);
     if (result.changed) {
