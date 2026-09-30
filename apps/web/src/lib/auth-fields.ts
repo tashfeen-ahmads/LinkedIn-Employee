@@ -1,45 +1,20 @@
 /**
  * What a signup form is allowed to accept, checked in one place.
  *
- * The rules live here rather than in the page for the reason every other rule
- * in this repo does: the sign-up form and the profile screen both edit the
- * same columns, and two readings of "is this a username" drift — the one
- * somebody believes is whichever screen they happened to be on. It is pure, so
- * it is testable without a browser or a database.
+ * Pure, so it is testable without a browser or a database, and in one file so
+ * the form and the server action cannot hold two readings of the same rule.
+ *
+ * `checkUsername` used to live here. The handle it validated was required at
+ * signup, stored on `profiles`, shown read-only on the profile screen — and
+ * read by nothing else in the product. It was not the login identifier, it was
+ * in no URL, no prospect ever saw it, and there was no screen on which to
+ * change it. So it was a mandatory field that could refuse to create an
+ * account and could never be corrected afterwards. The column and its unique
+ * index stay; if handles become a feature, the rule comes back with the screen
+ * that needs it.
  */
-
-/** LinkedIn-ish handle rules: what people expect a username to be. */
-export const USERNAME_MIN = 3;
-export const USERNAME_MAX = 30;
 
 export type FieldCheck = { ok: true; value: string } | { ok: false; reason: string };
-
-/**
- * A username, or the reason it is not one.
- *
- * Lower-cased before it is stored, because the column is citext and the index
- * is unique: storing "Sam" and comparing "sam" would work, and reading it back
- * capitalised differently on different screens would not. Letters, digits,
- * a dot, an underscore and a hyphen — a handle with a space or an @ in it is
- * something somebody typed into the wrong field.
- */
-export function checkUsername(raw: string): FieldCheck {
-  const value = raw.trim().toLowerCase();
-  if (!value) return { ok: false, reason: "Choose a username." };
-  if (value.length < USERNAME_MIN) {
-    return { ok: false, reason: `A username is at least ${USERNAME_MIN} characters.` };
-  }
-  if (value.length > USERNAME_MAX) {
-    return { ok: false, reason: `A username is at most ${USERNAME_MAX} characters.` };
-  }
-  if (!/^[a-z0-9._-]+$/.test(value)) {
-    return { ok: false, reason: "Use letters, numbers, dots, underscores or hyphens — no spaces." };
-  }
-  if (/^[._-]|[._-]$/.test(value)) {
-    return { ok: false, reason: "A username cannot start or end with a dot, underscore or hyphen." };
-  }
-  return { ok: true, value };
-}
 
 /**
  * A password, held to length rather than to a character recipe.

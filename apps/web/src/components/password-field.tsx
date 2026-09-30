@@ -22,12 +22,23 @@ export function PasswordField({
   hint,
   autoComplete = "new-password",
   required = true,
+  minLength,
 }: {
   name: string;
   label: string;
   hint?: string;
   autoComplete?: string;
   required?: boolean;
+  /**
+   * Enforced by the browser as well as by the server.
+   *
+   * `checkPassword` has always required a minimum and the input carried none,
+   * so a short password was accepted by the form, refused by the server, and
+   * answered with a re-rendered empty page — the person losing their name,
+   * their email and both passwords to a rule nothing had told them about
+   * until after they pressed the button.
+   */
+  minLength?: number;
 }) {
   const [shown, setShown] = useState(false);
 
@@ -39,6 +50,7 @@ export function PasswordField({
           type={shown ? "text" : "password"}
           name={name}
           required={required}
+          minLength={minLength}
           autoComplete={autoComplete}
         />
         <button

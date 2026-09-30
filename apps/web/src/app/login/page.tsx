@@ -128,7 +128,7 @@ export default async function LoginPage({
           {params.invite ? <input type="hidden" name="invite" value={params.invite} /> : null}
           <label className="field">
             <span>Work email</span>
-            <input type="email" name="email" required autoComplete="email" placeholder="you@company.com" />
+            <input type="email" name="email" required autoComplete="username" placeholder="you@company.com" />
           </label>
           <PasswordField name="password" label="Password" autoComplete="current-password" />
           <SubmitButton className="btn block" pendingLabel="Signing in…">
@@ -148,7 +148,7 @@ export default async function LoginPage({
             {params.invite ? <input type="hidden" name="invite" value={params.invite} /> : null}
             <label className="field">
               <span>Work email</span>
-              <input type="email" name="email" required autoComplete="email" placeholder="you@company.com" />
+              <input type="email" name="email" required autoComplete="username" placeholder="you@company.com" />
             </label>
             <SubmitButton className="btn secondary block" pendingLabel="Sending…">
               Email me a sign-in link

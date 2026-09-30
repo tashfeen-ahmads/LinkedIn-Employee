@@ -6,7 +6,7 @@ import { SiteFooter, SiteHeader } from "@/components/marketing";
 import { AuthAside } from "@/components/auth-aside";
 import { PasswordField } from "@/components/password-field";
 import { SubmitButton } from "@/components/submit-button";
-import { checkEmail, checkPassword, checkUsername, PASSWORD_MIN } from "@/lib/auth-fields";
+import { checkEmail, checkPassword, PASSWORD_MIN } from "@/lib/auth-fields";
 
 /**
  * Creating an account, as its own page and its own act.
@@ -30,16 +30,29 @@ async function signUp(formData: FormData) {
   const address = String(formData.get("address") ?? "").trim();
   const invite = String(formData.get("invite") ?? "").trim();
 
-  const back = (reason: string) =>
-    redirect(`/signup?error=${encodeURIComponent(reason)}${invite ? `&invite=${encodeURIComponent(invite)}` : ""}`);
+  const typed = String(formData.get("email") ?? "").trim();
+
+  /*
+   * A refusal hands back what was typed.
+   *
+   * Every rejection used to redirect to a bare `?error=`, which re-rendered an
+   * empty form: fix the one field that was wrong and you retype your name, your
+   * email and both passwords. Two rejections in a row and people stop. The
+   * password is deliberately not echoed — it would be in the URL bar, the
+   * browser history and every access log between here and the CDN.
+   */
+  const back = (reason: string) => {
+    const params = new URLSearchParams({ error: reason });
+    if (fullName) params.set("name", fullName);
+    if (typed) params.set("email", typed);
+    if (invite) params.set("invite", invite);
+    redirect(`/signup?${params.toString()}`);
+  };
 
   if (!fullName) back("Tell us your name.");
 
-  const email = checkEmail(String(formData.get("email") ?? ""));
+  const email = checkEmail(typed);
   if (!email.ok) back(email.reason);
-
-  const username = checkUsername(String(formData.get("username") ?? ""));
-  if (!username.ok) back(username.reason);
 
   const password = checkPassword(
     String(formData.get("password") ?? ""),
@@ -48,22 +61,6 @@ async function signUp(formData: FormData) {
   if (!password.ok) back(password.reason);
 
   const supabase = await createClient();
-
-  /*
-   * The username is checked before the account is made, because the unique
-   * index would otherwise report itself as a failed signup.
-   *
-   * It is not a guarantee — two people can pass this check in the same second
-   * and the index still decides — which is exactly why the constraint exists
-   * underneath. This only turns the common case into a sentence somebody can
-   * act on instead of "duplicate key value violates unique constraint".
-   */
-  const { data: taken } = await supabase
-    .from("profiles")
-    .select("id")
-    .eq("username", (username as { value: string }).value)
-    .maybeSingle();
-  if (taken) back("That username is taken. Try another.");
 
   const base = process.env.APP_URL ?? "http://localhost:3000";
   const callback = invite
@@ -77,7 +74,7 @@ async function signUp(formData: FormData) {
       emailRedirectTo: callback,
       // Read by the trigger, never by the browser. These are the only fields
       // the form is allowed to put on the account.
-      data: { full_name: fullName, username: (username as { value: string }).value, address },
+      data: { full_name: fullName, address },
     },
   });
 
@@ -117,7 +114,7 @@ async function signUp(formData: FormData) {
 export default async function SignupPage({
   searchParams,
 }: {
-  searchParams: Promise<{ sent?: string; error?: string; invite?: string }>;
+  searchParams: Promise<{ sent?: string; error?: string; invite?: string; name?: string; email?: string }>;
 }) {
   const params = await searchParams;
 
@@ -216,24 +213,17 @@ export default async function SignupPage({
 
             <label className="field">
               <span>Your name</span>
-              <input type="text" name="fullName" required autoComplete="name" placeholder="Sam Patel" />
+              <input
+                type="text"
+                name="fullName"
+                required
+                autoComplete="name"
+                placeholder="Sam Patel"
+                defaultValue={params.name ?? ""}
+              />
               <span className="hint">Yours, not your company&rsquo;s — a prospect reads it on the invitation.</span>
             </label>
 
-            <label className="field">
-              <span>Username</span>
-              <input
-                type="text"
-                name="username"
-                required
-                autoComplete="username"
-                placeholder="sampatel"
-                minLength={3}
-                maxLength={30}
-                pattern="[A-Za-z0-9._-]+"
-              />
-              <span className="hint">Letters, numbers, dots, underscores or hyphens.</span>
-            </label>
           </div>
 
           <div className="field-group">
@@ -241,7 +231,21 @@ export default async function SignupPage({
 
             <label className="field">
               <span>Work email</span>
-              <input type="email" name="email" required autoComplete="email" placeholder="you@company.com" />
+              {/*
+                `username`, not `email`: this address is what you sign in
+                with, and it is the token a password manager stores as the
+                login. It was on the handle field, so managers were saving the
+                handle as the identifier and then not offering the address
+                back on the sign-in page.
+              */}
+              <input
+                type="email"
+                name="email"
+                required
+                autoComplete="username"
+                placeholder="you@company.com"
+                defaultValue={params.email ?? ""}
+              />
             </label>
 
             <div className="form-row">
@@ -251,9 +255,10 @@ export default async function SignupPage({
               <PasswordField
                 name="password"
                 label="Password"
+                minLength={PASSWORD_MIN}
                 hint={`At least ${PASSWORD_MIN} characters.`}
               />
-              <PasswordField name="confirm" label="Again" />
+              <PasswordField name="confirm" label="Again" minLength={PASSWORD_MIN} />
             </div>
             <span className="hint">
               Length is the only rule. A demand for a capital, a digit and a symbol produces
