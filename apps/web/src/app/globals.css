@@ -2444,9 +2444,13 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
    hue — the same story the funnel on the page tells. */
 .logo-mark { flex: none; display: block; }
 .logo-plate { fill: var(--accent); }
-.logo-bar { fill: #fff; opacity: .95; }
-.logo-bar.is-mid { opacity: .75; }
-.logo-bar.is-outcome { fill: var(--accent-2); opacity: 1; }
+/* The letter, on the plate. A literal white rather than a token: the plate is
+   always the accent, in both themes, so this stroke only ever sits on one
+   ground and a token would imply a choice that does not exist. */
+.logo-stroke { stroke: #fff; }
+/* The line the letter stops short of. The second hue, which is exactly what
+   `--accent-2` is reserved for — somewhere the first hue can travel to. */
+.logo-limit { fill: var(--accent-2); }
 
 .wordmark {
   display: inline-flex;

@@ -1,4 +1,6 @@
 import { ImageResponse } from "next/og";
+import { BRAND } from "@le/shared";
+import { MARK } from "@/components/logo";
 import { SITE } from "@/lib/site";
 
 export const runtime = "edge";
@@ -27,13 +29,18 @@ export function GET(request: Request) {
           backgroundImage: "radial-gradient(circle at 0% 100%, #241F5E 0%, #0B0D12 55%)" }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <div
-            style={{ width: 40,
-              height: 40,
-              borderRadius: 10,
-              background: "#A5A0FF",
-              display: "flex" }}
-          />
+          {/*
+            The real mark, not a rounded rectangle standing in for one. This
+            card is often the first thing anybody sees of the product, and a
+            placeholder where the logo goes is a worse impression than no card.
+            Drawn on its own plate so it reads on this dark ground exactly as
+            it does on the header's light one.
+          */}
+          <svg width="44" height="44" viewBox="0 0 32 32" fill="none">
+            <rect width="32" height="32" rx={MARK.plateRadius} fill={BRAND.color.accent} />
+            <path d={MARK.letter} stroke="#FFFFFF" strokeWidth={MARK.stroke} strokeLinecap="round" />
+            <rect {...MARK.limit} fill={BRAND.color.limit} />
+          </svg>
           <div style={{ color: "#ECEEF3", fontSize: 26, letterSpacing: "-0.02em" }}>{SITE.name}</div>
         </div>
 
@@ -49,7 +56,7 @@ export function GET(request: Request) {
         </div>
 
         <div style={{ color: "#A2AAB9", fontSize: 24, display: "flex" }}>
-          Finds your buyers. Starts the conversation. Books the meeting.
+          {BRAND.promise}
         </div>
       </div>
     ),

@@ -1,12 +1,43 @@
 import { BRAND } from "@le/shared";
 
 /**
- * The mark is the funnel: three bars narrowing, and the last one — the meeting
- * — in the second hue, because that is the only stage that is a different kind
- * of thing from the ones above it.
+ * The mark's geometry, in one place.
  *
- * Drawn rather than lettered so it survives at 20px in a browser tab, and built
- * from the same tokens as everything else so it cannot drift from the palette.
+ * The favicon and the link-preview card have to redraw it — they render
+ * through Satori, which cannot run a React component from this app or resolve
+ * a class name — so without this the same letter would be typed out in three
+ * files and would fall out of step in two of them.
+ */
+export const MARK = {
+  /** Left stem full height; shoulder arcs over to a right leg that stops early. */
+  letter: "M9.4 25.2V11.4M9.4 15a6.6 6.6 0 0 1 12.8 2.3v4.3",
+  stroke: 3.5,
+  plateRadius: 9,
+  limit: { x: 14.6, y: 26.4, width: 9.8, height: 1.8, rx: 0.9 },
+  /** Below this the line is dropped; see above. */
+  limitMinSize: 20,
+} as const;
+
+/**
+ * The mark is a lowercase `n` whose right leg stops short of a line.
+ *
+ * Every product in this category draws a funnel or a rocket, and both say the
+ * same thing: more, faster. This one's whole argument is the opposite. A third
+ * of one competitor's reviewers report having their LinkedIn account restricted
+ * inside ninety days, because a tool sent as much as it could as fast as it
+ * could. What Nora sells is a ceiling — a daily cap that is a product rule and
+ * not a setting, a ramp that starts at an account's first action, a day's
+ * allowance spread across the day rather than fired off in an hour.
+ *
+ * So the letter approaches its limit and deliberately does not reach it, and
+ * the limit is drawn. That is the entire pitch in one glyph, and it is the
+ * initial of the name, which means the mark cannot be lifted by anyone whose
+ * product does something else.
+ *
+ * Drawn from two strokes of one weight so it survives a browser tab. Below
+ * 20px the line is dropped: at that size it is two pixels of teal that read as
+ * a smudge under the letter rather than as a limit above it, and a detail
+ * nobody can resolve is worse than one that is not there.
  */
 export function LogoMark({ size = 28 }: { size?: number }) {
   return (
@@ -18,10 +49,9 @@ export function LogoMark({ size = 28 }: { size?: number }) {
       aria-hidden="true"
       className="logo-mark"
     >
-      <rect width="32" height="32" rx="9" className="logo-plate" />
-      <rect x="8" y="9.5" width="16" height="3" rx="1.5" className="logo-bar" />
-      <rect x="10" y="14.5" width="12" height="3" rx="1.5" className="logo-bar is-mid" />
-      <rect x="12.5" y="19.5" width="7" height="3" rx="1.5" className="logo-bar is-outcome" />
+      <rect width="32" height="32" rx={MARK.plateRadius} className="logo-plate" />
+      <path d={MARK.letter} strokeWidth={MARK.stroke} strokeLinecap="round" className="logo-stroke" />
+      {size >= MARK.limitMinSize ? <rect {...MARK.limit} className="logo-limit" /> : null}
     </svg>
   );
 }

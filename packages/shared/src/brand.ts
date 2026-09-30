@@ -31,6 +31,31 @@ export const BRAND = {
   site: "https://norasdr.com",
   /** Where the product itself lives, and the only host that holds a session. */
   app: "https://app.norasdr.com",
+
+  /**
+   * What a customer gets, in the words they would use. Not "AI-powered
+   * outreach automation" — the outcome, and the cost of the alternative.
+   */
+  promise: "Meetings from LinkedIn, at a pace that keeps your account safe.",
+
+  /**
+   * The two brand colours, and the only place they exist outside the
+   * stylesheet.
+   *
+   * They have to be literals here because the surfaces that need them cannot
+   * read CSS: the favicon and the link-preview card are rendered by Satori,
+   * which lays out a subset of CSS and has never heard of a custom property.
+   * Two representations of one colour is exactly the drift rule 38 is about,
+   * so `apps/web/test/brand-tokens.test.ts` reads `--accent` and `--accent-2`
+   * out of the stylesheet and fails if they have moved apart. A favicon in
+   * last season's blue is the kind of thing nobody ever reports.
+   */
+  color: {
+    /** `--accent`. The plate, and the letter when it has no plate. */
+    accent: "#3730E8",
+    /** `--accent-2`. The line the mark stops short of, and nothing else. */
+    limit: "#12A5A0",
+  },
 } as const;
 
 /**

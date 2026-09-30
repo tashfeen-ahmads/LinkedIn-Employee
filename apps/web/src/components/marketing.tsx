@@ -76,12 +76,23 @@ export function Hero() {
               <span className="announce-chip">See how &rarr;</span>
             </Link>
             <div className="stack-3">
+              {/*
+                The outcome first, then the thing nobody else can say.
+
+                "Your AI SDR for LinkedIn" is the category, not the product —
+                every competitor's headline says it, so it tells a visitor
+                nothing about which of them to pick. What separates this one is
+                the second sentence, and it is the same sentence the mark
+                draws: it stops before the limit.
+              */}
               <h1>
-                Your AI SDR <span className="headline-accent">for LinkedIn.</span>
+                Meetings from LinkedIn.{" "}
+                <span className="headline-accent">Without risking the account.</span>
               </h1>
               <p className="lede prose">
-                It finds your buyers, starts the conversation, and books the meeting into your
-                calendar. You show up and close.
+                {BRAND.name} finds your buyers, writes each invitation from that person&rsquo;s own
+                profile, answers the replies and books the meeting. You approve the strategy, check
+                the words and press launch — three decisions, not an hour a day.
               </p>
             </div>
             <div className="cluster">
@@ -136,8 +147,9 @@ export function Hero() {
             </div>
 
             <p className="tiny subtle prose">
-              Held for you. Pricing, legal, anything negative and anything it is unsure about waits
-              for a person, on every plan.
+              Held for you. Pricing, legal and anything negative wait for a person until you turn
+              that off — and two holds never lift: a message it is not confident it understood, and
+              a prospect who asks to speak to a human.
             </p>
           </figure>
         </Reveal>
