@@ -3,7 +3,6 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase-server";
 import { isAppConfigured } from "@/lib/config";
 import { SiteFooter, SiteHeader } from "@/components/marketing";
-import { GoogleGlyph } from "@/components/google-glyph";
 import { AuthAside } from "@/components/auth-aside";
 import { PasswordField } from "@/components/password-field";
 import { SubmitButton } from "@/components/submit-button";
@@ -115,24 +114,6 @@ async function signUp(formData: FormData) {
   redirect(`/signup?sent=${encodeURIComponent((email as { value: string }).value)}`);
 }
 
-/** Google, which confirms the address by definition and needs no password. */
-async function signUpWithGoogle(formData: FormData) {
-  "use server";
-  const invite = String(formData.get("invite") ?? "").trim();
-  const base = process.env.APP_URL ?? "http://localhost:3000";
-  const callback = invite
-    ? `${base}/auth/callback?invite=${encodeURIComponent(invite)}`
-    : `${base}/auth/callback`;
-
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.signInWithOAuth({
-    provider: "google",
-    options: { redirectTo: callback, queryParams: { access_type: "offline", prompt: "consent" } },
-  });
-  if (error || !data?.url) redirect(`/signup?error=${encodeURIComponent(error?.message ?? "Google sign-in is unavailable.")}`);
-  redirect(data.url);
-}
-
 export default async function SignupPage({
   searchParams,
 }: {
@@ -216,18 +197,6 @@ export default async function SignupPage({
         </header>
 
         {params.error ? <div className="notice danger">{params.error}</div> : null}
-
-        <form action={signUpWithGoogle}>
-          {params.invite ? <input type="hidden" name="invite" value={params.invite} /> : null}
-          <button className="btn secondary block" type="submit">
-            <GoogleGlyph />
-            Continue with Google
-          </button>
-        </form>
-
-        <div className="or-rule">
-          <span className="tiny subtle">or with an email and password</span>
-        </div>
 
         {/*
           Two groups, not six boxes in a row.

@@ -38,12 +38,20 @@ export function SiteHeader() {
 
         <SiteNav links={NAV_LINKS} />
 
+        {/*
+          Sign in and sign up, which are the two things a header is for.
+
+          The filled button used to say "Start free trial" and point at
+          /login — so the one control aimed at somebody who has never been
+          here before opened a form asking for a password they do not have.
+          The trial is what they get; signing up is what they do.
+        */}
         <div className="site-header-actions">
           <Link href={`${SITE.app}/login`} className="site-nav-link site-signin">
             Sign in
           </Link>
-          <Link href={`${SITE.app}/login`} className="btn small">
-            Start free trial
+          <Link href={`${SITE.app}/signup`} className="btn small">
+            Sign up
           </Link>
         </div>
       </div>
@@ -96,7 +104,7 @@ export function Hero() {
               </p>
             </div>
             <div className="cluster">
-              <Link href={`${SITE.app}/login`} className="btn large">
+              <Link href={`${SITE.app}/signup`} className="btn large">
                 Start 7-day free trial
               </Link>
               <a href="#how-it-works" className="btn secondary large">
@@ -721,7 +729,7 @@ export function Pricing({ standalone = false }: { standalone?: boolean } = {}) {
                 ))}
               </ul>
 
-              <Link href={`${SITE.app}/login`} className={`btn${plan.highlight ? "" : " secondary"} block`}>
+              <Link href={`${SITE.app}/signup`} className={`btn${plan.highlight ? "" : " secondary"} block`}>
                 Start free trial
               </Link>
             </article>
@@ -787,7 +795,7 @@ export function ClosingCta() {
           </p>
         </div>
         <div className="cluster">
-          <Link href={`${SITE.app}/login`} className="btn large">
+          <Link href={`${SITE.app}/signup`} className="btn large">
             Start free trial
           </Link>
           <Link href="/how-it-works" className="btn secondary large">

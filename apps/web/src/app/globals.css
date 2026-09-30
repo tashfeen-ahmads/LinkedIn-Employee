@@ -2734,8 +2734,6 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
 }
 
 /* A rule with a label in it, for "or use an email link". */
-.or-rule { display: flex; align-items: center; gap: var(--space-3); margin-block: var(--space-4); }
-.or-rule::before, .or-rule::after { content: ""; flex: 1; height: 1px; background: var(--border); }
 
 /* The setup checklist. A done row recedes rather than celebrating. */
 .checklist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }

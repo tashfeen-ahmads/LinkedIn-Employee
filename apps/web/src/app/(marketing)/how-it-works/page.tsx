@@ -217,7 +217,7 @@ export default function HowItWorksPage() {
           </div>
 
           <div className="cluster">
-            <Link href={`${SITE.app}/login`} className="btn large">
+            <Link href={`${SITE.app}/signup`} className="btn large">
               Start 7-day free trial
             </Link>
             <Link href="/pricing" className="btn secondary large">

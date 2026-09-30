@@ -65,7 +65,9 @@ export function LogoMark({ size = 28 }: { size?: number }) {
  * place a rename leaves half the old name behind, on the most looked-at
  * element in the product.
  */
-const QUALIFIER = BRAND.full.startsWith(BRAND.name) ? BRAND.full.slice(BRAND.name.length).trim() : "";
+export const BRAND_QUALIFIER = BRAND.full.startsWith(BRAND.name)
+  ? BRAND.full.slice(BRAND.name.length).trim()
+  : "";
 
 export function Wordmark({ size = 28 }: { size?: number }) {
   return (
@@ -73,7 +75,7 @@ export function Wordmark({ size = 28 }: { size?: number }) {
       <LogoMark size={size} />
       <span className="wordmark-text">
         {BRAND.name}
-        {QUALIFIER ? <span className="wordmark-thin">&nbsp;{QUALIFIER}</span> : null}
+        {BRAND_QUALIFIER ? <span className="wordmark-thin">&nbsp;{BRAND_QUALIFIER}</span> : null}
       </span>
     </span>
   );

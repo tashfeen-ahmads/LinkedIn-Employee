@@ -5,7 +5,8 @@ import { createClient } from "@/lib/supabase-server";
 import { AppNav, type NavGroup } from "@/components/app-nav";
 import { AppSearch } from "@/components/app-search";
 import { NavIcon } from "@/components/icons";
-import { LogoMark } from "@/components/logo";
+import { BRAND } from "@le/shared";
+import { BRAND_QUALIFIER, LogoMark } from "@/components/logo";
 import { readSetupState } from "@/lib/setup-state";
 import { markFor, type NavMarks } from "@/lib/nav-marks";
 import { loadNeedsYou } from "@/lib/needs-you-data";
@@ -186,7 +187,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <div className="app-brand">
           <Link href="/app" className="app-brand-name">
             <LogoMark size={22} />
-            <span>LinkedIn&nbsp;Employee</span>
+            {/*
+              Rendered from BRAND, not typed out. This span kept the old name
+              for a full release after the rename: it was written with a
+              non-breaking entity between the two words, and the check meant to
+              ban that name was looking for a plain space.
+            */}
+            <span>
+              {BRAND.name}
+              {BRAND_QUALIFIER ? <span className="wordmark-thin">&nbsp;{BRAND_QUALIFIER}</span> : null}
+            </span>
           </Link>
           <p className="tiny subtle">{session.workspaceName}</p>
         </div>

@@ -22,11 +22,25 @@ import { BRAND, appOrigin, siteOrigin } from "../src/brand.js";
  */
 const SHIPPED = ["apps/web/src", "apps/worker/src", "packages"];
 
+/**
+ * Extended-regex, not a fixed string, and that distinction is the whole test.
+ *
+ * The first version of this greped for the literal "LinkedIn Employee" and
+ * passed while the dashboard's own sidebar still said it — because the sidebar
+ * splits the name for typesetting and wrote it as `LinkedIn&nbsp;Employee`. A
+ * non-breaking entity between the words, and the check sailed past it for a
+ * whole release, on the single most looked-at element in the product.
+ *
+ * That is this repo's oldest lesson: a test that passes for the wrong reason
+ * is worse than no test, because it stops anyone looking again. Any separator
+ * counts now — a space, a newline, an entity — since a rename is exactly when
+ * somebody's markup puts one there.
+ */
 function grepShipped(pattern: string): string[] {
   try {
     const out = execFileSync(
       "git",
-      ["grep", "-n", "--fixed-strings", pattern, "--", ...SHIPPED],
+      ["grep", "-n", "-E", pattern, "--", ...SHIPPED],
       { cwd: new URL("../../..", import.meta.url).pathname, encoding: "utf8" },
     );
     return out
@@ -47,9 +61,14 @@ function grepShipped(pattern: string): string[] {
   }
 }
 
+/** Two words with anything between them that renders as one space. */
+function SEPARATED(a: string, b: string): string {
+  return `${a}(&nbsp;|&#160;|&#xA0;|&#xa0;|[[:space:]])+${b}`;
+}
+
 describe("the brand has one definition", () => {
   it("has no trace of the old product name in anything that ships", () => {
-    expect(grepShipped("LinkedIn Employee")).toEqual([]);
+    expect(grepShipped(SEPARATED("LinkedIn", "Employee"))).toEqual([]);
   });
 
   it("has no trace of the old preview host, which is now nobody's canonical", () => {

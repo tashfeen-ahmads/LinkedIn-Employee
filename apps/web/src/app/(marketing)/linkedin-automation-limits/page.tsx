@@ -218,7 +218,7 @@ export default function LimitsPage() {
               only make them stricter.
             </p>
             <div className="cluster">
-              <Link href={`${SITE.app}/login`} className="btn">
+              <Link href={`${SITE.app}/signup`} className="btn">
                 Start 7-day free trial
               </Link>
               <Link href="/how-it-works" className="btn secondary">

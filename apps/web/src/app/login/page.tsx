@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase-server";
 import { isAppConfigured } from "@/lib/config";
 import { SiteFooter, SiteHeader } from "@/components/marketing";
-import { GoogleGlyph } from "@/components/google-glyph";
 import { AuthAside } from "@/components/auth-aside";
 import { PasswordField } from "@/components/password-field";
 import { SubmitButton } from "@/components/submit-button";
@@ -74,38 +73,6 @@ async function signInWithPassword(formData: FormData) {
   redirect(invite ? `/invite/${encodeURIComponent(invite)}` : "/app");
 }
 
-/**
- * Google sign-in.
- *
- * Beside the magic link rather than instead of it: a work Google account is one
- * click, and the magic link is the fallback for anyone whose company does not
- * use Google. Both land on the same callback and produce the same session.
- */
-async function signInWithGoogle(formData: FormData) {
-  "use server";
-  const invite = String(formData.get("invite") ?? "").trim();
-  const base = process.env.APP_URL ?? "http://localhost:3000";
-  const callback = invite
-    ? `${base}/auth/callback?invite=${encodeURIComponent(invite)}`
-    : `${base}/auth/callback`;
-
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.signInWithOAuth({
-    provider: "google",
-    options: {
-      redirectTo: callback,
-      // A refresh token, so the session survives without sending them back to
-      // Google every hour.
-      queryParams: { access_type: "offline", prompt: "consent" },
-    },
-  });
-
-  if (error || !data.url) {
-    redirect(`/login?error=${encodeURIComponent(error?.message ?? "Could not reach Google")}`);
-  }
-  redirect(data.url);
-}
-
 export default async function LoginPage({
   searchParams,
 }: {
@@ -156,18 +123,6 @@ export default async function LoginPage({
           <div className="notice">Check your inbox. The link is valid for one hour.</div>
         ) : null}
         {params.error ? <div className="notice danger">{params.error}</div> : null}
-
-        <form action={signInWithGoogle}>
-          {params.invite ? <input type="hidden" name="invite" value={params.invite} /> : null}
-          <button className="btn secondary block" type="submit">
-            <GoogleGlyph />
-            Continue with Google
-          </button>
-        </form>
-
-        <div className="or-rule">
-          <span className="tiny subtle">or with your password</span>
-        </div>
 
         <form action={signInWithPassword} className="card">
           {params.invite ? <input type="hidden" name="invite" value={params.invite} /> : null}
