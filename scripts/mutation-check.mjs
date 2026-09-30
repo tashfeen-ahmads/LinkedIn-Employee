@@ -1303,8 +1303,8 @@ const MUTATIONS = [
     id: "connect/verified-deliveries-only",
     rule: "An unverifiable connection notice binds nothing",
     file: "apps/worker/src/server.ts",
-    from: '      console.error("rejected account webhook", err);\n      return c.json({ error: "invalid signature" }, 401);',
-    to: '      console.error("rejected account webhook", err);\n      accounts = [];',
+    from: '      void pullAfterUnverifiedNotice(ctx);\n      return c.json({ error: "invalid signature" }, 401);',
+    to: '      void pullAfterUnverifiedNotice(ctx);\n      accounts = [];',
     pkg: "@le/worker",
   },
   {
