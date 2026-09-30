@@ -2137,6 +2137,46 @@ const MUTATIONS = [
     pkg: "@le/worker",
   },
   {
+    id: "accounts/a-refused-list-is-not-a-clean-sweep",
+    rule: "Recovery reports that it could not ask the provider; `repaired: 0` from a refused call is otherwise identical to a night with nothing to fix, and the nightly record then writes down a sweep that never happened",
+    file: "apps/worker/src/accounts.ts",
+    from: "      unreachable: err instanceof Error ? err.message : String(err),",
+    to: "      unreachable: null,",
+    pkg: "@le/worker",
+  },
+  {
+    id: "accounts/the-night-records-the-refusal",
+    rule: "Maintenance raises on a refused account list so it lands in `failed`; discarding what recovery reported is how the call site loses it again",
+    file: "apps/worker/src/jobs/maintenance.ts",
+    from: "    if (run.unreachable) throw new Error(`could not list provider accounts: ${run.unreachable}`);",
+    to: "    if (false) throw new Error(`could not list provider accounts: ${run.unreachable}`);",
+    pkg: "@le/worker",
+  },
+  {
+    id: "system/the-customers-half-carries-no-vendor",
+    rule: "A provider's raw error reaches the operator's half of a system-check row and never the customer's; it names the vendor, an endpoint and a status code, and assigns a repair the reader cannot perform",
+    file: "apps/worker/src/jobs/diagnostics.ts",
+    from: '        : "We could not reach LinkedIn on your behalf, so nothing is sending. This one is ours rather than yours.",',
+    to: '        : `Could not ask the provider: ${(err as { message?: string })?.message ?? "unknown error"}`,',
+    pkg: "@le/worker",
+  },
+  {
+    id: "system/a-shouted-variable-is-caught-on-its-own",
+    rule: "An environment variable on a customer's row is caught by its shape alone, with no vendor word beside it to give it away — the guard has to read the row's real text, since a lowercased copy can never match an uppercase pattern",
+    file: "apps/worker/src/jobs/diagnostics.ts",
+    /*
+     * Deliberately plants a name that appears on none of the banned-word
+     * lists, so the *only* thing that can catch it is the shouted-shape
+     * pattern. That half of the guard had been running against a lowercased
+     * copy of the row since it was written and could therefore never fire;
+     * a plant carrying "unipile" as well would be caught by the word list
+     * and this mutation would pass while the regex stayed dead.
+     */
+    from: '      fix: "Nothing for you to do here. Tell us if it stays this way.",\n      href: "/app/support",\n      operator: `Could not ask the provider: ${(err as { message?: string })?.message ?? "unknown error"}`,\n    };\n  }\n\n  if (mine.length === 0) {',
+    to: '      fix: "Set CREDENTIALS_KEY and try again.",\n      href: "/app/support",\n      operator: `Could not ask the provider: ${(err as { message?: string })?.message ?? "unknown error"}`,\n    };\n  }\n\n  if (mine.length === 0) {',
+    pkg: "@le/worker",
+  },
+  {
     id: "connect/an-unverifiable-notice-still-makes-us-look",
     rule: "A refused account delivery still triggers a pull from the provider; the hosted flow's notify is never signed, so refusing and learning nothing leaves the row holding a dead id until the nightly sweep",
     file: "apps/worker/src/server.ts",

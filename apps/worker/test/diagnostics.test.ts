@@ -22,10 +22,29 @@ function harness(
     env?: Record<string, unknown>;
     /** The provider the worker actually built, which is what the email row reads. */
     email?: unknown;
+    /**
+     * Provider methods that refuse, so the catch branches are walked.
+     *
+     * Without this the harness only ever produced a provider that answers, so
+     * every `catch` in this file — four of them, each interpolating the
+     * provider's raw error into the row a customer reads — was unreachable
+     * from the test that exists to keep vendor names off that screen. The
+     * guard reported clean while `Unipile GET /api/v1/accounts/… 401` was
+     * live on `/app/system`.
+     */
+    throws?: string[];
   } = {},
 ) {
   const db = new FakeDb();
   const linkedin = new MockLinkedInProvider();
+
+  for (const method of options.throws ?? []) {
+    (linkedin as unknown as Record<string, unknown>)[method] = async () => {
+      throw new Error(
+        "Unipile GET /api/v1/accounts/acct_live failed with 401: Missing credentials — errors/missing_credentials",
+      );
+    };
+  }
 
   if (options.account !== null) {
     db.seed("linkedin_accounts", [
@@ -116,7 +135,10 @@ describe("system check", () => {
 
     expect(check(report, "account-row").state).toBe("ok");
     expect(check(report, "account-live").state).toBe("blocked");
-    expect(check(report, "account-live").detail).toMatch(/no such account/i);
+    // Said in the reader's own terms — a stale connection and what it costs —
+    // rather than by quoting the provider at them (rule 54).
+    expect(check(report, "account-live").detail).toMatch(/stale/i);
+    expect(check(report, "account-live").detail).not.toMatch(/unipile/i);
     expect(check(report, "account-live").href).toBe("/app/team");
   });
 
@@ -132,14 +154,24 @@ describe("system check", () => {
     expect(check(report, "search").detail).toMatch(/not attempted/i);
   });
 
-  it("carries the provider's own sentence when a search is refused", async () => {
+  it("carries the provider's own sentence to the operator, and not to the customer", async () => {
+    /*
+     * The provider's exact words are the most useful thing in the flow and
+     * they still travel — on the half belonging to somebody who can act on
+     * them. This used to assert them in `detail`, which is how a status code
+     * and a vendor's name came to be a business owner's whole explanation of
+     * why prospecting had stopped.
+     */
     const { ctx, linkedin } = harness();
     linkedin.searchError = new Error("402 subscription required");
 
     const report = await run(ctx);
 
     expect(check(report, "search").state).toBe("blocked");
-    expect(check(report, "search").detail).toContain("402");
+    expect(check(report, "search").operator).toContain("402");
+    expect(check(report, "search").detail).not.toContain("402");
+    // Blocked and ours, so it still hands them somewhere to go.
+    expect(check(report, "search").fix).toBeTruthy();
   });
 
   it("names a missing webhook secret as blocking replies, not as a detail", async () => {
@@ -408,6 +440,20 @@ describe("the two audiences for a system check", () => {
       harness({ env: { EMAIL_PROVIDER: "off" }, email: null }),
       harness({ env: { EMAIL_PROVIDER: "resend" }, email: null }),
       harness({ env: { EMAIL_PROVIDER: "resend" }, email: { send: async () => {} } }),
+      /*
+       * The provider refusing, one method at a time.
+       *
+       * These are the branches that carried the leak, and they are listed
+       * individually rather than as one all-refusing provider because a row
+       * upstream of a failure can short-circuit the rows below it — a single
+       * state where everything throws would walk the first catch and skip the
+       * other three, which is the same "passed because it did not run" the
+       * whole describe block exists to prevent.
+       */
+      harness({ throws: ["getAccountHealth"] }),
+      harness({ throws: ["listAccounts"] }),
+      harness({ throws: ["searchProspects"] }),
+      harness({ throws: ["listPendingInvitations"] }),
     ];
 
     // A signature that did not verify, and one that never arrived: the two
@@ -441,13 +487,28 @@ describe("the two audiences for a system check", () => {
     const offenders: string[] = [];
     for (const row of await everyRow()) {
       // Every sentence this screen shows without an admin session.
-      const mine = [row.label, row.detail, row.fix ?? ""].join(" ").toLowerCase();
+      const raw = [row.label, row.detail, row.fix ?? ""].join(" ");
+      const mine = raw.toLowerCase();
       for (const word of OPERATOR_ONLY) {
         if (mine.includes(word)) offenders.push(`${row.key}: "${word}"`);
       }
-      // An environment variable is SHOUTED, which is how one is recognised
-      // without listing every name this deployment might gain.
-      const shouted = mine.match(/[A-Z][A-Z0-9]{3,}_[A-Z0-9_]+/);
+      /*
+       * An environment variable is SHOUTED, which is how one is recognised
+       * without listing every name this deployment might gain.
+       *
+       * Matched against `raw`, not against the lowercased copy. It ran on
+       * `mine` for as long as this test has existed, so the pattern could
+       * never match anything and this half of the guard checked nothing at
+       * all — the word list carried the whole file. `WORKER_URL`, `APP_URL`
+       * and `CREDENTIALS_KEY` are on none of those lists and would each have
+       * gone straight to a customer.
+       *
+       * Which is this repo's oldest lesson twice over: a test that passes for
+       * the wrong reason stops anybody looking again, and the fix is only
+       * trustworthy because it was run against a row carrying a shouted name
+       * first and seen to fail.
+       */
+      const shouted = raw.match(/[A-Z][A-Z0-9]{3,}_[A-Z0-9_]+/);
       if (shouted) offenders.push(`${row.key}: ${shouted[0]}`);
     }
     expect(offenders).toEqual([]);

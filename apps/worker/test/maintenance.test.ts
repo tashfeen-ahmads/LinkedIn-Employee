@@ -161,6 +161,38 @@ describe("runMaintenance", () => {
     expect(detail.failures["withdraw-stale"]).toContain("502");
   });
 
+  it("records a refused account list as a failure, not as a night with nothing to fix", async () => {
+    /*
+     * `recover-accounts: 0` was two different nights written the same way, and
+     * this deployment spent one of them in the wrong one: the provider
+     * answered `401 Missing credentials` to every call, recovery correctly
+     * touched no row, and the record said the step was done.
+     *
+     * Asserted here rather than only on `recoverAccounts` because the bug was
+     * the call site discarding what it was told — rule 39's lesson, that a
+     * unit test of the function passes throughout.
+     */
+    const { db, ctx, linkedin, queues } = harness();
+    linkedin.listAccounts = async () => {
+      throw new Error("Unipile GET /api/v1/accounts failed with 401: Missing credentials");
+    };
+
+    await runMaintenance(ctx, queues, NOW);
+
+    const detail = db.find("worker_heartbeats", { name: MAINTENANCE_BEAT })!.detail as {
+      ok: boolean;
+      done: Record<string, number>;
+      failed: string[];
+      failures: Record<string, string>;
+    };
+    expect(detail.ok).toBe(false);
+    expect(detail.failed).toContain("recover-accounts");
+    expect(detail.failures["recover-accounts"]).toContain("401");
+    // And it must not also appear as a completed step with a count of zero,
+    // which is the sentence that cost the day.
+    expect(detail.done["recover-accounts"]).toBeUndefined();
+  });
+
   it("does not let one unhealthy account stop the others being checked", async () => {
     const { db, ctx, linkedin, queues } = harness();
     db.seed("linkedin_accounts", [

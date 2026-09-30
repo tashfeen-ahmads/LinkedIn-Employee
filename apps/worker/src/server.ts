@@ -1583,6 +1583,10 @@ async function pullAfterUnverifiedNotice(ctx: WorkerContext): Promise<void> {
       trigger: "unverified-notice",
       checked: result.checked,
       repaired: result.repaired,
+      // `repaired: 0` because there was nothing to fix, and `repaired: 0`
+      // because the provider refused the call, are the same two words and
+      // completely different afternoons.
+      unreachable: result.unreachable,
     });
   } catch (err) {
     console.error("pull after unverified account notice failed", err);

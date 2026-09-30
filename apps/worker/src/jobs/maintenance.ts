@@ -79,7 +79,16 @@ export async function runMaintenance(
   // Before polling: repair any account whose stored id the provider has
   // replaced. Polling first asks about an id that is already gone, marks the
   // row dead, and never looks for the live account sitting beside it.
-  await step("recover-accounts", async () => (await recoverAccounts(db, ctx.linkedin)).repaired);
+  await step("recover-accounts", async () => {
+    const run = await recoverAccounts(db, ctx.linkedin);
+    // A list call that was refused touched no row, which is correct — but it
+    // is not a night with nothing to fix, and recording it as `0` is how this
+    // deployment wrote down a clean sweep while the provider was answering
+    // `401 Missing credentials` to everything. Raised so it lands in
+    // `failed`, where the next step's own failure already lands.
+    if (run.unreachable) throw new Error(`could not list provider accounts: ${run.unreachable}`);
+    return run.repaired;
+  });
 
   // Per account, not per loop: one restricted account must not stop the others
   // being checked.

@@ -283,16 +283,41 @@ export function canRepointWorkingAccount(
   return mine.length === 1;
 }
 
+/**
+ * What a recovery run found, including the case where it found nothing because
+ * it could not look.
+ *
+ * `unreachable` exists because `repaired: 0` was two different nights. A sweep
+ * that listed the provider's accounts and had nothing to fix is the good one.
+ * A sweep whose list call was refused outright is the deployment's credentials
+ * being rejected — and it reported the identical zero, which the nightly
+ * record then wrote down as a clean step. This deployment sat in the second
+ * state with `recover-accounts: 0` on the record: the provider answered
+ * `401 Missing credentials` to every call, and the only reason anybody found
+ * out is that the health poll beside it happened to surface the same 401 in
+ * its own row. Without that neighbour the night was green.
+ *
+ * That is rule 17's disease in the maintenance log — a step that passes because
+ * it did not run — and it is worth a field rather than a log line, because a
+ * log on the deployment's host is not somewhere the person who needs it can go.
+ */
+export interface RecoveryRun {
+  checked: number;
+  repaired: number;
+  /** Why the provider could not be asked, or null if it answered. */
+  unreachable: string | null;
+}
+
 export async function recoverAccounts(
   db: Db,
   provider: LinkedInProvider,
-): Promise<{ checked: number; repaired: number }> {
+): Promise<RecoveryRun> {
   const { data: rows } = await db
     .from("linkedin_accounts")
     .select("id, workspace_id, user_id, status, provider_account_id")
     .in("status", ["active", "connecting", "reauth_required", "restricted", "warning", "disconnected"]);
 
-  if (!rows?.length) return { checked: 0, repaired: 0 };
+  if (!rows?.length) return { checked: 0, repaired: 0, unreachable: null };
 
   let accounts: ConnectedAccount[];
   try {
@@ -300,9 +325,15 @@ export async function recoverAccounts(
   } catch (err) {
     // Asked and could not be answered is not the same as "the provider has
     // nothing", and treating it as the latter would mark every account in the
-    // deployment dead over one bad minute.
+    // deployment dead over one bad minute. So no row is touched — but the
+    // refusal is returned rather than swallowed, or the caller records a
+    // night that never happened.
     console.error("could not list provider accounts for recovery", err);
-    return { checked: rows.length, repaired: 0 };
+    return {
+      checked: rows.length,
+      repaired: 0,
+      unreachable: err instanceof Error ? err.message : String(err),
+    };
   }
 
   let repaired = 0;
@@ -346,7 +377,7 @@ export async function recoverAccounts(
       });
     }
   }
-  return { checked: rows.length, repaired };
+  return { checked: rows.length, repaired, unreachable: null };
 }
 
 /**

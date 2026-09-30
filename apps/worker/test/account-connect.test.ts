@@ -410,6 +410,55 @@ describe("recovering an account the provider has replaced", () => {
     expect(account.status_detail).toBeNull();
   });
 
+  it("reports a refused list rather than reading it as nothing to repair", async () => {
+    /*
+     * The night this deployment lost.
+     *
+     * `listAccounts` was answered `401 Missing credentials` — the DSN and the
+     * access token belonged to two different Unipile tenants — and recovery
+     * correctly touched no row, because "asked and refused" must never be
+     * read as "the provider has none" (that would mark every account on the
+     * deployment dead over one bad minute). But it then returned
+     * `repaired: 0`, which is exactly what a healthy night with nothing to fix
+     * returns, and the nightly record wrote `recover-accounts: 0` and called
+     * the step done.
+     *
+     * The only reason anybody ever found out is that the health poll standing
+     * beside it surfaced the same 401 in its own row. Without that neighbour
+     * the sweep was green while nothing in the product could reach LinkedIn
+     * at all — a step that passes because it could not look, which is the
+     * disease this repo keeps paying for.
+     */
+    const { db, linkedin } = harness({ provider_account_id: "acct_dead", status: "reauth_required" });
+    linkedin.listAccounts = async () => {
+      throw new Error("Unipile GET /api/v1/accounts failed with 401: Missing credentials");
+    };
+    const { recoverAccounts } = await import("../src/accounts.js");
+
+    const result = await recoverAccounts(db.asDb(), linkedin);
+
+    expect(result.unreachable).toMatch(/401/);
+    expect(result.repaired).toBe(0);
+    // No row touched: a refusal is not evidence about any account.
+    expect(db.find("linkedin_accounts", { id: ACCOUNT })!.status).toBe("reauth_required");
+    expect(db.find("linkedin_accounts", { id: ACCOUNT })!.provider_account_id).toBe("acct_dead");
+  });
+
+  it("says nothing was wrong when the provider answered and there was nothing to fix", async () => {
+    // The other half of the pair, so `unreachable` cannot be made truthy
+    // unconditionally and still pass: a clean run has to report a clean run.
+    const { db, linkedin } = harness({ provider_account_id: "acct_live", status: "active" });
+    linkedin.connectedAccounts = [
+      { providerAccountId: "acct_live", reference: USER, status: "ok" },
+    ];
+    const { recoverAccounts } = await import("../src/accounts.js");
+
+    const result = await recoverAccounts(db.asDb(), linkedin);
+
+    expect(result.unreachable).toBeNull();
+    expect(result.repaired).toBe(0);
+  });
+
   it("finishes a connection that was left half-done", async () => {
     // A hosted flow whose notification never arrived leaves a `connecting` row
     // with no provider id, and nothing else ever completes it.

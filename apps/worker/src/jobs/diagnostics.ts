@@ -309,7 +309,18 @@ export async function runDiagnostics(
           stage: STAGES.account,
           label: "Invitations LinkedIn is still holding",
           state: "unknown",
-          detail: `Could not ask the provider: ${err instanceof Error ? err.message : String(err)}`,
+          /*
+           * The customer's half never carries the raw error, for rule 54's
+           * reason: that string is `Unipile GET /api/v1/accounts/… failed
+           * with 401` — our supply chain, an endpoint and a status code,
+           * printed on a business owner's dashboard as a repair they have no
+           * access to perform.
+           */
+          detail:
+            "We could not check how many of your invitations are still waiting for an answer, so this one is unknown rather than clear. It is ours to look into rather than yours.",
+          fix: "Nothing for you to do here. Tell us if it stays this way.",
+          href: "/app/support",
+          operator: `Could not ask the provider: ${err instanceof Error ? err.message : String(err)}`,
         });
       }
     }
@@ -746,11 +757,22 @@ async function probeAccount(
     return {
       label: "The provider still has that account",
       state: "blocked",
+      /*
+       * The non-`gone` branch was the worst row on this screen: blocked, with
+       * a vendor's HTTP error as its whole explanation and no `fix` at all. So
+       * a customer read `Unipile GET /api/v1/accounts/… 401 Missing
+       * credentials` and was given nothing to do about it — our supply chain
+       * printed on their dashboard *and* a dead end. It is also the row this
+       * deployment actually sits on, which is how it was found.
+       */
       detail: gone
-        ? "The provider has no such account. The connection here is stale — this is what makes every campaign fail with nothing to show for it."
+        ? "Your LinkedIn connection is stale — the account it points at no longer exists. This is what makes every campaign fail with nothing to show for it."
+        : "We could not reach LinkedIn on your behalf, so nothing is sending. This one is ours rather than yours.",
+      fix: gone ? "Reconnect LinkedIn." : "Nothing for you to do here. Tell us and we will look.",
+      href: gone ? "/app/team" : "/app/support",
+      operator: gone
+        ? "The provider has no account with the stored id. Recovery re-points the row when the provider holds a replacement labelled with this user."
         : `Could not ask the provider: ${(err as { message?: string })?.message ?? "unknown error"}`,
-      fix: gone ? "Reconnect LinkedIn." : undefined,
-      href: gone ? "/app/team" : undefined,
     };
   }
 }
@@ -775,7 +797,12 @@ async function probeReplacement(
     return {
       label: "The provider and this app agree about your account",
       state: "unknown",
-      detail: `Could not ask the provider: ${(err as { message?: string })?.message ?? "unknown error"}`,
+      // Vendor, endpoint and status code stay on the operator's half (rule 54).
+      detail:
+        "We could not confirm your LinkedIn connection just now, so this one is unknown rather than clear. It is ours to look into rather than yours.",
+      fix: "Nothing for you to do here. Tell us if it stays this way.",
+      href: "/app/support",
+      operator: `Could not ask the provider: ${(err as { message?: string })?.message ?? "unknown error"}`,
     };
   }
 
@@ -784,9 +811,11 @@ async function probeReplacement(
       label: "The provider and this app agree about your account",
       state: "blocked",
       detail:
-        "The provider has no LinkedIn account connected for you at all. If its own dashboard shows one as connected, it is not labelled with this user, which an administrator has to look at.",
+        "No LinkedIn account is connected for you. Nothing can be sent until one is, and reconnecting from the Team page is what fixes it.",
       fix: "Connect LinkedIn again from the Team page.",
       href: "/app/team",
+      operator:
+        "The provider holds no account whose reference is this user id. If its own dashboard shows one connected, the account is not labelled with this user — check what `name` the hosted auth link was given.",
     };
   }
 
@@ -846,12 +875,22 @@ async function probeSearch(
       fix: notes.length ? notes.join(" ") : undefined,
     };
   } catch (err) {
+    const gone = isAccountGone(err);
     return {
       label: "Prospect search works",
       state: "blocked",
-      detail: `A test search was refused: ${(err as { message?: string })?.message ?? "unknown error"}`,
-      fix: isAccountGone(err) ? "Reconnect LinkedIn." : "The provider's own words are above — they name what to fix.",
-      href: isAccountGone(err) ? "/app/team" : undefined,
+      /*
+       * "The provider's own words are above" was the worst version of this:
+       * it printed a vendor's HTTP error to a business owner and then told
+       * them to read it for the remedy. The words are kept — on the half
+       * belonging to whoever can act on them (rule 54).
+       */
+      detail: gone
+        ? "Your LinkedIn connection is no longer valid, so no new prospects can be found until it is reconnected."
+        : "A test search was refused, so no new prospects can be found right now. It is ours to look into rather than yours.",
+      fix: gone ? "Reconnect LinkedIn." : "Nothing for you to do here. Tell us and we will look.",
+      href: gone ? "/app/team" : "/app/support",
+      operator: `A test search was refused: ${(err as { message?: string })?.message ?? "unknown error"}`,
     };
   }
 }
