@@ -2097,6 +2097,14 @@ const MUTATIONS = [
     pkg: "@le/worker",
   },
   {
+    id: "boot/a-public-origin-must-be-public",
+    rule: "A production worker refuses to boot with a localhost WORKER_URL or APP_URL; the default is handed to the provider as a callback and fails in silence",
+    file: "apps/worker/src/config.ts",
+    from: "      if (isLoopback(env[key])) {",
+    to: "      if (false) {",
+    pkg: "@le/worker",
+  },
+  {
     id: "connect/recovery-walks-the-active-rows",
     rule: "Recovery looks at accounts that still say active; a provider replacing one does not make the row unhealthy, so excluding active is excluding the common case",
     file: "apps/worker/src/accounts.ts",

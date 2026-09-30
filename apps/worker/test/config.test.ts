@@ -71,8 +71,16 @@ describe("loadEnv", () => {
  * passes, the platform reports the service Live, and not one queued job is
  * ever consumed. Nothing in the product said a word.
  */
+/** Production, with the two public origins a real deployment has. */
+const deployed = {
+  ...complete,
+  NODE_ENV: "production",
+  WORKER_URL: "https://api.norasdr.com",
+  APP_URL: "https://app.norasdr.com",
+};
+
 describe("REDIS_URL", () => {
-  const live = { ...complete, NODE_ENV: "production" };
+  const live = deployed;
 
   it("refuses a production worker pointed at its own localhost", () => {
     expect(() => loadEnv(live)).toThrow(/REDIS_URL/);
@@ -102,6 +110,44 @@ describe("REDIS_URL", () => {
     // That is its own problem with its own message, and reporting it as a
     // missing queue service sends somebody to create one they already have.
     expect(() => loadEnv({ ...live, REDIS_URL: "not a url" })).not.toThrow();
+  });
+});
+
+/**
+ * The same silent failure one step further out.
+ *
+ * Both default to localhost, and both are handed to somebody else: WORKER_URL
+ * is the `notify_url` on every hosted-auth link, so the default tells the
+ * provider to call a machine it cannot reach. It obliges, nothing arrives, the
+ * account never finishes connecting, and no screen says why — which is the
+ * whole reason this is a boot refusal rather than a log line.
+ */
+describe("the public origins", () => {
+  for (const key of ["WORKER_URL", "APP_URL"] as const) {
+    it(`refuses a production ${key} pointed at localhost`, () => {
+      const { [key]: _drop, ...without } = deployed;
+      // Absent, so the localhost default applies — which is the real case:
+      // nobody types localhost into Render, they just never set the variable.
+      expect(() => loadEnv(without)).toThrow(new RegExp(key));
+      expect(() => loadEnv(without)).toThrow(/callback address/);
+    });
+
+    it(`refuses the other spellings for ${key}`, () => {
+      for (const url of ["http://127.0.0.1:4000", "http://localhost:3000", "http://[::1]:4000"]) {
+        expect(() => loadEnv({ ...deployed, [key]: url }), url).toThrow(new RegExp(key));
+      }
+    });
+  }
+
+  it("accepts a real origin", () => {
+    expect(() => loadEnv({ ...deployed, REDIS_URL: "redis://red-abc:6379" })).not.toThrow();
+  });
+
+  it("leaves the laptop alone", () => {
+    // The defaults exist so the worker runs locally with no configuration, and
+    // a rule that broke that would be paid for every day.
+    expect(loadEnv(complete).WORKER_URL).toBe("http://localhost:4000");
+    expect(loadEnv(complete).APP_URL).toBe("http://localhost:3000");
   });
 });
 

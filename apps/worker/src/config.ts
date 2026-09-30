@@ -159,6 +159,34 @@ const EnvSchema = z.object({
     });
   }
 
+  /*
+   * The same trap, one step further out: a public origin that is not public.
+   *
+   * `WORKER_URL` and `APP_URL` both default to localhost, and both are handed
+   * to somebody else. `WORKER_URL` is the `notify_url` on every hosted-auth
+   * link and the base of every OAuth redirect, so a worker that boots with the
+   * default tells Unipile to call `http://localhost:4000` — Unipile obliges,
+   * nothing arrives, the account never finishes connecting, and no screen
+   * anywhere says why. `APP_URL` is where a rep is sent back to afterwards.
+   *
+   * A localhost default is the right thing for a laptop and a silent failure
+   * in production, which is exactly the shape of the REDIS_URL check above.
+   * This is the moment those two values are most likely to be wrong: they
+   * change when a deployment moves to its own domain.
+   */
+  if (isProduction(env.NODE_ENV)) {
+    for (const key of ["WORKER_URL", "APP_URL"] as const) {
+      if (isLoopback(env[key])) {
+        ctx.addIssue({
+          code: "custom",
+          path: [key],
+          message:
+            "points at localhost in production, and it is handed to the provider as a callback address",
+        });
+      }
+    }
+  }
+
   // Checked here rather than at the first send: a worker that boots without
   // the credentials it needs looks healthy for hours, and the failure surfaces
   // as a campaign that quietly never started.
@@ -187,11 +215,16 @@ function isProduction(nodeEnv: string | undefined): boolean {
  * varies the port has made it too.
  */
 function isLocalRedis(url: string): boolean {
+  return isLoopback(url);
+}
+
+/** Matched on the host, so a hand-typed 127.0.0.1 or an odd port is caught too. */
+function isLoopback(url: string): boolean {
   try {
     const host = new URL(url).hostname.toLowerCase();
     return host === "localhost" || host === "127.0.0.1" || host === "::1" || host === "[::1]";
   } catch {
-    // Unparseable is its own problem, and not this one. ioredis will say so.
+    // Unparseable is its own problem, and not this one. The client will say so.
     return false;
   }
 }
