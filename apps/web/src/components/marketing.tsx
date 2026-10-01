@@ -85,22 +85,38 @@ export function Hero() {
             </Link>
             <div className="stack-3">
               {/*
-                The outcome first, then the thing nobody else can say.
+                The outcome, and nothing but the outcome.
 
-                "Your AI SDR for LinkedIn" is the category, not the product —
-                every competitor's headline says it, so it tells a visitor
-                nothing about which of them to pick. What separates this one is
-                the second sentence, and it is the same sentence the mark
-                draws: it stops before the limit.
+                "Your AI SDR for LinkedIn" is the category rather than the
+                product — every competitor's headline says it, so it tells a
+                visitor nothing about which of them to pick. This one names
+                what they get and when: work that happened without them.
+
+                The safety claim used to be the second half of the headline,
+                and it has moved into the lede on purpose. It is the strongest
+                thing this product can say and the wrong thing to lead with: a
+                headline that mentions risk puts the risk in the reader's head
+                before the reward, and the people most likely to buy are the
+                ones who have not yet been burned and are not shopping for a
+                guarantee. It still appears above the fold, in the sentence
+                that explains how the outcome is produced, which is where a
+                claim like that is believed rather than discounted.
+
+                `headline-accent` stays on the clause that does the work:
+                "while you sleep" is the part a competitor cannot copy without
+                also pacing their sending, which is the same argument the mark
+                draws.
               */}
               <h1>
-                Meetings from LinkedIn.{" "}
-                <span className="headline-accent">Without risking the account.</span>
+                Meetings and leads created{" "}
+                <span className="headline-accent">while you sleep.</span>
               </h1>
               <p className="lede prose">
                 {BRAND.name} finds your buyers, writes each invitation from that person&rsquo;s own
-                profile, answers the replies and books the meeting. You approve the strategy, check
-                the words and press launch — three decisions, not an hour a day.
+                profile, answers the replies and books the meeting — all inside the daily limits
+                LinkedIn actually watches, so the account doing the sending is not what you are
+                gambling with. You approve the strategy, check the words and press launch — three
+                decisions, not an hour a day.
               </p>
             </div>
             <div className="cluster">
