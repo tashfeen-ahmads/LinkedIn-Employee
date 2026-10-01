@@ -88,6 +88,34 @@ try {
   });
 }
 
+/*
+ * And every account that is not working gets asked about, for the reason
+ * directly above: a deploy fixes it, waiting until three in the morning does
+ * not.
+ *
+ * This already runs hourly and nightly. Adding it to boot costs one list call
+ * and closes the window a deploy opens — the hourly beat is scheduled from
+ * whenever it last fired, so a worker that has just restarted can sit for the
+ * best part of an hour before asking anything. Every hour of that is an hour
+ * of a reconnected account still reported dead, which is this deployment's
+ * entire history: reconnect in the evening, nothing until the sweep.
+ *
+ * It also writes down the ids when the provider holds accounts that carry
+ * nobody's reference, which is the state no automatic path can repair and the
+ * one where somebody needs the ids in front of them.
+ *
+ * Awaited but never fatal, exactly as the seeding above.
+ */
+try {
+  const { checked, repaired, unreachable } = await recoverAccounts(ctx.db, ctx.linkedin);
+  if (unreachable) console.error("could not ask the provider about accounts at boot", { unreachable });
+  else if (repaired) console.log("repaired accounts the provider had replaced", { checked, repaired });
+} catch (err) {
+  console.error("could not sweep for replaced accounts", {
+    reason: err instanceof Error ? err.message : String(err),
+  });
+}
+
 if (!queueOk) {
   // Not a crash: the HTTP API still answers, /health now says 503, and the
   // boot stamp above is readable from the product's own screens. A process
