@@ -28,7 +28,7 @@ import type IORedis from "ioredis";
 import type { WorkerContext } from "./context.js";
 import { bookFromLink, readBookingPage } from "./jobs/book.js";
 import { connectCalendarFeed, disconnectCalendarFeed } from "./jobs/calendar-feed.js";
-import { reconcileAccount, recoverAccounts } from "./accounts.js";
+import { reconcileAccount, recordObservedAccounts, recoverAccounts } from "./accounts.js";
 import { runDiagnostics } from "./jobs/diagnostics.js";
 import { eraseProspect, exportWorkspace } from "./jobs/retention.js";
 import { inviteEmail } from "@le/email";
@@ -965,6 +965,12 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
         wanted: parsed.data.userId,
         references: accounts.map((a) => a.reference),
       });
+      // And written where somebody can read it. The log line above is on a
+      // host the person repairing this cannot reach, and the response below
+      // carries shapes rather than values on purpose — so the one fact needed
+      // to attach the row by hand was being discovered and discarded on every
+      // single run. Operator-only, never a customer screen (rule 17).
+      await recordObservedAccounts(ctx.db, { wanted: parsed.data.userId, accounts });
       /*
        * The shape of what the provider actually sent, field by field.
        *

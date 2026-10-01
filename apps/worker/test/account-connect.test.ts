@@ -1107,3 +1107,57 @@ describe("a provider refusal, in the words the rep reads", () => {
     expect(body.error ?? "").not.toMatch(/[A-Z][A-Z0-9]{3,}_[A-Z0-9_]+/);
   });
 });
+
+/*
+ * The one fact needed to repair the row by hand, written where it can be read.
+ *
+ * An account connected in the provider's own dashboard carries no reference to
+ * the rep, so nothing binds it and rule 8 is right to refuse to guess. But the
+ * ids went to `console.error` on a host nobody repairing this can reach, and
+ * only the *shape* of each reference came back to the browser — so the
+ * provider's actual account id was discovered and thrown away on every run,
+ * which is what left this deployment pointing at a dead id with the live one
+ * sitting beside it.
+ */
+describe("what the provider holds, when none of it can be bound", () => {
+  it("writes the ids down where an operator can read them", async () => {
+    const { db, linkedin, app } = harness({ provider_account_id: "acct_dead", status: "connecting" });
+    // Labelled with the LinkedIn display name, which is what the provider
+    // returns for an account somebody connected in its own dashboard.
+    linkedin.connectedAccounts = [
+      { providerAccountId: "acct_live", reference: "Tashfeen Ahmad", displayName: "Tashfeen Ahmad", status: "ok" },
+    ];
+
+    const res = await app.request("/jobs/linkedin-refresh", {
+      method: "POST",
+      body: JSON.stringify({ workspaceId: WORKSPACE, userId: USER }),
+      headers: { "content-type": "application/json", authorization: `Bearer ${INTERNAL_SECRET}` },
+    });
+    expect(res.status).toBe(200);
+
+    const beat = db.find("worker_heartbeats", { name: "accounts:observed" });
+    expect(beat, "nothing recorded, so the id is lost again").toBeTruthy();
+    const detail = beat!.detail as { wanted: string; found: number; accounts: Array<{ providerAccountId: string }> };
+    expect(detail.found).toBe(1);
+    expect(detail.wanted).toBe(USER);
+    expect(detail.accounts[0]?.providerAccountId).toBe("acct_live");
+  });
+
+  it("binds nothing on the strength of it", async () => {
+    // Recording is not matching. The row keeps the id it had, because an
+    // account the provider does not label with this rep is still not this
+    // rep's to take (rule 8).
+    const { db, linkedin, app } = harness({ provider_account_id: "acct_dead", status: "connecting" });
+    linkedin.connectedAccounts = [
+      { providerAccountId: "acct_live", reference: "Tashfeen Ahmad", status: "ok" },
+    ];
+
+    await app.request("/jobs/linkedin-refresh", {
+      method: "POST",
+      body: JSON.stringify({ workspaceId: WORKSPACE, userId: USER }),
+      headers: { "content-type": "application/json", authorization: `Bearer ${INTERNAL_SECRET}` },
+    });
+
+    expect(db.find("linkedin_accounts", { id: ACCOUNT })!.provider_account_id).toBe("acct_dead");
+  });
+});

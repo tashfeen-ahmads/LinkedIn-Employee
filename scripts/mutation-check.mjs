@@ -2183,6 +2183,14 @@ const MUTATIONS = [
     pkg: "@le/web",
   },
   {
+    id: "connect/the-unbindable-id-is-written-down",
+    rule: "When the provider holds accounts that carry nobody's reference, the ids are recorded for an operator; discovering the one fact needed to attach the row and discarding it on every run is what left this deployment pointing at a dead id with the live one beside it",
+    file: "apps/worker/src/server.ts",
+    from: "      await recordObservedAccounts(ctx.db, { wanted: parsed.data.userId, accounts });",
+    to: "      void accounts;",
+    pkg: "@le/worker",
+  },
+  {
     id: "accounts/a-refused-list-is-not-a-clean-sweep",
     rule: "Recovery reports that it could not ask the provider; `repaired: 0` from a refused call is otherwise identical to a night with nothing to fix, and the nightly record then writes down a sweep that never happened",
     file: "apps/worker/src/accounts.ts",

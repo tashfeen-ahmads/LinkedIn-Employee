@@ -8,7 +8,48 @@ import type { AccountRecord } from "@le/linkedin";
 import { accountPausedEmail } from "@le/email";
 import type { EmailProvider } from "@le/email";
 import { recordEvent } from "./context.js";
+import { recordBeat } from "./heartbeat.js";
 import { trySend } from "./email.js";
+
+/** Where the provider's unmatched account list is left for an operator. */
+export const OBSERVED_ACCOUNTS_BEAT = "accounts:observed";
+
+/**
+ * What the provider actually holds, written down when none of it can be bound.
+ *
+ * An account connected in the provider's own dashboard carries no reference to
+ * the rep who owns it — its `name` is the LinkedIn profile's display name — so
+ * nothing can bind it, and rule 8 is right to refuse to guess. But the refusal
+ * then had nowhere to land: the ids were passed to `console.error`, on a host
+ * the person fixing it cannot reach, and only the *shape* of each reference
+ * came back to the browser. So the one fact needed to repair the row by hand —
+ * which id the provider is actually offering — existed, was looked at, and was
+ * thrown away on every run. That is rule 8's own complaint one turn further
+ * on: repair must not depend on somebody finding a button, and it must not
+ * depend on somebody reading a log either.
+ *
+ * It goes to a heartbeat rather than to `events`, and that is deliberate.
+ * `worker_heartbeats` carries no `workspace_id` and no customer screen renders
+ * it, which is what keeps rule 17 intact: a list of every account the provider
+ * holds must never be reported to one workspace, because the other entries are
+ * somebody else's. An operator reads it; a customer never sees it.
+ */
+export async function recordObservedAccounts(
+  db: Db,
+  input: { wanted: string; accounts: ConnectedAccount[] },
+): Promise<void> {
+  await recordBeat(db, OBSERVED_ACCOUNTS_BEAT, {
+    at: new Date().toISOString(),
+    wanted: input.wanted,
+    found: input.accounts.length,
+    accounts: input.accounts.map((a) => ({
+      providerAccountId: a.providerAccountId,
+      reference: a.reference,
+      displayName: a.displayName ?? null,
+      status: a.status,
+    })),
+  });
+}
 
 /**
  * Increment the counters that the rate limiter reads. Done after a successful
@@ -334,6 +375,13 @@ export async function recoverAccounts(
       repaired: 0,
       unreachable: err instanceof Error ? err.message : String(err),
     };
+  }
+
+  // The provider has accounts and not one of them is labelled with anybody
+  // here: the state this deployment has been stuck in, and the one where the
+  // ids are the whole of what somebody needs.
+  if (accounts.length > 0 && !rows.some((row) => accounts.some((a) => a.reference === row.user_id))) {
+    await recordObservedAccounts(db, { wanted: rows.map((r) => r.user_id).join(","), accounts });
   }
 
   let repaired = 0;
