@@ -12,9 +12,11 @@
  *
  *   node scripts/mutation-check.mjs            # all mutations
  *   node scripts/mutation-check.mjs rate       # only ids containing "rate"
+ *   node scripts/mutation-check.mjs --shard=2/4   # the second of four slices
  */
 import { execSync } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync, readdirSync, existsSync } from "node:fs";
+import { join } from "node:path";
 
 /**
  * Each mutation states the rule it breaks, so a SURVIVED line reads as a
@@ -3154,15 +3156,70 @@ const MUTATIONS = [
   },
 ];
 
-const filter = process.argv[2];
-const selected = filter ? MUTATIONS.filter((m) => m.id.includes(filter)) : MUTATIONS;
+/**
+ * Where each workspace package lives, so its tests can be run directly.
+ *
+ * This replaced `pnpm --filter <pkg> test`, and the reason is the whole point
+ * of the change: that spawn costs fourteen seconds of pnpm and turbo start-up
+ * against under two seconds of actual testing, so 377 mutations took about
+ * ninety minutes — and the CI job has a fifteen-minute limit. The step was
+ * therefore killed at the limit on *every push this repo has ever had*, and
+ * GitHub reports a timed-out job as `cancelled`, which reads like a person
+ * stopped it rather than like a check that never ran.
+ *
+ * So the file that exists to prove the safety tests bite had never once run to
+ * completion in CI. That is this repo's own disease — a check that reports
+ * something other than failure because it could not finish — in the script
+ * written to catch it.
+ *
+ * Every package's `test` script is exactly `vitest run`, so calling vitest in
+ * the package directory is the same work without the start-up.
+ */
+function packageDirs() {
+  const roots = ["apps", "packages"];
+  const found = new Map();
+  for (const root of roots) {
+    for (const entry of readdirSync(root)) {
+      const manifest = join(root, entry, "package.json");
+      if (!existsSync(manifest)) continue;
+      const { name } = JSON.parse(readFileSync(manifest, "utf8"));
+      if (name) found.set(name, join(root, entry));
+    }
+  }
+  return found;
+}
+
+const DIRS = packageDirs();
+
+const args = process.argv.slice(2);
+const shardArg = args.find((a) => a.startsWith("--shard="));
+const filter = args.find((a) => !a.startsWith("--"));
+
+let selected = filter ? MUTATIONS.filter((m) => m.id.includes(filter)) : MUTATIONS;
+
+/*
+ * Sharding is interleaved rather than sliced into blocks.
+ *
+ * The list is grouped by subject, so contiguous blocks would hand one shard
+ * every worker mutation and another every web one — and the slowest package
+ * would then set the wall clock for the whole matrix. Taking every nth keeps
+ * the mix, and the mix is what makes the shards finish together.
+ */
+if (shardArg) {
+  const [index, total] = shardArg.slice("--shard=".length).split("/").map(Number);
+  if (!Number.isInteger(index) || !Number.isInteger(total) || index < 1 || index > total) {
+    console.error(`Bad --shard value: expected i/n with 1 <= i <= n, got "${shardArg}"`);
+    process.exit(2);
+  }
+  selected = selected.filter((_, i) => i % total === index - 1);
+}
 
 if (selected.length === 0) {
-  console.error(`No mutations match "${filter}"`);
+  console.error(filter ? `No mutations match "${filter}"` : "No mutations selected");
   process.exit(2);
 }
 
-console.log(`Running ${selected.length} mutations\n`);
+console.log(`Running ${selected.length} mutations${shardArg ? ` (${shardArg})` : ""}\n`);
 
 const survived = [];
 const inapplicable = [];
@@ -3179,11 +3236,22 @@ for (const mutation of selected) {
     continue;
   }
 
+  const dir = DIRS.get(mutation.pkg);
+  if (!dir) {
+    // Checked before the file is touched, so a typo here cannot leave the
+    // working tree mutated. A mutation naming a package that does not exist
+    // can never be caught, and reporting it as a survival would send somebody
+    // looking for a missing test rather than for the typo in this file.
+    inapplicable.push(mutation);
+    console.log(`  STALE     ${mutation.id} — no such package ${mutation.pkg}`);
+    continue;
+  }
+
   writeFileSync(mutation.file, original.replace(mutation.from, mutation.to));
 
   let caught = false;
   try {
-    execSync(`pnpm --filter ${mutation.pkg} test`, { stdio: "pipe" });
+    execSync("npx vitest run", { stdio: "pipe", cwd: dir });
   } catch {
     // A non-zero exit means a test failed, which is what we want.
     caught = true;

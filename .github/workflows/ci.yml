@@ -39,15 +39,54 @@ jobs:
 
       - run: pnpm test
 
-      # Proves the safety tests actually bite. A green suite says nothing on its
-      # own: a test can pass because the code is right, or because it never
-      # reaches the code.
-      - name: Mutation check on the safety rules
-        run: node scripts/mutation-check.mjs
-
       # The eval dataset's own consistency checks run here. The eval itself
       # needs an API key and is run deliberately, not on every push.
       - name: Check migration is applied in one piece
         run: |
           test -f packages/db/supabase/migrations/0001_init.sql
           grep -q "enable row level security" packages/db/supabase/migrations/0001_init.sql
+
+  # Proves the safety tests actually bite. A green suite says nothing on its
+  # own: a test can pass because the code is right, or because it never reaches
+  # the code.
+  #
+  # Its own job, sharded, because it had been sharing the fifteen minutes above
+  # and losing. Breaking 377 rules one at a time and running a suite against
+  # each takes about half an hour, so the step was killed at the job's limit on
+  # every push this repo has ever had — and a timed-out job is reported
+  # `cancelled`, which reads like somebody stopped it rather than like a check
+  # that never finished. The file written to prove the safety tests bite had
+  # therefore never once run to completion.
+  #
+  # Four shards of interleaved mutations, roughly eight minutes each, against a
+  # limit with real headroom. The point is not that it fits today: it is that
+  # growing the list adds to a wall clock nobody is watching, and a shard that
+  # starts failing for lack of time must look different from a rule that broke.
+  mutation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # The packages publish to dist/ and the apps' tests resolve `@le/*`
+      # through it, so a mutation in a package is only visible to its own
+      # suite — and an unbuilt tree fails every shard for the wrong reason.
+      - run: pnpm build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+
+      - name: Mutation check on the safety rules
+        run: node scripts/mutation-check.mjs --shard=${{ matrix.shard }}/4
