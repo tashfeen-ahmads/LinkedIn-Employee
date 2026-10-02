@@ -12,6 +12,7 @@ import { markFor, type NavMarks } from "@/lib/nav-marks";
 import { loadNeedsYou } from "@/lib/needs-you-data";
 import { entitlementFor, entitlementMessage, trialLimitEnforced } from "@le/billing";
 import { isPlatformAdmin } from "@/lib/admin";
+import { linkedInState } from "./profile/linkedin-state";
 
 /**
  * Twelve links in one flat list is a list you read rather than a nav you use.
@@ -160,10 +161,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const { data: account } = await supabase
     .from("linkedin_accounts")
-    .select("status, status_detail")
+    .select("status, status_detail, provider_account_id")
     .eq("workspace_id", session.workspaceId)
     .eq("user_id", session.userId)
     .maybeSingle();
+  const linkedIn = linkedInState(account);
 
   // Where this workspace has got to, read once here and handed to the nav. The
   // dashboard reads the same function, so the sidebar and the page can never
@@ -320,8 +322,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             {account && account.status !== "active" ? (
               <div className={`notice ${account.status === "restricted" ? "danger" : "warning"}`}>
                 <p>
-                  <strong>LinkedIn account {account.status.replaceAll("_", " ")}.</strong>{" "}
-                  {account.status_detail ?? "Sending is paused until this is resolved."}{" "}
+                  <strong>LinkedIn account {linkedIn.label}.</strong>{" "}
+                  {linkedIn.kind === "failed"
+                    ? linkedIn.detail
+                    : linkedIn.kind === "unfinished"
+                      ? "The LinkedIn sign-in was not finished, so nothing can send yet."
+                      : (account.status_detail ?? "Sending is paused until this is resolved.")}{" "}
                   {/*
                     Profile, not Team, and the difference is the whole bug.
                     `connectLinkedIn` lives on `/app/profile` and nowhere else;

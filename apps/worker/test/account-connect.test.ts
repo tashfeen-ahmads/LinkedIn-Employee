@@ -1030,6 +1030,53 @@ describe("the link the rep is sent to LinkedIn with", () => {
 });
 
 /*
+ * Pressing Connect on an account that already works.
+ *
+ * Every press used to write `connecting`, which every job skips — so a rep who
+ * pressed Reconnect on a healthy account and then mistyped their password had
+ * broken a working account by trying to repair it. The button is now on the
+ * screen in every state, which makes that the common path rather than a rare
+ * one.
+ */
+describe("reconnecting an account that already works", () => {
+  function press(app: ReturnType<typeof createServer>) {
+    return app.request("/auth/linkedin/link", {
+      method: "POST",
+      body: JSON.stringify({ workspaceId: WORKSPACE, userId: USER }),
+      headers: { "content-type": "application/json", authorization: `Bearer ${INTERNAL_SECRET}` },
+    });
+  }
+
+  it("leaves a working account sending while the sign-in is under way", async () => {
+    const { db, app } = harness({ provider_account_id: "acct_live", status: "active" });
+
+    expect((await press(app)).status).toBe(200);
+
+    expect(db.find("linkedin_accounts", { id: ACCOUNT })!.status).toBe("active");
+  });
+
+  it("still starts a connection for a row that holds nothing", async () => {
+    // The other half: a failed sign-in leaves `disconnected`, and pressing
+    // Connect again must make that row claimable or the retry can never land.
+    const { db, app } = harness({ provider_account_id: null, status: "disconnected" });
+
+    await press(app);
+
+    expect(db.find("linkedin_accounts", { id: ACCOUNT })!.status).toBe("connecting");
+  });
+
+  it("calls a sign-in that came back with the same account a success", async () => {
+    const { db, linkedin, app } = harness({ provider_account_id: "acct_live", status: "active" });
+    linkedin.connectedAccounts = [{ providerAccountId: "acct_live", reference: USER, status: "ok" }];
+
+    const res = await claim(app, { workspaceId: WORKSPACE, userId: USER, accountId: "acct_live" });
+
+    expect(await res.json()).toMatchObject({ claimed: true });
+    expect(db.find("linkedin_accounts", { id: ACCOUNT })!.status).toBe("active");
+  });
+});
+
+/*
  * Whose words come back to the browser when the provider refuses.
  *
  * `/auth/linkedin/link` and `/jobs/linkedin-claim` both answer the web app,
@@ -1261,6 +1308,33 @@ describe("a LinkedIn sign-in that did not work", () => {
 
     expect(res.status).toBe(302);
     expect(db.rows("events").some((e) => e.name === "linkedin.connect.failed")).toBe(false);
+  });
+
+  it("stops saying the account is connecting, because no sign-in happened", async () => {
+    // The live case: the rep typed the wrong LinkedIn password on the hosted
+    // page, came back, and every screen still read "connecting" — as if the
+    // product were working on it, when nothing would change until they
+    // pressed Connect again.
+    const { db, app } = harness({ provider_account_id: null, status: "connecting" });
+    const claim = encryptJson({ workspaceId: WORKSPACE, userId: USER, issuedAt: Date.now() }, CREDENTIALS_KEY);
+
+    await failed(app, `claim=${encodeURIComponent(claim)}`);
+
+    const row = db.find("linkedin_accounts", { id: ACCOUNT })!;
+    expect(row.status).toBe("disconnected");
+    expect(String(row.status_detail)).toMatch(/No sign-in happened/);
+    expect(String(row.status_detail)).toMatch(/try again/);
+  });
+
+  it("never breaks an account that was working when the reconnect failed", async () => {
+    const { db, app } = harness({ provider_account_id: "acct_live", status: "active" });
+    const claim = encryptJson({ workspaceId: WORKSPACE, userId: USER, issuedAt: Date.now() }, CREDENTIALS_KEY);
+
+    await failed(app, `claim=${encodeURIComponent(claim)}`);
+
+    const row = db.find("linkedin_accounts", { id: ACCOUNT })!;
+    expect(row.status).toBe("active");
+    expect(row.provider_account_id).toBe("acct_live");
   });
 
   it("records nothing for a stale token", async () => {

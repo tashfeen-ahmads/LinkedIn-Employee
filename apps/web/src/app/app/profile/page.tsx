@@ -10,6 +10,7 @@ import { cannotSend, describeRepair, type RefreshResult, type RepairNotice } fro
 import { PageNotice } from "@/components/page-notice";
 import { SubmitButton } from "@/components/submit-button";
 import { TeamSection } from "./team-section";
+import { linkedInState } from "./linkedin-state";
 import { BillingSection } from "./billing-section";
 import { PageHeader, PageGroup, Panel, Section } from "@/components/page";
 import { AllowanceMeter } from "@/components/charts";
@@ -344,7 +345,7 @@ export default async function ProfilePage({
     supabase
       .from("linkedin_accounts")
       .select(
-        "user_id, status, status_detail, display_name, invites_today, invites_this_week, messages_today, has_sales_navigator, working_hours",
+        "user_id, status, status_detail, provider_account_id, display_name, invites_today, invites_this_week, messages_today, has_sales_navigator, working_hours",
       )
       .eq("workspace_id", session.workspaceId)
       .eq("user_id", session.userId)
@@ -356,13 +357,15 @@ export default async function ProfilePage({
       .maybeSingle(),
   ]);
 
-  // A row still `connecting` has no provider id, so nothing can send from it.
-  // Treating it as connected showed usage bars for an account that does not
-  // work yet, and took away the only button that could fix it.
+  // A row with no provider account behind it is not connected, whatever its
+  // status says (`linkedInState`). Treating it as connected showed usage bars
+  // for an account that does not exist, and took away the only button that
+  // could fix it.
   const found = account ?? undefined;
-  const mine = found?.status === "connecting" ? undefined : found;
-  const awaitingProvider = found?.status === "connecting";
-  const needsReconnect = cannotSend(found?.status);
+  const linkedIn = linkedInState(found);
+  const mine = linkedIn.kind === "attached" ? found : undefined;
+  const awaitingProvider = linkedIn.kind === "unfinished";
+  const needsReconnect = linkedIn.kind === "attached" && (cannotSend(found?.status) || found?.status === "connecting");
   const hours = readWorkingHours(mine?.working_hours);
   const editing = params.edit === "1";
   const canManage = ["owner", "admin", "manager"].includes(session.role);
@@ -667,7 +670,7 @@ export default async function ProfilePage({
         {mine ? (
           <>
             <p className="small muted">
-              {mine.display_name ?? "Connected"} · {mine.status}
+              {mine.display_name ?? "Connected"} · {linkedIn.label}
               {mine.has_sales_navigator ? " · Sales Navigator" : ""}
             </p>
 
@@ -739,6 +742,16 @@ export default async function ProfilePage({
                   Check connection
                 </button>
               </form>
+              {/* Always offered. A rep who changed their LinkedIn password, or
+                  wants a different account on this seat, has no other way
+                  back to the sign-in page while this one reads as working. */}
+              {needsReconnect ? null : (
+                <form action={connectLinkedIn}>
+                  <button className="btn secondary small" type="submit">
+                    Reconnect LinkedIn
+                  </button>
+                </form>
+              )}
               <span className="tiny subtle">
                 Asks LinkedIn&rsquo;s provider whether this account is still there. Worth doing if
                 campaigns are not finding anyone.
@@ -767,11 +780,19 @@ export default async function ProfilePage({
               done. So the action leads and the rarer case — finished, but it
               did not take — keeps its button underneath.
             */}
-            <p className="small muted">
-              {awaitingProvider
-                ? "You started connecting LinkedIn but the sign-in was not finished. Press Connect LinkedIn to pick up where you left off — it takes about a minute, and you sign in on LinkedIn’s own page, so we never see your password."
-                : "Not connected yet. You will sign in to LinkedIn on their hosted page; we never see your password."}
-            </p>
+            {linkedIn.kind === "failed" ? (
+              <div className="notice danger">
+                <p>
+                  <strong>Not connected.</strong> {linkedIn.detail}
+                </p>
+              </div>
+            ) : (
+              <p className="small muted">
+                {awaitingProvider
+                  ? "Not connected — the LinkedIn sign-in was not finished. Press Connect LinkedIn to try again. It takes about a minute, and you sign in on LinkedIn’s own page, so we never see your password."
+                  : "Not connected yet. You will sign in to LinkedIn on their hosted page; we never see your password."}
+              </p>
+            )}
             <div className="cluster">
               <form action={connectLinkedIn}>
                 <button className="btn" type="submit">

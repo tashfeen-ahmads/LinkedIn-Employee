@@ -5,6 +5,7 @@ import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { callWorker, errorQuery, noticeQuery } from "@/lib/worker";
 import { describeClaim } from "./claim";
+import { linkedInState } from "./linkedin-state";
 import { PLAN_SEATS } from "@le/billing";
 import { createInviteToken, inviteExpiry, INVITE_TTL_DAYS } from "@/lib/invitations";
 import { PageNotice } from "@/components/page-notice";
@@ -181,7 +182,7 @@ export async function TeamSection({
         .eq("workspace_id", session.workspaceId),
       supabase
         .from("linkedin_accounts")
-        .select("user_id, status, invites_today, invites_this_week")
+        .select("user_id, status, provider_account_id, invites_today, invites_this_week")
         .eq("workspace_id", session.workspaceId),
       supabase
         .from("invitations")
@@ -253,11 +254,11 @@ export async function TeamSection({
                     </td>
                     <td className="small">{member.role}</td>
                     <td>
-                      {!account ? (
+                      {linkedInState(account).kind !== "attached" ? (
                         <span className="pill tiny">not connected</span>
                       ) : (
                         <span className={`pill tiny ${broken ? "warning" : "positive"}`}>
-                          {account.status.replaceAll("_", " ")}
+                          {linkedInState(account).label}
                         </span>
                       )}
                       {member.user_id === session.userId && broken ? (

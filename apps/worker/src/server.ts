@@ -687,12 +687,31 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
       | { workingHours?: { start: number; end: number; days: number[] } | null; hasSalesNavigator?: boolean }
       | null;
 
+    /*
+     * Pressing Connect never takes a working account off the air.
+     *
+     * Every press used to write `connecting`, so a rep who pressed Reconnect
+     * on a healthy account and then mistyped their LinkedIn password was left
+     * with a row every job skips and a screen saying "connecting" — a working
+     * account broken by trying to repair it. Only a row that holds nothing
+     * usable is moved to `connecting`; one that already has an account keeps
+     * its status, and `claimAccount` attaches the new sign-in to it if one
+     * comes back.
+     */
+    const { data: existing } = await ctx.db
+      .from("linkedin_accounts")
+      .select("status")
+      .eq("workspace_id", parsed.data.workspaceId)
+      .eq("user_id", parsed.data.userId)
+      .maybeSingle();
+    const keepStatus = Boolean(existing && !RESTARTABLE_STATUSES.includes(existing.status));
+
     await ctx.db.from("linkedin_accounts").upsert(
       {
         workspace_id: parsed.data.workspaceId,
         user_id: parsed.data.userId,
         provider: ctx.linkedin.name,
-        status: "connecting",
+        ...(keepStatus ? {} : { status: "connecting" as const }),
         // Only when onboarding actually answered. Spreading an absent value
         // would overwrite a window the rep has since edited on their profile
         // with a default nobody chose — a reconnect must not silently reset
@@ -962,6 +981,23 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
       userId: who.userId,
       provider,
     });
+
+    /*
+     * No sign-in happened, so the row stops saying one is under way.
+     *
+     * Left at `connecting`, every screen told the rep the product was working
+     * on it, when LinkedIn had refused the sign-in and nothing would change
+     * until they pressed Connect again. Only a row holding no account is
+     * touched: one that already has a working account behind it keeps it, so
+     * a failed reconnect never breaks what was working.
+     */
+    await ctx.db
+      .from("linkedin_accounts")
+      .update({ status: "disconnected", status_detail: LINKEDIN_NO_SIGN_IN })
+      .eq("workspace_id", who.workspaceId)
+      .eq("user_id", who.userId)
+      .eq("status", "connecting")
+      .is("provider_account_id", null);
     return back();
   });
 
@@ -1643,6 +1679,13 @@ function claimFailureUrl(ctx: WorkerContext, workspaceId: string, userId: string
 const LINKEDIN_SIGN_IN_FAILED =
   "LinkedIn didn't finish signing you in. The usual reasons: (1) you normally sign in to LinkedIn with Google or Apple, so your LinkedIn account has no password yet — set one in LinkedIn under Settings → Sign in & security → Change password, then try again; (2) LinkedIn asked for a verification code — have your phone or email open when you press Connect; (3) the password was mistyped. Press Connect LinkedIn to try again, or tell us from the Support page and we'll walk through it with you.";
 
+/** What the account row says after a refused sign-in, on every screen that shows it. */
+const LINKEDIN_NO_SIGN_IN =
+  "No sign-in happened, so no LinkedIn account is connected. Press Connect LinkedIn to try again.";
+
+/** Rows a Connect press may move to `connecting`: the ones holding nothing usable. */
+const RESTARTABLE_STATUSES: string[] = ["connecting", "disconnected"];
+
 /** The return trip broke before LinkedIn was even reached, or took too long. */
 const LINKEDIN_CONNECT_INCOMPLETE =
   "The connection to LinkedIn didn't complete. Press Connect LinkedIn to start again — it takes about a minute.";
@@ -1688,11 +1731,30 @@ async function claimAccount(
   // Somebody else's, and not available to be taken.
   const { data: taken } = await ctx.db
     .from("linkedin_accounts")
-    .select("id, user_id")
+    .select("id, user_id, status")
     .eq("provider_account_id", input.accountId)
     .maybeSingle();
   if (taken && taken.user_id !== input.userId) {
     return { status: "refused", claimed: false, reason: "that account is already attached to someone else" };
+  }
+
+  /*
+   * A reconnect that came back with the account this row already holds is a
+   * success, not a refusal. Pressing Connect on a working account no longer
+   * sets it to `connecting` (see `/auth/linkedin/link`), so without this the
+   * rep who signed in again perfectly well would be told it had not worked.
+   * It never re-points a working row onto a *different* account — rule 8.
+   */
+  if (taken && taken.user_id === input.userId) {
+    // Only a row waiting on a sign-in moves. A paused or restricted one keeps
+    // what somebody, or LinkedIn, decided about it.
+    if (["connecting", "reauth_required"].includes(String(taken.status))) {
+      await ctx.db
+        .from("linkedin_accounts")
+        .update({ status: match.status === "ok" ? "active" : "reauth_required", status_detail: null })
+        .eq("id", taken.id);
+    }
+    return { status: "ok", claimed: true, accountStatus: match.status };
   }
 
   const { data: pending } = await ctx.db
