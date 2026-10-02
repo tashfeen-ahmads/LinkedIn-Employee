@@ -310,6 +310,12 @@ describe("system check", () => {
     // operator looking for a setting that does not exist.
     expect(check(report, "webhook-deliveries").operator).toMatch(/Unipile-Auth/);
     expect(check(report, "webhook-deliveries").operator).not.toMatch(/unipile-signature/);
+    // And it is the *missing* credential's sentence, not the wrong one's. Both
+    // name `Unipile-Auth`, so matching on the header alone cannot tell them
+    // apart — which is how the mutation keeping these two refusals separate
+    // survived for one commit after the wording changed.
+    expect(check(report, "webhook-deliveries").operator).toMatch(/carrying no credential/);
+    expect(check(report, "webhook-deliveries").operator).not.toMatch(/did not verify/);
     // And the secret check still reads ok, which is why this row had to exist.
     expect(check(report, "webhook-secret").state).toBe("ok");
   });
