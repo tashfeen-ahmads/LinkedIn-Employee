@@ -18,6 +18,7 @@ import { detectAcceptedInvitations } from "./jobs/acceptance.js";
 import { publishApprovedPosts } from "./jobs/publish-posts.js";
 import { recoverThrottledProspects, unstickProspects } from "./jobs/unstick.js";
 import { recoverAccounts } from "./accounts.js";
+import { ensureWebhooks } from "./webhooks.js";
 import { runMaintenance } from "./jobs/maintenance.js";
 import { seedMissingAgents } from "./jobs/seed-agent.js";
 import { runDailyDigest } from "./jobs/digest.js";
@@ -114,6 +115,26 @@ try {
   console.error("could not sweep for replaced accounts", {
     reason: err instanceof Error ? err.message : String(err),
   });
+}
+
+/*
+ * The provider calls us with the secret it is supposed to carry. Registered by
+ * the worker rather than by a person in a dashboard, which is how every
+ * prospect reply came to be refused for days. Never fatal, and never pointed
+ * at a local address — a developer's worker must not take the live webhooks.
+ */
+if (!/localhost|127\.0\.0\.1/.test(ctx.env.WORKER_URL)) {
+  try {
+    const outcome = await ensureWebhooks(ctx.db, ctx.linkedin, {
+      workerUrl: ctx.env.WORKER_URL,
+      secret: ctx.env.UNIPILE_WEBHOOK_SECRET,
+    });
+    console.log("webhooks", { outcome });
+  } catch (err) {
+    console.error("could not register webhooks", {
+      reason: err instanceof Error ? err.message : String(err),
+    });
+  }
 }
 
 if (!queueOk) {

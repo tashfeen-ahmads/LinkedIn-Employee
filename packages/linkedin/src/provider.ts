@@ -156,6 +156,16 @@ export interface LinkedInProvider {
    * "we read the wrong field" stop looking identical. Shapes, never values.
    */
   describeAccountFields?(): Promise<Array<Record<string, string>>>;
+  /**
+   * Point the provider's webhooks at this deployment, carrying the shared
+   * secret as a header. Optional: a provider that pushes nothing has nothing
+   * to register. Creates first and only then removes the older ones pointing
+   * at the same address, so a failure leaves what was there.
+   */
+  ensureWebhooks?(input: {
+    secret: string;
+    endpoints: Array<{ source: "messaging" | "account_status"; url: string; name: string }>;
+  }): Promise<{ created: number; removed: number }>;
   getAccountHealth(accountId: string): Promise<AccountHealth>;
   searchProspects(input: {
     accountId: string;

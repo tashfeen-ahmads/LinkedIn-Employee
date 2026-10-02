@@ -41,6 +41,8 @@ const ROUTES = {
   chatMessages: (id: string) => `/api/v1/chats/${id}/messages`,
   messages: "/api/v1/messages",
   relations: "/api/v1/users/relations",
+  webhooks: "/api/v1/webhooks",
+  webhook: (id: string) => `/api/v1/webhooks/${id}`,
 } as const;
 
 /** Unipile's own ceiling for a page of results; larger is a 400. */
@@ -801,6 +803,48 @@ export class UnipileProvider implements LinkedInProvider {
       }
       return out;
     });
+  }
+
+  /**
+   * Register this deployment's webhooks with the secret as a header.
+   *
+   * Unipile's v1 webhooks are not signed; the only way a delivery proves where
+   * it came from is a header configured on the webhook itself. Leaving that to
+   * somebody in the provider's dashboard meant every prospect reply was refused
+   * at the door for days — correctly, and silently. So the worker does it.
+   *
+   * Created first. Only once the new one exists are older webhooks pointing at
+   * the same address removed: they are ours by address, they carry no header
+   * (or a stale one), and left in place each delivery would arrive twice, once
+   * refused. A failure to create leaves everything exactly as it was.
+   */
+  async ensureWebhooks(input: {
+    secret: string;
+    endpoints: Array<{ source: "messaging" | "account_status"; url: string; name: string }>;
+  }): Promise<{ created: number; removed: number }> {
+    const existing = await this.request<{ items?: Array<{ id?: string; request_url?: string }> }>(ROUTES.webhooks);
+    let created = 0;
+    let removed = 0;
+    for (const endpoint of input.endpoints) {
+      const res = await this.request<{ webhook_id?: string; id?: string }>(ROUTES.webhooks, {
+        method: "POST",
+        body: JSON.stringify({
+          request_url: endpoint.url,
+          name: endpoint.name,
+          source: endpoint.source,
+          format: "json",
+          headers: [{ key: "Unipile-Auth", value: input.secret }],
+        }),
+      });
+      created++;
+      const keep = res.webhook_id ?? res.id;
+      for (const old of existing.items ?? []) {
+        if (!old.id || old.id === keep || old.request_url !== endpoint.url) continue;
+        await this.request(ROUTES.webhook(old.id), { method: "DELETE" });
+        removed++;
+      }
+    }
+    return { created, removed };
   }
 
   async listAccounts(): Promise<ConnectedAccount[]> {
