@@ -710,19 +710,25 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
 
   app.post("/webhooks/unipile/messages", async (c) => {
     const body = await c.req.text();
-    // Unipile sends `unipile-signature`; the x- prefixed spelling is kept as a
-    // fallback so a sender configured against the older name still verifies.
-    const signature = c.req.header("unipile-signature") ?? c.req.header("x-unipile-signature") ?? undefined;
+    // Two credentials, because Unipile has two schemes (see `verifyDelivery`):
+    // v2 signs in `unipile-signature`, v1 carries a shared secret in a header
+    // configured on the webhook itself.
+    const { signature, authHeader } = webhookCredentials(c);
 
     let messages;
     try {
-      messages = ctx.linkedin.parseWebhook({ body, signature });
+      messages = ctx.linkedin.parseWebhook({ body, signature, authHeader });
     } catch (err) {
       await recordBeat(ctx.db, "webhook:messages", {
         at: new Date().toISOString(),
         ok: false,
         reason: err instanceof Error ? err.message : String(err),
-        hadSignature: Boolean(signature),
+        // "A credential arrived", either kind. Kept under this name because
+        // the readers (rule 46) split refusals on it: none at all means the
+        // webhook is configured without one, one that does not verify means
+        // the secret differs between the two sides.
+        hadSignature: Boolean(signature || authHeader),
+        credential: signature ? "signature" : authHeader ? "header" : null,
         bytes: body.length,
       });
       console.error("rejected webhook", err);
@@ -767,13 +773,14 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
    */
   app.post("/webhooks/unipile/accounts", async (c) => {
     const body = await c.req.text();
-    // Unipile sends `unipile-signature`; the x- prefixed spelling is kept as a
-    // fallback so a sender configured against the older name still verifies.
-    const signature = c.req.header("unipile-signature") ?? c.req.header("x-unipile-signature") ?? undefined;
+    // Two credentials, because Unipile has two schemes (see `verifyDelivery`):
+    // v2 signs in `unipile-signature`, v1 carries a shared secret in a header
+    // configured on the webhook itself.
+    const { signature, authHeader } = webhookCredentials(c);
 
     let accounts;
     try {
-      accounts = ctx.linkedin.parseAccountWebhook({ body, signature });
+      accounts = ctx.linkedin.parseAccountWebhook({ body, signature, authHeader });
     } catch (err) {
       /*
        * A rejected delivery leaves a mark, and the absence of one is the whole
@@ -794,7 +801,12 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
         at: new Date().toISOString(),
         ok: false,
         reason: err instanceof Error ? err.message : String(err),
-        hadSignature: Boolean(signature),
+        // "A credential arrived", either kind. Kept under this name because
+        // the readers (rule 46) split refusals on it: none at all means the
+        // webhook is configured without one, one that does not verify means
+        // the secret differs between the two sides.
+        hadSignature: Boolean(signature || authHeader),
+        credential: signature ? "signature" : authHeader ? "header" : null,
         bytes: body.length,
       });
       console.error("rejected account webhook", err);
@@ -1400,6 +1412,23 @@ const OAUTH_INTEGRATIONS: OAuthIntegration[] = [
  * Constant-time bearer check. A missing secret fails closed: an unauthenticated
  * internal API is worse than a worker that refuses to start work.
  */
+/**
+ * The credentials a Unipile webhook delivery can carry. Never logged.
+ *
+ * `unipile-auth` is the header name Unipile's own v1 documentation uses as its
+ * example, so it is what the webhook should be configured with; `x-unipile-auth`
+ * is accepted for the same reason the signature's x- spelling is.
+ */
+function webhookCredentials(c: { req: { header(name: string): string | undefined } }): {
+  signature?: string;
+  authHeader?: string;
+} {
+  return {
+    signature: c.req.header("unipile-signature") ?? c.req.header("x-unipile-signature") ?? undefined,
+    authHeader: c.req.header("unipile-auth") ?? c.req.header("x-unipile-auth") ?? undefined,
+  };
+}
+
 function requireInternalAuth(secret: string | undefined): MiddlewareHandler {
   return async (c, next) => {
     if (!secret) return c.json({ error: "worker is not configured for internal calls" }, 503);

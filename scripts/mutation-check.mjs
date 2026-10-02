@@ -460,46 +460,74 @@ const MUTATIONS = [
   },
   {
     /*
-     * Both webhook parsers carry the identical pair of guards, so an anchor
-     * written as the bare `if` matched twice — and `String.replace` takes the
-     * first. Every webhook mutation therefore only ever broke the *message*
-     * parser, and `parseAccountWebhook` — where rule 8 says a forged delivery
-     * binds a stranger's LinkedIn account to a rep's row and sends every
-     * campaign message from it — was covered by nothing at all. The higher
-     * stake was the unguarded one.
-     *
-     * Each anchor now carries the line that tells the two apart: the parsers
-     * cast to `RawUnipileMessage` and `RawUnipileAccount` respectively.
+     * Both parsers share one `verifyDelivery`, so the guard is one place and
+     * the call sites are two. Each is broken separately: removing the check
+     * from the account parser alone is the dangerous case (rule 8 — a forged
+     * delivery binds a stranger's LinkedIn account to a rep's row), and a
+     * mutation that only ever broke the message parser is how that went
+     * unguarded before.
      */
-    id: "webhook/signature",
-    rule: "An unsigned or wrongly signed message webhook is rejected",
-    file: "packages/linkedin/src/unipile.ts",
-    from: 'if (!input.signature || !verifySignature(input.body, input.signature, this.webhookSecret)) {\n      throw new Error("Invalid Unipile webhook signature");\n    }\n    const parsed = JSON.parse(input.body) as RawUnipileMessage',
-    to: 'if (false) {\n      throw new Error("Invalid Unipile webhook signature");\n    }\n    const parsed = JSON.parse(input.body) as RawUnipileMessage',
-    pkg: "@le/linkedin",
-  },
-  {
     id: "webhook/fails-closed",
-    rule: "A missing webhook secret rejects rather than accepts on the message webhook",
+    rule: "A missing webhook secret rejects rather than accepts",
     file: "packages/linkedin/src/unipile.ts",
-    from: 'if (!this.webhookSecret) {\n      throw new Error("Unipile webhook secret is not configured; refusing to accept unverified deliveries");\n    }\n    if (!input.signature || !verifySignature(input.body, input.signature, this.webhookSecret)) {\n      throw new Error("Invalid Unipile webhook signature");\n    }\n    const parsed = JSON.parse(input.body) as RawUnipileMessage',
-    to: 'if (false) {\n      throw new Error("Unipile webhook secret is not configured; refusing to accept unverified deliveries");\n    }\n    if (!input.signature || !verifySignature(input.body, input.signature, this.webhookSecret)) {\n      throw new Error("Invalid Unipile webhook signature");\n    }\n    const parsed = JSON.parse(input.body) as RawUnipileMessage',
+    from: "    if (!this.webhookSecret) {\n      throw new Error(\"Unipile webhook secret is not configured; refusing to accept unverified deliveries\");",
+    to: "    if (false) {\n      throw new Error(\"Unipile webhook secret is not configured; refusing to accept unverified deliveries\");",
     pkg: "@le/linkedin",
   },
   {
-    id: "webhook/accounts-signature",
-    rule: "An unsigned or wrongly signed ACCOUNTS webhook is rejected — a forged one binds a stranger's LinkedIn account to a rep's row, and every campaign message then leaves that account",
+    id: "webhook/signature",
+    rule: "A delivery carrying neither a valid signature nor the shared secret is rejected",
     file: "packages/linkedin/src/unipile.ts",
-    from: 'if (!input.signature || !verifySignature(input.body, input.signature, this.webhookSecret)) {\n      throw new Error("Invalid Unipile webhook signature");\n    }\n\n    const parsed = JSON.parse(input.body) as RawUnipileAccount',
-    to: 'if (false) {\n      throw new Error("Invalid Unipile webhook signature");\n    }\n\n    const parsed = JSON.parse(input.body) as RawUnipileAccount',
+    from: "    if (!signed && !headed) {",
+    to: "    if (false) {",
     pkg: "@le/linkedin",
   },
   {
-    id: "webhook/accounts-fails-closed",
-    rule: "A missing webhook secret rejects rather than accepts on the ACCOUNTS webhook",
+    id: "webhook/messages-parser-verifies",
+    rule: "The message parser verifies before it reads; a forged delivery makes the Reply Agent answer a message no prospect sent",
     file: "packages/linkedin/src/unipile.ts",
-    from: 'if (!this.webhookSecret) {\n      throw new Error("Unipile webhook secret is not configured; refusing to accept unverified deliveries");\n    }\n    if (!input.signature || !verifySignature(input.body, input.signature, this.webhookSecret)) {\n      throw new Error("Invalid Unipile webhook signature");\n    }\n\n    const parsed = JSON.parse(input.body) as RawUnipileAccount',
-    to: 'if (false) {\n      throw new Error("Unipile webhook secret is not configured; refusing to accept unverified deliveries");\n    }\n    if (!input.signature || !verifySignature(input.body, input.signature, this.webhookSecret)) {\n      throw new Error("Invalid Unipile webhook signature");\n    }\n\n    const parsed = JSON.parse(input.body) as RawUnipileAccount',
+    from: "    this.verifyDelivery(input);\n    const parsed = JSON.parse(input.body) as RawUnipileMessage",
+    to: "    const parsed = JSON.parse(input.body) as RawUnipileMessage",
+    pkg: "@le/linkedin",
+  },
+  {
+    id: "webhook/accounts-parser-verifies",
+    rule: "The account parser verifies before it reads — a forged one binds a stranger's LinkedIn account to a rep's row, and every campaign message then leaves that account",
+    file: "packages/linkedin/src/unipile.ts",
+    from: "    this.verifyDelivery(input);\n\n    const parsed = JSON.parse(input.body) as RawUnipileAccount",
+    to: "    const parsed = JSON.parse(input.body) as RawUnipileAccount",
+    pkg: "@le/linkedin",
+  },
+  {
+    id: "webhook/the-header-is-compared-not-just-present",
+    rule: "A v1 delivery is accepted on the shared secret's value, never on the header merely being there",
+    file: "packages/linkedin/src/unipile.ts",
+    from: "    const headed = Boolean(input.authHeader) && secretEquals(input.authHeader!, this.webhookSecret);",
+    to: "    const headed = Boolean(input.authHeader);",
+    pkg: "@le/linkedin",
+  },
+  {
+    id: "webhook/the-header-must-match-exactly",
+    rule: "The shared secret matches exactly; a prefix match would let a caller recover it a character at a time",
+    file: "packages/linkedin/src/unipile.ts",
+    from: "  const b = Buffer.from(secret.trim(), \"utf8\");\n  return a.length === b.length && timingSafeEqual(a, b);",
+    to: "  const b = Buffer.from(secret.trim(), \"utf8\");\n  return b.toString().startsWith(a.toString());",
+    pkg: "@le/linkedin",
+  },
+  {
+    id: "webhook/the-route-passes-the-v1-header",
+    rule: "The webhook routes read Unipile's v1 auth header off the request and hand it to the parser; a parser that accepts the header is no fix if the call site never passes it",
+    file: "apps/worker/src/server.ts",
+    from: '    authHeader: c.req.header("unipile-auth") ?? c.req.header("x-unipile-auth") ?? undefined,',
+    to: "    authHeader: undefined,",
+    pkg: "@le/worker",
+  },
+  {
+    id: "webhook/v1-deliveries-are-accepted",
+    rule: "Unipile's v1 webhooks authenticate by header, not signature; refusing them drops every prospect reply at the door, which is what happened here for weeks",
+    file: "packages/linkedin/src/unipile.ts",
+    from: "    const headed = Boolean(input.authHeader) && secretEquals(input.authHeader!, this.webhookSecret);",
+    to: "    const headed = false && Boolean(input.authHeader);",
     pkg: "@le/linkedin",
   },
   {

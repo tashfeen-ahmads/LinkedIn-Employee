@@ -658,31 +658,55 @@ export class UnipileProvider implements LinkedInProvider {
       .map((m) => toInboundMessage(m, input.accountId));
   }
 
-  parseWebhook(input: { body: string; signature?: string }): InboundMessage[] {
-    // Fails closed. An unsigned webhook is an open door: a forged delivery
-    // makes the Reply Agent answer a message no prospect ever sent, in a real
-    // rep's name, so an unconfigured secret must reject rather than accept.
+  /**
+   * Whether a delivery really came from Unipile. One check, for both webhooks.
+   *
+   * Unipile authenticates webhooks two different ways depending on which API
+   * created them, and this accepted only one of them. Its v2 API signs every
+   * delivery with an HMAC in `unipile-signature`. Its v1 API — the one this
+   * deployment uses for everything — does not sign at all: a v1 webhook is
+   * created with a `headers` array, and the documented way to authenticate it
+   * is to put a shared secret in a custom header such as `Unipile-Auth`.
+   *
+   * So every webhook this deployment ever registered arrived with no
+   * `unipile-signature`, was refused as unsigned, and no secret anybody could
+   * set in Unipile would have changed that: the header being waited for is one
+   * v1 never sends. Prospect replies were dropped at the door for weeks, on the
+   * trial account and the premium one alike, while the advice — "set the
+   * signing secret" — pointed at a setting that does not exist for v1.
+   *
+   * Both are accepted now, and neither loosens rule 8. The secret is still
+   * required; a delivery with neither credential, or with one that does not
+   * match, is still refused; and the header is compared in constant time, as
+   * the signature is. What changed is only which of Unipile's two real
+   * mechanisms counts as proof.
+   */
+  private verifyDelivery(input: { body: string; signature?: string; authHeader?: string }): void {
     if (!this.webhookSecret) {
       throw new Error("Unipile webhook secret is not configured; refusing to accept unverified deliveries");
     }
-    if (!input.signature || !verifySignature(input.body, input.signature, this.webhookSecret)) {
+    const signed = Boolean(input.signature) && verifySignature(input.body, input.signature!, this.webhookSecret);
+    const headed = Boolean(input.authHeader) && secretEquals(input.authHeader!, this.webhookSecret);
+    if (!signed && !headed) {
       throw new Error("Invalid Unipile webhook signature");
     }
+  }
+
+  parseWebhook(input: { body: string; signature?: string; authHeader?: string }): InboundMessage[] {
+    // Fails closed. An unverified webhook is an open door: a forged delivery
+    // makes the Reply Agent answer a message no prospect ever sent, in a real
+    // rep's name, so an unconfigured secret must reject rather than accept.
+    this.verifyDelivery(input);
     const parsed = JSON.parse(input.body) as RawUnipileMessage | { items?: RawUnipileMessage[] };
     const items = "items" in parsed && Array.isArray(parsed.items) ? parsed.items : [parsed as RawUnipileMessage];
     return items.filter((m) => !m.is_sender).map((m) => toInboundMessage(m, m.account_id ?? ""));
   }
 
-  parseAccountWebhook(input: { body: string; signature?: string }): ConnectedAccount[] {
+  parseAccountWebhook(input: { body: string; signature?: string; authHeader?: string }): ConnectedAccount[] {
     // Fails closed for the same reason the message webhook does, and one more:
     // a forged delivery would bind a stranger's LinkedIn account to a rep's
     // row, and every message the campaign sends would leave that account.
-    if (!this.webhookSecret) {
-      throw new Error("Unipile webhook secret is not configured; refusing to accept unverified deliveries");
-    }
-    if (!input.signature || !verifySignature(input.body, input.signature, this.webhookSecret)) {
-      throw new Error("Invalid Unipile webhook signature");
-    }
+    this.verifyDelivery(input);
 
     const parsed = JSON.parse(input.body) as RawUnipileAccount | { items?: RawUnipileAccount[] };
     const items = "items" in parsed && Array.isArray(parsed.items) ? parsed.items : [parsed as RawUnipileAccount];
@@ -1170,6 +1194,19 @@ function verifySignature(body: string, signature: string, secret: string): boole
     return hexEquals(createHmac("sha256", secret).update(`${timestamp}.${body}`).digest("hex"), v0);
   }
   return hexEquals(createHmac("sha256", secret).update(body).digest("hex"), signature.replace(/^sha256=/, "").trim());
+}
+
+/**
+ * A shared secret compared in constant time.
+ *
+ * Exact match only: trimmed of surrounding whitespace, because a value pasted
+ * into a dashboard field often carries a trailing newline, and nothing else.
+ * Prefix and case-insensitive matching would each make a guess cheaper.
+ */
+function secretEquals(presented: string, secret: string): boolean {
+  const a = Buffer.from(presented.trim(), "utf8");
+  const b = Buffer.from(secret.trim(), "utf8");
+  return a.length === b.length && timingSafeEqual(a, b);
 }
 
 /** Constant-time, and length-safe: timingSafeEqual throws on a length mismatch. */

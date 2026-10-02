@@ -169,3 +169,69 @@ describe("Unipile account webhook verification", () => {
     expect(provider().parseAccountWebhook({ body: anonymous, signature: sign(anonymous) })).toHaveLength(0);
   });
 });
+
+/**
+ * Unipile's v1 webhooks, which authenticate with a header rather than a
+ * signature.
+ *
+ * This deployment uses Unipile's v1 API, and a v1 webhook is never HMAC-signed:
+ * it is created with a `headers` array and authenticated by a shared secret in
+ * a custom header. The parser accepted only the v2 signature, so every delivery
+ * this deployment ever received was refused as unsigned — prospect replies
+ * dropped at the door for weeks — and no secret anybody could set in Unipile
+ * would have produced the header being waited for.
+ *
+ * Accepting the header must not open the door any wider than the signature
+ * does, so the refusals are tested as carefully as the acceptance.
+ */
+describe("Unipile v1 webhooks, authenticated by header", () => {
+  it("accepts a message delivery carrying the shared secret", () => {
+    const messages = provider().parseWebhook({ body: payload, authHeader: SECRET });
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.text).toContain("Sounds good");
+  });
+
+  it("accepts an account delivery carrying the shared secret", () => {
+    const account = JSON.stringify({ account_id: "acct_new", name: "rep-id", status: "OK" });
+    expect(provider().parseAccountWebhook({ body: account, authHeader: SECRET })).toHaveLength(1);
+  });
+
+  it("tolerates the trailing newline a pasted secret often carries", () => {
+    expect(provider().parseWebhook({ body: payload, authHeader: `${SECRET}\n` })).toHaveLength(1);
+  });
+
+  it("rejects the wrong secret", () => {
+    expect(() => provider().parseWebhook({ body: payload, authHeader: "not-the-secret" })).toThrow(/signature/i);
+  });
+
+  it("rejects a secret that merely starts the same way", () => {
+    // A prefix match would let a caller recover the secret a character at a time.
+    expect(() => provider().parseWebhook({ body: payload, authHeader: SECRET.slice(0, -1) })).toThrow(/signature/i);
+    expect(() => provider().parseWebhook({ body: payload, authHeader: `${SECRET}x` })).toThrow(/signature/i);
+  });
+
+  it("rejects a forged account delivery carrying the wrong secret", () => {
+    // The dangerous one: a forged account delivery binds a stranger's LinkedIn
+    // to a rep's row (rule 8).
+    const forged = JSON.stringify({ account_id: "acct_attacker", name: "rep-id", status: "OK" });
+    expect(() => provider().parseAccountWebhook({ body: forged, authHeader: "guess" })).toThrow(/signature/i);
+  });
+
+  it("still fails closed with no secret configured, header or not", () => {
+    // An empty configured secret must not be "matched" by an empty header.
+    expect(() => provider({ secret: undefined }).parseWebhook({ body: payload, authHeader: "" })).toThrow(
+      /not configured/i,
+    );
+    expect(() => provider({ secret: undefined }).parseWebhook({ body: payload, authHeader: SECRET })).toThrow(
+      /not configured/i,
+    );
+  });
+
+  it("rejects an empty header rather than reading it as a match", () => {
+    expect(() => provider().parseWebhook({ body: payload, authHeader: "" })).toThrow(/signature/i);
+  });
+
+  it("still rejects a delivery carrying neither credential", () => {
+    expect(() => provider().parseWebhook({ body: payload })).toThrow(/signature/i);
+  });
+});

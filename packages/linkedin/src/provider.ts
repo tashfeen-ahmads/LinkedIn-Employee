@@ -137,7 +137,7 @@ export interface LinkedInProvider {
    * connecting. Until one arrives the account has no provider id and every job
    * skips it, so this is the step that makes a connected account real.
    */
-  parseAccountWebhook(input: { body: string; signature?: string }): ConnectedAccount[];
+  parseAccountWebhook(input: { body: string; signature?: string; authHeader?: string }): ConnectedAccount[];
   /**
    * Every account the provider currently holds, so a connection can be
    * confirmed by asking rather than only by being told. The hosted flow's
@@ -237,5 +237,5 @@ export interface LinkedInProvider {
    */
   listRelations(input: { accountId: string; since?: string; limit?: number }): Promise<ProviderRelation[]>;
   /** Verify a provider webhook signature. Returns the parsed messages it carries. */
-  parseWebhook(input: { body: string; signature?: string }): InboundMessage[];
+  parseWebhook(input: { body: string; signature?: string; authHeader?: string }): InboundMessage[];
 }

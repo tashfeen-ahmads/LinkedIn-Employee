@@ -305,8 +305,11 @@ describe("system check", () => {
     expect(check(report, "webhook-deliveries").state).toBe("blocked");
     // The header, not the secret: those are two different things to go and do,
     // and telling somebody to re-copy a secret that is already correct is an
-    // afternoon.
-    expect(check(report, "webhook-deliveries").operator).toMatch(/unipile-signature/);
+    // afternoon. And it names the header v1 actually uses — this used to say
+    // `unipile-signature`, a v2 header a v1 webhook never sends, which sent the
+    // operator looking for a setting that does not exist.
+    expect(check(report, "webhook-deliveries").operator).toMatch(/Unipile-Auth/);
+    expect(check(report, "webhook-deliveries").operator).not.toMatch(/unipile-signature/);
     // And the secret check still reads ok, which is why this row had to exist.
     expect(check(report, "webhook-secret").state).toBe("ok");
   });

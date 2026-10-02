@@ -1161,3 +1161,39 @@ describe("what the provider holds, when none of it can be bound", () => {
     expect(db.find("linkedin_accounts", { id: ACCOUNT })!.provider_account_id).toBe("acct_dead");
   });
 });
+
+/*
+ * The worker hands Unipile's v1 credential to the parser.
+ *
+ * The parser accepting a header is not enough on its own: the route has to
+ * read it off the request and pass it through, and a call site that forgets is
+ * a fix that never reaches production — rule 39's lesson, that the bug lives
+ * in the call site and a test of the helper passes throughout. Asserted on both
+ * webhooks, because they are two routes.
+ */
+describe("the webhook routes pass Unipile's v1 header to the parser", () => {
+  for (const route of ["/webhooks/unipile/messages", "/webhooks/unipile/accounts"] as const) {
+    it(`reads Unipile-Auth on ${route}`, async () => {
+      const { linkedin, app } = harness();
+      const seen: Array<{ signature?: string; authHeader?: string }> = [];
+      const capture = (input: { body: string; signature?: string; authHeader?: string }) => {
+        seen.push({ signature: input.signature, authHeader: input.authHeader });
+        return [];
+      };
+      linkedin.parseWebhook = capture as never;
+      linkedin.parseAccountWebhook = capture as never;
+
+      await app.request(route, {
+        method: "POST",
+        body: JSON.stringify({}),
+        // Header names are case-insensitive on the wire; Unipile's own example
+        // spells it this way.
+        headers: { "content-type": "application/json", "Unipile-Auth": "the-shared-secret" },
+      });
+
+      expect(seen).toHaveLength(1);
+      expect(seen[0]?.authHeader).toBe("the-shared-secret");
+      expect(seen[0]?.signature).toBeUndefined();
+    });
+  }
+});

@@ -147,7 +147,7 @@ export async function runDiagnostics(
     href: env.UNIPILE_WEBHOOK_SECRET ? undefined : "/app/support",
     operator: env.UNIPILE_WEBHOOK_SECRET
       ? undefined
-      : "Set UNIPILE_WEBHOOK_SECRET to the value in Unipile's webhook settings.",
+      : "Set UNIPILE_WEBHOOK_SECRET to a long random value, then configure each Unipile webhook with header `Unipile-Auth` set to the same value.",
   });
 
   // ---- Onboarding and Strategy -----------------------------------------
@@ -482,9 +482,9 @@ export async function runDiagnostics(
     operator: !webhook
       ? "Unipile has never called this deployment. Point its messaging webhook at this worker's /webhooks/unipile/messages."
       : unsigned
-        ? `Unipile called at ${webhook.beat_at} with no signature header. In its webhook settings add the \`unipile-signature\` header with the same value as UNIPILE_WEBHOOK_SECRET — the endpoint refuses an unsigned delivery on purpose and will keep doing so.`
+        ? `Unipile called at ${webhook.beat_at} carrying no credential. Unipile's v1 webhooks are never signed — they authenticate with a custom header set on the webhook itself. Configure each Unipile webhook (messaging and account status) with header \`Unipile-Auth\` set to the value of UNIPILE_WEBHOOK_SECRET. The endpoint refuses an unauthenticated delivery on purpose and will keep doing so.`
         : rejected
-          ? `Unipile called at ${webhook.beat_at} and the signature did not verify (${String(webhookDetail.reason ?? "no reason recorded")}). Make UNIPILE_WEBHOOK_SECRET and the value in Unipile's webhook settings match.`
+          ? `Unipile called at ${webhook.beat_at} and its credential did not verify (${String(webhookDetail.reason ?? "no reason recorded")}). Make the \`Unipile-Auth\` header on the Unipile webhook match UNIPILE_WEBHOOK_SECRET exactly.`
           : undefined,
   });
 
