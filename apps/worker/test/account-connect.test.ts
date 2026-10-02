@@ -1173,6 +1173,33 @@ describe("a provider refusal, in the words the rep reads", () => {
  * which is what left this deployment pointing at a dead id with the live one
  * sitting beside it.
  */
+/*
+ * The live report: a customer's account was attached and working, and pressing
+ * Check connection told her "the provider holds 3 accounts and none of them is
+ * yours" — because it matched on the provider's label (her display name) and
+ * never looked at the account her row already held.
+ */
+describe("checking a connection that already works", () => {
+  it("recognises the account the row holds, whatever the provider labelled it", async () => {
+    const { db, linkedin, app } = harness({ provider_account_id: "acct_patti", status: "connecting" });
+    linkedin.connectedAccounts = [
+      { providerAccountId: "acct_other", reference: "Somebody Else", status: "ok" },
+      { providerAccountId: "acct_patti", reference: "Patti Dubas", status: "ok" },
+    ];
+
+    const res = await app.request("/jobs/linkedin-refresh", {
+      method: "POST",
+      body: JSON.stringify({ workspaceId: WORKSPACE, userId: USER }),
+      headers: { "content-type": "application/json", authorization: `Bearer ${INTERNAL_SECRET}` },
+    });
+    const body = (await res.json()) as Record<string, unknown>;
+
+    expect(body.unlabelled).toBe(true);
+    expect(body.referenceShape).toBeUndefined();
+    expect(db.find("linkedin_accounts", { id: ACCOUNT })!.status).toBe("active");
+  });
+});
+
 describe("what the provider holds, when none of it can be bound", () => {
   it("writes the ids down where an operator can read them", async () => {
     const { db, linkedin, app } = harness({ provider_account_id: "acct_dead", status: "connecting" });

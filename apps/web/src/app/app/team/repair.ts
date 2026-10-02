@@ -40,7 +40,7 @@ export function describeRepair(result: WorkerResult<RefreshResult>): RepairNotic
   if (!result.ok) {
     return {
       tone: "danger",
-      title: "Could not check with LinkedIn's provider.",
+      title: "We couldn't check your LinkedIn connection just now.",
       body: result.error,
     };
   }
@@ -50,7 +50,7 @@ export function describeRepair(result: WorkerResult<RefreshResult>): RepairNotic
     return {
       tone: "accent",
       title: "Reconnected.",
-      body: "The provider had a different account for you, and this is now pointed at it.",
+      body: "Your LinkedIn account is attached again and ready.",
     };
   }
   if (data?.bound) {
@@ -65,26 +65,21 @@ export function describeRepair(result: WorkerResult<RefreshResult>): RepairNotic
 
   const found = data?.found ?? 0;
   if (found > 0 && (data?.mine ?? 0) === 0) {
-    // The shape, not the value. "an id that does not match" and "a person's
-    // name" are the two answers here and they mean completely different things
-    // -- a name means the account was made in the provider's own dashboard and
-    // carries no reference to anybody -- but printing the value itself would
-    // put one workspace's labels in another's browser.
-    const shapes = data?.referenceShape ?? [];
-    const labelled = shapes.length ? ` They are labelled: ${shapes.join(", ")}.` : "";
+    // Said in words the rep can act on. How many accounts we hold and how
+    // they are labelled is ours to know (rule 54): it read to a customer as
+    // "the product is broken", and the fix is the same either way.
     return {
       tone: "danger",
-      title: `LinkedIn's provider holds ${found} account${found === 1 ? "" : "s"}, and none of them is labelled as yours.`,
-      body:
-        `That is what a connection made inside the provider's own dashboard looks like from here: it works perfectly on their side and belongs to nobody on ours.${labelled} We cannot attach an unlabelled account to you — an account labelled with nobody could belong to anybody.`,
-      fix: "Press Connect LinkedIn below and sign in through this flow once. That is what writes your name onto the account; afterwards you can delete the stray one in the provider.",
+      title: "We couldn't find your LinkedIn sign-in yet.",
+      body: "If you signed in a moment ago it can take a minute to show up here.",
+      fix: "Press Connect LinkedIn below and finish signing in on LinkedIn's page.",
     };
   }
   if (data?.lost || found === 0) {
     return {
       tone: "danger",
-      title: "LinkedIn's provider has no account for you.",
-      body: "Whatever was connected before is gone from their side.",
+      title: "Your LinkedIn account isn't connected.",
+      body: "The connection we had for you is no longer working.",
       fix: "Press Connect LinkedIn below.",
     };
   }

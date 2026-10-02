@@ -6,6 +6,7 @@ import { SiteFooter, SiteHeader } from "@/components/marketing";
 import { AuthAside } from "@/components/auth-aside";
 import { PasswordField } from "@/components/password-field";
 import { SubmitButton } from "@/components/submit-button";
+import { PostButton } from "@/components/post-button";
 
 /**
  * Magic-link sign in. No passwords to store, and the same form serves signup
@@ -27,50 +28,6 @@ async function sendMagicLink(formData: FormData) {
   const { error } = await supabase.auth.signInWithOtp({ email, options: { emailRedirectTo: callback } });
 
   redirect(error ? `/login?error=${encodeURIComponent(error.message)}` : "/login?sent=1");
-}
-
-/**
- * Password sign-in.
- *
- * The primary way in now that signup collects one. The magic link stays below
- * it rather than being replaced: it is the recovery path for somebody who has
- * forgotten the password, and the only path for the accounts created before
- * passwords existed — several of which are real people using this today.
- *
- * The refusal is deliberately one sentence for both halves. "No account with
- * that email" and "wrong password" told apart is a way to learn which
- * addresses have accounts here, one guess at a time.
- */
-async function signInWithPassword(formData: FormData) {
-  "use server";
-  const email = String(formData.get("email") ?? "").trim().toLowerCase();
-  const password = String(formData.get("password") ?? "");
-  const invite = String(formData.get("invite") ?? "").trim();
-  const q = invite ? `&invite=${encodeURIComponent(invite)}` : "";
-
-  if (!email || !password) redirect(`/login?error=${encodeURIComponent("Enter your email and password.")}${q}`);
-
-  const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
-
-  if (error) {
-    /*
-     * An unconfirmed address is the one case worth naming, because the fix is
-     * different: the password is right and the mail is sitting unopened, and
-     * "email or password is wrong" would send them to reset a password that
-     * works.
-     */
-    const unconfirmed = /confirm/i.test(error.message);
-    redirect(
-      `/login?error=${encodeURIComponent(
-        unconfirmed
-          ? "Open the confirmation link we emailed you first — it is what proves the address is yours."
-          : "That email and password do not match an account.",
-      )}${q}`,
-    );
-  }
-
-  redirect(invite ? `/invite/${encodeURIComponent(invite)}` : "/app");
 }
 
 export default async function LoginPage({
@@ -124,16 +81,16 @@ export default async function LoginPage({
         ) : null}
         {params.error ? <div className="notice danger">{params.error}</div> : null}
 
-        <form action={signInWithPassword} className="card">
+        <form action="/auth/sign-in" method="post" className="card">
           {params.invite ? <input type="hidden" name="invite" value={params.invite} /> : null}
           <label className="field">
             <span>Work email</span>
             <input type="email" name="email" required autoComplete="username" placeholder="you@company.com" />
           </label>
           <PasswordField name="password" label="Password" autoComplete="current-password" />
-          <SubmitButton className="btn block" pendingLabel="Signing in…">
+          <PostButton className="btn block" pendingLabel="Signing in…">
             Sign in
-          </SubmitButton>
+          </PostButton>
         </form>
 
         {/*

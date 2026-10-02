@@ -232,7 +232,18 @@ export async function reconcileAccount(
     // Binding is untouched: choosing a *new* id to attach still requires the
     // rep's own reference. This only governs tearing an existing one down, and
     // that needs evidence the account is gone, which a mismatched label is not.
-    if (all.some((a) => a.providerAccountId === row.provider_account_id)) {
+    const held = all.find((a) => a.providerAccountId === row.provider_account_id);
+    if (held) {
+      // The account is there and healthy, so a row still waiting on a sign-in
+      // is told so. Left alone, a rep whose account worked at the provider read
+      // "connecting" on every screen here — the report this product kept
+      // getting from every new customer.
+      if (held.status === "ok" && ["connecting", "reauth_required", "disconnected"].includes(String(row.status))) {
+        await db
+          .from("linkedin_accounts")
+          .update({ status: "active", status_detail: null })
+          .eq("id", row.id);
+      }
       return { unlabelled: true };
     }
 

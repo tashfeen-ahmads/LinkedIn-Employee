@@ -23,16 +23,15 @@ describe("describeRepair", () => {
     expect(notice?.title).toMatch(/reconnected/i);
   });
 
-  it("names an account the provider holds but has not labelled as this rep's", () => {
-    // The real case: connected from inside the provider's dashboard, so it is
-    // healthy on their side and belongs to nobody on ours.
+  it("tells a rep with no matching sign-in what to do, in their words", () => {
     const notice = describeRepair({ ok: true, data: { found: 2, mine: 0 } });
 
     expect(notice?.tone).toBe("danger");
-    expect(notice?.title).toMatch(/2 accounts/);
-    expect(notice?.title).toMatch(/none of them is labelled as yours/i);
-    // And a way out, not just a diagnosis.
     expect(notice?.fix).toMatch(/connect linkedin/i);
+    // How many accounts we hold and how they are labelled is ours (rule 54):
+    // "3 accounts, none of them yours" read to a customer as a broken product.
+    const said = `${notice?.title} ${notice?.body} ${notice?.fix}`;
+    expect(said).not.toMatch(/provider|label|2 accounts|belong to anybody/i);
   });
 
   it("says nothing when the account exists but carries no label for this rep", () => {
@@ -42,34 +41,12 @@ describe("describeRepair", () => {
     expect(describeRepair({ ok: true, data: { found: 2, mine: 0, unlabelled: true } })).toBeNull();
   });
 
-  it("says how the provider's accounts are labelled, which is the whole diagnosis", () => {
-    // "a uuid that does not match" and "a person's name" are different
-    // problems. A name means the account was created in the provider's own
-    // dashboard and carries no reference to anybody here, which is the case
-    // that kept a real deployment stuck for two days.
-    const notice = describeRepair({
-      ok: true,
-      data: { found: 1, mine: 0, referenceShape: ["text with spaces"] },
-    });
-
-    expect(notice?.body).toMatch(/labelled: text with spaces/);
-  });
-
-  it("does not offer to attach an unlabelled account", () => {
-    // An account labelled with nobody could belong to anybody. Attaching it to
-    // whoever asks is how one company's campaign goes out from another
-    // company's LinkedIn, so the page explains rather than offering a button.
-    const notice = describeRepair({ ok: true, data: { found: 1, mine: 0 } });
-
-    expect(notice?.body).toMatch(/could belong to anybody/i);
-  });
-
   it("distinguishes a provider with nothing from a provider it could not reach", () => {
     const nothing = describeRepair({ ok: true, data: { found: 0, mine: 0 } });
     const unreachable = describeRepair({ ok: false, error: "The background service is not responding." });
 
-    expect(nothing?.title).toMatch(/has no account for you/i);
-    expect(unreachable?.title).toMatch(/could not check/i);
+    expect(nothing?.title).toMatch(/isn.t connected/i);
+    expect(unreachable?.title).toMatch(/couldn.t check/i);
     // Two different things to do about them, so never the same sentence.
     expect(nothing?.title).not.toBe(unreachable?.title);
   });

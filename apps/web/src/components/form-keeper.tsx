@@ -21,7 +21,11 @@ export function FormKeeper({ formId, storageKey }: { formId: string; storageKey:
       const saved = JSON.parse(window.sessionStorage.getItem(storageKey) ?? "{}") as Record<string, string | boolean>;
       for (const [name, value] of Object.entries(saved)) {
         const field = form.elements.namedItem(name);
-        if (field instanceof HTMLInputElement && field.type === "checkbox") field.checked = value === true;
+        if (field instanceof RadioNodeList) {
+          for (const radio of Array.from(field)) {
+            if (radio instanceof HTMLInputElement) radio.checked = radio.value === value;
+          }
+        } else if (field instanceof HTMLInputElement && field.type === "checkbox") field.checked = value === true;
         else if (
           field instanceof HTMLInputElement ||
           field instanceof HTMLTextAreaElement ||
@@ -37,7 +41,9 @@ export function FormKeeper({ formId, storageKey }: { formId: string; storageKey:
     const save = () => {
       const values: Record<string, string | boolean> = {};
       for (const field of Array.from(form.elements)) {
-        if (field instanceof HTMLInputElement && field.name && field.type !== "hidden") {
+        if (field instanceof HTMLInputElement && field.type === "radio") {
+          if (field.checked) values[field.name] = field.value;
+        } else if (field instanceof HTMLInputElement && field.name && field.type !== "hidden") {
           values[field.name] = field.type === "checkbox" ? field.checked : field.value;
         } else if ((field instanceof HTMLTextAreaElement || field instanceof HTMLSelectElement) && field.name) {
           values[field.name] = field.value;

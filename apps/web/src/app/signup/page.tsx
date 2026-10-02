@@ -266,6 +266,15 @@ export default async function SignupPage({
             </span>
           </div>
 
+          <div className="notice">
+            <p className="small">
+              <strong>Works with any LinkedIn account.</strong> With Sales Navigator, NORA can also
+              target by seniority and company size and leave out job titles you don&rsquo;t want, so
+              your lists are tighter. Without it, lists are broader and you&rsquo;ll review more of
+              them. You&rsquo;ll choose on the next step.
+            </p>
+          </div>
+
           <SubmitButton className="btn block" pendingLabel="Creating your account…">
             Create account
           </SubmitButton>

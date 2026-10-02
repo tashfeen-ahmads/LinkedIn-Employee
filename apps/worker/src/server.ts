@@ -1050,6 +1050,13 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
     const bound = await bindAccounts(ctx, mine);
     const reconciled = await reconcileAccount(ctx.db, parsed.data.workspaceId, parsed.data.userId, mine, accounts);
 
+    // The row already holds an account the provider lists: that is a working
+    // connection, whatever label the provider put on it. Reporting "none of
+    // them is yours" here told a connected rep she was not connected.
+    if (reconciled.unlabelled) {
+      return c.json({ found: accounts.length, mine: 0, bound, ...reconciled });
+    }
+
     if (accounts.length > 0 && mine.length === 0) {
       // The provider has accounts but none carries this rep's id as its
       // reference, which is the interesting failure and used to be invisible:
