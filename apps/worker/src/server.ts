@@ -650,7 +650,7 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
          * exactly what it had.
          */
         successUrl: claimReturnUrl(ctx, parsed.data.workspaceId, parsed.data.userId),
-        failureUrl: `${ctx.env.APP_URL}/app/profile?error=connection_failed#team`,
+        failureUrl: claimFailureUrl(ctx, parsed.data.workspaceId, parsed.data.userId),
         // The redirect tells the rep's browser it worked. This tells us, and
         // until it arrives the account has no provider id, so every job skips it.
         notifyUrl: `${ctx.env.WORKER_URL}/webhooks/unipile/accounts`,
@@ -914,20 +914,71 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
    * because "we could not attach it" shown on a screen is the difference
    * between a two-minute fix and the three days this cost.
    */
-  app.get("/auth/linkedin/done", async (c) => {
-    const back = (query: string) => c.redirect(`${ctx.env.APP_URL}/app/profile?${query}#team`, 302);
+  /*
+   * Where a LinkedIn sign-in that did not work comes back to.
+   *
+   * Public for the same reason `/auth/linkedin/done` is — the provider
+   * redirects a browser here — and it trusts nothing that arrives except the
+   * token this worker minted. A forged or stale token records nothing and is
+   * sent on with the same sentence, so the route cannot be used to write
+   * events into somebody else's workspace or to learn which tokens exist.
+   *
+   * What the provider appended to the URL is recorded, minus the token: it is
+   * the only clue to *why* it failed, and the first time anybody looked there
+   * was nothing to read.
+   */
+  app.get("/auth/linkedin/failed", async (c) => {
+    const back = () =>
+      c.redirect(`${ctx.env.APP_URL}/app/profile?error=${encodeURIComponent(LINKEDIN_SIGN_IN_FAILED)}#team`, 302);
 
     const claim = c.req.query("claim");
-    const accountId = c.req.query("account_id");
-    if (!claim || !ctx.env.CREDENTIALS_KEY) return back("error=connection_incomplete");
+    if (!claim || !ctx.env.CREDENTIALS_KEY) return back();
 
     let who: { workspaceId: string; userId: string; issuedAt: number };
     try {
       who = decryptState(claim, ctx.env.CREDENTIALS_KEY);
     } catch {
-      return back("error=connection_incomplete");
+      return back();
     }
-    if (Date.now() - who.issuedAt > CLAIM_TOKEN_TTL_MS) return back("error=connection_expired");
+    if (Date.now() - who.issuedAt > CLAIM_TOKEN_TTL_MS) return back();
+
+    const provider: Record<string, string> = {};
+    for (const [key, value] of Object.entries(c.req.query())) {
+      if (key === "claim") continue;
+      provider[key] = String(value).slice(0, 300);
+    }
+
+    await recordEvent(ctx.db, {
+      workspaceId: who.workspaceId,
+      name: "linkedin.connect.failed",
+      actorUserId: who.userId,
+      subjectType: "user",
+      subjectId: who.userId,
+      payload: { provider },
+    });
+    await recordBeat(ctx.db, "linkedin:connect-failed", {
+      at: new Date().toISOString(),
+      workspaceId: who.workspaceId,
+      userId: who.userId,
+      provider,
+    });
+    return back();
+  });
+
+  app.get("/auth/linkedin/done", async (c) => {
+    const back = (query: string) => c.redirect(`${ctx.env.APP_URL}/app/profile?${query}#team`, 302);
+
+    const claim = c.req.query("claim");
+    const accountId = c.req.query("account_id");
+    if (!claim || !ctx.env.CREDENTIALS_KEY) return back(`error=${encodeURIComponent(LINKEDIN_CONNECT_INCOMPLETE)}`);
+
+    let who: { workspaceId: string; userId: string; issuedAt: number };
+    try {
+      who = decryptState(claim, ctx.env.CREDENTIALS_KEY);
+    } catch {
+      return back(`error=${encodeURIComponent(LINKEDIN_CONNECT_INCOMPLETE)}`);
+    }
+    if (Date.now() - who.issuedAt > CLAIM_TOKEN_TTL_MS) return back(`error=${encodeURIComponent(LINKEDIN_CONNECT_EXPIRED)}`);
 
     // The provider appends this itself. Without it there is nothing to attach,
     // and the page's own check against the provider is the next thing to run.
@@ -1555,6 +1606,48 @@ function claimReturnUrl(ctx: WorkerContext, workspaceId: string, userId: string)
   const claim = encodeState(workspaceId, userId, ctx.env.CREDENTIALS_KEY);
   return `${ctx.env.WORKER_URL}/auth/linkedin/done?claim=${encodeURIComponent(claim)}`;
 }
+
+/**
+ * Where the hosted flow sends somebody whose LinkedIn sign-in did not work.
+ *
+ * It used to go straight to the app page with `?error=connection_failed`, and
+ * two things followed. The banner printed that code verbatim — a red box
+ * reading "connection_failed", no reason, no next step — and the page beneath
+ * it said to press Connect LinkedIn, which failed the same way: the loop the
+ * first customers kept reporting as "stuck on connecting". And nothing was
+ * written anywhere, so "LinkedIn refused her sign-in" and "she never tried
+ * again" were the same empty database from every place anybody could look.
+ *
+ * So it comes back through the worker, carrying the same signed token the
+ * success path does, and the failure is recorded against the workspace it
+ * belongs to before the person is sent on with a sentence that says what
+ * usually causes it.
+ */
+function claimFailureUrl(ctx: WorkerContext, workspaceId: string, userId: string): string {
+  if (!ctx.env.CREDENTIALS_KEY) {
+    return `${ctx.env.APP_URL}/app/profile?error=${encodeURIComponent(LINKEDIN_SIGN_IN_FAILED)}#team`;
+  }
+  const claim = encodeState(workspaceId, userId, ctx.env.CREDENTIALS_KEY);
+  return `${ctx.env.WORKER_URL}/auth/linkedin/failed?claim=${encodeURIComponent(claim)}`;
+}
+
+/**
+ * What a failed LinkedIn sign-in says to the person it happened to.
+ *
+ * The provider does not tell us why, so this names the three causes that
+ * account for nearly all of them, most common first. The first is the one
+ * nobody guesses: a LinkedIn account opened with "Continue with Google" or
+ * Apple has no LinkedIn password at all, so there is nothing to type on the
+ * sign-in page, and every attempt fails identically until one is set.
+ */
+const LINKEDIN_SIGN_IN_FAILED =
+  "LinkedIn didn't finish signing you in. The usual reasons: (1) you normally sign in to LinkedIn with Google or Apple, so your LinkedIn account has no password yet — set one in LinkedIn under Settings → Sign in & security → Change password, then try again; (2) LinkedIn asked for a verification code — have your phone or email open when you press Connect; (3) the password was mistyped. Press Connect LinkedIn to try again, or tell us from the Support page and we'll walk through it with you.";
+
+/** The return trip broke before LinkedIn was even reached, or took too long. */
+const LINKEDIN_CONNECT_INCOMPLETE =
+  "The connection to LinkedIn didn't complete. Press Connect LinkedIn to start again — it takes about a minute.";
+const LINKEDIN_CONNECT_EXPIRED =
+  "That LinkedIn sign-in link expired after an hour. Press Connect LinkedIn to start a fresh one.";
 
 /** A claim token is good for an hour: long enough to sign in to LinkedIn, short enough to be worthless later. */
 const CLAIM_TOKEN_TTL_MS = 60 * 60_000;

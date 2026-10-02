@@ -936,7 +936,9 @@ describe("the connect return trip", () => {
     const res = await done(app, "account_id=acct_new");
 
     expect(res.status).toBe(302);
-    expect(res.headers.get("location")).toContain("error=connection_incomplete");
+    // A sentence the person can act on, never the machine code the banner
+    // used to print verbatim.
+    expect(decodeURIComponent(res.headers.get("location") ?? "")).toMatch(/didn't complete.*Connect LinkedIn/);
     expect(db.find("linkedin_accounts", { id: ACCOUNT })!.provider_account_id).toBeNull();
   });
 
@@ -948,7 +950,9 @@ describe("the connect return trip", () => {
 
     const res = await done(app, `claim=${encodeURIComponent(forged)}&account_id=acct_new`);
 
-    expect(res.headers.get("location")).toContain("error=connection_incomplete");
+    // A sentence the person can act on, never the machine code the banner
+    // used to print verbatim.
+    expect(decodeURIComponent(res.headers.get("location") ?? "")).toMatch(/didn't complete.*Connect LinkedIn/);
     expect(db.find("linkedin_accounts", { id: ACCOUNT })!.provider_account_id).toBeNull();
   });
 
@@ -959,7 +963,7 @@ describe("the connect return trip", () => {
 
     const res = await done(app, `claim=${encodeURIComponent(old)}&account_id=acct_new`);
 
-    expect(res.headers.get("location")).toContain("error=connection_expired");
+    expect(decodeURIComponent(res.headers.get("location") ?? "")).toMatch(/expired.*Connect LinkedIn/);
     expect(db.find("linkedin_accounts", { id: ACCOUNT })!.provider_account_id).toBeNull();
   });
 
@@ -1017,8 +1021,11 @@ describe("the link the rep is sent to LinkedIn with", () => {
     // that can read the token, and no page in between.
     expect(asked.successUrl.startsWith("http://worker.test/auth/linkedin/done")).toBe(true);
     expect(new URL(asked.successUrl).searchParams.get("claim")).toBeTruthy();
-    // And the failure still lands somewhere a person can act on.
-    expect(asked.failureUrl).toContain("/app/profile");
+    // And a failed sign-in comes back through the worker too, carrying the
+    // same token, so the failure is recorded before the person is sent on —
+    // straight to the page, it was written nowhere.
+    expect(asked.failureUrl.startsWith("http://worker.test/auth/linkedin/failed")).toBe(true);
+    expect(new URL(asked.failureUrl).searchParams.get("claim")).toBeTruthy();
   });
 });
 
@@ -1196,4 +1203,75 @@ describe("the webhook routes pass Unipile's v1 header to the parser", () => {
       expect(seen[0]?.signature).toBeUndefined();
     });
   }
+});
+
+/*
+ * A LinkedIn sign-in that did not work.
+ *
+ * It used to land on the profile page with `?error=connection_failed`, which
+ * the banner printed verbatim and nothing recorded. So a customer saw a machine
+ * code, pressed Connect LinkedIn again, failed the same way — and from here,
+ * "LinkedIn refused her sign-in" and "she never tried again" were the same
+ * empty database. Both halves are asserted: the failure is written down, and
+ * the person is told what usually causes it.
+ */
+describe("a LinkedIn sign-in that did not work", () => {
+  function failed(app: ReturnType<typeof createServer>, query: string) {
+    return app.request(`/auth/linkedin/failed?${query}`, { method: "GET" });
+  }
+
+  it("records the failure against the workspace it belongs to", async () => {
+    const { db, app } = harness();
+    const claim = encryptJson({ workspaceId: WORKSPACE, userId: USER, issuedAt: Date.now() }, CREDENTIALS_KEY);
+
+    const res = await failed(app, `claim=${encodeURIComponent(claim)}&reason=checkpoint`);
+
+    expect(res.status).toBe(302);
+    const event = db.rows("events").find((e) => e.name === "linkedin.connect.failed");
+    expect(event, "a failed sign-in was written nowhere").toBeTruthy();
+    expect(event!.workspace_id).toBe(WORKSPACE);
+    // What the provider appended is kept — it is the only clue to why — but
+    // never the token itself.
+    expect(JSON.stringify(event!.payload)).toContain("checkpoint");
+    expect(JSON.stringify(event!.payload)).not.toContain(claim);
+  });
+
+  it("tells the person the usual causes instead of printing a code", async () => {
+    const { app } = harness();
+    const claim = encryptJson({ workspaceId: WORKSPACE, userId: USER, issuedAt: Date.now() }, CREDENTIALS_KEY);
+
+    const res = await failed(app, `claim=${encodeURIComponent(claim)}`);
+    const where = decodeURIComponent(res.headers.get("location") ?? "");
+
+    expect(where).toContain("/app/profile");
+    expect(where).not.toContain("connection_failed");
+    // The cause nobody guesses: a Google- or Apple-created LinkedIn account has
+    // no password to type on the sign-in page.
+    expect(where).toMatch(/Google or Apple/);
+    expect(where).toMatch(/Connect LinkedIn/);
+  });
+
+  it("records nothing for a token it did not mint, and says the same thing", async () => {
+    // The route is public. A forged token must not write events into somebody
+    // else's workspace, and must not be distinguishable from a real refusal.
+    const { db, app } = harness();
+    const forged = encryptJson({ workspaceId: WORKSPACE, userId: USER, issuedAt: Date.now() }, "b".repeat(64));
+
+    const res = await failed(app, `claim=${encodeURIComponent(forged)}`);
+
+    expect(res.status).toBe(302);
+    expect(db.rows("events").some((e) => e.name === "linkedin.connect.failed")).toBe(false);
+  });
+
+  it("records nothing for a stale token", async () => {
+    const { db, app } = harness();
+    const stale = encryptJson(
+      { workspaceId: WORKSPACE, userId: USER, issuedAt: Date.now() - 2 * 60 * 60_000 },
+      CREDENTIALS_KEY,
+    );
+
+    await failed(app, `claim=${encodeURIComponent(stale)}`);
+
+    expect(db.rows("events").some((e) => e.name === "linkedin.connect.failed")).toBe(false);
+  });
 });
