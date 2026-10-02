@@ -13,6 +13,7 @@ import { loadNeedsYou } from "@/lib/needs-you-data";
 import { entitlementFor, entitlementMessage, trialLimitEnforced } from "@le/billing";
 import { isPlatformAdmin } from "@/lib/admin";
 import { linkedInState } from "./profile/linkedin-state";
+import { ClearKept } from "@/components/form-keeper";
 
 /**
  * Twelve links in one flat list is a list you read rather than a nav you use.
@@ -175,6 +176,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="app">
+      <ClearKept storageKey="nora:onboarding-answers" />
       <aside className="app-aside">
         {/*
           The funnel mark, which the marketing header and the browser tab have
