@@ -747,27 +747,44 @@ export default async function ProfilePage({
           </>
         ) : (
           <>
+            {/*
+              A started-but-unfinished connection is told to finish, not to wait.
+
+              This used to read "Waiting for LinkedIn to confirm the
+              connection", with Check again as the main button and the connect
+              button demoted to a grey "Start again". That was right when the
+              usual cause was a confirmation that never arrived. It stopped
+              being right once the return trip from LinkedIn binds the account
+              by itself (`/auth/linkedin/done`): somebody who finished signing
+              in is connected on arrival, so a row still sitting here is almost
+              always somebody who closed the LinkedIn window, or skipped the
+              step during signup and meant to come back.
+
+              Telling that person to wait is telling them the product is
+              working on it when the product is waiting on them — the first
+              customer to hit it reported it as "an issue with my LinkedIn",
+              because nothing on the screen said it was a step she had not
+              done. So the action leads and the rarer case — finished, but it
+              did not take — keeps its button underneath.
+            */}
             <p className="small muted">
               {awaitingProvider
-                ? "Waiting for LinkedIn to confirm the connection. If you have already finished signing in, check again — the confirmation sometimes does not arrive, and checking asks directly."
+                ? "You started connecting LinkedIn but the sign-in was not finished. Press Connect LinkedIn to pick up where you left off — it takes about a minute, and you sign in on LinkedIn’s own page, so we never see your password."
                 : "Not connected yet. You will sign in to LinkedIn on their hosted page; we never see your password."}
             </p>
             <div className="cluster">
-              {/* While waiting, checking is the likelier fix and goes first:
-                  the account is usually already connected at the provider and
-                  only the notification went missing. */}
+              <form action={connectLinkedIn}>
+                <button className="btn" type="submit">
+                  Connect LinkedIn
+                </button>
+              </form>
               {awaitingProvider ? (
                 <form action={refreshLinkedIn}>
-                  <button className="btn" type="submit">
-                    Check again
+                  <button className="btn secondary" type="submit">
+                    I already finished — check again
                   </button>
                 </form>
               ) : null}
-              <form action={connectLinkedIn}>
-                <button className={awaitingProvider ? "btn secondary" : "btn"} type="submit">
-                  {awaitingProvider ? "Start again" : "Connect LinkedIn"}
-                </button>
-              </form>
             </div>
           </>
         )}
