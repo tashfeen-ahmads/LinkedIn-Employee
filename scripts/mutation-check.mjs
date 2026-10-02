@@ -583,6 +583,14 @@ const MUTATIONS = [
     pkg: "@le/worker",
   },
   {
+    id: "billing/trial-limit-off-by-default",
+    rule: "Until pricing is decided the trial's end date stops nobody; a default that quietly turned the limit back on would pause every trial workspace's campaigns on a placeholder date",
+    file: "packages/billing/src/entitlement.ts",
+    from: "  const enforceTrial = options.enforceTrial ?? false;",
+    to: "  const enforceTrial = options.enforceTrial ?? true;",
+    pkg: "@le/billing",
+  },
+  {
     id: "billing/canceled-subscription",
     rule: "A canceled subscription stops sending",
     file: "packages/billing/src/entitlement.ts",

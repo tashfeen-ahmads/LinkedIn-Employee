@@ -1,4 +1,5 @@
 import { countFunnel, nextStep, ONBOARDING_STEPS, type OnboardingState } from "@le/shared";
+import { trialLimitEnforced } from "@le/billing";
 import { onboardingNudgeEmail, trialEndingEmail } from "@le/email";
 import type { WorkerContext } from "../context.js";
 import { recordEvent } from "../context.js";
@@ -173,6 +174,10 @@ async function maybeTrialWarning(
   profile: { email: string; full_name: string | null },
   now: Date,
 ): Promise<number> {
+  // No "your trial ends in 3 days" while the trial does not end. The email
+  // would be a threat the product does not carry out — and the next one, when
+  // it does, would be read as another false alarm.
+  if (!trialLimitEnforced(process.env.TRIAL_LIMIT_ENFORCED)) return 0;
   if (workspace.subscription_status === "active" || !workspace.trial_ends_at) return 0;
 
   const daysLeft = Math.ceil((Date.parse(workspace.trial_ends_at) - now.getTime()) / 86_400_000);

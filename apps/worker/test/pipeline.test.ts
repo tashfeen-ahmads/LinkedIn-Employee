@@ -1173,15 +1173,43 @@ describe("campaign pipeline", () => {
     expect(classifyMock).not.toHaveBeenCalled();
   });
 
-  it("stops outreach for a workspace whose trial has expired", async () => {
-    const { db, queues, enqueued } = harness({
-      trialEndsAt: new Date(NOW.getTime() - 86_400_000).toISOString(),
-    });
+  it("stops outreach for a workspace whose trial has expired, when the limit is on", async () => {
+    // The limit is suspended by default until pricing is decided; this pins it
+    // on, so the gate stays proven for the day it is switched back.
+    const was = process.env.TRIAL_LIMIT_ENFORCED;
+    process.env.TRIAL_LIMIT_ENFORCED = "true";
+    try {
+      const { db, queues, enqueued } = harness({
+        trialEndsAt: new Date(NOW.getTime() - 86_400_000).toISOString(),
+      });
 
-    const count = await runCampaignTick(db.asDb(), queues, NOW);
+      const count = await runCampaignTick(db.asDb(), queues, NOW);
 
-    expect(count).toBe(0);
-    expect(enqueued).toHaveLength(0);
+      expect(count).toBe(0);
+      expect(enqueued).toHaveLength(0);
+    } finally {
+      if (was === undefined) delete process.env.TRIAL_LIMIT_ENFORCED;
+      else process.env.TRIAL_LIMIT_ENFORCED = was;
+    }
+  });
+
+  it("keeps outreach running for an expired trial while the limit is off", async () => {
+    // The default. Nobody's campaign pauses on a placeholder date — asserted
+    // through the real loop, not only on `entitlementFor`, because the gate is
+    // the call site and a call site is where a switch gets lost.
+    const was = process.env.TRIAL_LIMIT_ENFORCED;
+    delete process.env.TRIAL_LIMIT_ENFORCED;
+    try {
+      const { db, queues, enqueued } = harness({
+        trialEndsAt: new Date(NOW.getTime() - 30 * 86_400_000).toISOString(),
+      });
+
+      await runCampaignTick(db.asDb(), queues, NOW);
+
+      expect(enqueued.length).toBeGreaterThan(0);
+    } finally {
+      if (was !== undefined) process.env.TRIAL_LIMIT_ENFORCED = was;
+    }
   });
 
   it("stops outreach for a paused LinkedIn account", async () => {

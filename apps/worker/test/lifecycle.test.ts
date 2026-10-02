@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { MockEmailProvider } from "@le/email";
 import { FakeDb } from "./fake-db.js";
 import { runLifecycleEmails } from "../src/jobs/lifecycle.js";
@@ -79,28 +79,64 @@ describe("runLifecycleEmails", () => {
     expect(email.sent[0]?.text).toContain("further along");
   });
 
-  it("warns three days before a trial ends", async () => {
-    const { ctx, email } = harness({ trialEndsInDays: 3 });
+  /*
+   * Trial-ending emails, with the trial limit switched on.
+   *
+   * The limit is suspended by default until pricing is decided, and while it
+   * is off the warning returns before any of these checks run. Left unpinned,
+   * "does not warn a workspace that has already subscribed" would keep passing
+   * for that reason alone — green, and no longer testing the subscription
+   * check at all, which is how a mutation quietly stops biting.
+   */
+  describe("with the trial limit on", () => {
+    let was: string | undefined;
+    beforeEach(() => {
+      was = process.env.TRIAL_LIMIT_ENFORCED;
+      process.env.TRIAL_LIMIT_ENFORCED = "true";
+    });
+    afterEach(() => {
+      if (was === undefined) delete process.env.TRIAL_LIMIT_ENFORCED;
+      else process.env.TRIAL_LIMIT_ENFORCED = was;
+    });
 
-    await runLifecycleEmails(ctx, NOW);
-    const trial = email.sent.find((m) => m.subject.includes("trial"));
-    expect(trial?.subject).toBe("Your trial ends in 3 days");
+    it("warns three days before a trial ends", async () => {
+      const { ctx, email } = harness({ trialEndsInDays: 3 });
+
+      await runLifecycleEmails(ctx, NOW);
+      const trial = email.sent.find((m) => m.subject.includes("trial"));
+      expect(trial?.subject).toBe("Your trial ends in 3 days");
+    });
+
+    it("does not warn a workspace that has already subscribed", async () => {
+      const { db, ctx, email } = harness({ trialEndsInDays: 3 });
+      db.find("workspaces", { id: WORKSPACE })!.subscription_status = "active";
+
+      await runLifecycleEmails(ctx, NOW);
+      expect(email.sent.some((m) => m.subject.includes("trial"))).toBe(false);
+    });
+
+    it("says the numbers are early rather than claiming success on three invitations", async () => {
+      const { ctx, email } = harness({ trialEndsInDays: 1 });
+
+      await runLifecycleEmails(ctx, NOW);
+      const trial = email.sent.find((m) => m.subject.includes("trial"));
+      expect(trial?.text).toContain("not yet a fair test");
+    });
   });
 
-  it("does not warn a workspace that has already subscribed", async () => {
-    const { db, ctx, email } = harness({ trialEndsInDays: 3 });
-    db.find("workspaces", { id: WORKSPACE })!.subscription_status = "active";
-
-    await runLifecycleEmails(ctx, NOW);
-    expect(email.sent.some((m) => m.subject.includes("trial"))).toBe(false);
-  });
-
-  it("says the numbers are early rather than claiming success on three invitations", async () => {
-    const { ctx, email } = harness({ trialEndsInDays: 1 });
-
-    await runLifecycleEmails(ctx, NOW);
-    const trial = email.sent.find((m) => m.subject.includes("trial"));
-    expect(trial?.text).toContain("not yet a fair test");
+  it("sends no trial-ending email while the trial limit is off", async () => {
+    // "Your trial ends in 3 days" for a trial that does not end is a threat
+    // the product does not carry out, and the real one later reads as another
+    // false alarm.
+    const was = process.env.TRIAL_LIMIT_ENFORCED;
+    delete process.env.TRIAL_LIMIT_ENFORCED;
+    try {
+      const { ctx, email } = harness({ trialEndsInDays: 3 });
+      await runLifecycleEmails(ctx, NOW);
+      expect(email.sent.some((m) => m.subject.toLowerCase().includes("trial"))).toBe(false);
+    } finally {
+      if (was !== undefined) process.env.TRIAL_LIMIT_ENFORCED = was;
+    }
   });
 
   it("does nothing at all when email is not configured", async () => {

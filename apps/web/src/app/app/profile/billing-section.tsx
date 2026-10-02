@@ -1,4 +1,4 @@
-import { entitlementFor, entitlementMessage } from "@le/billing";
+import { entitlementFor, entitlementMessage, trialLimitEnforced } from "@le/billing";
 import { PageHeader, Panel, Section } from "@/components/page";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
@@ -48,7 +48,7 @@ export async function BillingSection({ searchParams }: { searchParams: NoticePar
     trialEndsAt: workspace?.trial_ends_at ?? null,
     subscriptionStatus: workspace?.subscription_status ?? null,
     seats: workspace?.seats ?? 1,
-  });
+  }, new Date(), { enforceTrial: trialLimitEnforced(process.env.TRIAL_LIMIT_ENFORCED) });
   const message = entitlementMessage(entitlement);
 
   return (
@@ -58,6 +58,11 @@ export async function BillingSection({ searchParams }: { searchParams: NoticePar
       {message ? (
         <div className={`notice ${entitlement.canSend ? "warning" : "danger"}`}>
           {message}
+        </div>
+      ) : entitlement.reason === "trial_unlimited" ? (
+        <div className="notice">
+          No trial limit right now — campaigns run without an end date while pricing is being
+          finalised. We will tell you well before that changes.
         </div>
       ) : entitlement.reason === "trial_active" ? (
         <div className="notice">

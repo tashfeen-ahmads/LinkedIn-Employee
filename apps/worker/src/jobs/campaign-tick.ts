@@ -8,7 +8,7 @@ import {
   PACING_LOOP,
   type CampaignProspectStatus,
 } from "@le/shared";
-import { entitlementFor } from "@le/billing";
+import { entitlementFor, trialLimitEnforced } from "@le/billing";
 import {
   checkAction,
   dailyInviteCap,
@@ -730,6 +730,9 @@ async function canWorkspaceSend(db: Db, workspaceId: string, now: Date): Promise
       seats: data.seats ?? 1,
     },
     now,
+    // Read per call rather than once at import, so the switch takes effect on
+    // the next tick after the variable changes and a test can set it.
+    { enforceTrial: trialLimitEnforced(process.env.TRIAL_LIMIT_ENFORCED) },
   ).canSend;
 }
 

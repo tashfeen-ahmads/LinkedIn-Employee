@@ -10,7 +10,7 @@ import { BRAND_QUALIFIER, LogoMark } from "@/components/logo";
 import { readSetupState } from "@/lib/setup-state";
 import { markFor, type NavMarks } from "@/lib/nav-marks";
 import { loadNeedsYou } from "@/lib/needs-you-data";
-import { entitlementFor, entitlementMessage } from "@le/billing";
+import { entitlementFor, entitlementMessage, trialLimitEnforced } from "@le/billing";
 import { isPlatformAdmin } from "@/lib/admin";
 
 /**
@@ -155,7 +155,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     trialEndsAt: workspace?.trial_ends_at ?? null,
     subscriptionStatus: workspace?.subscription_status ?? null,
     seats: workspace?.seats ?? 1,
-  });
+  }, new Date(), { enforceTrial: trialLimitEnforced(process.env.TRIAL_LIMIT_ENFORCED) });
   const billingMessage = entitlementMessage(entitlement);
 
   const { data: account } = await supabase

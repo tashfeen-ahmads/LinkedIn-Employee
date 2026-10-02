@@ -12,6 +12,8 @@ export interface WorkspaceBilling {
 export type EntitlementReason =
   | "active_subscription"
   | "trial_active"
+  /** A trial workspace while the trial's end date is not being enforced. */
+  | "trial_unlimited"
   | "trial_expired"
   | "subscription_canceled"
   | "payment_failed"
@@ -37,8 +39,16 @@ export interface Entitlement {
  * their own reps had would be indefensible, and a past-due card is usually an
  * expired card, not a decision to leave.
  */
-export function entitlementFor(billing: WorkspaceBilling, now: Date = new Date()): Entitlement {
-  const trialDaysLeft = daysLeft(billing.trialEndsAt, now);
+export function entitlementFor(
+  billing: WorkspaceBilling,
+  now: Date = new Date(),
+  options: { enforceTrial?: boolean } = {},
+): Entitlement {
+  const enforceTrial = options.enforceTrial ?? false;
+  // No countdown anywhere while there is nothing to count down to: a sidebar
+  // reading "2 days left" over an account that will keep sending on day three
+  // is a screen that lies in the direction that makes people panic.
+  const trialDaysLeft = enforceTrial ? daysLeft(billing.trialEndsAt, now) : null;
 
   if (billing.subscriptionStatus === "active" || billing.subscriptionStatus === "trialing") {
     return { canSend: true, canRead: true, reason: "active_subscription", trialDaysLeft };
@@ -56,6 +66,9 @@ export function entitlementFor(billing: WorkspaceBilling, now: Date = new Date()
   }
 
   if (billing.plan === "trial") {
+    if (!enforceTrial) {
+      return { canSend: true, canRead: true, reason: "trial_unlimited", trialDaysLeft: null };
+    }
     // Compare the instant, not the floored day count: trialDaysLeft is 0 for
     // the whole of the final day, and reading it as expiry would end a
     // seven-day trial after six.
@@ -73,6 +86,27 @@ export function entitlementFor(billing: WorkspaceBilling, now: Date = new Date()
   // A paid plan name with no subscription record means the two sides have
   // drifted. Fail closed on sending rather than give away the product.
   return { canSend: false, canRead: true, reason: "no_plan", trialDaysLeft };
+}
+
+/**
+ * Whether a trial's end date stops anything. Off unless explicitly turned on.
+ *
+ * Pricing and the trial are not decided yet, and until they are nobody should
+ * find their campaigns paused by a date we picked as a placeholder. So the
+ * limit is off by default for every workspace, existing and new, and switching
+ * it back on is one environment variable on both the web app and the worker —
+ * `TRIAL_LIMIT_ENFORCED=true` — with no code change. Everything the limit did
+ * is still here and still tested with it on; it is suspended, not deleted.
+ *
+ * Only the trial is suspended. A cancelled or unpaid subscription still stops
+ * sending, because that is somebody's decision, not a placeholder.
+ *
+ * One parser for both apps, so the sidebar and the sending loop cannot read
+ * the same variable two different ways — the screen saying "trial ended" while
+ * the loop keeps sending is the drift this exists to prevent.
+ */
+export function trialLimitEnforced(value: string | undefined): boolean {
+  return value?.trim().toLowerCase() === "true";
 }
 
 /** Whole days remaining, floored at zero. Null when there is no trial. */

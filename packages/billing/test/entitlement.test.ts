@@ -1,11 +1,21 @@
 import { describe, expect, it } from "vitest";
 import {
   daysLeft,
-  entitlementFor,
+  entitlementFor as entitlementForAnyMode,
   entitlementMessage,
+  trialLimitEnforced,
   withinSeatLimit,
   type WorkspaceBilling,
 } from "../src/entitlement.js";
+
+/**
+ * Every test below the switch describes the trial *as enforced* — which is how
+ * it will behave the day pricing is decided and `TRIAL_LIMIT_ENFORCED` goes
+ * on. They pin the limit on explicitly so that behaviour stays proven while it
+ * is suspended: a limit nobody tests is a limit nobody can safely turn back on.
+ */
+const entitlementFor = (b: WorkspaceBilling, now?: Date) =>
+  entitlementForAnyMode(b, now, { enforceTrial: true });
 
 const NOW = new Date("2026-09-08T12:00:00Z");
 
@@ -118,5 +128,54 @@ describe("trial boundary", () => {
   it("stops the moment the trial instant passes", () => {
     const justGone = new Date(NOW.getTime() - 1000).toISOString();
     expect(entitlementFor(billing({ trialEndsAt: justGone }), NOW).canSend).toBe(false);
+  });
+});
+
+/*
+ * The trial limit while it is switched off — the default until pricing and the
+ * trial are decided.
+ *
+ * Nobody should find their campaigns paused by an end date that was only ever
+ * a placeholder, so every trial workspace sends, existing and new, whatever
+ * its `trial_ends_at` says. Only the trial is suspended: a subscription that
+ * was cancelled or went unpaid is somebody's decision and still stops sending.
+ */
+describe("with the trial limit off (the default)", () => {
+  it("lets an expired trial keep sending", () => {
+    const result = entitlementForAnyMode(billing({ trialEndsAt: inDays(-30) }), NOW);
+    expect(result.canSend).toBe(true);
+    expect(result.reason).toBe("trial_unlimited");
+  });
+
+  it("lets a trial with no date at all send", () => {
+    // Fails closed when enforced; open while the limit is suspended.
+    expect(entitlementForAnyMode(billing({ trialEndsAt: null }), NOW).canSend).toBe(true);
+  });
+
+  it("shows no countdown, so no screen can say a trial is ending", () => {
+    // A sidebar reading "2 days left" over an account that keeps sending on
+    // day three lies in the direction that makes people panic.
+    expect(entitlementForAnyMode(billing({ trialEndsAt: inDays(2) }), NOW).trialDaysLeft).toBeNull();
+  });
+
+  it("says nothing alarming", () => {
+    expect(entitlementMessage(entitlementForAnyMode(billing({ trialEndsAt: inDays(-1) }), NOW))).toBeNull();
+  });
+
+  it("still stops a cancelled subscription", () => {
+    // Suspending the placeholder must not suspend a real decision.
+    const result = entitlementForAnyMode(billing({ plan: "pro", subscriptionStatus: "canceled" }), NOW);
+    expect(result.canSend).toBe(false);
+  });
+
+  it("is off unless the variable says exactly true", () => {
+    // Off by default means unset, empty and anything ambiguous all read as
+    // off — the safe direction while there is no price to charge.
+    expect(trialLimitEnforced(undefined)).toBe(false);
+    expect(trialLimitEnforced("")).toBe(false);
+    expect(trialLimitEnforced("false")).toBe(false);
+    expect(trialLimitEnforced("1")).toBe(false);
+    expect(trialLimitEnforced("true")).toBe(true);
+    expect(trialLimitEnforced(" TRUE ")).toBe(true);
   });
 });
