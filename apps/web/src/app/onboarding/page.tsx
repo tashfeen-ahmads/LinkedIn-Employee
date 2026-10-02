@@ -6,6 +6,7 @@ import { isValidTimezone } from "@le/shared";
 import { TimezoneSelect } from "@/components/timezone-select";
 import { SetupRail } from "@/components/setup-rail";
 import { SubmitButton } from "@/components/submit-button";
+import { FormKeeper } from "@/components/form-keeper";
 
 /**
  * First run. Creates the workspace and kicks off the Strategy Agent, so the
@@ -183,7 +184,8 @@ export default async function OnboardingPage({
         change an earlier answer a chore. This is long, and being able to see
         its whole length is the honest version.
       */}
-      <form action={createWorkspace} className="stack-5">
+      <form id="onboarding-form" action={createWorkspace} className="stack-5">
+        <FormKeeper formId="onboarding-form" storageKey="nora:onboarding-answers" />
         <section className="card">
           <div className="form-step">
             <span className="form-step-n" aria-hidden="true">1</span>
