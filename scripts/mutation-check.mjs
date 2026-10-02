@@ -2973,8 +2973,8 @@ const MUTATIONS = [
     id: "diagnostics/the-two-webhook-refusals-stay-apart",
     rule: "No signature and a signature that does not verify are two different people doing two different things; merged, somebody re-copies a secret that was already correct (rule 46)",
     file: "apps/worker/src/jobs/diagnostics.ts",
-    from: "      : unsigned\n        ? `Unipile called at ${webhook.beat_at} with no signature header.",
-    to: "      : false\n        ? `Unipile called at ${webhook.beat_at} with no signature header.",
+    from: "      : unsigned\n        ? `Unipile called at ${webhook.beat_at} carrying no credential.",
+    to: "      : false\n        ? `Unipile called at ${webhook.beat_at} carrying no credential.",
     pkg: "@le/worker",
   },
   {
