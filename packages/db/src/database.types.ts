@@ -140,6 +140,12 @@ export type ProfileRow = {
   avatar_url: string | null;
   bio: string | null;
   timezone: string;
+  /**
+   * Set by the one-click unsubscribe link (migration 0040). While set, no
+   * lifecycle or announcement email reaches this person; transactional email —
+   * a welcome, an invitation, a paused account — is unaffected.
+   */
+  marketing_opt_out_at: string | null;
   created_at: string;
 };
 
@@ -751,6 +757,48 @@ export type SupportTicketRow = {
   created_at: string;
 };
 
+/** The operators of this deployment (migration 0010). Written only with the service role. */
+export type PlatformAdminRow = {
+  user_id: string;
+  note: string | null;
+  created_at: string;
+};
+
+/**
+ * One email this product sent to one of its own users (migration 0040).
+ *
+ * Unique on (user_id, step), and claimed *before* the send: that index is the
+ * whole of the never-twice guarantee.
+ */
+export type EmailSendRow = {
+  id: string;
+  user_id: string;
+  step: string;
+  kind: "transactional" | "lifecycle" | "announcement" | "admin";
+  recipient: string;
+  status: "claimed" | "sent";
+  provider_message_id: string | null;
+  sent_at: string | null;
+  created_at: string;
+};
+
+/** A product update an operator wrote in the console (migration 0040). */
+export type AnnouncementRow = {
+  id: string;
+  subject: string;
+  body: string;
+  cta_label: string | null;
+  cta_url: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  /** Set once, atomically, by the first "send to all"; the button-level guard. */
+  send_requested_at: string | null;
+  send_requested_by: string | null;
+  sent_at: string | null;
+  recipients: number | null;
+};
+
 export type LlmCallRow = {
   id: number;
   workspace_id: string | null;
@@ -810,6 +858,9 @@ export type Database = {
       agent_test_runs: Table<AgentTestRunRow>;
       support_tickets: Table<SupportTicketRow>;
       worker_heartbeats: Table<WorkerHeartbeatRow>;
+      platform_admins: Table<PlatformAdminRow>;
+      email_sends: Table<EmailSendRow>;
+      announcements: Table<AnnouncementRow>;
     };
     // `{ [_ in never]: never }` and not `Record<string, never>`: an index
     // signature here intersects with Tables and collapses every row type to

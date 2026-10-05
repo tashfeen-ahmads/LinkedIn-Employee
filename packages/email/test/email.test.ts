@@ -8,7 +8,6 @@ import {
   digestEmail,
   firstMeetingEmail,
   inviteEmail,
-  onboardingNudgeEmail,
   trialEndingEmail,
   welcomeEmail,
 } from "../src/templates.js";
@@ -167,76 +166,6 @@ describe("escapeHtml", () => {
   });
 });
 
-describe("onboardingNudgeEmail", () => {
-  const step = {
-    label: "Approve a customer profile",
-    done: "an approved customer profile",
-    nudge: "Your profiles are written and waiting.",
-    href: "/app/strategy",
-  };
-
-  it("names what is already done before what is not", () => {
-    const message = onboardingNudgeEmail({
-      to: "sam@acme.test",
-      repName: "Sam Patel",
-      appUrl: "https://app.test",
-      step,
-      daysIn: 4,
-      completed: ["your business profile", "your LinkedIn account"],
-    });
-
-    // The credit has to arrive before the ask, or the email reads as an
-    // accusation from a robot with no memory of what this person has done.
-    const text = message.text;
-    expect(text.indexOf("further along")).toBeLessThan(text.indexOf(step.nudge));
-    expect(text).toContain("your business profile and your LinkedIn account are done");
-  });
-
-  it("says nothing about progress when there is none to report", () => {
-    const message = onboardingNudgeEmail({
-      to: "sam@acme.test",
-      repName: null,
-      appUrl: "https://app.test",
-      step,
-      daysIn: 2,
-      completed: [],
-    });
-
-    // "You are further along than you might think — nothing is done" is worse
-    // than saying nothing at all.
-    expect(message.text).not.toContain("further along");
-    expect(message.text).toContain("2 days");
-  });
-
-  it("uses the singular for a single finished step", () => {
-    const message = onboardingNudgeEmail({
-      to: "sam@acme.test",
-      repName: null,
-      appUrl: "https://app.test",
-      step,
-      daysIn: 3,
-      completed: ["your business profile"],
-    });
-
-    expect(message.text).toContain("your business profile is done");
-  });
-
-  it("subjects the email with the step itself, and links straight to it", () => {
-    const message = onboardingNudgeEmail({
-      to: "sam@acme.test",
-      repName: "Sam Patel",
-      appUrl: "https://app.test",
-      step,
-      daysIn: 4,
-      completed: [],
-    });
-
-    expect(message.subject).toBe("Approve a customer profile");
-    expect(message.html).toContain("https://app.test/app/strategy");
-    expect(message.text).toContain("https://app.test/app/strategy");
-  });
-});
-
 describe("trialEndingEmail", () => {
   const base = {
     to: "sam@acme.test",
@@ -299,18 +228,27 @@ describe("firstMeetingEmail", () => {
 });
 
 describe("welcomeEmail", () => {
-  it("says what is happening rather than handing over a task", () => {
-    const message = welcomeEmail({
-      to: "sam@acme.test",
-      repName: "Sam Patel",
-      appUrl: "https://app.test",
-      companyName: "Acme",
-    });
+  const message = welcomeEmail({ to: "sam@acme.test", repName: "Sam Patel", appUrl: "https://app.test" });
 
-    expect(message.subject).toBe("Your profiles are being written");
-    expect(message.text).toContain("Acme");
-    // The two things that surprise people later, said before they start.
-    expect(message.text).toContain("approval mode");
-    expect(message.text).toContain("ten invitations a day");
+  it("introduces the team and asks for the one thing everything waits on", () => {
+    expect(message.subject).toBe(`Welcome to ${BRAND.name} — meet your team`);
+    for (const name of ["Sage", "Scout", "Quinn", "Reese"]) {
+      expect(message.text).toContain(name);
+      expect(message.html).toContain(name);
+    }
+    expect(message.html).toContain("https://app.test/onboarding");
+    expect(message.text).toContain("https://app.test/onboarding");
+  });
+
+  it("never mentions a price or a trial while the product is free", () => {
+    for (const part of [message.text, message.subject]) {
+      expect(part).not.toMatch(/trial|\$|price|credit card|free/i);
+    }
+    expect(message.html).not.toMatch(/trial|price|pricing/i);
+  });
+
+  it("is transactional, so it carries no unsubscribe", () => {
+    expect(message.headers?.["List-Unsubscribe"]).toBeUndefined();
+    expect(message.html).not.toContain("Unsubscribe");
   });
 });

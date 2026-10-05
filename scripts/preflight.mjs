@@ -93,7 +93,7 @@ const IMPORTANT = [
 const OPTIONAL = [
   ["STRIPE_SECRET_KEY", "Billing. Trials work without it; nobody can subscribe."],
   ["STRIPE_WEBHOOK_SECRET", "Without it a completed checkout never activates the plan."],
-  ["RESEND_API_KEY", "The digest and the account-paused alert. Silent without it."],
+  ["RESEND_API_KEY", "The welcome, the onboarding sequence, admin notifications, announcements, the digest and the account-paused alert. Silent without it."],
   ["GOOGLE_CLIENT_ID", "Calendar. Without it the agent offers to send times rather than proposing any."],
   ["HUBSPOT_CLIENT_ID", "CRM sync."],
 ];

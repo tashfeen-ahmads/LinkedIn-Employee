@@ -3,3 +3,5 @@ export * from "./resend.js";
 export * from "./mock.js";
 export * from "./render.js";
 export * from "./templates.js";
+export * from "./lifecycle.js";
+export * from "./unsubscribe.js";

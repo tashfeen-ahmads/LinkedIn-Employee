@@ -7,6 +7,7 @@ import { AuthAside } from "@/components/auth-aside";
 import { PasswordField } from "@/components/password-field";
 import { SubmitButton } from "@/components/submit-button";
 import { checkEmail, checkPassword, PASSWORD_MIN } from "@/lib/auth-fields";
+import { requestAccountEmails } from "@/lib/account-emails";
 
 /**
  * Creating an account, as its own page and its own act.
@@ -101,6 +102,10 @@ async function signUp(formData: FormData) {
    * the setting: the project is the thing that decides, and a second reading
    * of somebody else's setting is one that can disagree with it.
    */
+  // The welcome goes only with a session: without one the address is
+  // unproved, and the confirmation link's callback welcomes them instead.
+  if (created.session && created.user) await requestAccountEmails(created.user.id);
+
   if (created.session) {
     // Straight to setting the business up. `/onboarding` sends them on to the
     // app if they somehow already have a workspace, so this cannot strand

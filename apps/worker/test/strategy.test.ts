@@ -189,27 +189,16 @@ describe("runStrategyJob", () => {
     expect(input.websiteText).toContain("revenue tooling");
   });
 
-  it("welcomes the owner while the agent is still reading their site", async () => {
-    const { ctx, email } = harness({ email: true });
-    const { runStrategyJob } = await import("../src/jobs/strategy.js");
-
-    await runStrategyJob(ctx, { workspaceId: WORKSPACE, userId: USER, websiteUrl: "https://acme.test" });
-
-    expect(email!.sent).toHaveLength(1);
-    expect(email!.sent[0]?.to).toBe("sam@acme.test");
-    expect(email!.sent[0]?.text).toContain("Acme");
-  });
-
-  it("welcomes a workspace once, however often the agent is re-run", async () => {
-    // Re-running strategy is a normal thing to do when the first profiles were
-    // wrong. A second welcome on day nine reads as a product with no memory.
+  it("sends no email of its own: the welcome belongs to signup, once per person", async () => {
+    // It used to welcome from here, once per workspace. A second welcome path
+    // is how a re-run strategy becomes a second welcome on day nine.
     const { ctx, email } = harness({ email: true });
     const { runStrategyJob } = await import("../src/jobs/strategy.js");
 
     await runStrategyJob(ctx, { workspaceId: WORKSPACE, userId: USER, websiteUrl: "https://acme.test" });
     await runStrategyJob(ctx, { workspaceId: WORKSPACE, userId: USER, websiteUrl: "https://acme.test" });
 
-    expect(email!.sent).toHaveLength(1);
+    expect(email!.sent).toHaveLength(0);
   });
 
   it("still writes the profiles when the welcome email cannot be sent", async () => {

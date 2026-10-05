@@ -31,8 +31,10 @@ import { connectCalendarFeed, disconnectCalendarFeed } from "./jobs/calendar-fee
 import { reconcileAccount, recordObservedAccounts, recoverAccounts } from "./accounts.js";
 import { runDiagnostics } from "./jobs/diagnostics.js";
 import { eraseProspect, exportWorkspace } from "./jobs/retention.js";
-import { inviteEmail } from "@le/email";
+import { inviteEmail, verifyUnsubscribeToken } from "@le/email";
 import { trySend } from "./email.js";
+import { sendAccountEmails } from "./jobs/lifecycle.js";
+import { requestAnnouncementSend, saveAnnouncement, sendAnnouncementTest } from "./jobs/announcements.js";
 import { recordEvent } from "./context.js";
 
 const AgentTestRequestSchema = z.object({
@@ -158,6 +160,40 @@ const SendReplyRequest = z.object({
   userId: z.string().uuid(),
   draftId: z.string().uuid(),
 });
+
+/** The person who just arrived. The web app takes this id from their session, never a form. */
+const AccountEmailsRequest = z.object({ userId: z.string().uuid() });
+
+// The token is the whole authorisation; the length cap stops a pasted novel
+// becoming an HMAC computation.
+const UnsubscribeRequest = z.object({ token: z.string().min(10).max(300) });
+
+const AnnouncementRequest = z.discriminatedUnion("op", [
+  z.object({
+    op: z.literal("save"),
+    userId: z.string().uuid(),
+    id: z.string().uuid().optional(),
+    subject: z.string().trim().min(1).max(200),
+    body: z.string().trim().min(1).max(10_000),
+    // Both or neither: a label with nowhere to go is a dead button.
+    ctaLabel: z.string().trim().max(60).nullable(),
+    ctaUrl: z
+      .string()
+      .trim()
+      .max(2000)
+      .regex(/^https:\/\//, "must start with https://")
+      .nullable(),
+  }),
+  z.object({ op: z.literal("test"), userId: z.string().uuid(), id: z.string().uuid() }),
+  z.object({
+    op: z.literal("send"),
+    userId: z.string().uuid(),
+    id: z.string().uuid(),
+    // The form's checkbox, carried through rather than trusted to the page:
+    // "send to everybody" is not a request that can arrive by accident.
+    confirm: z.literal(true),
+  }),
+]);
 
 const LinkRequest = z.object({
   workspaceId: z.string().uuid(),
@@ -331,6 +367,81 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
       console.error("could not record strategy.queued", err);
     }
     await queues.strategy.add("strategy", parsed.data);
+    return c.json({ queued: true });
+  });
+
+  /*
+   * Email to the product's own users. Under /email rather than /jobs because
+   * none of it needs the queue: a welcome, an unsubscribe and an operator's
+   * note must not be refused because Redis is having a bad minute, and the
+   * /jobs/* guard refuses exactly that. Same shared secret, applied here.
+   */
+  app.use("/email/*", requireInternalAuth(ctx.env.INTERNAL_API_SECRET));
+
+  // Signup, email confirmation and onboarding all call this; every email in it
+  // is claimed once per person, so three calls send each one once.
+  app.post("/email/account", async (c) => {
+    const parsed = AccountEmailsRequest.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "invalid request" }, 400);
+    return c.json(await sendAccountEmails(ctx, parsed.data.userId));
+  });
+
+  // One-click unsubscribe, from the link in the footer or a mailbox provider's
+  // RFC 8058 POST. Marketing only: transactional email is not touched.
+  app.post("/email/unsubscribe", async (c) => {
+    const parsed = UnsubscribeRequest.safeParse(await c.req.json().catch(() => null));
+    const userId = parsed.success ? verifyUnsubscribeToken(parsed.data.token, ctx.env.INTERNAL_API_SECRET) : null;
+    if (!userId) return c.json({ error: "That unsubscribe link is not valid." }, 400);
+    const { error } = await ctx.db
+      .from("profiles")
+      .update({ marketing_opt_out_at: new Date().toISOString() })
+      .eq("id", userId)
+      .is("marketing_opt_out_at", null);
+    if (error) return c.json({ error: "We could not record that just now. Please try the link again." }, 500);
+    return c.json({ ok: true });
+  });
+
+  /*
+   * The operator's announcements. Platform-scoped rather than workspace-scoped,
+   * so not under /jobs (whose second lock is workspace membership): the second
+   * lock here is `platform_admins`, checked by every op in announcements.ts.
+   */
+  app.use("/admin/*", requireInternalAuth(ctx.env.INTERNAL_API_SECRET));
+  app.post("/admin/announcements", async (c) => {
+    const parsed = AnnouncementRequest.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) {
+      return c.json({ error: parsed.error.issues[0]?.message ?? "invalid request" }, 400);
+    }
+    const req = parsed.data;
+    if (req.op === "save") {
+      if (Boolean(req.ctaLabel) !== Boolean(req.ctaUrl)) {
+        return c.json({ error: "A button needs both a label and a link, or neither." }, 400);
+      }
+      const saved = await saveAnnouncement(ctx, {
+        userId: req.userId,
+        id: req.id,
+        subject: req.subject,
+        body: req.body,
+        ctaLabel: req.ctaLabel || null,
+        ctaUrl: req.ctaUrl || null,
+      });
+      return saved.ok ? c.json({ id: saved.id }) : c.json({ error: saved.error }, 400);
+    }
+    if (req.op === "test") {
+      const sent = await sendAnnouncementTest(ctx, req);
+      return sent.ok ? c.json({ to: sent.to }) : c.json({ error: sent.error }, 400);
+    }
+    // Asked before claiming: a claim whose delivery cannot be queued leaves a
+    // button that now refuses to send and an announcement nobody received
+    // until the hourly run notices, which needs the queue too.
+    if (connection && !(await queueReachable(connection))) {
+      return c.json({ error: "the job queue is unreachable, so nothing can be queued" }, 503);
+    }
+    const claimed = await requestAnnouncementSend(ctx, req);
+    if (!claimed.ok) return c.json({ error: claimed.error }, 409);
+    // The id makes a second add a no-op, and the hourly run resumes it if this
+    // job never runs. jobId(), never a template literal: BullMQ rejects ":".
+    await queues.digest.add("announcement", { announcementId: req.id }, { jobId: jobId("announcement", req.id) });
     return c.json({ queued: true });
   });
 

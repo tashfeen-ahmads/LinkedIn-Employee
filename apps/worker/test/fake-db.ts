@@ -34,6 +34,9 @@ export class FakeDb {
     memberships: ["workspace_id", "user_id"],
     billing_events: ["id"],
     worker_heartbeats: ["name"],
+    // `email_sends_once` in migration 0040: the never-twice guarantee for
+    // every email this product sends its own users.
+    email_sends: ["user_id", "step"],
   };
 
   seed(table: string, rows: Row[]): void {

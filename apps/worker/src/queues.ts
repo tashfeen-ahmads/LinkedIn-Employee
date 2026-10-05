@@ -106,6 +106,15 @@ export type LinkedInActionJob =
   | { kind: "follow_up"; workspaceId: string; campaignProspectId: string; stepNumber: number }
   | { kind: "reply"; workspaceId: string; conversationId: string; draftId: string };
 
+/**
+ * The email queue's payload. Its scheduled jobs (digest, weekly report, the
+ * hourly lifecycle run) carry nothing; a queued announcement carries the one
+ * it is delivering.
+ */
+export interface DigestJob {
+  announcementId?: string;
+}
+
 export interface InboundMessageJob {
   workspaceId: string;
   linkedinAccountId: string;
@@ -162,7 +171,7 @@ export interface Queues {
   linkedinAction: Queue<LinkedInActionJob>;
   inbound: Queue<InboundMessageJob>;
   maintenance: Queue<Record<string, never>>;
-  digest: Queue<Record<string, never>>;
+  digest: Queue<DigestJob>;
 }
 
 const DEFAULT_JOB_OPTIONS: JobsOptions = {
@@ -256,6 +265,22 @@ export async function scheduleRepeatables(queues: Queues): Promise<void> {
     "weekly-report",
     { pattern: "0 8 * * 1" },
     { name: "weekly-report", data: {} },
+  );
+  /*
+   * The lifecycle emails, hourly: the onboarding sequence, the operators'
+   * notifications and any announcement left half-sent.
+   *
+   * Hourly rather than nightly because the sequence is keyed to what somebody
+   * has done, and "about an hour after signing up" is one of its moments — a
+   * sweep at three in the morning would send it eighteen hours late, to
+   * somebody who has either finished or forgotten. Each step is claimed once
+   * per person in `email_sends`, so running this as often as we like sends
+   * nothing twice.
+   */
+  await queues.digest.upsertJobScheduler(
+    "lifecycle-hourly",
+    { every: 60 * 60_000 },
+    { name: "lifecycle", data: {} },
   );
 }
 
