@@ -99,6 +99,48 @@ describe("putting a stuck prospect back on the rails", () => {
     expect(await unstickProspects(fake.asDb(), NOW)).toBe(0);
     expect(fake.find("campaign_prospects", { id: "cp1" })?.next_action_at).toBeNull();
   });
+
+  it("invents no step for somebody whose angle's sequence has ended", async () => {
+    /*
+     * Rule 28 and rule 42 together. An angle that wrote a sequence owns it end
+     * to end, and the send path stops where it stops. Repair used to fall
+     * through to the campaign-wide step 2 the angle never had, re-arming
+     * somebody whose sequence was over — every hour, for a send that would
+     * then be refused.
+     */
+    const fake = db(
+      [
+        {
+          id: "cp1",
+          campaign_id: CAMPAIGN,
+          variant_id: "angle-a",
+          status: "messaged_1",
+          last_step_sent: 1,
+          next_action_at: null,
+        },
+      ],
+      [{ ...STEP2, id: "a1", variant_id: "angle-a", step_number: 1 }, STEP2],
+    );
+    expect(await unstickProspects(fake.asDb(), NOW)).toBe(0);
+    expect(fake.find("campaign_prospects", { id: "cp1" })?.next_action_at).toBeNull();
+  });
+
+  it("still re-arms an angle's own next step", async () => {
+    const fake = db(
+      [
+        {
+          id: "cp1",
+          campaign_id: CAMPAIGN,
+          variant_id: "angle-a",
+          status: "messaged_1",
+          last_step_sent: 1,
+          next_action_at: null,
+        },
+      ],
+      [{ ...STEP2, id: "a1", variant_id: "angle-a", step_number: 1 }, { ...STEP2, id: "a2", variant_id: "angle-a" }],
+    );
+    expect(await unstickProspects(fake.asDb(), NOW)).toBe(1);
+  });
 });
 
 describe("a first message left on a rule the product no longer has", () => {

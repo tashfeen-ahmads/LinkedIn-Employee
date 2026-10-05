@@ -235,3 +235,40 @@ describe("Unipile v1 webhooks, authenticated by header", () => {
     expect(() => provider().parseWebhook({ body: payload })).toThrow(/signature/i);
   });
 });
+
+describe("the message_received webhook's own shape", () => {
+  it("reads the sender from the nested attendee Unipile actually sends", () => {
+    // The webhook names the sender as an object, not the flat `sender_id` the
+    // messages list uses. Read only flat, every delivery carried an empty
+    // sender, matched no prospect, and the reply was dropped.
+    const body = JSON.stringify({
+      event: "message_received",
+      account_id: "a1",
+      chat_id: "c1",
+      message_id: "m1",
+      message: "Thursday works",
+      timestamp: "2026-10-05T09:00:00.000Z",
+      sender: { attendee_id: "att_1", attendee_provider_id: "ACoAA_prospect", attendee_name: "Jane" },
+    });
+
+    const [message] = provider().parseWebhook({ body, signature: sign(body) });
+
+    expect(message?.fromProviderId).toBe("ACoAA_prospect");
+    expect(message?.text).toBe("Thursday works");
+  });
+
+  it("falls back to the attendee id when no provider id is given", () => {
+    const body = JSON.stringify({ message_id: "m2", account_id: "a1", sender: { attendee_id: "att_2" } });
+    expect(provider().parseWebhook({ body, signature: sign(body) })[0]?.fromProviderId).toBe("att_2");
+  });
+
+  it("keeps preferring the flat fields when both are present", () => {
+    const body = JSON.stringify({
+      message_id: "m3",
+      account_id: "a1",
+      sender_id: "flat_id",
+      sender: { attendee_provider_id: "nested_id" },
+    });
+    expect(provider().parseWebhook({ body, signature: sign(body) })[0]?.fromProviderId).toBe("flat_id");
+  });
+});

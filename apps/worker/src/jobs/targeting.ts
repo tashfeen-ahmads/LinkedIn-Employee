@@ -141,7 +141,13 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
     .from("customer_profiles")
     .select("id, spec, business_profile_id, do_not_pursue, approved_at, cta_kind, cta_label, cta_url")
     .eq("id", customerProfileId)
-    .single();
+    // Every id in this job arrived from a form. The worker holds the service
+    // role, so RLS does not stand between a member and another workspace's
+    // strategy, business or LinkedIn account: these filters are the whole
+    // tenant boundary, and without them a pasted id ran one company's search
+    // on another company's seat.
+    .eq("workspace_id", job.workspaceId)
+    .maybeSingle();
   if (!profileRow) return giveUp(ctx, job, "That customer profile no longer exists.");
   if (profileRow.do_not_pursue) {
     return giveUp(ctx, job, "That customer profile is marked do-not-pursue.");
@@ -171,14 +177,16 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
     .from("business_profiles")
     .select("spec")
     .eq("id", profileRow.business_profile_id)
-    .single();
+    .eq("workspace_id", job.workspaceId)
+    .maybeSingle();
   const business = BusinessProfileSchema.parse(businessRow?.spec);
 
   const { data: account } = await db
     .from("linkedin_accounts")
     .select("id, provider_account_id, status, has_sales_navigator")
     .eq("id", linkedinAccountId)
-    .single();
+    .eq("workspace_id", job.workspaceId)
+    .maybeSingle();
   if (!account?.provider_account_id || account.status !== "active") {
     return giveUp(ctx, job, "The LinkedIn account is not connected and active.", {
       status: account?.status ?? "missing",
@@ -957,7 +965,7 @@ async function attachProspects(
     if (candidate) providerIdByProspectId.set(p.id, candidate.providerId);
   }
 
-  await db.from("campaign_prospects").upsert(
+  const { error: attachError } = await db.from("campaign_prospects").upsert(
     insertedProspects.map((p) => {
       const note = notes.get(providerIdByProspectId.get(p.id) ?? "");
       return {
@@ -979,6 +987,30 @@ async function attachProspects(
     // campaign has already invited back to `queued` — inviting them twice.
     { onConflict: "campaign_id,prospect_id", ignoreDuplicates: true },
   );
+  if (attachError) {
+    /*
+     * Rule 27: a prospect row with no campaign is an exclusion spent on an
+     * outreach that never happened — that person is filtered out of every
+     * future search and appears on no list. This write's error used to be
+     * ignored, so a failure here did exactly that while the run went on to
+     * report the campaign built. The rows this run created are removed again
+     * (never one that is on a campaign or has been contacted), and the throw
+     * gets the run retried and recorded.
+     */
+    const ids = insertedProspects.map((p) => p.id);
+    const { data: attached } = await db.from("campaign_prospects").select("prospect_id").in("prospect_id", ids);
+    const keep = new Set((attached ?? []).map((row) => row.prospect_id));
+    const orphans = ids.filter((id) => !keep.has(id));
+    if (orphans.length) {
+      await db
+        .from("prospects")
+        .delete()
+        .in("id", orphans)
+        .eq("workspace_id", job.workspaceId)
+        .is("last_contacted_at", null);
+    }
+    throw new Error(`could not put the prospects on the campaign: ${attachError.message}`);
+  }
 
   /*
    * How many people actually got a note, not just whether the writer threw.

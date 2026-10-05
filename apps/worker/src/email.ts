@@ -11,6 +11,10 @@ import type { Env } from "./config.js";
 
 export function createEmailProvider(env: Env): EmailProvider | null {
   if (env.EMAIL_PROVIDER === "mock") return new MockEmailProvider();
+  // "off" means off. The deployment guide says to leave it there until the
+  // sending domain verifies, and with a key already pasted in the worker sent
+  // anyway — while the operator's Issues tab reported email as switched off.
+  if (env.EMAIL_PROVIDER !== "resend") return null;
   if (!env.RESEND_API_KEY || !env.EMAIL_FROM) return null;
   return new ResendProvider({
     apiKey: env.RESEND_API_KEY,

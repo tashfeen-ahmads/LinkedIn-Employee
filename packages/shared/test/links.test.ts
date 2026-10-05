@@ -79,3 +79,56 @@ describe("draftLinkCheck", () => {
     expect(draftLinkCheck("Happy to talk next week.", []).ok).toBe(true);
   });
 });
+
+/**
+ * A link without a scheme is still a link.
+ *
+ * `acme.com/demo` is the exact shape rule 30 names — the thing a model writes
+ * when a reply wants a link and none was given — and only `http(s)://` used to
+ * count, so the canonical case walked through the check that exists for it.
+ */
+describe("addresses written without a scheme", () => {
+  it("finds a bare domain with a path", () => {
+    expect(extractLinks("Book a time at acme.com/demo.")).toEqual(["acme.com/demo"]);
+    expect(extractLinks("Pricing: acme.co.uk/preise")).toEqual(["acme.co.uk/preise"]);
+  });
+
+  it("finds a www address with or without a path", () => {
+    expect(extractLinks("See www.acme.com/pricing!")).toEqual(["www.acme.com/pricing"]);
+    expect(extractLinks("Visit www.acme.com.")).toEqual(["www.acme.com"]);
+  });
+
+  it("keeps schemed and bare addresses in the order they appear, once each", () => {
+    expect(extractLinks("https://cal.com/sam/intro or acme.com/demo")).toEqual([
+      "https://cal.com/sam/intro",
+      "acme.com/demo",
+    ]);
+  });
+
+  it("does not mistake prose for an address", () => {
+    // Holding drafts for these would teach somebody to approve held drafts
+    // without reading them, which is worse than not checking.
+    for (const text of [
+      "e.g. a quick call, i.e. fifteen minutes",
+      "Mr.Smith suggested it",
+      "Rated 4.5/5 by customers",
+      "We use Node.js/React and README.md/docs",
+      "Write to sam@acme.com or sam@acme.com/x",
+      "acme.com is the company",
+      "Version 2.0 shipped",
+      "U.S./Canada only",
+    ]) {
+      expect(extractLinks(text), text).toEqual([]);
+    }
+  });
+
+  it("holds an invented bare link and passes the one the agent was given", () => {
+    expect(draftLinkCheck("Grab a slot at acme.com/demo", [BOOKING]).ok).toBe(false);
+    expect(draftLinkCheck("Grab a slot at www.acme.com/pricing", [BOOKING]).ok).toBe(false);
+    // Host and path compared as today: the given link written without its
+    // scheme is the same destination.
+    expect(draftLinkCheck("Grab a time at cal.com/sam/intro", [BOOKING]).ok).toBe(true);
+    expect(sameDestination("www.cal.com/sam/intro/", BOOKING)).toBe(true);
+    expect(sameDestination("cal.com/sam/demo", BOOKING)).toBe(false);
+  });
+});

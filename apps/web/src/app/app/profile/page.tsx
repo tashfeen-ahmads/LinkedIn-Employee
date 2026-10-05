@@ -6,7 +6,13 @@ import { createClient } from "@/lib/supabase-server";
 import { callWorker, errorQuery, noticeQuery } from "@/lib/worker";
 import { checkCtaUrl, LINKEDIN_LIMITS, describeWorkingHours } from "@le/shared";
 import { TimezoneSelect } from "@/components/timezone-select";
-import { cannotSend, describeRepair, type RefreshResult, type RepairNotice } from "../team/repair";
+import {
+  cannotSend,
+  describeRefreshRefusal,
+  describeRepair,
+  type RefreshResult,
+  type RepairNotice,
+} from "../team/repair";
 import { PageNotice } from "@/components/page-notice";
 import { SubmitButton } from "@/components/submit-button";
 import { TeamSection } from "./team-section";
@@ -14,6 +20,7 @@ import { linkedInState } from "./linkedin-state";
 import { BillingSection } from "./billing-section";
 import { PageHeader, PageGroup, Panel, Section } from "@/components/page";
 import { AllowanceMeter } from "@/components/charts";
+import { mergeStash, readOnboardingStash, stashedAccountAnswers } from "@/lib/onboarding-stash";
 
 /**
  * You, and the account you send from.
@@ -82,7 +89,7 @@ async function refreshLinkedIn() {
     redirect(
       errorQuery(
         "/app/profile",
-        "LinkedIn's provider no longer has the account this was connected to. Connect LinkedIn again to start sending.",
+        "The LinkedIn account this was connected to is no longer connected. Connect LinkedIn again to start sending.",
       ),
     );
   }
@@ -91,32 +98,17 @@ async function refreshLinkedIn() {
     redirect(
       noticeQuery(
         "/app/profile",
-        "Reconnected: LinkedIn's provider had a different account for you, and this is now pointed at it.",
+        "Reconnected: your LinkedIn account is attached again and ready.",
       ),
     );
   }
 
-  if (!result.data?.mine) {
-    // "No account yet" and "an account that is not labelled with your id" look
-    // identical from here and need completely different things done about them,
-    // so they are said differently.
-    const found = result.data?.found ?? 0;
-    redirect(
-      errorQuery(
-        "/app/profile",
-        found === 0
-          ? "LinkedIn's provider has no account for you yet. If you just finished signing in, give it a few seconds and check again."
-          : // "This needs an administrator" was the wrong sentence and the wrong
-            // person. The rep reading it usually *is* the administrator, and no
-            // amount of admin fixes this: an account labelled with a person's
-            // name was connected inside the provider's own dashboard, and the
-            // only thing that writes this rep's id onto one is this flow. The
-            // panel on the same page already said so, so the screen gave two
-            // instructions for one state and the wrong one was the actionable-
-            // sounding one.
-            `LinkedIn's provider has ${found} account${found === 1 ? "" : "s"}, none matching your id here. Expected ${result.data?.expected ?? "uuid"}, found ${result.data?.referenceShape?.join(", ") ?? "unknown"}. Fields the provider sent: ${JSON.stringify(result.data?.fields?.[0] ?? {})}`,
-      ),
-    );
+  // `unlabelled` is an account that is here and working, attached without our
+  // label — nothing to refuse (`describeRepair` says the same on arrival).
+  if (!result.data?.mine && !result.data?.unlabelled) {
+    // One sentence the rep can act on, from the same place the panel's own
+    // wording comes from — never the provider's payload (rule 54).
+    redirect(errorQuery("/app/profile", describeRefreshRefusal(result.data)));
   }
   revalidatePath("/app/profile");
 }
@@ -200,11 +192,39 @@ async function saveProfile(formData: FormData) {
     accountPatch.working_hours = { start, end, days };
   }
 
-  await supabase
+  const { data: updatedAccounts } = await supabase
     .from("linkedin_accounts")
     .update(accountPatch as never)
     .eq("workspace_id", session.workspaceId)
-    .eq("user_id", session.userId);
+    .eq("user_id", session.userId)
+    .select("id");
+
+  /*
+   * No account row yet — nobody has pressed Connect — so the update above
+   * matched nothing, and the page said "Saved." over answers written nowhere.
+   * They go where onboarding put them instead: the stash the worker copies
+   * onto the row the moment Connect creates it. Merged, because the same row
+   * holds the autonomy answer and what Sage was asked to read.
+   */
+  let accountAnswersKept = true;
+  if (!updatedAccounts?.length) {
+    const { data: wsStash } = await supabase
+      .from("workspaces")
+      .select("onboarding")
+      .eq("id", session.workspaceId)
+      .maybeSingle();
+    const { data: stashed } = await supabase
+      .from("workspaces")
+      .update({
+        onboarding: mergeStash(wsStash?.onboarding, stashedAccountAnswers(accountPatch)) as never,
+      })
+      .eq("id", session.workspaceId)
+      .select("id");
+    // Only an owner or admin may write the workspace row, and a refused update
+    // matches nothing rather than failing. Said, not assumed: "Saved." over
+    // answers that went nowhere is the bug this block exists to fix.
+    accountAnswersKept = Boolean(stashed?.length);
+  }
 
   /* ---- how much the agent finishes on its own ---- */
   const wanted = formData.get("autonomy");
@@ -263,7 +283,14 @@ async function saveProfile(formData: FormData) {
 
   revalidatePath("/app/profile");
   // Back to the profile, not to the form. Finishing is the point of Save.
-  redirect(noticeQuery("/app/profile", "Saved."));
+  redirect(
+    noticeQuery(
+      "/app/profile",
+      accountAnswersKept
+        ? "Saved."
+        : "Saved — except your sending hours and Sales Navigator answer, which can be set once your LinkedIn account is connected.",
+    ),
+  );
 }
 
 /** Validated against the runtime's own list rather than a hand-kept one. */
@@ -366,7 +393,15 @@ export default async function ProfilePage({
   const mine = linkedIn.kind === "attached" ? found : undefined;
   const awaitingProvider = linkedIn.kind === "unfinished";
   const needsReconnect = linkedIn.kind === "attached" && (cannotSend(found?.status) || found?.status === "connecting");
-  const hours = readWorkingHours(mine?.working_hours);
+  // What the form shows comes from wherever a save would write it: the account
+  // row once one exists, and before that the onboarding stash the row will be
+  // created from. Reading only a connected account showed defaults here to
+  // anybody who had not connected yet, whatever they had chosen.
+  const stash = readOnboardingStash(wsRow?.onboarding);
+  const hours = found
+    ? readWorkingHours(found.working_hours)
+    : readWorkingHours(stash.workingHours);
+  const hasSalesNavigator = found ? found.has_sales_navigator : (stash.hasSalesNavigator ?? false);
   const editing = params.edit === "1";
   const canManage = ["owner", "admin", "manager"].includes(session.role);
 
@@ -528,7 +563,7 @@ export default async function ProfilePage({
                   <input
                     type="checkbox"
                     name="hasSalesNavigator"
-                    defaultChecked={mine?.has_sales_navigator ?? false}
+                    defaultChecked={hasSalesNavigator}
                   />
                   <span>
                     This account has Sales Navigator
@@ -637,7 +672,7 @@ export default async function ProfilePage({
                   {describeWorkingHours(hours, me?.timezone ?? "UTC")}
                 </Fact>
                 <Fact label="Sales Navigator" wide>
-                  {mine?.has_sales_navigator
+                  {hasSalesNavigator
                     ? "Yes — the full customer profile is used in search."
                     : "No — search cannot filter on seniority or company size."}
                 </Fact>

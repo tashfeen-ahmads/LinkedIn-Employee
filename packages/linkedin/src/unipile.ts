@@ -898,6 +898,12 @@ interface RawUnipileMessage {
   account_id?: string;
   sender_id?: string;
   sender_attendee_id?: string;
+  /**
+   * How the `message_received` webhook names the sender: an object rather than
+   * the flat `sender_id` the messages list uses. `attendee_provider_id` is the
+   * LinkedIn member id, the one `prospects.provider_id` holds.
+   */
+  sender?: { attendee_provider_id?: string; attendee_id?: string } | null;
   text?: string;
   message?: string;
   timestamp?: string;
@@ -909,7 +915,16 @@ function toInboundMessage(m: RawUnipileMessage, fallbackAccountId: string): Inbo
     providerMessageId: m.message_id ?? m.id ?? "",
     providerChatId: m.chat_id ?? "",
     providerAccountId: m.account_id ?? fallbackAccountId,
-    fromProviderId: m.sender_id ?? m.sender_attendee_id ?? "",
+    // The flat fields first, as they always were; the webhook's nested sender
+    // after them. Without the nested form every webhook delivery carried an
+    // empty sender, matched no prospect, and the reply was dropped — the poll
+    // was then the only door that worked.
+    fromProviderId:
+      m.sender_id ||
+      m.sender_attendee_id ||
+      (typeof m.sender === "object" && m.sender
+        ? m.sender.attendee_provider_id || m.sender.attendee_id || ""
+        : ""),
     text: m.text ?? m.message ?? "",
     receivedAt: m.timestamp ?? new Date().toISOString(),
   };

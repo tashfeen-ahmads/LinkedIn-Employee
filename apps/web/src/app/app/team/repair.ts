@@ -105,3 +105,19 @@ export function cannotSend(status: string | null | undefined): boolean {
   if (!status) return false;
   return !["active", "warning", "restricted"].includes(status);
 }
+
+/**
+ * What "Check again" says when the provider holds nothing for this rep.
+ *
+ * It said "Expected uuid, found …. Fields the provider sent: {…}" — the
+ * payload we were debugging, printed on the customer's own profile. How many
+ * accounts we hold and how they are labelled is ours to know (rule 54), and
+ * the thing the rep can do is the same whatever they say: give a sign-in that
+ * just finished a moment, or sign in again.
+ */
+export function describeRefreshRefusal(data: RefreshResult | null | undefined): string {
+  if ((data?.found ?? 0) === 0) {
+    return "Your LinkedIn account isn't connected yet. If you just finished signing in, give it a few seconds and press Check again — otherwise press Connect LinkedIn.";
+  }
+  return "We couldn't find your LinkedIn sign-in yet. If you signed in a moment ago it can take a minute to show up — otherwise press Connect LinkedIn and finish signing in on LinkedIn's page.";
+}

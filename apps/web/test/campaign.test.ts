@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { LINKEDIN_LIMITS } from "@le/shared";
-import { CONNECTION_NOTE_MAX, daysToSendAll, launchBlockers, type LaunchState } from "../src/lib/campaign.js";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { INVITE_NOTE_MAX_CHARS, LINKEDIN_LIMITS } from "@le/shared";
+import { daysToSendAll, launchBlockers, type LaunchState } from "../src/lib/campaign.js";
 
 function state(overrides: Partial<LaunchState> = {}): LaunchState {
   return {
@@ -29,13 +31,22 @@ describe("launchBlockers", () => {
     expect(launchBlockers(state({ connectionNote: "   " }))).toContain("The connection note is empty.");
   });
 
-  it("refuses a note LinkedIn would truncate", () => {
-    const long = "a".repeat(CONNECTION_NOTE_MAX + 1);
+  it("refuses a note LinkedIn would refuse", () => {
+    const long = "a".repeat(INVITE_NOTE_MAX_CHARS + 1);
     expect(launchBlockers(state({ connectionNote: long })).join(" ")).toContain("LinkedIn allows");
   });
 
   it("accepts a note of exactly the maximum length", () => {
-    expect(launchBlockers(state({ connectionNote: "a".repeat(CONNECTION_NOTE_MAX) }))).toEqual([]);
+    expect(launchBlockers(state({ connectionNote: "a".repeat(INVITE_NOTE_MAX_CHARS) }))).toEqual([]);
+  });
+
+  it("holds the review screen to the send path's cap, not a bigger one", () => {
+    // The screen read 300 while the send path drops anything over 200, so a
+    // 250-character note passed review and then never went out. Asserted as a
+    // number as well as through the constant, so a constant that drifted
+    // upward with this test following it cannot pass.
+    expect(INVITE_NOTE_MAX_CHARS).toBeLessThanOrEqual(200);
+    expect(launchBlockers(state({ connectionNote: "a".repeat(250) })).join(" ")).toContain("LinkedIn allows 200");
   });
 
   it("names which follow-up is blank rather than just refusing", () => {
@@ -112,5 +123,34 @@ describe("isAppConfigured", () => {
       if (key) process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = key;
       else delete process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
     }
+  });
+});
+
+/**
+ * One cap for the connection note, everywhere in the web app.
+ *
+ * `CONNECTION_NOTE_MAX` was a second definition, 300, beside the send path's
+ * `INVITE_NOTE_MAX_CHARS`, 200 — and the textarea, its counter, the save
+ * action and launchBlockers all followed the wrong one. A note the review
+ * screen accepted was one the send path dropped.
+ */
+describe("the connection note cap", () => {
+  const SRC = join(__dirname, "..", "src");
+  const files = (dir: string): string[] =>
+    readdirSync(dir).flatMap((name) => {
+      const path = join(dir, name);
+      return statSync(path).isDirectory() ? files(path) : /\.(ts|tsx)$/.test(name) ? [path] : [];
+    });
+
+  it("has no second definition in the web app", () => {
+    const offenders = files(SRC).filter((path) => /CONNECTION_NOTE_MAX|maxLength=\{300\}/.test(readFileSync(path, "utf8")));
+    expect(offenders).toEqual([]);
+  });
+
+  it("is what the campaign screen's fields and save actions use", () => {
+    const page = readFileSync(join(SRC, "app", "app", "campaigns", "[id]", "page.tsx"), "utf8");
+    // The template field, each per-prospect textarea, and both save actions.
+    expect(page.match(/maxLength=\{INVITE_NOTE_MAX_CHARS\}/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+    expect(page.match(/note\.length > INVITE_NOTE_MAX_CHARS/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
   });
 });

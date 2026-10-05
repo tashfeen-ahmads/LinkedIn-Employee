@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase-server";
 import { callWorker, errorQuery } from "@/lib/worker";
 import { requestAccountEmails } from "@/lib/account-emails";
 import { isValidTimezone } from "@le/shared";
+import { sourceFromForm } from "@/lib/onboarding-stash";
 
 /**
  * First run. Creates the workspace and kicks off the Strategy Agent, so the
@@ -105,6 +106,11 @@ export async function createWorkspace(formData: FormData): Promise<string> {
         workingHours: hoursUsable ? { start, end, days } : null,
         hasSalesNavigator: formData.get("hasSalesNavigator") === "on",
         autonomy: formData.get("autonomy") === "autonomous" ? "autonomous" : "supervised",
+        // What the Strategy Agent is about to be asked to read, kept so a run
+        // that fails can be retried from the dashboard. Without it the only
+        // copy was the job itself, and the only way to start another was the
+        // onboarding form — which a person with a workspace is sent past.
+        source: sourceFromForm(formData),
       } as never,
     })
     .eq("id", workspaceId);

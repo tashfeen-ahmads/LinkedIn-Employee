@@ -1,4 +1,4 @@
-import { timingSafeEqual } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { Hono } from "hono";
 import { z } from "zod";
 import { exchangeGoogleCode, exchangeMicrosoftCode, googleConsentUrl, microsoftConsentUrl } from "@le/calendar";
@@ -14,7 +14,7 @@ import { decryptJson, encryptJson } from "./crypto.js";
 import { recordBeat } from "./heartbeat.js";
 import type { MiddlewareHandler } from "hono";
 import type { IntegrationKind } from "@le/db";
-import { jobId } from "./queues.js";
+import { enqueueOnce, jobId } from "./queues.js";
 import type { Queues } from "./queues.js";
 import { queueReachable } from "./queues.js";
 import { sendOneNow } from "./jobs/send-one.js";
@@ -24,6 +24,7 @@ import { writeWorkspaceHooks } from "./jobs/write-hooks.js";
 import { writeWorkspacePosts } from "./jobs/write-posts.js";
 import { publishApprovedPosts } from "./jobs/publish-posts.js";
 import { rewriteCampaignNotes } from "./jobs/rewrite-notes.js";
+import { startPendingSearches } from "./jobs/pending-searches.js";
 import type IORedis from "ioredis";
 import type { WorkerContext } from "./context.js";
 import { bookFromLink, readBookingPage } from "./jobs/book.js";
@@ -206,6 +207,8 @@ const LinkRequest = z.object({
 // nothing here accepts a workspace or a user id from the caller.
 const BookingPageRequest = z.object({ token: z.string().min(20).max(200) });
 
+const InvitePreviewRequest = z.object({ token: z.string().min(16).max(200) });
+
 const BookingConfirmRequest = BookingPageRequest.extend({
   startsAt: z.string().datetime(),
   name: z.string().trim().min(1).max(120),
@@ -322,15 +325,20 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
   /**
    * Refuses to accept work the queue cannot hold.
    *
-   * Every route below ends in `queue.add`, and against an unreachable Redis
-   * that call does not fail — the client keeps the command and waits for a
+   * The routes that end in `queue.add`, and against an unreachable Redis that
+   * call does not fail — the client keeps the command and waits for a
    * connection that is not coming. The request hangs, the caller times out, and
    * what the person sees is a button that did nothing, which is the same thing
    * they see when everything is fine and the work is merely paced. Accepting a
    * job we cannot store and answering "queued" is the worse lie of the two.
+   *
+   * Only those routes. It used to cover all of `/jobs/*`, so the moment the
+   * queue went down the system check — whose own row exists to say "the queue
+   * is down" — could not render, and data export and erasure, which never touch
+   * the queue, refused too.
    */
   app.use("/jobs/*", async (c, next) => {
-    if (connection && !(await queueReachable(connection))) {
+    if (QUEUEING_ROUTES.has(c.req.path) && connection && !(await queueReachable(connection))) {
       return c.json({ error: "the job queue is unreachable, so nothing can be queued" }, 503);
     }
     await next();
@@ -345,16 +353,21 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
     if (!(await assertMembership(ctx.db, parsed.data.workspaceId, parsed.data.userId))) {
       return c.json({ error: "not a member of that workspace" }, 403);
     }
-    // Recorded before the job is queued, because the minutes in between are
+    // One Strategy Agent run per workspace and kind at a time. A second press
+    // of "Build my profiles" (or "Find more") while the first is still writing
+    // ran the agent twice and stored two sets of strategies over the same
+    // people. A press after the run finished starts a fresh one.
+    const outcome = await enqueueOnce(queues.strategy, "strategy", parsed.data, {
+      jobId: strategyJobKey(parsed.data),
+    });
+    if (outcome === "already_pending") return c.json({ queued: true, alreadyRunning: true });
+
+    // Recorded once the run is queued, because the minutes in between are
     // exactly when nobody knows anything. Onboarding's only output is written
     // by the agent, so until it lands the dashboard has no evidence the person
     // did their part -- and told one tester for twenty-one minutes that they
     // had not said what they sell, with a button inviting them to do it again.
-    //
-    // Never at the cost of the run itself: a failure to write the note must not
-    // 500 a request whose job was accepted, or the caller submits again and the
-    // agent runs twice. Worst case the screen is as uninformative as it was
-    // before, which is not worth a duplicate campaign.
+    // Never at the cost of the run itself: the job is already accepted.
     try {
       await recordEvent(ctx.db, {
         workspaceId: parsed.data.workspaceId,
@@ -367,7 +380,6 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
     } catch (err) {
       console.error("could not record strategy.queued", err);
     }
-    await queues.strategy.add("strategy", parsed.data);
     return c.json({ queued: true });
   });
 
@@ -503,6 +515,38 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
     return c.json(await readBookingPage(ctx, parsed.data.token));
   });
 
+  /*
+   * What an invitation link says, for whoever holds it.
+   *
+   * The invite page read `invitations` as the visitor, and row-level security
+   * shows that table to members and to the signed-in invitee — never to
+   * somebody signed out. So the person the email was for, clicking it before
+   * they had an account, was told "Invitation not found", which is the one
+   * thing the link was certain not to be. The token is the authorisation here,
+   * exactly as on the booking page; it names one invitation and nothing else,
+   * and the answer carries no id that could reach any other row.
+   */
+  app.post("/invites/preview", async (c) => {
+    const parsed = InvitePreviewRequest.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ found: false });
+    const { data: invite } = await ctx.db
+      .from("invitations")
+      .select("workspace_id, email, role, expires_at, accepted_at, revoked_at")
+      .eq("token", parsed.data.token)
+      .maybeSingle();
+    if (!invite) return c.json({ found: false });
+    const { data: workspace } = await ctx.db.from("workspaces").select("name").eq("id", invite.workspace_id).maybeSingle();
+    return c.json({
+      found: true,
+      workspaceName: workspace?.name ?? null,
+      email: invite.email,
+      role: invite.role,
+      expires_at: invite.expires_at,
+      accepted_at: invite.accepted_at,
+      revoked_at: invite.revoked_at,
+    });
+  });
+
   app.post("/booking/confirm", async (c) => {
     const parsed = BookingConfirmRequest.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: "Please check the name and email address." }, 400);
@@ -516,15 +560,22 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
     if (!(await assertMembership(ctx.db, parsed.data.workspaceId, parsed.data.userId))) {
       return c.json({ error: "not a member of that workspace" }, 403);
     }
-    // Recorded before the job is queued, and for the same reason the Strategy
-    // Agent's is: without it, "the request never reached the worker" and "the
-    // worker took it and died" are the same blank screen. A night was spent on
-    // exactly that ambiguity -- a button pressed, no banner, no event, nothing
-    // to tell the two apart.
-    //
-    // Never at the cost of the run: a failure to write the note must not 500 a
-    // request whose job was accepted, or the caller presses again and two
-    // agents search.
+    // One search per strategy and campaign at a time. Pressing the button
+    // three times in eight seconds queued three full searches that ran side by
+    // side, each read the prospect list before any of them wrote to it, and
+    // each built its own campaign from the same people: one customer approved
+    // one strategy and got four near-identical campaigns. A second press while
+    // the first is still running is now the same request, and a press after it
+    // finished starts a fresh one (`enqueueOnce`).
+    const outcome = await enqueueOnce(queues.targeting, "targeting", parsed.data, {
+      jobId: jobId("targeting", parsed.data.customerProfileId, parsed.data.campaignId ?? "new"),
+    });
+    if (outcome === "already_pending") return c.json({ queued: true, alreadyRunning: true });
+
+    // Recorded once the job is really queued, and for the same reason the
+    // Strategy Agent's is: without it, "the request never reached the worker"
+    // and "the worker took it and died" are the same blank screen. Never at the
+    // cost of the run: the job is already accepted.
     try {
       await recordEvent(ctx.db, {
         workspaceId: parsed.data.workspaceId,
@@ -537,7 +588,6 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
     } catch (err) {
       console.error("could not record targeting.queued", err);
     }
-    await queues.targeting.add("targeting", parsed.data);
     return c.json({ queued: true });
   });
 
@@ -718,7 +768,14 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
       .maybeSingle();
     if (!draft || draft.status !== "approved") return c.json({ error: "draft is not approved" }, 409);
 
-    await queues.linkedinAction.add(
+    // `enqueueOnce`, not `add` (rule 44). A reply job that already ran and came
+    // back without sending — the draft was still pending when the inbound job
+    // queued it, the account was paused — keeps `reply:<draftId>` for a day,
+    // and a plain `add` hands back that finished job: the rep presses Send, is
+    // told it is sending, and nothing ever goes. The draft being approved is
+    // the evidence the work is not done; a sent draft is `sent`, not approved.
+    await enqueueOnce(
+      queues.linkedinAction,
       "reply",
       {
         kind: "reply",
@@ -838,12 +895,14 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
         user_id: parsed.data.userId,
         provider: ctx.linkedin.name,
         ...(keepStatus ? {} : { status: "connecting" as const }),
-        // Only when onboarding actually answered. Spreading an absent value
-        // would overwrite a window the rep has since edited on their profile
-        // with a default nobody chose — a reconnect must not silently reset
-        // the hours (rule 8's habit: repair never makes things worse).
-        ...(answers?.workingHours ? { working_hours: answers.workingHours as never } : {}),
-        ...(typeof answers?.hasSalesNavigator === "boolean"
+        // Only on the first press, when there is no row yet, and only when
+        // onboarding actually answered. Once a row exists it is the record:
+        // the rep may have changed their hours or ticked Sales Navigator on
+        // the profile since, and every Reconnect used to put the signup
+        // answers back over that — a different search tier (rule 12) chosen
+        // by nobody, from a button pressed to repair something else.
+        ...(!existing && answers?.workingHours ? { working_hours: answers.workingHours as never } : {}),
+        ...(!existing && typeof answers?.hasSalesNavigator === "boolean"
           ? { has_sales_navigator: answers.hasSalesNavigator }
           : {}),
       },
@@ -887,8 +946,18 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
         .eq("provider_account_id", message.providerAccountId)
         .maybeSingle();
       if (!account) continue;
+      // Nothing to match without a sender or an id, exactly as the poll skips
+      // them. Queued anyway, a job keyed on an empty id is one every later
+      // empty-id delivery is taken for a duplicate of.
+      if (!message.providerMessageId || !message.fromProviderId) continue;
 
-      await queues.inbound.add(
+      // `enqueueOnce`, not `add` (rule 44). Provider redelivery is normal and a
+      // waiting job under this id is the dedupe working; a *finished* one is
+      // not — a delivery that completed without storing anything (the sender
+      // not yet a prospect here) would otherwise turn the poll away for a day.
+      // A revived job for a message already stored stops at one lookup.
+      await enqueueOnce(
+        queues.inbound,
         "inbound",
         {
           workspaceId: account.workspace_id,
@@ -899,7 +968,6 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
           text: message.text,
           receivedAt: message.receivedAt,
         },
-        // Provider redelivery is normal; the job id makes it a no-op.
         { jobId: jobId("inbound", message.providerMessageId) },
       );
     }
@@ -1029,6 +1097,17 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
    * therefore buys nothing: it can only land somewhere its sender already had
    * a pending connection of their own.
    */
+  /*
+   * A strategy approved before this account existed has been waiting for it.
+   * Started in the background so the rep's redirect never waits on the queue;
+   * the hourly run catches anything this misses.
+   */
+  const kickPendingSearches = (workspaceId: string) => {
+    void startPendingSearches(ctx, queues, { workspaceId }).catch((err) =>
+      console.error("could not start pending searches", err),
+    );
+  };
+
   app.post("/jobs/linkedin-claim", async (c) => {
     const Claim = LinkRequest.extend({ accountId: z.string().min(1) });
     const parsed = Claim.safeParse(await c.req.json().catch(() => null));
@@ -1041,6 +1120,7 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
     const result = await claimAccount(ctx, { workspaceId, userId, accountId });
     if (result.status === "provider_error") return c.json({ error: result.reason }, 502);
     if (!result.claimed) return c.json({ claimed: false, reason: result.reason });
+    kickPendingSearches(workspaceId);
     return c.json({ claimed: true, status: result.accountStatus });
   });
 
@@ -1147,7 +1227,10 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
     if (!accountId) return back("connected=1");
 
     const result = await claimAccount(ctx, { ...who, accountId });
-    if (result.claimed) return back("connected=1");
+    if (result.claimed) {
+      kickPendingSearches(who.workspaceId);
+      return back("connected=1");
+    }
 
     // A refusal still sends them to the page, which asks the provider again
     // and says what it found. Silence here is what left somebody pressing a
@@ -1175,6 +1258,8 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
     const mine = accounts.filter((a) => a.reference === parsed.data.userId);
     const bound = await bindAccounts(ctx, mine);
     const reconciled = await reconcileAccount(ctx.db, parsed.data.workspaceId, parsed.data.userId, mine, accounts);
+    // Cheap when nothing is waiting: it does nothing without an active account.
+    kickPendingSearches(parsed.data.workspaceId);
 
     // The row already holds an account the provider lists: that is a working
     // connection, whatever label the provider put on it. Reporting "none of
@@ -2039,3 +2124,35 @@ function shapeOf(value: string): string {
   if (/\s/.test(value)) return "text with spaces";
   return `${value.length} characters, no spaces`;
 }
+
+/**
+ * The id that makes a second press of the same Strategy Agent request a no-op.
+ *
+ * Keyed on what the run would work from, not only on its kind: "Add a
+ * business" and onboarding's first run both arrive with no business profile id
+ * and no `expand`, and sharing one id let a new business be silently dropped
+ * while the onboarding run was still writing. The same material pressed twice
+ * is the same request; different material is a different business.
+ */
+export function strategyJobKey(input: {
+  workspaceId: string;
+  expand?: boolean;
+  businessProfileId?: string;
+  websiteUrl?: string;
+  linkedinCompanyUrl?: string;
+  description?: string;
+}): string {
+  if (input.expand) return jobId("strategy", input.workspaceId, "expand", input.businessProfileId ?? "default");
+  const material = [input.websiteUrl, input.linkedinCompanyUrl, input.description]
+    .map((part) => part?.trim().toLowerCase() ?? "")
+    .join("|");
+  return jobId("strategy", input.workspaceId, "new", createHash("sha256").update(material).digest("hex").slice(0, 16));
+}
+
+/** The `/jobs/*` routes that put work on a queue, and so need one to answer. */
+export const QUEUEING_ROUTES = new Set([
+  "/jobs/strategy",
+  "/jobs/targeting",
+  "/jobs/campaign-tick",
+  "/jobs/send-reply",
+]);

@@ -8,6 +8,7 @@ import { PasswordField } from "@/components/password-field";
 import { SubmitButton } from "@/components/submit-button";
 import { checkEmail, checkPassword, PASSWORD_MIN } from "@/lib/auth-fields";
 import { requestAccountEmails } from "@/lib/account-emails";
+import { SITE } from "@/lib/site";
 
 /**
  * Creating an account, as its own page and its own act.
@@ -63,7 +64,9 @@ async function signUp(formData: FormData) {
 
   const supabase = await createClient();
 
-  const base = process.env.APP_URL ?? "http://localhost:3000";
+  // `SITE.app`, normalised, so a trailing slash or an unset variable cannot
+  // put a broken address in the confirmation email.
+  const base = SITE.app;
   const callback = invite
     ? `${base}/auth/callback?invite=${encodeURIComponent(invite)}`
     : `${base}/auth/callback`;

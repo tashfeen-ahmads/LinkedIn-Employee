@@ -96,7 +96,7 @@ async function sendManualReply(formData: FormData) {
 
 async function dismissDraft(formData: FormData) {
   "use server";
-  const draftId = String(formData.get("draftId"));
+  const draftId = String(formData.get("draftId") ?? "");
   const conversationId = String(formData.get("conversationId"));
   const session = await requireSession();
   const supabase = await createClient();
@@ -114,6 +114,30 @@ async function dismissDraft(formData: FormData) {
   redirect(noticeQuery("/app/inbox", "Dismissed."));
 }
 
+/**
+ * Takes a follow-up held for copy off the waiting list.
+ *
+ * Its own action, because the hold it clears is its own kind. The dismiss
+ * button on these used to clear kind "reply", which matched nothing, and the
+ * page then said "Dismissed." over a conversation that was still there.
+ * Dismissing does not release the message — only approving a pitch does — so
+ * the next tick will hold it again if nothing has changed, and the notice says
+ * that rather than implying the follow-up is dealt with.
+ */
+async function dismissCopyHold(formData: FormData) {
+  "use server";
+  const conversationId = String(formData.get("conversationId"));
+  const session = await requireSession();
+  await clearConversationHold(conversationId, session.workspaceId, "copy");
+  revalidatePath("/app/inbox");
+  redirect(
+    noticeQuery(
+      "/app/inbox",
+      "Dismissed. The follow-up still waits for an approved pitch and will come back here if it is due again.",
+    ),
+  );
+}
+
 async function markBooked(formData: FormData) {
   "use server";
   const conversationId = String(formData.get("conversationId"));
@@ -127,7 +151,11 @@ async function markBooked(formData: FormData) {
  * Clears one kind of hold. Scoped by kind for the same reason the worker's is:
  * dismissing a draft says nothing about whether a meeting reached a diary.
  */
-async function clearConversationHold(conversationId: string, workspaceId: string, kind: "reply" | "booking") {
+async function clearConversationHold(
+  conversationId: string,
+  workspaceId: string,
+  kind: "reply" | "booking" | "copy",
+) {
   const supabase = await createClient();
   await supabase
     .from("conversations")
@@ -314,6 +342,10 @@ export default async function InboxPage({
             ? (draft.unanswered_questions as string[])
             : [];
           const booking = hold?.needs_human_kind === "booking";
+          // A follow-up held because the copy it is built from has not been
+          // approved. Nothing to write here: the act that releases it is
+          // approving a line on the Agents screen, so that is what it asks for.
+          const copy = hold?.needs_human_kind === "copy";
 
           return (
             <article key={conversationId} className="card">
@@ -367,8 +399,8 @@ export default async function InboxPage({
               {booking ? (
                 <>
                   <p className="small">
-                    They accepted a time and the calendar write failed, so this meeting is in nobody&apos;s
-                    diary. Put it in yours, then mark it done.
+                    They accepted a time and it could not be booked automatically, so this meeting is in
+                    nobody&apos;s diary. Put it in yours, or offer them another time, then mark it done.
                   </p>
                   <form action={markBooked}>
                     <input type="hidden" name="conversationId" value={conversationId} />
@@ -376,6 +408,25 @@ export default async function InboxPage({
                       I have booked it
                     </button>
                   </form>
+                </>
+              ) : copy && !draft ? (
+                <>
+                  <p className="small">
+                    Approve a pitch to send the next follow-up. It is written around your approved offer,
+                    and none is approved yet, so it is waiting rather than going out half-written. Its
+                    schedule is unchanged: approving one sends it.
+                  </p>
+                  <div className="cluster">
+                    <Link className="btn" href="/app/agents">
+                      Approve a pitch
+                    </Link>
+                    <form action={dismissCopyHold}>
+                      <input type="hidden" name="conversationId" value={conversationId} />
+                      <button className="btn secondary small" type="submit">
+                        Dismiss
+                      </button>
+                    </form>
+                  </div>
                 </>
               ) : draft ? (
                 <>

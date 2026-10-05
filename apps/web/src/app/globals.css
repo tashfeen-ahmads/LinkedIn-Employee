@@ -1855,6 +1855,14 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
      scrolling row keeps the page where it belongs — at the top. */
   .nav {
     grid-column: 1 / -1;
+    /* A grid item's floor is its content, so without this the whole row of
+       chips set the bar's width: the sign-out column grew to fit it and every
+       dashboard page on a phone scrolled ~490px sideways into blank space. */
+    min-width: 0;
+    /* The containing block for the links' absolutely positioned screen-reader
+       text. Without it that text escaped the scroller, sat ~880px across, and
+       was what actually let every dashboard page on a phone scroll sideways. */
+    position: relative;
     flex-direction: row;
     flex-wrap: nowrap;
     overflow-x: auto;

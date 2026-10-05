@@ -308,6 +308,22 @@ describe("runTargetingJob", () => {
     expect(db.rows("campaigns")).toHaveLength(0);
   });
 
+  it("never runs another workspace's strategy or LinkedIn seat", async () => {
+    // Every id in the job came from a form, and the worker holds the service
+    // role: the workspace filter is the whole tenant boundary.
+    const OTHER = "66666666-6666-4666-8666-666666666666";
+    for (const table of ["customer_profiles", "linkedin_accounts"] as const) {
+      const { db, ctx, linkedin } = harness();
+      const { runTargetingJob } = await import("../src/jobs/targeting.js");
+      db.find(table, { id: table === "customer_profiles" ? PROFILE : ACCOUNT })!.workspace_id = OTHER;
+      linkedin.candidates = { items: [candidate("p1", "https://www.linkedin.com/in/a")], cursor: null, droppedFilters: [] };
+      scoreMock.mockResolvedValue([ranked("https://www.linkedin.com/in/a", "p1", 90)]);
+
+      expect(await runTargetingJob(ctx, job), table).toBeNull();
+      expect(db.rows("campaigns"), table).toHaveLength(0);
+    }
+  });
+
   it("refuses to build a campaign on a paused LinkedIn account", async () => {
     const { db, ctx, linkedin } = harness();
     const { runTargetingJob } = await import("../src/jobs/targeting.js");
@@ -316,6 +332,27 @@ describe("runTargetingJob", () => {
 
     expect(await runTargetingJob(ctx, job)).toBeNull();
     expect(db.rows("campaigns")).toHaveLength(0);
+  });
+
+  it("never leaves people in the workspace on no campaign when attaching them fails", async () => {
+    // Rule 27: a prospect row excludes that person from every future search,
+    // so one written without a campaign is an outreach spent that never happened.
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    const real = ctx.db.from.bind(ctx.db);
+    (ctx as { db: unknown }).db = {
+      ...ctx.db,
+      from: (table: string) => {
+        const builder = real(table as never) as unknown as { upsert: (...a: unknown[]) => unknown };
+        if (table !== "campaign_prospects") return builder;
+        return { ...builder, select: (builder as unknown as { select: (...a: unknown[]) => unknown }).select.bind(builder), upsert: async () => ({ data: null, error: { message: "connection reset" } }) };
+      },
+    };
+    linkedin.candidates = { items: [candidate("p1", "https://www.linkedin.com/in/jane-one")], cursor: null, droppedFilters: [] };
+    scoreMock.mockResolvedValue([ranked("https://www.linkedin.com/in/jane-one", "p1", 90)]);
+
+    await expect(runTargetingJob(ctx, job)).rejects.toThrow(/could not put the prospects on the campaign/);
+    expect(db.rows("prospects")).toHaveLength(0);
   });
 
   it("stores prospects under the canonical URL so a later run dedupes against them", async () => {

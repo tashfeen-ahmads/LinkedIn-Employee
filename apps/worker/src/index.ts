@@ -16,6 +16,7 @@ import { runStrategyJob } from "./jobs/strategy.js";
 import { runTargetingJob } from "./jobs/targeting.js";
 import { detectAcceptedInvitations } from "./jobs/acceptance.js";
 import { pollInbound } from "./jobs/inbound-poll.js";
+import { startPendingSearches } from "./jobs/pending-searches.js";
 import { publishApprovedPosts } from "./jobs/publish-posts.js";
 import { recoverThrottledProspects, unstickProspects } from "./jobs/unstick.js";
 import { recoverAccounts } from "./accounts.js";
@@ -238,6 +239,9 @@ const workers = [
         return (
           detectAcceptedInvitations(ctx)
             .then(() => unstickProspects(ctx.db))
+            // A strategy approved before LinkedIn was connected, still waiting
+            // for the search the connect should have started.
+            .then(() => startPendingSearches(ctx, queues))
             // A throttle lifts on its own schedule, so the rows it wrote off
             // are checked on the same hourly beat rather than waiting for the
             // night.

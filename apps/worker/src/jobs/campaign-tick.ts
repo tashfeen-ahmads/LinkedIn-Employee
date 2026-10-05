@@ -13,6 +13,8 @@ import {
   checkAction,
   dailyInviteCap,
   invitationCouldFollow,
+  localDate,
+  localDayStart,
   nextGapMs,
   spreadGapMs,
   warmStillCounts,
@@ -69,8 +71,6 @@ export async function runCampaignTick(
 }
 
 async function tick(db: Db, queues: Queues, now: Date, linkedin?: unknown): Promise<number> {
-  const today = now.toISOString().slice(0, 10);
-
   const { data: campaigns } = await db
     .from("campaigns")
     .select("id, workspace_id, linkedin_account_id, daily_invite_cap, owner_user_id, warm_up")
@@ -98,6 +98,10 @@ async function tick(db: Db, queues: Queues, now: Date, linkedin?: unknown): Prom
     if (decisions.length < 20) decisions.push({ campaign, reason });
   };
 
+  // What is already on the conveyor belt, read once for every campaign and
+  // every account this run touches. See `invitesInFlight`.
+  const inFlight = await invitesInFlight(db, queues, campaigns as CampaignRow[], now);
+
   for (const campaign of campaigns) {
     // A trial that has ended, or a subscription that has, stops outreach here.
     // Reading is never blocked; see packages/billing/src/entitlement.ts.
@@ -112,7 +116,7 @@ async function tick(db: Db, queues: Queues, now: Date, linkedin?: unknown): Prom
     if (!accounts.has(campaign.linkedin_account_id)) {
       accounts.set(
         campaign.linkedin_account_id,
-        await loadAccount(db, campaign.linkedin_account_id, today),
+        await loadAccount(db, campaign.linkedin_account_id, now),
       );
     }
     const loaded = accounts.get(campaign.linkedin_account_id);
@@ -139,7 +143,7 @@ async function tick(db: Db, queues: Queues, now: Date, linkedin?: unknown): Prom
     const warmed = await enqueueWarmUps(db, queues, campaign, usage, loaded.account, now);
     enqueued += warmed.enqueued;
 
-    const invites = await enqueueInvites(db, queues, campaign, usage, loaded.account, now);
+    const invites = await enqueueInvites(db, queues, campaign, usage, loaded.account, now, inFlight);
     enqueued += invites.enqueued;
 
     // Both reasons, not just the invitation's. During a throttle the
@@ -506,6 +510,7 @@ async function enqueueInvites(
   usage: ReturnType<typeof toUsage>,
   account: AccountRecord,
   now: Date,
+  inFlight: InFlight,
 ): Promise<{ enqueued: number; reason: string }> {
   /*
    * LinkedIn asked for time, so nothing is offered until it has had it.
@@ -532,13 +537,58 @@ async function enqueueInvites(
     return { enqueued: 0, reason: `limiter: ${decision.reason}` };
   }
 
-  const accountCap = dailyInviteCap(usage.firstActionAt, now) - usage.invitesToday;
-  const weeklyLeft = LINKEDIN_LIMITS.invitesPerWeek - usage.invitesThisWeek;
-  const budget = Math.max(0, Math.min(accountCap, weeklyLeft, campaign.daily_invite_cap));
+  if (!inFlight.known) {
+    // Budgeting without knowing what is already queued is how a day's
+    // allowance gets queued twice. Nobody is lost by waiting five minutes.
+    return { enqueued: 0, reason: `could not read what is already queued: ${inFlight.reason ?? "unknown"}` };
+  }
+
+  /*
+   * What is left today, net of what has been sent *and* what is already on
+   * its way.
+   *
+   * The budget used to be the lowest of the account's ramp, the week and the
+   * campaign's own cap — read off counters that only move when an invitation
+   * actually goes out. So nothing counted what this campaign had sent today,
+   * and nothing counted the jobs already sitting delayed in the queue: a
+   * campaign capped at five a day was handed the account's whole allowance,
+   * and every tick between placing a job and that job sending saw the same
+   * full allowance and placed more. `daily_invite_cap` was a number on a form.
+   *
+   * The account's share is subtracted across campaigns, because the ramp is a
+   * fact about the account (rules 3 and 4): two campaigns on one account each
+   * reading "ten left" is twenty invitations from an account allowed ten. The
+   * send path would refuse the extra ten, and they would then wait for
+   * tomorrow's window and land in its first minutes as a backlog — the burst,
+   * one day late. The in-flight count is read from the queue itself once per
+   * run and grows as this run places work, so whichever campaign is visited
+   * first, the second sees what the first took.
+   */
+  //
+  // Only what is due before the rep's midnight comes off today. A job parked
+  // until tomorrow morning — refused on a cap, or placed past the end of the
+  // window — will be spent from tomorrow's allowance, and counting it today
+  // as well would charge the account twice for one invitation. The week is
+  // charged for all of it, which can only ever err towards sending less.
+  const dayEnd = localDayStart(now, usage.timezone).getTime() + 86_400_000;
+  const onAccount = [...inFlight.entries.values()].filter((e) => e.accountId === campaign.linkedin_account_id);
+  const dueToday = onAccount.filter((e) => e.at < dayEnd);
+  const accountInFlight = dueToday.length;
+  const campaignInFlight = dueToday.filter((e) => e.campaignId === campaign.id).length;
+  const { count: sentToday } = await db
+    .from("campaign_prospects")
+    .select("id", { count: "exact", head: true })
+    .eq("campaign_id", campaign.id)
+    .gte("invited_at", localDayStart(now, usage.timezone).toISOString());
+
+  const accountCap = dailyInviteCap(usage.firstActionAt, now) - usage.invitesToday - accountInFlight;
+  const weeklyLeft = LINKEDIN_LIMITS.invitesPerWeek - usage.invitesThisWeek - onAccount.length;
+  const campaignLeft = campaign.daily_invite_cap - (sentToday ?? 0) - campaignInFlight;
+  const budget = Math.max(0, Math.min(accountCap, weeklyLeft, campaignLeft));
   if (budget === 0) {
     return {
       enqueued: 0,
-      reason: `no allowance left today (account ${accountCap}, week ${weeklyLeft}, campaign ${campaign.daily_invite_cap})`,
+      reason: `no allowance left today (account ${accountCap}, week ${weeklyLeft}, campaign ${campaignLeft} of ${campaign.daily_invite_cap}; ${accountInFlight} already queued on the account)`,
     };
   }
 
@@ -559,8 +609,8 @@ async function enqueueInvites(
     // Read wider than the budget, because some of these are serving a hold of
     // their own and are filtered out below. Taking exactly `budget` rows first
     // would let a handful of held prospects fill the whole allowance and send
-    // nobody.
-    .limit(budget * 4);
+    // nobody. Widened by what is already queued, which is filtered out too.
+    .limit((budget + campaignInFlight) * 4);
 
   // A prospect LinkedIn refused *about them* — "already invited recently" —
   // carries its own wait. Filtered here rather than in the query because the
@@ -580,6 +630,10 @@ async function enqueueInvites(
     ? (waiting ?? []).filter((row) => !warmStillCounts(row.warmed_at, now)).length
     : 0;
   const queued = (waiting ?? [])
+    // Already on its way. Its job holds the id, so enqueueing it again would
+    // be declined anyway — but only after it had taken a slot in this run's
+    // budget that a new invitation should have had.
+    .filter((row) => !inFlight.entries.has(row.id))
     .filter((row) => (campaign.warm_up ? warmStillCounts(row.warmed_at, now) : true))
     .filter((row) => {
       if (!row.next_action_at) return true;
@@ -617,7 +671,17 @@ async function enqueueInvites(
    * make it a warm-up, so those stay clustered on `nextGapMs` and the spacing
    * that matters for them is the per-prospect wait stamped after the view.
    */
-  const startDelay = decision.allowed ? 0 : decision.retryAfterMs;
+  /*
+   * ...and behind whatever this account already has queued.
+   *
+   * A later tick placing its own invitations from "now" would interleave them
+   * with the ones an earlier tick spread across the afternoon, and two that
+   * happen to land a minute apart are the pattern the spread exists to stop.
+   * Continuing from the last one keeps the day one evenly spaced line however
+   * many ticks contributed to it.
+   */
+  const lastPlaced = Math.max(0, ...dueToday.map((e) => e.at));
+  const startDelay = Math.max(decision.allowed ? 0 : decision.retryAfterMs, lastPlaced - now.getTime(), 0);
   const windowMs = workingMsLeftToday(
     new Date(now.getTime() + startDelay),
     usage.workingHours,
@@ -641,6 +705,22 @@ async function enqueueInvites(
      * tick finds ten or one, which is what makes it a pace.
      */
     delay += spreadGapMs({ remaining: budget, windowMs });
+    /*
+     * Never later than the warm-up still counts.
+     *
+     * The spread places the day's invitations evenly, and on a long afternoon
+     * that can be five hours out — past the four-hour window that makes the
+     * earlier view a warm-up. The invitation then went out cold anyway, the
+     * view spent for nothing. A warmed prospect is placed no later than its
+     * window allows (with a margin for the send path's own gap), and one
+     * whose window has already gone is left for the loop to re-warm.
+     */
+    let at = delay;
+    if (campaign.warm_up && row.warmed_at) {
+      const latest = Date.parse(row.warmed_at) + LINKEDIN_LIMITS.warmUpToInviteMaxMs - WARM_MARGIN_MS - now.getTime();
+      if (!(latest > 0)) continue;
+      at = Math.min(delay, latest);
+    }
     // The id is what stops a second tick queueing the same invitation five
     // minutes later — and what strands a prospect for ever when the job that
     // holds it has already finished without sending. enqueueOnce keeps the
@@ -649,11 +729,20 @@ async function enqueueInvites(
       queues.linkedinAction,
       "invite",
       { kind: "invite", workspaceId: campaign.workspace_id, campaignProspectId: row.id },
-      { delay, jobId: jobId("invite", row.id) },
+      { delay: at, jobId: jobId("invite", row.id) },
     );
     if (outcome === "added") added++;
     else if (outcome === "revived") revived++;
     else pending++;
+    // Recorded as in flight, so the next campaign on this account — visited
+    // later in this same run — budgets against it.
+    if (outcome !== "already_pending") {
+      inFlight.entries.set(row.id, {
+        campaignId: campaign.id,
+        accountId: campaign.linkedin_account_id,
+        at: now.getTime() + at,
+      });
+    }
   }
 
   // Said in full, because these three numbers are three different situations
@@ -661,8 +750,82 @@ async function enqueueInvites(
   // finished in Redis is the sentence that cost a working day.
   const parts = [`queued ${added} invitation(s)`];
   if (revived) parts.push(`re-queued ${revived} stranded`);
-  if (pending) parts.push(`${pending} already waiting`);
+  if (pending + campaignInFlight) parts.push(`${pending + campaignInFlight} already waiting`);
   return { enqueued: added + revived, reason: parts.join(", ") };
+}
+
+/**
+ * Invitations already queued and not yet sent, by campaign and by account.
+ *
+ * The account counters move when an invitation goes out, and a job placed this
+ * morning for three this afternoon has not gone out. Budgeting from the
+ * counters alone therefore counted none of the day's queued work, and every
+ * tick in between saw the full allowance again. The queue is the only place
+ * that knows what is in flight, so it is asked — once per run, not once per
+ * campaign.
+ *
+ * Only rows still `queued` count. A job whose prospect has already been
+ * invited, closed or failed will do nothing when it runs, and counting it
+ * would spend a slot on a send that cannot happen.
+ *
+ * `known: false` is a queue that could not be read, which is a different
+ * answer from an empty one and is never reported as zero. A queue double with
+ * no `getJobs` at all is empty by construction — the same convention as
+ * `enqueueOnce`.
+ */
+interface InFlight {
+  known: boolean;
+  reason?: string;
+  /**
+   * Every invitation waiting, delayed or running, by campaign_prospect id:
+   * whose it is, and when it is due in epoch ms.
+   */
+  entries: Map<string, { campaignId: string; accountId: string; at: number }>;
+}
+
+const PENDING_STATES = ["active", "waiting", "delayed", "prioritized", "paused"] as const;
+
+async function invitesInFlight(db: Db, queues: Queues, campaigns: CampaignRow[], now: Date): Promise<InFlight> {
+  const state: InFlight = { known: true, entries: new Map() };
+  const queue = queues.linkedinAction as unknown as {
+    getJobs?: (types: readonly string[]) => Promise<
+      Array<{ name?: string; data?: { kind?: string; campaignProspectId?: string }; timestamp?: number; delay?: number } | null | undefined>
+    >;
+  };
+  if (typeof queue.getJobs !== "function") return state;
+
+  let jobs: Awaited<ReturnType<NonNullable<typeof queue.getJobs>>>;
+  try {
+    jobs = await queue.getJobs(PENDING_STATES);
+  } catch (err) {
+    return { ...state, known: false, reason: (err as { message?: string })?.message ?? "unknown" };
+  }
+
+  const dueAt = new Map<string, number>();
+  for (const job of jobs ?? []) {
+    if (job?.data?.kind !== "invite" || !job.data.campaignProspectId) continue;
+    const at = Number(job.timestamp ?? now.getTime()) + Number(job.delay ?? 0);
+    dueAt.set(job.data.campaignProspectId, Number.isFinite(at) ? at : now.getTime());
+  }
+  if (!dueAt.size) return state;
+
+  const accountOf = new Map(campaigns.map((c) => [c.id, c.linkedin_account_id]));
+  const ids = [...dueAt.keys()];
+  for (let i = 0; i < ids.length; i += 200) {
+    const { data: rows } = await db
+      .from("campaign_prospects")
+      .select("id, campaign_id, status")
+      .in("id", ids.slice(i, i + 200));
+    for (const row of rows ?? []) {
+      if (row.status !== "queued") continue;
+      // A campaign that is not running sends nothing from its queue, so its
+      // jobs take nothing from today's allowance while it stays that way.
+      const accountId = accountOf.get(row.campaign_id);
+      if (!accountId) continue;
+      state.entries.set(row.id, { campaignId: row.campaign_id, accountId, at: dueAt.get(row.id) ?? now.getTime() });
+    }
+  }
+  return state;
 }
 
 async function enqueueFollowUps(
@@ -745,7 +908,7 @@ async function canWorkspaceSend(db: Db, workspaceId: string, now: Date): Promise
 async function loadAccount(
   db: Db,
   accountId: string,
-  today: string,
+  now: Date,
 ): Promise<{ account: AccountRecord; timezone: string } | null> {
   const { data: accountRow } = await db
     .from("linkedin_accounts")
@@ -754,7 +917,21 @@ async function loadAccount(
     .single();
   if (!accountRow || accountRow.status !== "active") return null;
 
-  const account = await resetCountersIfNeeded(db, accountRow as AccountRecord, today);
-  const { data: profile } = await db.from("profiles").select("timezone").eq("id", account.user_id).single();
-  return { account, timezone: profile?.timezone ?? "UTC" };
+  /*
+   * The zone first, because the day the counters belong to is the rep's.
+   *
+   * This read the UTC date, while every cap, retry and spread was measured
+   * from the rep's own midnight. For a rep in California that put the reset at
+   * five in the afternoon: the counters emptied with an hour of the working
+   * day still to run, and the whole of the next day's allowance went out
+   * between five and six — the burst rule 48 exists to prevent, arriving
+   * every afternoon through the counter rather than the spread.
+   */
+  const { data: profile } = await db.from("profiles").select("timezone").eq("id", accountRow.user_id).single();
+  const timezone = profile?.timezone ?? "UTC";
+  const account = await resetCountersIfNeeded(db, accountRow as AccountRecord, localDate(now, timezone));
+  return { account, timezone };
 }
+
+/** Room left before a warm-up stops counting, for the send path's own gap and retries. */
+const WARM_MARGIN_MS = 15 * 60_000;

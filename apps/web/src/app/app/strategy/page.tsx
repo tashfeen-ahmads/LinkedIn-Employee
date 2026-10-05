@@ -11,11 +11,21 @@ import { PageNotice } from "@/components/page-notice";
 import { PageHeader, Section } from "@/components/page";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
-import { callWorker, errorQuery, noticeQuery } from "@/lib/worker";
+import {
+  ALREADY_RUNNING,
+  callWorker,
+  errorQuery,
+  isAlreadyRunning,
+  noticeQuery,
+  startedNotice,
+} from "@/lib/worker";
 import { FILTER_FIELDS, applyProfileEdits, formatList } from "@/lib/profile-form";
 import { CTA_DEFINITIONS, CTA_KINDS, checkCtaUrl, type CtaKind } from "@le/shared";
 import { readStrategyState } from "@/lib/strategy-state";
+import { SEARCH_EVENTS, describeLastSearch } from "@/lib/last-search";
 import { StrategyStatus } from "@/components/strategy-status";
+import { StrategyDetailsForm, StrategyRetryButton } from "@/components/strategy-retry";
+import { hasStrategySource, readOnboardingStash } from "@/lib/onboarding-stash";
 import { SubmitButton } from "@/components/submit-button";
 
 /**
@@ -46,7 +56,7 @@ async function queueSearch(
   userId: string,
   supabase: Awaited<ReturnType<typeof createClient>>,
   profileId: string,
-): Promise<{ ok: true } | { ok: false; reason: string }> {
+): Promise<{ ok: true; alreadyRunning: boolean } | { ok: false; reason: string }> {
   const { data: account } = await supabase
     .from("linkedin_accounts")
     .select("id, status")
@@ -65,7 +75,11 @@ async function queueSearch(
     linkedinAccountId: account.id,
     limit: HOW_MANY,
   });
-  return queued.ok ? { ok: true } : { ok: false, reason: queued.error };
+  // A press while this strategy's search is still running is the same search
+  // (the worker dedupes it), and the sentence the caller shows has to say so.
+  return queued.ok
+    ? { ok: true, alreadyRunning: isAlreadyRunning(queued.data) }
+    : { ok: false, reason: queued.error };
 }
 
 /**
@@ -114,7 +128,9 @@ async function approveProfile(formData: FormData) {
     noticeQuery(
       "/app/strategy",
       started.ok
-        ? "Approved — the agent is searching now and will build you a campaign to review. It takes about a minute."
+        ? started.alreadyRunning
+          ? `Approved. ${ALREADY_RUNNING}`
+          : "Approved — the agent is searching now and will build you a campaign to review. It takes about a minute."
         : `Approved, but the search has not started: ${started.reason}`,
     ),
   );
@@ -232,7 +248,10 @@ async function writeMoreStrategies(formData: FormData) {
   redirect(
     noticeQuery(
       businessProfileId ? `/app/strategy?business=${businessProfileId}` : "/app/strategy",
-      "Writing four more. They arrive on this page in a minute or two, unapproved like the others — nothing is searched for until you read one.",
+      startedNotice(
+        queued.data,
+        "Writing four more. They arrive on this page in a minute or two, unapproved like the others — nothing is searched for until you read one.",
+      ),
     ),
   );
 }
@@ -277,7 +296,10 @@ async function addBusiness(formData: FormData) {
   redirect(
     noticeQuery(
       "/app/strategy",
-      "Reading that site now. The new business and its strategies appear here in a minute or two, unapproved — and they keep their own list, so nothing changes for the business you already run.",
+      startedNotice(
+        queued.data,
+        "Reading that site now. The new business and its strategies appear here in a minute or two, unapproved — and they keep their own list, so nothing changes for the business you already run.",
+      ),
     ),
   );
 }
@@ -306,7 +328,9 @@ async function findProspects(formData: FormData) {
   redirect(
     noticeQuery(
       "/app/strategy",
-      "Searching LinkedIn now. It takes about a minute — the list appears under Prospects, and this page will say if it stops early.",
+      started.alreadyRunning
+        ? ALREADY_RUNNING
+        : "Searching LinkedIn now. It takes about a minute — the list appears under Prospects, and this page will say if it stops early.",
     ),
   );
 }
@@ -330,7 +354,10 @@ export default async function StrategyPage({
     .from("events")
     .select("name, payload, created_at")
     .eq("workspace_id", session.workspaceId)
-    .in("name", ["targeting.stopped", "targeting.queued"])
+    // The completion events too. Without them a search that worked left its
+    // own `targeting.queued` as the newest row, and every success was reported
+    // as a worker that never finished (`describeLastSearch`).
+    .in("name", SEARCH_EVENTS)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -366,6 +393,7 @@ export default async function StrategyPage({
       .maybeSingle(),
   ]);
 
+  const lastSearch = describeLastSearch(lastStop);
   const businesses = businessRows ?? [];
   // `?business=` picks one, and an id that is not this workspace's falls back
   // to the first rather than to an empty page: a stale bookmark should show
@@ -378,23 +406,43 @@ export default async function StrategyPage({
     // about them — one of them being a failed run that will never finish on its
     // own. The agent records where it got to; this reads that.
     const strategy = await readStrategyState(supabase, session.workspaceId, false);
+    // What onboarding kept for Sage to read. A workspace set up before it was
+    // kept has nothing here, and then the only way forward is to say it again —
+    // on this page, because `/onboarding` sends anybody with a workspace away.
+    const { data: ws } = await supabase
+      .from("workspaces")
+      .select("onboarding")
+      .eq("id", session.workspaceId)
+      .maybeSingle();
+    const source = readOnboardingStash(ws?.onboarding).source;
+    const known = hasStrategySource(source);
     return (
       <>
         <PageHeader eyebrow="Pipeline" title="Strategies" />
+        {/* The retry reports back through the URL, and this branch is the
+            only place it can land while there is no profile yet. */}
+        <PageNotice error={params.error} notice={params.notice} />
         <StrategyStatus state={strategy} />
-        {strategy.phase === "absent" ? (
+        {strategy.phase === "absent" && known ? (
           <div className="notice">
             <p>
               <strong>Nothing here yet.</strong> Sage, your strategist, reads what you publish and drafts
               your business profile and three to five customer profiles — it has not been asked to
               yet.
             </p>
-            <p className="small">
-              <Link href="/onboarding" className="btn small">
-                Tell us what you sell
-              </Link>
-            </p>
+            <StrategyRetryButton>Start Sage</StrategyRetryButton>
           </div>
+        ) : null}
+        {/* Asked here when there is nothing to retry from, and offered after a
+            failure too: the reason a run fails is often the site it was given. */}
+        {(strategy.phase === "absent" && !known) || strategy.phase === "failed" ? (
+          <Section
+            id="details"
+            title={strategy.phase === "failed" ? "Or change what Sage reads" : "Tell Sage what you sell"}
+            description="Sage reads what you publish and drafts your business profile and three to five customer profiles. Nothing is searched for until you approve one."
+          >
+            <StrategyDetailsForm source={source} />
+          </Section>
         ) : null}
       </>
     );
@@ -508,22 +556,15 @@ export default async function StrategyPage({
 
       {/* Reported whether or not the run failed loudly: the interesting case is
           the one that succeeded at doing nothing. */}
-      {lastStop ? (
-        <div className="notice warning">
+      {lastSearch ? (
+        <div className={lastSearch.tone === "warning" ? "notice warning" : "notice"} role="status">
           <p>
-            <strong>
-              {lastStop.name === "targeting.queued"
-                ? "The last prospect search has not reported back."
-                : "The last prospect search stopped early."}
-            </strong>{" "}
-            {lastStop.name === "targeting.queued"
-              ? "Scout was asked to search and has not reported back. If this does not change in a minute, the background worker took the job and did not finish it."
-              : String((lastStop.payload as Record<string, unknown>)?.reason ?? "No reason recorded.")}
+            <strong>{lastSearch.title}</strong> {lastSearch.body}
           </p>
-          <p className="tiny subtle">
-            {new Date(lastStop.created_at).toLocaleString()} ·{" "}
-            <span className="mono">{JSON.stringify(lastStop.payload)}</span>
-          </p>
+          {/* When, and nothing else. The payload is the worker's record —
+              build ids and internal fields — and never the customer's to read
+              (rule 54). */}
+          <p className="tiny subtle">{new Date(lastSearch.at).toLocaleString()}</p>
         </div>
       ) : null}
 

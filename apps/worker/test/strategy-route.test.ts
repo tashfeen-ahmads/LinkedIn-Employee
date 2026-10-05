@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { MockLinkedInProvider } from "@le/linkedin";
 import { FakeDb } from "./fake-db.js";
-import { createServer } from "../src/server.js";
+import { createServer, strategyJobKey } from "../src/server.js";
 import type { WorkerContext } from "../src/context.js";
 import type { Queues } from "../src/queues.js";
 
@@ -117,5 +117,72 @@ describe("queueing the Targeting Agent", () => {
 
     expect((await queueTargeting(app)).status).toBe(200);
     expect(added).toHaveLength(1);
+  });
+});
+
+/**
+ * Three presses, one search.
+ *
+ * A customer pressed the build button three times in eight seconds and once
+ * more a minute later. Four searches ran side by side, each read the prospect
+ * list before any wrote to it, and four near-identical campaigns came out of
+ * one approved strategy.
+ */
+describe("a search already running", () => {
+  function queueWithState(state: { current: string | null }) {
+    const db = new FakeDb();
+    db.seed("memberships", [{ id: "m-1", workspace_id: WORKSPACE, user_id: USER, role: "owner" }]);
+    const added: string[] = [];
+    const targeting = {
+      add: async (_n: string, _d: unknown, opts: { jobId: string }) => {
+        added.push(opts.jobId);
+        state.current = "waiting";
+      },
+      getJob: async () =>
+        state.current === null
+          ? null
+          : { getState: async () => state.current, remove: async () => { state.current = null; } },
+    };
+    const ctx = {
+      db: db.asDb(),
+      linkedin: new MockLinkedInProvider(),
+      email: null,
+      env: { APP_URL: "http://app.test", WORKER_URL: "http://worker.test", INTERNAL_API_SECRET: INTERNAL_SECRET } as WorkerContext["env"],
+      agentsFor: () => ({ client: {} as never }),
+    } as unknown as WorkerContext;
+    return { db, added, app: createServer(ctx, { targeting } as unknown as Queues) };
+  }
+
+  it("queues one search however many times the button is pressed", async () => {
+    const state = { current: null as string | null };
+    const { db, added, app } = queueWithState(state);
+    for (let press = 0; press < 3; press++) expect((await queueTargeting(app)).status).toBe(200);
+    expect(added).toHaveLength(1);
+    expect(db.rows("events").filter((e) => e.name === "targeting.queued")).toHaveLength(1);
+  });
+
+  it("starts a fresh search once the last one has finished", async () => {
+    const state = { current: null as string | null };
+    const { added, app } = queueWithState(state);
+    await queueTargeting(app);
+    state.current = "completed";
+    await queueTargeting(app);
+    expect(added).toHaveLength(2);
+  });
+});
+
+describe("which Strategy Agent requests count as the same one", () => {
+  it("never folds a new business into onboarding's still-running first run", () => {
+    const onboarding = strategyJobKey({ workspaceId: WORKSPACE, websiteUrl: "https://acme.com", description: "We sell anvils." });
+    const another = strategyJobKey({ workspaceId: WORKSPACE, websiteUrl: "https://acme-two.com" });
+    expect(another).not.toBe(onboarding);
+    expect(strategyJobKey({ workspaceId: WORKSPACE, websiteUrl: "https://acme.com ", description: "we sell anvils." })).toBe(onboarding);
+    expect(onboarding).not.toContain(":");
+  });
+
+  it("keeps expanding one business apart from expanding another", () => {
+    const a = strategyJobKey({ workspaceId: WORKSPACE, expand: true, businessProfileId: "b1" });
+    expect(strategyJobKey({ workspaceId: WORKSPACE, expand: true, businessProfileId: "b2" })).not.toBe(a);
+    expect(strategyJobKey({ workspaceId: WORKSPACE, expand: true, businessProfileId: "b1" })).toBe(a);
   });
 });

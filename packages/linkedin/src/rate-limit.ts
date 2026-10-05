@@ -99,6 +99,75 @@ export function nextGapMs(random: () => number = Math.random): number {
 }
 
 /**
+ * The calendar date it is for the rep, as YYYY-MM-DD.
+ *
+ * The daily counters used to roll over at UTC midnight while every cap, every
+ * retry and the day's spread were measured from the rep's own midnight. For a
+ * rep in California UTC midnight is five in the afternoon, so the counters went
+ * back to zero an hour before the end of the working day and the whole of the
+ * next day's allowance was available — and spent, at the two-minute floor —
+ * between five and six. One day, one definition: the account's local date is
+ * the day the counters count.
+ */
+export function localDate(now: Date, timezone: string): string {
+  // en-CA formats a date as YYYY-MM-DD, which is the shape `counters_reset_on`
+  // already stores and the shape that compares correctly as a string.
+  try {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(now);
+  } catch {
+    // A zone Intl does not know is not a reason to stop counting. UTC is what
+    // every other reader falls back to for the same row.
+    return now.toISOString().slice(0, 10);
+  }
+}
+
+/**
+ * When the rep's day began, as an instant.
+ *
+ * Measured back from the next local midnight rather than computed from the
+ * wall clock, so it agrees with `msUntilNextLocalMidnight` — which is what the
+ * limiter's "until tomorrow" is measured by. On the two days a year the clocks
+ * move this is out by an hour, in the direction of counting an hour of the
+ * previous night as today: an hour nobody works in, and the conservative way
+ * to be wrong about a cap.
+ */
+export function localDayStart(now: Date, timezone: string): Date {
+  return new Date(now.getTime() + msUntilNextLocalMidnight(now, timezone) - 86_400_000);
+}
+
+/**
+ * How long a refused action actually waits before it is tried again.
+ *
+ * The limiter's `retryAfterMs` is the earliest moment the answer could change,
+ * and that is the same moment for every job it refused. Rescheduled to exactly
+ * that, a backlog drains at a fixed cadence: ten jobs held by a throttle all
+ * wake at the instant it lifts, the first one sends, the other nine are told
+ * "too soon" with the same remaining gap, and they go out precisely two minutes
+ * apart — a metronome, which is the one rhythm no person produces. The same
+ * happens at the start of the working day to everything parked overnight.
+ *
+ * So the wait is the earliest moment plus the ordinary jitter between two
+ * actions. A `too_soon` refusal has already served part of the floor, so it
+ * gets only the random part of the gap on top; every other refusal gets a
+ * whole gap, so nothing held wakes at the same instant as anything else.
+ */
+export function jitteredRetryMs(
+  retryAfterMs: number,
+  reason: DenyReason | string,
+  random: () => number = Math.random,
+): number {
+  const base = Number.isFinite(retryAfterMs) && retryAfterMs > 0 ? retryAfterMs : 0;
+  const gap = nextGapMs(random);
+  const extra = reason === "too_soon" ? gap - LINKEDIN_LIMITS.minGapMs : gap;
+  return Math.round(base + Math.max(0, extra));
+}
+
+/**
  * How wide the jitter around a spread gap is, as a fraction of the target.
  *
  * Not a cap and not in `constants.ts` for that reason (rule 4): it is the

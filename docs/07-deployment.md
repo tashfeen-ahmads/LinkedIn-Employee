@@ -166,11 +166,16 @@ Verify the sending domain — this takes longest because DNS propagates on its
 own schedule, so start it before you need it. Set `EMAIL_FROM` to a real
 address at that domain. Until it verifies, leave `EMAIL_PROVIDER=off`: the
 product works, invitations simply show a link to copy instead of arriving by
-email.
+email. Once it verifies, set `EMAIL_PROVIDER=resend` and `RESEND_API_KEY` on
+the worker — `off` is honoured even when a key is present, so both are needed.
+
+The worker also refuses to boot without `UNIPILE_DSN` and
+`UNIPILE_ACCESS_TOKEN` (unless `LINKEDIN_PROVIDER=mock`); where to find them is
+in `docs/09-credentials.md`.
 
 ## 8. Web app
 
-Deploy to Netlify from `apps/web/netlify.toml`. It needs the Supabase URL and
+Deploy to Netlify from `netlify.toml` at the repository root (its `base` points at `apps/web`). It needs the Supabase URL and
 anon key, `APP_URL`, `WORKER_URL`, and the same `INTERNAL_API_SECRET` the
 worker has. In Supabase → Authentication → URL Configuration, add
 `$APP_URL/auth/callback` as a redirect URL or magic links will not return.

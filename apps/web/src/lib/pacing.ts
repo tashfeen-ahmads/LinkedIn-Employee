@@ -45,6 +45,12 @@ export function describePacing(input: {
    * than the campaign is allowed and turn a correct wait into a broken screen.
    */
   dailyCap?: number;
+  /**
+   * Invitations this campaign has already sent today, in the rep's own day.
+   * The loop takes them off the campaign's cap before it divides the day, so
+   * the screen has to as well or it quotes a faster pace than the loop keeps.
+   */
+  sentToday?: number;
   now?: Date;
 }): PacingState | null {
   const now = input.now ?? new Date();
@@ -141,7 +147,16 @@ export function describePacing(input: {
     }
   }
 
-  const left = Math.max(0, dailyInviteCap(usage.firstActionAt, now) - usage.invitesToday);
+  // The campaign's own cap is a real cap now, so "up to N more today" is the
+  // lower of the two — the account's allowance is shared with every other
+  // campaign on it, and this one may not take all of it.
+  const left = Math.max(
+    0,
+    Math.min(
+      dailyInviteCap(usage.firstActionAt, now) - usage.invitesToday,
+      input.dailyCap === undefined ? Number.POSITIVE_INFINITY : input.dailyCap - (input.sentToday ?? 0),
+    ),
+  );
   const pace = paceMs(input, usage, now);
   return {
     tone: "accent",
@@ -217,20 +232,26 @@ function notSending(
  * The pace the loop will keep today, from the same function it paces by.
  *
  * Bounded by whichever of the three budgets is smallest, because that is what
- * the loop divides the day among — and by how many people are actually queued,
- * since a pace computed for ten invitations is a lie on a campaign with two
- * people left on it.
+ * the loop divides the day among (`spreadGapMs({ remaining: budget, ... })` in
+ * the pacing loop).
+ *
+ * Not by how many people are queued. It was, on the reasoning that a pace for
+ * ten is a lie on a campaign with two left — but the loop divides by the
+ * allowance precisely so that the rate is the same whether a tick finds ten
+ * people or one (rule 48), and two people are placed a tenth of the day apart.
+ * Bounded by the list, this screen promised the second of them within the
+ * hour while the loop had placed it that afternoon: the same function, read
+ * two ways, which is the drift `invitePaceMs` exists to prevent.
  */
 function paceMs(
-  input: { queued: number; dailyCap?: number },
+  input: { dailyCap?: number; sentToday?: number },
   usage: ReturnType<typeof toUsage>,
   now: Date,
 ): number | null {
   const remaining = Math.min(
     Math.max(0, dailyInviteCap(usage.firstActionAt, now) - usage.invitesToday),
     Math.max(0, LINKEDIN_LIMITS.invitesPerWeek - usage.invitesThisWeek),
-    input.dailyCap ?? Number.POSITIVE_INFINITY,
-    input.queued,
+    input.dailyCap === undefined ? Number.POSITIVE_INFINITY : Math.max(0, input.dailyCap - (input.sentToday ?? 0)),
   );
   if (remaining <= 0) return null;
   return invitePaceMs({

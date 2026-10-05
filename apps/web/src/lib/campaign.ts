@@ -1,4 +1,4 @@
-import { LINKEDIN_LIMITS } from "@le/shared";
+import { INVITE_NOTE_MAX_CHARS, LINKEDIN_LIMITS } from "@le/shared";
 
 /**
  * What has to be true before a campaign may start sending.
@@ -16,8 +16,6 @@ export interface LaunchState {
   accountStatus: string | null;
 }
 
-/** LinkedIn's own limit on a connection request note. */
-export const CONNECTION_NOTE_MAX = 300;
 
 export function launchBlockers(state: LaunchState): string[] {
   const blockers: string[] = [];
@@ -29,11 +27,13 @@ export function launchBlockers(state: LaunchState): string[] {
   const note = state.connectionNote.trim();
   if (!note) {
     blockers.push("The connection note is empty.");
-  } else if (note.length > CONNECTION_NOTE_MAX) {
-    // LinkedIn silently truncates past this; a half-sentence invitation is
-    // worse than none.
+  } else if (note.length > INVITE_NOTE_MAX_CHARS) {
+    // The send path's own cap, imported rather than retyped. This read 300
+    // while the send path drops anything over 200, so the review screen
+    // passed notes that LinkedIn then refused outright — the whole invitation,
+    // not the tail of it — or that went out as no note at all.
     blockers.push(
-      `The connection note is ${note.length} characters. LinkedIn allows ${CONNECTION_NOTE_MAX}.`,
+      `The connection note is ${note.length} characters. LinkedIn allows ${INVITE_NOTE_MAX_CHARS}.`,
     );
   }
 

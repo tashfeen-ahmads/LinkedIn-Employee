@@ -7,6 +7,7 @@ import { AuthAside } from "@/components/auth-aside";
 import { PasswordField } from "@/components/password-field";
 import { SubmitButton } from "@/components/submit-button";
 import { PostButton } from "@/components/post-button";
+import { SITE } from "@/lib/site";
 
 /**
  * Magic-link sign in. No passwords to store, and the same form serves signup
@@ -18,7 +19,9 @@ async function sendMagicLink(formData: FormData) {
   const invite = String(formData.get("invite") ?? "").trim();
   if (!email) redirect("/login?error=Enter+your+work+email");
 
-  const base = process.env.APP_URL ?? "http://localhost:3000";
+  // `SITE.app`, normalised: a trailing slash on APP_URL produced
+  // `https://app…//auth/callback`, which the provider refuses as a redirect.
+  const base = SITE.app;
   // An invited user should land back on their invitation, not on onboarding.
   const callback = invite
     ? `${base}/auth/callback?invite=${encodeURIComponent(invite)}`
@@ -33,7 +36,7 @@ async function sendMagicLink(formData: FormData) {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ sent?: string; error?: string; invite?: string }>;
+  searchParams: Promise<{ sent?: string; error?: string; notice?: string; invite?: string }>;
 }) {
   const params = await searchParams;
 
@@ -79,6 +82,9 @@ export default async function LoginPage({
         {params.sent ? (
           <div className="notice">Check your inbox. The link is valid for one hour.</div>
         ) : null}
+        {/* Good news in its own colour: a confirmed address arriving here is
+            a success, and the red banner told people their signup had failed. */}
+        {params.notice ? <div className="notice accent" role="status">{params.notice}</div> : null}
         {params.error ? <div className="notice danger">{params.error}</div> : null}
 
         <form action="/auth/sign-in" method="post" className="card">

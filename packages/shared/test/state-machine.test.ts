@@ -25,3 +25,12 @@ describe("campaign state machine", () => {
     expect(canTransition("positive", "opted_out")).toBe(true);
   });
 });
+
+describe("retrying a failed row", () => {
+  it("puts it back where it failed from, never re-inviting somebody already invited", () => {
+    for (const to of ["queued", "invited", "accepted", "messaged_1", "messaged_2", "messaged_3"] as const) {
+      expect(canTransition("failed", to), to).toBe(true);
+    }
+    expect(canTransition("failed", "replied")).toBe(false);
+  });
+});

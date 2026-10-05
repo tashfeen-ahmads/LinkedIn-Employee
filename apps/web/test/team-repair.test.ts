@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { cannotSend, describeRepair } from "../src/app/app/team/repair";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { cannotSend, describeRefreshRefusal, describeRepair } from "../src/app/app/team/repair";
 
 /**
  * What asking the provider told us, said on the screen.
@@ -88,5 +90,34 @@ describe("cannotSend", () => {
     // No row is a different screen entirely, not a broken account.
     expect(cannotSend(null)).toBe(false);
     expect(cannotSend(undefined)).toBe(false);
+  });
+});
+
+/**
+ * "Check again" printed the payload it was being debugged with.
+ *
+ * "Expected uuid, found …. Fields the provider sent: {…}" on the customer's
+ * own profile — how many accounts we hold and how they are labelled is ours
+ * to know (rule 54), and the rep's next step is the same whatever they say.
+ */
+describe("describeRefreshRefusal", () => {
+  const TECHNICAL = /uuid|expected|fields|provider|referenceShape|[{}]|unipile/i;
+
+  it("says what to do, in words, whatever came back", () => {
+    for (const data of [
+      null,
+      { found: 0 },
+      { found: 3, mine: 0, expected: "uuid", referenceShape: ["name"], fields: [{ id: "string" }] },
+    ]) {
+      const said = describeRefreshRefusal(data);
+      expect(said).toMatch(/Connect LinkedIn/);
+      expect(said).not.toMatch(TECHNICAL);
+    }
+  });
+
+  it("is what the profile's Check again uses", () => {
+    const profile = readFileSync(join(__dirname, "..", "src", "app", "app", "profile", "page.tsx"), "utf8");
+    expect(profile).toMatch(/redirect\(errorQuery\("\/app\/profile", describeRefreshRefusal\(result\.data\)\)\)/);
+    expect(profile).not.toMatch(/Fields the provider sent|JSON\.stringify\(result\.data/);
   });
 });

@@ -81,21 +81,20 @@ export async function readBookingPage(ctx: WorkerContext, token: string): Promis
     ctx.db.from("prospects").select("first_name").eq("id", link.row.prospect_id).maybeSingle(),
   ]);
 
-  if (link.row.meeting_id) {
-    const { data: meeting } = await ctx.db
-      .from("meetings")
-      .select("starts_at")
-      .eq("id", link.row.meeting_id)
-      .maybeSingle();
-    if (meeting) {
-      return {
-        ...empty,
-        repName: rep?.full_name ?? null,
-        prospectFirstName: prospect?.first_name ?? null,
-        alreadyBookedFor: formatSlot(meeting.starts_at, rep?.timezone || "UTC"),
-      };
-    }
+  // Somebody re-opening a link they already booked wants to know when their
+  // meeting is, not to be told the page is broken. A spent link whose meeting
+  // has gone shows nothing to book either: it was spent, and `bookFromLink`
+  // would refuse it, so offering times would be offering a button that fails.
+  const booked = await bookedMeetingFor(ctx, link.row);
+  if (booked) {
+    return {
+      ...empty,
+      repName: rep?.full_name ?? null,
+      prospectFirstName: prospect?.first_name ?? null,
+      alreadyBookedFor: formatSlot(booked.starts_at, rep?.timezone || "UTC"),
+    };
   }
+  if (link.row.meeting_id || link.row.used_at) return { ...empty, unavailable: LINK_REFUSED };
 
   const binding = await resolveCalendar(ctx.db, ctx.env, {
     workspaceId: link.row.workspace_id,
@@ -134,6 +133,15 @@ export async function bookFromLink(
   const link = await loadLink(ctx, input.token);
   if ("problem" in link) return { ok: false, error: link.problem };
 
+  /*
+   * One link, one meeting. The link was never marked as spent in any way this
+   * read, so a form submitted twice — a double click, a back button, a second
+   * tab — booked twice, and the prospect then held two meetings with the same
+   * rep. Refused in the same words as a link that never existed (rule 18).
+   */
+  if (link.row.meeting_id || link.row.used_at) return { ok: false, error: LINK_REFUSED };
+  if (await bookedMeetingFor(ctx, link.row)) return { ok: false, error: LINK_REFUSED };
+
   const { data: rep } = await ctx.db
     .from("profiles")
     .select("full_name, email, timezone")
@@ -154,6 +162,21 @@ export async function bookFromLink(
   if (!offer.iso.includes(input.startsAt)) {
     return { ok: false, error: "That time has just been taken. Please pick another." };
   }
+
+  /*
+   * Claimed before the meeting is written, in one conditional statement. The
+   * checks above are a read, and two submissions arriving together both pass
+   * a read; only one of them can turn `used_at` from null to a time. The loser
+   * is refused exactly as a spent link is.
+   */
+  const { data: claimed } = await ctx.db
+    .from("booking_links")
+    .update({ used_at: new Date().toISOString() })
+    .eq("id", link.row.id)
+    .is("used_at", null)
+    .is("meeting_id", null)
+    .select("id");
+  if (!claimed?.length) return { ok: false, error: LINK_REFUSED };
 
   const endsAt = new Date(Date.parse(input.startsAt) + binding.rules.meetingMinutes * 60_000).toISOString();
   const { data: prospect } = await ctx.db
@@ -186,13 +209,12 @@ export async function bookFromLink(
     // of them wrote first; the loser is told to pick again rather than being
     // quietly put in the same half hour.
     console.error("booking insert failed", error);
+    // Nothing was booked, so the link is not spent: they can pick again.
+    await ctx.db.from("booking_links").update({ used_at: null }).eq("id", link.row.id).is("meeting_id", null);
     return { ok: false, error: "That time has just been taken. Please pick another." };
   }
 
-  await ctx.db
-    .from("booking_links")
-    .update({ meeting_id: meeting.id, used_at: new Date().toISOString() })
-    .eq("id", link.row.id);
+  await ctx.db.from("booking_links").update({ meeting_id: meeting.id }).eq("id", link.row.id);
 
   await ctx.db
     .from("campaign_prospects")
@@ -286,30 +308,79 @@ async function sendInvites(
   }
 }
 
-type LoadedLink =
-  | { row: { id: string; workspace_id: string; rep_user_id: string; prospect_id: string; conversation_id: string | null; meeting_id: string | null } }
-  | { problem: string };
+type LinkRow = {
+  id: string;
+  workspace_id: string;
+  rep_user_id: string;
+  prospect_id: string;
+  conversation_id: string | null;
+  meeting_id: string | null;
+  used_at: string | null;
+};
+
+type LoadedLink = { row: LinkRow } | { problem: string };
 
 /**
- * A token, checked. Every refusal says the same kind of thing to whoever is
- * holding the link and nothing at all about whether the token was real, so this
- * cannot be used to find out which tokens exist.
+ * The one sentence every refusal of a link says.
+ *
+ * Rule 18: a booking link's token is its entire authorisation, so the page must
+ * say the same thing whether the token is invented, withdrawn, expired or
+ * already used. "This link has been withdrawn" for a real token and "not valid"
+ * for a made-up one is a way to find out which tokens exist. What to do next is
+ * the same in every case, so it can be said without saying which one it was.
+ */
+export const LINK_REFUSED = "This booking link cannot be used. Reply to the message and we will send another.";
+
+/**
+ * A token, checked. Every refusal is the same sentence, so this cannot be used
+ * to find out which tokens exist.
  */
 async function loadLink(ctx: WorkerContext, token: string): Promise<LoadedLink> {
-  if (!token || token.length < 20) return { problem: "This booking link is not valid." };
+  if (!token || token.length < 20) return { problem: LINK_REFUSED };
 
   const { data } = await ctx.db
     .from("booking_links")
-    .select("id, workspace_id, rep_user_id, prospect_id, conversation_id, meeting_id, expires_at, revoked_at")
+    .select("id, workspace_id, rep_user_id, prospect_id, conversation_id, meeting_id, used_at, expires_at, revoked_at")
     .eq("token", token)
     .maybeSingle();
 
-  if (!data) return { problem: "This booking link is not valid." };
-  if (data.revoked_at) return { problem: "This booking link has been withdrawn." };
-  if (Date.parse(data.expires_at) < Date.now()) {
-    return { problem: "This booking link has expired. Reply to the message and we will send another." };
+  if (!data) return { problem: LINK_REFUSED };
+  if (data.revoked_at) return { problem: LINK_REFUSED };
+  if (!(Date.parse(data.expires_at) >= Date.now())) return { problem: LINK_REFUSED };
+  return { row: { ...data, used_at: (data as { used_at?: string | null }).used_at ?? null } };
+}
+
+/**
+ * The scheduled meeting this link's prospect already has with this rep, if any:
+ * the one the link booked, or any other still to come. A prospect who booked
+ * through the reply path and then opens a link from a follow-up is the same
+ * person asking for the same meeting twice.
+ */
+async function bookedMeetingFor(
+  ctx: WorkerContext,
+  link: LinkRow,
+): Promise<{ starts_at: string } | null> {
+  if (link.meeting_id) {
+    const { data: own } = await ctx.db
+      .from("meetings")
+      .select("starts_at, status, cancelled_at")
+      .eq("id", link.meeting_id)
+      .maybeSingle();
+    if (own && own.status !== "cancelled" && !own.cancelled_at) return { starts_at: own.starts_at };
   }
-  return { row: data };
+  const { data: upcoming } = await ctx.db
+    .from("meetings")
+    .select("starts_at")
+    .eq("workspace_id", link.workspace_id)
+    .eq("prospect_id", link.prospect_id)
+    .eq("rep_user_id", link.rep_user_id)
+    .eq("status", "scheduled")
+    .is("cancelled_at", null)
+    .gte("starts_at", new Date().toISOString())
+    .order("starts_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  return upcoming ? { starts_at: upcoming.starts_at } : null;
 }
 
 function escapeHtml(value: string): string {

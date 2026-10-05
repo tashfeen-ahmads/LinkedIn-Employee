@@ -113,6 +113,18 @@ describe("accepting work", () => {
     expect(added).toHaveLength(0);
   }, 10_000);
 
+  it("never refuses a route that does not queue anything", async () => {
+    // The system check exists partly to say "the queue is down"; refusing it
+    // because the queue is down meant that row could never be shown.
+    const { app } = makeApp(hanging);
+    const res = await app.request("/jobs/diagnostics", {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${SECRET}` },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).not.toBe(503);
+  }, 10_000);
+
   it("still takes work when the queue is there", async () => {
     const { app, added } = makeApp(alive);
 

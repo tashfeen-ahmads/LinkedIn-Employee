@@ -1,5 +1,5 @@
-import Link from "next/link";
 import { minutesSince, type StrategyState } from "@/lib/strategy-state";
+import { StrategyRetryButton } from "@/components/strategy-retry";
 
 /**
  * What the Strategy Agent is doing, said on the screen someone is watching.
@@ -20,11 +20,9 @@ export function StrategyStatus({ state }: { state: StrategyState }) {
           does — your customer profiles are what everything downstream is built from.
         </p>
         <p className="small">{state.reason}</p>
-        <p className="small">
-          <Link href="/onboarding" className="btn small">
-            Try again
-          </Link>
-        </p>
+        {/* A retry, not a link to onboarding: onboarding sends anybody who
+            already has a workspace back here, so that link went nowhere. */}
+        <StrategyRetryButton />
       </div>
     );
   }
@@ -42,10 +40,13 @@ export function StrategyStatus({ state }: { state: StrategyState }) {
         a profile and approved it.
       </p>
       {minutes >= 15 ? (
-        <p className="small">
-          That is longer than usual. If it is still going in another few minutes, run it again from{" "}
-          <Link href="/onboarding">onboarding</Link>.
-        </p>
+        <>
+          <p className="small">
+            That is longer than usual. If it is still going in another few minutes, run it again —
+            pressing this while Sage is still working does not start a second run.
+          </p>
+          <StrategyRetryButton className="btn secondary small">Run it again</StrategyRetryButton>
+        </>
       ) : null}
     </div>
   );

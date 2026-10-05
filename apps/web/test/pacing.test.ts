@@ -79,11 +79,16 @@ describe("describePacing", () => {
     expect(quoted).toBeGreaterThan(20);
   });
 
-  it("paces a nearly-finished campaign by what is left on it", () => {
-    // Two people left is not a tenth of the day each. A pace computed from the
-    // allowance rather than the list would quote a wait nobody will sit
-    // through, which is the same lie in the other direction.
-    const wide = describePacing({
+  it("quotes the pace the loop keeps however few people are left", () => {
+    /*
+     * Rule 48: the loop divides the day by the allowance, never by however
+     * many people happen to be eligible, so two people left are placed a tenth
+     * of the day apart — exactly as ten would be. This screen used to divide
+     * by the list instead and promised the second of them within the hour
+     * while the loop had placed it that afternoon. One definition, two
+     * readers, and the screen's reading is the one somebody believes.
+     */
+    const few = describePacing({
       ...live,
       now: new Date("2026-09-17T10:00:00Z"),
       queued: 2,
@@ -91,7 +96,7 @@ describe("describePacing", () => {
       lastBeatAt: "2026-09-17T09:58:00Z",
       account: account({ first_action_at: "2026-07-01T09:00:00Z" }),
     });
-    const narrow = describePacing({
+    const many = describePacing({
       ...live,
       now: new Date("2026-09-17T10:00:00Z"),
       queued: 10,
@@ -101,7 +106,33 @@ describe("describePacing", () => {
     });
     const read = (body: string | undefined) =>
       Number(/about (\d+) minutes apart/.exec(body ?? "")?.[1]);
-    expect(read(wide?.body)).toBeGreaterThan(read(narrow?.body));
+    expect(read(few?.body)).toBe(read(many?.body));
+    // Eight working hours over ten invitations, divided as the loop divides.
+    expect(read(few?.body)).toBe(Math.round((8 * 60) / (10 * 1.4)));
+  });
+
+  it("takes what the campaign already sent today off its cap, as the loop does", () => {
+    const fresh = describePacing({
+      ...live,
+      now: new Date("2026-09-17T10:00:00Z"),
+      queued: 10,
+      dailyCap: 10,
+      lastBeatAt: "2026-09-17T09:58:00Z",
+      account: account({ first_action_at: "2026-07-01T09:00:00Z" }),
+    });
+    const half = describePacing({
+      ...live,
+      now: new Date("2026-09-17T10:00:00Z"),
+      queued: 10,
+      dailyCap: 10,
+      sentToday: 5,
+      lastBeatAt: "2026-09-17T09:58:00Z",
+      account: account({ first_action_at: "2026-07-01T09:00:00Z" }),
+    });
+    const read = (body: string | undefined) =>
+      Number(/about (\d+) minutes apart/.exec(body ?? "")?.[1]);
+    expect(read(half?.body)).toBeGreaterThan(read(fresh?.body));
+    expect(half?.body).toContain("up to 5 more today");
   });
 
   it("falls back to the old sentence once the sending hours are over", () => {

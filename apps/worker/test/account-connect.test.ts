@@ -1065,6 +1065,20 @@ describe("reconnecting an account that already works", () => {
     expect(db.find("linkedin_accounts", { id: ACCOUNT })!.status).toBe("connecting");
   });
 
+  it("keeps the Sales Navigator tick and hours the rep set since signup", async () => {
+    // A reconnect is a repair. It used to write the signup answers back over
+    // whatever the rep had changed on their profile — a different search tier
+    // chosen by nobody (rule 12).
+    const { db, app } = harness({ provider_account_id: "acct_live", status: "active", has_sales_navigator: true, working_hours: { start: 7, end: 15, days: [1, 2, 3] } });
+    db.seed("workspaces", [{ id: WORKSPACE, onboarding: { hasSalesNavigator: false, workingHours: { start: 9, end: 17, days: [1, 2, 3, 4, 5] } } }]);
+
+    await press(app);
+
+    const row = db.find("linkedin_accounts", { id: ACCOUNT })!;
+    expect(row.has_sales_navigator).toBe(true);
+    expect(row.working_hours).toEqual({ start: 7, end: 15, days: [1, 2, 3] });
+  });
+
   it("calls a sign-in that came back with the same account a success", async () => {
     const { db, linkedin, app } = harness({ provider_account_id: "acct_live", status: "active" });
     linkedin.connectedAccounts = [{ providerAccountId: "acct_live", reference: USER, status: "ok" }];

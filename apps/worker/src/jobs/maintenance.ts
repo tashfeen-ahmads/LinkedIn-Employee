@@ -10,9 +10,10 @@ import { syncCalendarFeeds } from "./calendar-feed.js";
 import { runLifecycleEmails } from "./lifecycle.js";
 import { runRetentionSweep } from "./retention.js";
 import { fillMissingNotes } from "./rewrite-notes.js";
-import { jobId } from "../queues.js";
+import { enqueueOnce, jobId } from "../queues.js";
 import type { Queues } from "../queues.js";
 import { recordBeat } from "../heartbeat.js";
+import { campaignSteps, ownSequence } from "../sequence.js";
 
 /**
  * Nightly housekeeping:
@@ -188,30 +189,41 @@ async function withdrawStaleInvites(ctx: WorkerContext, now: Date): Promise<void
 async function closeExhaustedSequences(ctx: WorkerContext, now: Date): Promise<void> {
   const { data: rows } = await ctx.db
     .from("campaign_prospects")
-    .select("id, campaign_id, last_step_sent")
+    .select("id, campaign_id, variant_id, status, last_step_sent")
     .in("status", ["messaged_1", "messaged_2", "messaged_3"])
     .is("next_action_at", null)
     .limit(500);
 
-  // One count per distinct campaign, not one per prospect: 500 exhausted
+  // One read per distinct campaign, not one per prospect: 500 exhausted
   // prospects usually belong to a handful of campaigns.
-  const stepCounts = new Map<string, number>();
+  const stepsByCampaign = new Map<string, Awaited<ReturnType<typeof campaignSteps>>>();
   for (const campaignId of new Set((rows ?? []).map((row) => row.campaign_id))) {
-    const { count } = await ctx.db
-      .from("campaign_steps")
-      .select("id", { count: "exact", head: true })
-      .eq("campaign_id", campaignId);
-    stepCounts.set(campaignId, count ?? 0);
+    stepsByCampaign.set(campaignId, await campaignSteps(ctx.db, campaignId));
   }
 
   for (const row of rows ?? []) {
-    const count = stepCounts.get(row.campaign_id) ?? 0;
-    if (count <= row.last_step_sent) {
-      await ctx.db
-        .from("campaign_prospects")
-        .update({ status: "closed", status_reason: "sequence completed", closed_at: now.toISOString() })
-        .eq("id", row.id);
-    }
+    /*
+     * Over when *this person's* sequence has no next step, resolved exactly as
+     * the send path resolves it (rule 28).
+     *
+     * It counted every step on the campaign, angles and all. A campaign with
+     * two angles of three steps each has six rows in `campaign_steps`, nobody
+     * on it ever sends six messages, and so nobody on an angled campaign was
+     * ever closed — they sat in `messaged_3` for ever, counted by the funnel
+     * as a conversation still in progress.
+     */
+    const own = ownSequence(stepsByCampaign.get(row.campaign_id) ?? [], row.variant_id ?? null);
+    const next = (row.last_step_sent ?? 0) + 1;
+    if (own.some((step) => step.step_number === next)) continue;
+
+    await ctx.db
+      .from("campaign_prospects")
+      .update({ status: "closed", status_reason: "sequence completed", closed_at: now.toISOString() })
+      .eq("id", row.id)
+      // Only if nothing moved it since the read. A reply that landed in
+      // between is a conversation, and closing it would end one in progress.
+      .eq("status", row.status)
+      .is("next_action_at", null);
   }
 }
 
@@ -235,8 +247,12 @@ async function sweepApprovedDrafts(ctx: WorkerContext, queues: Queues, now: Date
 
   for (const draft of stranded ?? []) {
     // The job id is the same one the web app would have used, so a queued job
-    // is not duplicated by this sweep.
-    await queues.linkedinAction.add(
+    // is not duplicated by this sweep. `enqueueOnce` rather than `add`, because
+    // a stranded draft is usually stranded *by* a finished job under that id —
+    // one that ran before the draft was approved, or found the account paused
+    // — and `add` would hand that job back and sweep nothing (rule 44).
+    await enqueueOnce(
+      queues.linkedinAction,
       "reply",
       {
         kind: "reply",

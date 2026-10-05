@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase-server";
 import { isAppConfigured } from "@/lib/config";
 import { checkInvite, inviteRejectionMessage } from "@/lib/invitations";
+import { callWorker } from "@/lib/worker";
 import { SiteFooter, SiteHeader } from "@/components/marketing";
 
 /**
@@ -47,6 +48,16 @@ async function acceptInvite(formData: FormData) {
   redirect("/app");
 }
 
+interface InvitePreview {
+  found: boolean;
+  workspaceName: string | null;
+  email: string;
+  role: string;
+  expires_at: string;
+  accepted_at: string | null;
+  revoked_at: string | null;
+}
+
 export default async function InvitePage({
   params,
   searchParams,
@@ -64,13 +75,14 @@ export default async function InvitePage({
     data: { user },
   } = await supabase.auth.getUser();
 
-  const { data: invite } = await supabase
-    .from("invitations")
-    .select("workspace_id, email, role, expires_at, accepted_at, revoked_at, workspaces(name)")
-    .eq("token", token)
-    .maybeSingle();
+  // Asked of the worker, with the token as the authorisation. Read as the
+  // visitor, row-level security hides the invitation from anybody signed out —
+  // which is everybody the email was sent to — and the page told them the link
+  // was not valid.
+  const preview = await callWorker<InvitePreview>("/invites/preview", { token });
+  const invite = preview.ok && preview.data?.found ? preview.data : null;
 
-  const workspaceName = (invite?.workspaces as unknown as { name: string } | null)?.name ?? "a workspace";
+  const workspaceName = invite?.workspaceName ?? "a workspace";
   const verdict = invite && user ? checkInvite(invite, user.email ?? "") : null;
 
   return (

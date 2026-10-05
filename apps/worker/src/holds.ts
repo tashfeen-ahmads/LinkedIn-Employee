@@ -19,16 +19,51 @@ import type { Db } from "@le/db";
  */
 export type HoldKind = "reply" | "booking" | "copy";
 
+/**
+ * Which hold wins when two land on one conversation. A conversation carries one
+ * kind at a time, so a second flag either replaces the first or leaves it.
+ *
+ * `booking` is first: somebody accepted a time and it is in nobody's diary, so
+ * a real person may turn up to a call nobody else knows about. The inbound job
+ * books first and drafts second, in the same run, so a reply hold arrives
+ * moments after a booking hold as a matter of course — and it used to overwrite
+ * it, which erased the only record that the meeting needed booking by hand.
+ *
+ * `reply` beats `copy`. A copy hold is a follow-up waiting for a pitch to be
+ * approved, and a prospect who has replied has stopped the sequence that
+ * follow-up belonged to: what is waiting now is their message, not our copy.
+ * The other way round, a follow-up being held must not hide a reply somebody
+ * still has to answer.
+ */
+const HOLD_RANK: Record<HoldKind, number> = { booking: 3, reply: 2, copy: 1 };
+
+/** The kinds a new hold of this kind may replace: itself and anything below it. */
+function replaceable(kind: HoldKind): HoldKind[] {
+  return (Object.keys(HOLD_RANK) as HoldKind[]).filter((k) => HOLD_RANK[k] <= HOLD_RANK[kind]);
+}
+
+/**
+ * Flags a conversation for a person, never downgrading a more important hold.
+ *
+ * Three conditional statements rather than a read and a write: reading the kind
+ * and writing back over it is a race between two jobs on one conversation, and
+ * the one that loses is the booking. Each statement only touches a row it is
+ * allowed to replace, so whichever order they land in, a booking hold stands.
+ */
 export async function flagForHuman(
   db: Db,
   conversationId: string,
   reason: string,
   kind: HoldKind = "reply",
 ): Promise<void> {
-  await db
-    .from("conversations")
-    .update({ needs_human: true, needs_human_reason: reason, needs_human_kind: kind })
-    .eq("id", conversationId);
+  const patch = { needs_human: true, needs_human_reason: reason, needs_human_kind: kind };
+  // Not held at all. A row cleared by hand may still carry a stale kind, and
+  // that kind is not a hold.
+  await db.from("conversations").update(patch).eq("id", conversationId).eq("needs_human", false);
+  // Held with no kind recorded: rows from before kinds existed.
+  await db.from("conversations").update(patch).eq("id", conversationId).is("needs_human_kind", null);
+  // Held for something this hold outranks or equals.
+  await db.from("conversations").update(patch).eq("id", conversationId).in("needs_human_kind", replaceable(kind));
 }
 
 /**

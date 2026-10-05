@@ -170,9 +170,12 @@ describe("warming a prospect", () => {
     expect(due).toBeLessThanOrEqual(Date.now() + LINKEDIN_LIMITS.warmUpToInviteMaxMs + 1000);
   });
 
-  it("never looks at somebody twice", async () => {
+  it("never looks at somebody twice while the first look still counts", async () => {
     // A second view spends another allowance on familiarity already bought.
-    const { db, ctx, linkedin } = harness({ cp: { warmed_at: "2026-09-25T09:00:00Z" } });
+    // Relative to the real clock, because the job reads it: a fixed date here
+    // becomes a stale view a few hours later, and a stale view is looked at
+    // again on purpose (sending-loop.test.ts).
+    const { db, ctx, linkedin } = harness({ cp: { warmed_at: new Date(Date.now() - 60 * 60_000).toISOString() } });
 
     await runLinkedInAction(ctx, job);
 
@@ -193,8 +196,12 @@ describe("warming a prospect", () => {
 
     const after = db.find("campaign_prospects", { id: CP })!;
     expect(after.status).toBe("queued");
-    expect(after.warmed_at ?? null).toBeNull();
     expect(db.find("linkedin_accounts", { id: ACCOUNT })?.profile_views_today).toBe(0);
+    // ...and is made invitable now, cold. Left unwarmed, a warm-up campaign
+    // never invited them and retried the view every five minutes for ever.
+    expect(after.warmed_at).toBeTruthy();
+    expect(after.next_action_at ?? null).toBeNull();
+    expect(db.rows("events").some((e) => e.name === "prospect.warm_refused")).toBe(true);
   });
 });
 

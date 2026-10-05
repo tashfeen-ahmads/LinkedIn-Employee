@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { matchOfferedSlot } from "../src/jobs/booking.js";
+import { DEFAULT_BOOKING_RULES } from "../src/calendar.js";
 
 // Tuesday 14:00, Wednesday 10:00, Friday 16:00 — all UTC.
 const OFFERED = ["2026-09-08T14:00:00Z", "2026-09-09T10:00:00Z", "2026-09-11T16:00:00Z"];
@@ -73,6 +74,17 @@ describe("matchOfferedSlot", () => {
 });
 
 describe("tryBookMeeting", () => {
+  // Monday morning before the week the slots below fall in. The booking path
+  // asks whether an offered time is still free, and a time in the past never
+  // is — so the clock is pinned rather than left to drift past the fixtures.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-07T09:00:00Z"));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   const WORKSPACE = "11111111-1111-4111-8111-111111111111";
   const USER = "22222222-2222-4222-8222-222222222222";
   const PROSPECT = "55555555-5555-4555-8555-555555555555";
@@ -107,7 +119,15 @@ describe("tryBookMeeting", () => {
       ctx,
       calendar,
       email,
-      binding: { provider: calendar, accessToken: "mock", timezone: "UTC" },
+      binding: {
+        provider: calendar,
+        accessToken: "mock",
+        timezone: "UTC",
+        rules: DEFAULT_BOOKING_RULES,
+        ownOnly: false,
+        repSettings: false,
+        bookedStarts: [] as string[],
+      },
     };
   }
 
@@ -136,6 +156,7 @@ describe("tryBookMeeting", () => {
   it("writes nothing at all when no slots were offered", async () => {
     const { db, ctx, calendar, binding } = await harness();
     const { tryBookMeeting } = await import("../src/jobs/booking.js");
+    db.seed("conversations", [{ id: CONVERSATION, workspace_id: WORKSPACE, prospect_id: PROSPECT, needs_human: false }]);
 
     // Nothing was proposed, so nothing can have been accepted — however
     // enthusiastic the message sounds.
@@ -145,6 +166,9 @@ describe("tryBookMeeting", () => {
     expect(calendar.created).toHaveLength(0);
     expect(db.rows("meetings")).toHaveLength(0);
     expect(db.rows("campaign_prospects")[0]?.status).toBe("replied");
+    // Nor any hold: there was no acceptance to honour, so there is nothing for
+    // a person to book by hand.
+    expect(db.find("conversations", { id: CONVERSATION })?.needs_human).toBe(false);
   });
 
   it("books only the offered slot, never a time from the message", async () => {
@@ -216,5 +240,197 @@ describe("tryBookMeeting", () => {
 
     expect(db.rows("meetings")).toHaveLength(2);
     expect(email!.sent).toHaveLength(1);
+  });
+});
+
+/**
+ * The acceptance matcher, case by case.
+ *
+ * Every row is a sentence a real prospect could send in answer to three
+ * offered times. The rule underneath all of them is rule 6: we book a time we
+ * offered, exactly, or we book nothing. The matcher this replaced read the
+ * first number in a message and compared minutes against a part it never
+ * asked the formatter for, so "Wednesday at 9:30" booked nothing and
+ * "Wednesday at 9" booked the 9:30 — a time the prospect never wrote.
+ */
+describe("matchOfferedSlot reads the time a prospect actually wrote", () => {
+  // Wednesday 9:30, Thursday 10:00, Friday 14:00 — UTC.
+  const WED = "2026-10-07T09:30:00Z";
+  const THU = "2026-10-08T10:00:00Z";
+  const FRI = "2026-10-09T14:00:00Z";
+  const SLOTS = [WED, THU, FRI];
+
+  const cases: Array<[string, string | null]> = [
+    ["Wednesday at 9:30 works", WED],
+    ["Wednesday at 9 works", null],
+    ["Wednesday 9 works", null],
+    ["Wed 9:30am works", WED],
+    ["9:30 works for me", WED],
+    ["Thursday, October 8 at 10:00 AM works for me", THU],
+    ["Let's do Thursday, October 8 at 10:00 AM UTC", THU],
+    ["Thursday at 10am works", THU],
+    ["Thursday at 10:30 works", null],
+    ["Thursday the 8th at 10 works", THU],
+    ["October 8th works", THU],
+    ["Friday at 2pm works", FRI],
+    ["Friday at 2 works", FRI],
+    ["Friday at 14:00 works", FRI],
+    ["Friday at 3pm works", null],
+    ["Wednesday or Thursday works", null],
+    ["Tomorrow at 10 works", null],
+    ["Option 2 works", THU],
+    ["The second one works, Thursday", THU],
+    ["The first one works, Thursday", null],
+    ["Sounds good", null],
+  ];
+
+  for (const [message, expected] of cases) {
+    it(`${JSON.stringify(message)} → ${expected ?? "nothing"}`, () => {
+      expect(matchOfferedSlot(message, SLOTS, "UTC")).toBe(expected);
+    });
+  }
+
+  it("matches each slot quoted back in exactly the form we sent it", async () => {
+    // `formatSlot` is what the prospect read. Pasting it back is the most
+    // literal acceptance there is, and it failed for every slot we offered.
+    const { formatSlot } = await import("@le/calendar");
+    for (const slot of SLOTS) {
+      expect(matchOfferedSlot(`${formatSlot(slot, "UTC")} works`, SLOTS, "UTC")).toBe(slot);
+    }
+  });
+
+  it("matches a time pasted with the narrow space newer formatters put before AM", () => {
+    expect(matchOfferedSlot("Wednesday, October 7 at 9:30 AM works", SLOTS, "UTC")).toBe(WED);
+  });
+
+  it("reads hours in the rep's time zone", () => {
+    // 16:30 UTC is 9:30 in the morning in Los Angeles.
+    const la = ["2026-10-07T16:30:00Z", "2026-10-08T17:00:00Z"];
+    expect(matchOfferedSlot("Wednesday at 9:30 works", la, "America/Los_Angeles")).toBe(la[0]);
+    expect(matchOfferedSlot("Wednesday at 4:30pm works", la, "America/Los_Angeles")).toBeNull();
+  });
+});
+
+describe("tryBookMeeting refuses what it can no longer honour", () => {
+  const WORKSPACE = "11111111-1111-4111-8111-111111111111";
+  const USER = "22222222-2222-4222-8222-222222222222";
+  const PROSPECT = "55555555-5555-4555-8555-555555555555";
+  const CONVERSATION = "66666666-6666-4666-8666-666666666666";
+  const SLOT = "2026-09-08T14:00:00.000Z";
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-07T09:00:00Z"));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  async function harness() {
+    const { FakeDb } = await import("./fake-db.js");
+    const { MockCalendarProvider } = await import("@le/calendar");
+    const db = new FakeDb();
+    db.seed("profiles", [{ id: USER, full_name: "Sam Patel", email: "sam@acme.test" }]);
+    db.seed("prospects", [{ id: PROSPECT, workspace_id: WORKSPACE, linkedin_url: "x", first_name: "Jane" }]);
+    db.seed("campaign_prospects", [
+      { workspace_id: WORKSPACE, campaign_id: "camp", prospect_id: PROSPECT, status: "replied" },
+    ]);
+    db.seed("conversations", [{ id: CONVERSATION, workspace_id: WORKSPACE, prospect_id: PROSPECT, needs_human: false }]);
+    const calendar = new MockCalendarProvider();
+    const binding = {
+      provider: calendar,
+      accessToken: "mock",
+      timezone: "UTC",
+      rules: DEFAULT_BOOKING_RULES,
+      ownOnly: true,
+      repSettings: false,
+      bookedStarts: [] as string[],
+    };
+    const ctx = { db: db.asDb(), email: null, env: { APP_URL: "https://app.test" } } as never;
+    const input = {
+      workspaceId: WORKSPACE,
+      conversationId: CONVERSATION,
+      prospectId: PROSPECT,
+      repUserId: USER,
+      message: "Tuesday at 2pm works",
+      offeredSlots: [SLOT],
+      binding: binding as never,
+      durationMinutes: 30,
+    };
+    return { db, ctx, calendar, binding, input };
+  }
+
+  function expectNothingBooked(db: import("./fake-db.js").FakeDb) {
+    expect(db.rows("meetings")).toHaveLength(0);
+    expect(db.rows("campaign_prospects")[0]?.status).toBe("replied");
+    expect(db.rows("events").some((e) => e.name === "meeting.booked")).toBe(false);
+    const conversation = db.find("conversations", { id: CONVERSATION })!;
+    // Somebody accepted a time; a person has to answer that, and the flag is
+    // a booking hold so the reply going out next does not clear it.
+    expect(conversation.needs_human).toBe(true);
+    expect(conversation.needs_human_kind).toBe("booking");
+  }
+
+  it("does not book an offered time that has since been taken", async () => {
+    // The offer is days old by the time somebody says yes. Booking it anyway
+    // puts two people in one call (rule 18).
+    const { db, ctx, calendar, input } = await harness();
+    calendar.busy = [{ start: SLOT, end: "2026-09-08T14:30:00.000Z" }];
+    const { bookAcceptedSlot } = await import("../src/jobs/booking.js");
+
+    const outcome = await bookAcceptedSlot(ctx, input);
+
+    expect(outcome.status).toBe("held");
+    expect(calendar.created).toHaveLength(0);
+    expectNothingBooked(db);
+    expect(db.find("conversations", { id: CONVERSATION })?.needs_human_reason).toMatch(/no longer free/);
+  });
+
+  it("does not book an offered time that has already passed", async () => {
+    const { db, ctx, input } = await harness();
+    vi.setSystemTime(new Date("2026-09-08T15:00:00Z"));
+    const { tryBookMeeting } = await import("../src/jobs/booking.js");
+
+    expect(await tryBookMeeting(ctx, input)).toBeNull();
+    expectNothingBooked(db);
+  });
+
+  it("does not book past the rep's meetings-per-day cap", async () => {
+    // `max_per_day` was stored and shown and enforced nowhere.
+    const { db, ctx, binding, input } = await harness();
+    binding.bookedStarts = ["2026-09-08T09:00:00Z", "2026-09-08T10:00:00Z", "2026-09-08T11:00:00Z"];
+    const { tryBookMeeting } = await import("../src/jobs/booking.js");
+
+    expect(await tryBookMeeting(ctx, input)).toBeNull();
+    expectNothingBooked(db);
+  });
+
+  it("does not mark anybody booked when the meeting row is refused", async () => {
+    // `meetings_one_per_rep_slot` refusing the insert is somebody else having
+    // taken the half hour. The prospect used to be marked booked anyway, with
+    // a `meeting.booked` event and no meeting.
+    const { db, ctx, input } = await harness();
+    (db as unknown as { uniqueKeys: Record<string, string[]> }).uniqueKeys.meetings = ["rep_user_id", "starts_at"];
+    db.seed("meetings", [{ workspace_id: WORKSPACE, rep_user_id: USER, starts_at: SLOT, status: "scheduled" }]);
+    const { bookAcceptedSlot } = await import("../src/jobs/booking.js");
+
+    const outcome = await bookAcceptedSlot(ctx, input);
+
+    expect(outcome.status).toBe("held");
+    expect(db.rows("meetings")).toHaveLength(1);
+    expect(db.rows("campaign_prospects")[0]?.status).toBe("replied");
+    expect(db.rows("events").some((e) => e.name === "meeting.booked")).toBe(false);
+    expect(db.find("conversations", { id: CONVERSATION })?.needs_human_kind).toBe("booking");
+  });
+
+  it("books a free offered slot exactly", async () => {
+    const { db, ctx, input } = await harness();
+    const { bookAcceptedSlot } = await import("../src/jobs/booking.js");
+
+    const outcome = await bookAcceptedSlot(ctx, input);
+
+    expect(outcome.status).toBe("booked");
+    expect(db.rows("meetings")[0]?.starts_at).toBe(SLOT);
+    expect(db.rows("campaign_prospects")[0]?.status).toBe("meeting_booked");
   });
 });

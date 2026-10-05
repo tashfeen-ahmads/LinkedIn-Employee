@@ -5,6 +5,10 @@ import { TimezoneSelect } from "@/components/timezone-select";
 import { SetupRail } from "@/components/setup-rail";
 import { PostButton } from "@/components/post-button";
 import { FormKeeper } from "@/components/form-keeper";
+import { StrategyStatus } from "@/components/strategy-status";
+import { StrategyDetailsForm, StrategyRetryButton } from "@/components/strategy-retry";
+import { readStrategyState } from "@/lib/strategy-state";
+import { hasStrategySource, readOnboardingStash } from "@/lib/onboarding-stash";
 
 
 export default async function OnboardingPage({
@@ -22,7 +26,62 @@ export default async function OnboardingPage({
   if (!user) redirect("/login");
 
   const { data: existing } = await supabase.from("memberships").select("workspace_id").eq("user_id", user.id).limit(1);
-  if (existing?.length) redirect("/app");
+  if (existing?.length) {
+    /*
+     * Somebody with a workspace is past this form — but not necessarily past
+     * the step it starts. Every "run Sage again" in the product, on the
+     * dashboard, in the system check and in the setup checklist, points here,
+     * and this sent all of them straight back to `/app`: a failed Strategy
+     * Agent run could not be retried from anywhere. So a workspace with no
+     * business profile yet gets the retry; one that has its profile goes on to
+     * the dashboard as before, because a second run without `expand` would
+     * write a second copy of the same business.
+     */
+    const workspaceId = existing[0]!.workspace_id;
+    const { data: business } = await supabase
+      .from("business_profiles")
+      .select("id")
+      .eq("workspace_id", workspaceId)
+      .limit(1)
+      .maybeSingle();
+    if (business) redirect("/app");
+
+    const [strategy, { data: ws }] = await Promise.all([
+      readStrategyState(supabase, workspaceId, false),
+      supabase.from("workspaces").select("onboarding").eq("id", workspaceId).maybeSingle(),
+    ]);
+    const source = readOnboardingStash(ws?.onboarding).source;
+    const known = hasStrategySource(source);
+
+    return (
+      <div className="auth-split">
+        <main className="auth-page wide">
+          <header>
+            <h1>Your profiles are not written yet</h1>
+            <p className="muted">
+              Your workspace is set up. What is missing is Sage&rsquo;s first pass: your business
+              profile and three to five customer profiles, which everything else is built from.
+            </p>
+          </header>
+          {params.error ? <div className="notice danger">{params.error}</div> : null}
+          <StrategyStatus state={strategy} />
+          {strategy.phase === "absent" && known ? (
+            <div className="notice">
+              <p>Sage has what it needs to start, and has not been asked yet.</p>
+              <StrategyRetryButton>Start Sage</StrategyRetryButton>
+            </div>
+          ) : null}
+          {(strategy.phase === "absent" && !known) || strategy.phase === "failed" ? (
+            <StrategyDetailsForm source={source} />
+          ) : null}
+          <p className="small muted">
+            <a href="/app">Go to the dashboard</a>
+          </p>
+        </main>
+        <SetupRail />
+      </div>
+    );
+  }
 
   // What signing up already stored, so this page can show it back rather than
   // ask for it again. The trigger writes `full_name` from the signup form.

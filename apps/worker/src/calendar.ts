@@ -5,6 +5,7 @@ import {
   OwnCalendarProvider,
   findFreeSlots,
   formatSlot,
+  offerableStarts,
   refreshGoogleAccessToken,
   refreshMicrosoftAccessToken,
   type CalendarProvider,
@@ -21,6 +22,20 @@ export interface CalendarBinding {
   rules: BookingRules;
   /** True when the only thing this calendar knows is what we put in it. */
   ownOnly: boolean;
+  /**
+   * True when `rules` came from the rep's own availability row rather than the
+   * defaults. A caller holding a setting of its own (a campaign's hours, the
+   * deployment's meeting length) yields to the rep's only when the rep has
+   * actually said something; otherwise a default would outrank a real choice.
+   */
+  repSettings: boolean;
+  /**
+   * Start times of the meetings this product has already booked for the rep,
+   * cancelled ones excluded. `maxPerDay` is counted against these: it is the
+   * rep's cap on meetings *we* put in their week, and on a Google or Microsoft
+   * calendar the busy list cannot tell our meetings from their own.
+   */
+  bookedStarts: string[];
 }
 
 export interface BookingRules {
@@ -58,12 +73,21 @@ export async function resolveCalendar(
   input: { workspaceId: string; userId: string; timezone: string },
 ): Promise<CalendarBinding | null> {
   if (env.CALENDAR_PROVIDER === "mock") {
+    // The rep's settings and booked meetings are read here too, so a mock
+    // deployment offers the times a real one would — otherwise the settings
+    // page changes nothing on the one setup people run to see it work.
+    const [settings, bookedStarts] = await Promise.all([
+      readAvailability(db, input),
+      readBookedStarts(db, input.userId),
+    ]);
     return {
       provider: new MockCalendarProvider(),
       accessToken: "mock",
-      timezone: input.timezone,
-      rules: DEFAULT_BOOKING_RULES,
+      timezone: settings?.timezone || input.timezone,
+      rules: toRules(settings),
       ownOnly: false,
+      repSettings: Boolean(settings),
+      bookedStarts,
     };
   }
 
@@ -118,14 +142,10 @@ export async function resolveCalendar(
   // A connected Google or Microsoft calendar keeps the rep's own booking rules
   // -- meeting length and notice are the rep's preference, not the provider's
   // -- but it is not ownOnly: it can see meetings booked elsewhere.
-  const { data: settings } = await db
-    .from("availability")
-    .select(
-      "timezone, working_hours, meeting_minutes, min_notice_hours, buffer_minutes, max_per_day, location",
-    )
-    .eq("workspace_id", input.workspaceId)
-    .eq("user_id", input.userId)
-    .maybeSingle();
+  const [settings, bookedStarts] = await Promise.all([
+    readAvailability(db, input),
+    readBookedStarts(db, input.userId),
+  ]);
 
   return {
     provider: microsoft
@@ -135,7 +155,47 @@ export async function resolveCalendar(
     timezone: settings?.timezone || input.timezone,
     rules: toRules(settings),
     ownOnly: false,
+    repSettings: Boolean(settings),
+    bookedStarts,
   };
+}
+
+type AvailabilityRow = {
+  timezone: string | null;
+  working_hours: unknown;
+  meeting_minutes: number;
+  min_notice_hours: number;
+  buffer_minutes: number;
+  max_per_day: number;
+  location: string | null;
+};
+
+async function readAvailability(
+  db: Db,
+  input: { workspaceId: string; userId: string },
+): Promise<AvailabilityRow | null> {
+  const { data } = await db
+    .from("availability")
+    .select(
+      "timezone, working_hours, meeting_minutes, min_notice_hours, buffer_minutes, max_per_day, location",
+    )
+    .eq("workspace_id", input.workspaceId)
+    .eq("user_id", input.userId)
+    .maybeSingle();
+  return (data as AvailabilityRow | null) ?? null;
+}
+
+/** Meetings we booked for this rep in the window slots are offered from. */
+async function readBookedStarts(db: Db, userId: string): Promise<string[]> {
+  const { data } = await db
+    .from("meetings")
+    .select("starts_at")
+    .eq("rep_user_id", userId)
+    .is("cancelled_at", null)
+    .neq("status", "cancelled")
+    .gte("starts_at", new Date(Date.now() - 86_400_000).toISOString())
+    .lte("starts_at", new Date(Date.now() + 45 * 86_400_000).toISOString());
+  return (data ?? []).map((row) => row.starts_at as string);
 }
 
 export interface SlotOffer {
@@ -171,7 +231,12 @@ export async function offerSlots(
     return { iso: [], readable: [] };
   }
 
-  const iso = findFreeSlots({
+  const maxSlots = input.maxSlots ?? 3;
+  // Every day's first free start, uncapped, so a day already at the rep's
+  // meeting cap can be skipped without losing a slot to it. `findFreeSlots`
+  // already keeps one per day, so asking it for more than there are days is
+  // the same as asking for all of them.
+  const perDay = findFreeSlots({
     from,
     to,
     // The rep's own booking rules, not the caller's guess at them. Meeting
@@ -181,15 +246,93 @@ export async function offerSlots(
     workingHours: input.workingHours ?? binding.rules.workingHours,
     minNoticeHours: binding.rules.minNoticeHours,
     bufferMinutes: binding.rules.bufferMinutes,
-    maxSlots: input.maxSlots,
+    maxSlots: 400,
     timezone: binding.timezone,
     busy,
   });
+
+  // `max_per_day` was stored, shown on the settings page and read into the
+  // rules, and nothing enforced it: a rep who said "three a day" could be
+  // offered — and booked into — a fourth. A full day is left out whole.
+  const full = fullDays(binding);
+  const iso = perDay.filter((slot) => !full.has(dayKey(slot, binding.timezone))).slice(0, maxSlots);
 
   return {
     iso,
     readable: iso.map((slot) => formatSlot(slot, binding.timezone)),
   };
+}
+
+/**
+ * Whether a time we offered earlier can still be booked now.
+ *
+ * The reply path books from the slots stored on the draft that offered them,
+ * and those can be days old: another prospect may have taken the half hour, the
+ * rep may have blocked the afternoon, or the day may have reached its cap. The
+ * link path re-derives its list before booking (rule 18), and this is the same
+ * question asked of one slot.
+ *
+ * Notice is not re-applied. It was satisfied when the time was offered, and a
+ * prospect who accepts at nine for an offered three o'clock has done exactly
+ * what was asked of them — but the time must still be in the future, inside the
+ * rep's hours, clear of everything busy (with the buffer), and on a day that is
+ * not already full. A calendar that cannot be read answers no.
+ */
+export async function slotStillFree(
+  binding: CalendarBinding,
+  startsAt: string,
+  options: { durationMinutes?: number; workingHours?: { start: number; end: number; days: number[] } } = {},
+  now: Date = new Date(),
+): Promise<boolean> {
+  const start = Date.parse(startsAt);
+  if (!Number.isFinite(start) || start <= now.getTime()) return false;
+  const durationMinutes = options.durationMinutes ?? binding.rules.meetingMinutes;
+  const end = start + durationMinutes * 60_000;
+
+  if (fullDays(binding).has(dayKey(startsAt, binding.timezone))) return false;
+
+  let busy: Awaited<ReturnType<CalendarProvider["getBusy"]>>;
+  try {
+    busy = await binding.provider.getBusy({
+      accessToken: binding.accessToken,
+      from: now.toISOString(),
+      to: new Date(end + 86_400_000).toISOString(),
+    });
+  } catch {
+    return false;
+  }
+
+  // The same function that produced the offer, asked about this one start, so
+  // "free" here cannot mean something different from "offerable" there.
+  const starts = offerableStarts({
+    from: new Date(start),
+    to: new Date(end),
+    durationMinutes,
+    workingHours: options.workingHours ?? binding.rules.workingHours,
+    minNoticeHours: 0,
+    bufferMinutes: binding.rules.bufferMinutes,
+    timezone: binding.timezone,
+    busy,
+  });
+  return starts.some((candidate) => Date.parse(candidate) === start);
+}
+
+/** Days, in the rep's time zone, that already hold `maxPerDay` of our meetings. */
+function fullDays(binding: CalendarBinding): Set<string> {
+  const cap = binding.rules.maxPerDay;
+  const counts = new Map<string, number>();
+  for (const starts of binding.bookedStarts ?? []) {
+    const key = dayKey(starts, binding.timezone);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  const full = new Set<string>();
+  if (!(cap > 0)) return full;
+  for (const [key, count] of counts) if (count >= cap) full.add(key);
+  return full;
+}
+
+function dayKey(iso: string, timezone: string): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: timezone, dateStyle: "short" }).format(new Date(iso));
 }
 
 /**
@@ -261,6 +404,8 @@ async function buildOwnCalendar(
     end: row.ends_at,
   });
 
+  const bookedStarts = (meetings ?? []).map((row) => row.starts_at);
+
   return {
     provider: new OwnCalendarProvider({
       meetings: (meetings ?? []).map(toInterval),
@@ -276,6 +421,8 @@ async function buildOwnCalendar(
     // calendar we can see, and the screens say so rather than implying the
     // rep's real diary is being watched when the last read of it broke.
     ownOnly: !feed || feed.status !== "ok",
+    repSettings: Boolean(settings),
+    bookedStarts,
   };
 }
 

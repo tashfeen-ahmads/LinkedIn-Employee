@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase-server";
 import { isAppConfigured } from "@/lib/config";
 import { requestAccountEmails } from "@/lib/account-emails";
 import { seeOther } from "@/lib/see-other";
+import { callbackFailurePath } from "@/lib/auth-callback";
 
 /** Exchanges the magic-link code for a session cookie. */
 export async function GET(request: Request) {
@@ -12,7 +13,9 @@ export async function GET(request: Request) {
 
   const supabase = await createClient();
   const { data, error } = await supabase.auth.exchangeCodeForSession(code);
-  if (error) return seeOther(`/login?error=${encodeURIComponent(error.message)}`);
+  // Usually a confirmation link opened on another device, which confirmed the
+  // address and then could not sign in here (`callbackFailurePath`).
+  if (error) return seeOther(callbackFailurePath(error, searchParams.get("invite")));
 
   // The address is proved now, so this is when somebody who had to confirm is
   // welcomed. Once-only in the worker, so a returning sign-in sends nothing.

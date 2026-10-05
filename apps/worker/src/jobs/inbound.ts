@@ -1,6 +1,7 @@
 import {
   applyRules,
   classifyReply,
+  containsOptOut,
   draftReply,
   DRAFT_PROMPT_VERSION,
   type ConversationTurn,
@@ -13,18 +14,19 @@ import {
   draftLinkCheck,
   extractLinks,
   type CampaignProspectStatus,
+  type ReplyClassification,
 } from "@le/shared";
 import type { WorkerContext } from "../context.js";
 import { pitchFor } from "../pitch.js";
 import { agentForCampaign, voiceOf } from "../agent.js";
 import { recordEvent } from "../context.js";
 import { flagForHuman } from "../holds.js";
-import { jobId } from "../queues.js";
+import { enqueueOnce, jobId } from "../queues.js";
 import type { InboundMessageJob, Queues } from "../queues.js";
 import { ensureConversation } from "./linkedin-action.js";
-import { offerSlots, resolveCalendar } from "../calendar.js";
+import { offerSlots, resolveCalendar, type CalendarBinding } from "../calendar.js";
 import { syncConversationToCrm, syncMeetingToCrm } from "../crm.js";
-import { tryBookMeeting } from "./booking.js";
+import { bookAcceptedSlot } from "./booking.js";
 import { readCampaignCta } from "../cta.js";
 
 /**
@@ -49,7 +51,7 @@ export async function handleInboundMessage(
 
   const { data: prospect } = await db
     .from("prospects")
-    .select("id, workspace_id, first_name, last_name")
+    .select("id, workspace_id, first_name, last_name, do_not_contact")
     .eq("workspace_id", job.workspaceId)
     .eq("provider_id", job.fromProviderId)
     .maybeSingle();
@@ -63,14 +65,24 @@ export async function handleInboundMessage(
     providerChatId: job.providerChatId,
   });
 
-  // Idempotency: webhooks redeliver, and polling overlaps with them.
+  // Idempotency: webhooks redeliver, and polling overlaps with them — both
+  // doors deliver most replies, so this is the common path, not the rare one.
+  // Nothing past this point may call a model for a message already stored.
   const { data: existing } = await db
     .from("messages")
-    .select("id")
+    .select("id, classification")
     .eq("workspace_id", job.workspaceId)
     .eq("provider_message_id", job.providerMessageId)
     .maybeSingle();
-  if (existing) return;
+  if (existing) {
+    await repairUnanswered(ctx, job, {
+      prospect,
+      conversationId: conversation.id,
+      messageId: existing.id as string,
+      classification: (existing.classification as ReplyClassification | null) ?? null,
+    });
+    return;
+  }
 
   const { data: inbound } = await db
     .from("messages")
@@ -85,6 +97,10 @@ export async function handleInboundMessage(
     })
     .select("id")
     .single();
+  // The other door may have stored this message a moment ago. Whatever it did
+  // with it, this run has nothing to add, and answering twice is the one
+  // outcome the idempotency check exists to prevent.
+  if (!inbound) return;
 
   await db
     .from("conversations")
@@ -107,6 +123,27 @@ export async function handleInboundMessage(
 
   const campaignProspect = await stopSequence(ctx, prospect.id);
   const campaignId = campaignProspect?.campaign_id ?? null;
+  await linkConversationToCampaign(ctx, conversation.id, prospect.id, campaignId);
+
+  /*
+   * "Remove me" is recorded before anybody asks a model what it means.
+   *
+   * The classifier overrides itself on a literal opt-out phrase, but only if it
+   * runs: a provider outage, a malformed response or an exhausted key threw
+   * before that override was reached, and the message — already stored — was
+   * never looked at again. Rule 7 says opt-outs are checked deterministically
+   * *as well as* by the model, and as well as means not after it. There is
+   * nothing to draft for somebody who asked us to stop, so no model is called.
+   */
+  if (containsOptOut(job.text)) {
+    await recordOptOut(ctx, {
+      workspaceId: job.workspaceId,
+      prospectId: prospect.id,
+      conversationId: conversation.id,
+      reason: "opt-out phrase detected",
+    });
+    return;
+  }
 
   const { data: campaign } = campaignId
     ? await db
@@ -123,7 +160,7 @@ export async function handleInboundMessage(
     ...(campaign?.reply_mode ? { mode: campaign.reply_mode } : {}),
   });
 
-  const history = await loadHistory(ctx, conversation.id, inbound?.id);
+  const history = await loadHistory(ctx, conversation.id, inbound.id as string);
   // The agent this conversation belongs to, resolved before anything reads it.
   // A conversation with no campaign, or on a campaign built before agents,
   // resolves to null and behaves exactly as it always did.
@@ -140,33 +177,46 @@ export async function handleInboundMessage(
   ]);
   const agents = ctx.agentsFor(job.workspaceId);
 
-  const classification = await classifyReply(agents, {
-    message: job.text,
-    history,
-    knowledgeTitles: knowledge.map((k) => k.title),
-  });
-
-  if (inbound) {
-    await db.from("messages").update({ classification: classification as never }).eq("id", inbound.id);
+  /*
+   * A reply the model could not read is a reply a person has to read.
+   *
+   * The message is already stored, so a retry finds it and stops — which is
+   * right, since a retry must never answer twice, and was wrong while nothing
+   * had flagged it: the reply was in the database, on no screen, for good. So
+   * the flag goes up before the error goes back to the queue, and the queue's
+   * retry finds the flag already standing (`repairUnanswered`).
+   */
+  let classification: ReplyClassification;
+  try {
+    classification = await classifyReply(agents, {
+      message: job.text,
+      history,
+      knowledgeTitles: knowledge.map((k) => k.title),
+    });
+  } catch (error) {
+    await holdWithoutDraft(ctx, job.workspaceId, conversation.id, inbound.id as string, UNREAD_REASON);
+    throw error;
   }
+
+  await db.from("messages").update({ classification: classification as never }).eq("id", inbound.id);
 
   const decision = applyRules(classification, rules);
 
   if (decision.action === "stop_sequence") {
-    // Only ever set the flag, never clear it. A prospect who opted out last
-    // month and later sends a neutral "not interested" must not be quietly
-    // returned to the contactable pool. Rule 5 in CLAUDE.md.
     if (classification.optOut) {
-      await db
-        .from("prospects")
-        .update({ do_not_contact: true, do_not_contact_reason: "opted out on LinkedIn" })
-        .eq("id", prospect.id);
+      await recordOptOut(ctx, {
+        workspaceId: job.workspaceId,
+        prospectId: prospect.id,
+        conversationId: conversation.id,
+        reason: decision.reason ?? "prospect opted out",
+      });
+      return;
     }
     if (campaignProspect) {
       await db
         .from("campaign_prospects")
         .update({
-          status: classification.optOut ? "opted_out" : "negative",
+          status: "negative",
           status_reason: decision.reason ?? null,
           closed_at: new Date().toISOString(),
           next_action_at: null,
@@ -175,7 +225,7 @@ export async function handleInboundMessage(
     }
     await recordEvent(db, {
       workspaceId: job.workspaceId,
-      name: classification.optOut ? "prospect.opted_out" : "reply.sequence_stopped",
+      name: "reply.sequence_stopped",
       subjectType: "conversation",
       subjectId: conversation.id,
       payload: { reason: decision.reason ?? null },
@@ -184,9 +234,13 @@ export async function handleInboundMessage(
   }
 
   let bookedMeeting = false;
+  // Set when the prospect accepted a time we could not book. The reply below
+  // is written without knowing that, so it waits for the person who now has
+  // to sort the meeting out.
+  let bookingHeld: string | null = null;
   const business = await loadBusinessProfile(ctx, job.workspaceId);
   if (!business) {
-    await flagForHuman(db, conversation.id, "no business profile configured");
+    await holdWithoutDraft(ctx, job.workspaceId, conversation.id, inbound.id as string, "no business profile configured");
     return;
   }
 
@@ -210,9 +264,18 @@ export async function handleInboundMessage(
   // If this reply accepts a time we previously offered, book it before drafting
   // anything: the confirmation message should say the meeting is in the diary,
   // not offer the same slots again.
+  //
+  // The rep's own availability decides the hours and the length when they
+  // have set it. The campaign's hours used to win unconditionally, and since
+  // the parser answered nine-to-five when the campaign said nothing, the
+  // settings page changed nothing about a single offered time.
+  const workingHours = calendar ? meetingHours(calendar, campaign?.rules) : undefined;
+  const durationMinutes = calendar?.repSettings
+    ? calendar.rules.meetingMinutes
+    : ctx.env.MEETING_DURATION_MINUTES;
   if (calendar) {
     const offered = await lastOfferedSlots(ctx, conversation.id);
-    const meetingId = await tryBookMeeting(ctx, {
+    const outcome = await bookAcceptedSlot(ctx, {
       workspaceId: job.workspaceId,
       conversationId: conversation.id,
       prospectId: prospect.id,
@@ -220,19 +283,19 @@ export async function handleInboundMessage(
       offeredSlots: offered,
       message: job.text,
       binding: calendar,
-      durationMinutes: ctx.env.MEETING_DURATION_MINUTES,
+      durationMinutes,
+      workingHours,
     });
-    if (meetingId) {
+    if (outcome.status === "booked") {
       bookedMeeting = true;
-      await syncMeetingToCrm(db, ctx.env, { workspaceId: job.workspaceId, meetingId });
+      await syncMeetingToCrm(db, ctx.env, { workspaceId: job.workspaceId, meetingId: outcome.meetingId });
+    } else if (outcome.status === "held") {
+      bookingHeld = outcome.reason;
     }
   }
 
   const slots = calendar && !bookedMeeting
-    ? await offerSlots(calendar, {
-        workingHours: parseWorkingHours(campaign?.rules),
-        durationMinutes: ctx.env.MEETING_DURATION_MINUTES,
-      })
+    ? await offerSlots(calendar, { workingHours, durationMinutes })
     : { iso: [], readable: [] };
 
   // What this campaign is asking for decides which link, if any, belongs in the
@@ -307,7 +370,7 @@ export async function handleInboundMessage(
     // The prospect replied and we could not write an answer. Retrying is the
     // queue's job; making sure a person sees the conversation either way is
     // ours, because the alternative is a warm reply nobody ever reads.
-    await flagForHuman(db, conversation.id, "could not draft a reply, answer this one yourself");
+    await holdWithoutDraft(ctx, job.workspaceId, conversation.id, inbound.id as string, UNDRAFTED_REASON);
     throw error;
   }
 
@@ -322,7 +385,13 @@ export async function handleInboundMessage(
   // here:" pointing at nothing, which reads worse than the invented link did,
   // and a hallucinated link is evidence the draft as a whole drifted.
   const linkCheck = draftLinkCheck(draft.message, allowedLinks);
-  const gate = linkCheck.ok ? decision : { action: "hold_for_human" as const, reason: linkCheck.reason };
+  const gate: { action: "send" | "hold_for_human"; reason?: string } = !linkCheck.ok
+    ? { action: "hold_for_human", reason: linkCheck.reason }
+    : bookingHeld
+      ? { action: "hold_for_human", reason: bookingHeld }
+      : decision.action === "send"
+        ? { action: "send" }
+        : { action: "hold_for_human", reason: decision.reason };
   if (!linkCheck.ok) {
     console.error("held a draft carrying a link nobody gave the agent", {
       conversationId: conversation.id,
@@ -335,7 +404,7 @@ export async function handleInboundMessage(
     .insert({
       workspace_id: job.workspaceId,
       conversation_id: conversation.id,
-      in_reply_to: inbound?.id ?? null,
+      in_reply_to: inbound.id,
       body: draft.message,
       proposes_meeting: draft.proposesMeeting,
       // The ISO slots we actually offered, not the model's rendering of them.
@@ -345,6 +414,10 @@ export async function handleInboundMessage(
       unanswered_questions: draft.unansweredQuestions as never,
       prompt_version: DRAFT_PROMPT_VERSION,
       status: gate.action === "send" ? "approved" : "pending",
+      // Stamped when the gate approved it, so the maintenance sweep can find an
+      // approved draft whose job never sent it. A null here was invisible to
+      // that sweep, which only ever looked at drafts a person had approved.
+      resolved_at: gate.action === "send" ? new Date().toISOString() : null,
     })
     .select("id")
     .single();
@@ -354,7 +427,7 @@ export async function handleInboundMessage(
     name: gate.action === "send" ? "reply.drafted" : "reply.needs_human",
     subjectType: "conversation",
     subjectId: conversation.id,
-    payload: { reason: decision.reason ?? null, proposesMeeting: draft.proposesMeeting },
+    payload: { reason: gate.reason ?? null, proposesMeeting: draft.proposesMeeting },
   });
 
   /*
@@ -379,18 +452,206 @@ export async function handleInboundMessage(
       .in("status", ["invited", "accepted", "messaged_1", "messaged_2", "messaged_3", "replied"]);
   }
 
-  if (decision.action === "hold_for_human") {
-    await flagForHuman(db, conversation.id, decision.reason ?? "held for review");
+  /*
+   * Everything below reads the final gate, never the classifier's decision.
+   *
+   * The draft above is saved from `gate`, and a link check or a failed booking
+   * can turn a `send` into a hold after the classifier has spoken. Reading
+   * `decision` here saved a held draft as `pending`, raised no flag, and queued
+   * a reply job that found the draft unapproved and did nothing — finishing
+   * under `reply:<draftId>`, so the rep's own Send a minute later was taken for
+   * a duplicate and also did nothing. A held reply nobody was told about,
+   * whose Send button was dead.
+   */
+  if (gate.action === "hold_for_human") {
+    await flagForHuman(db, conversation.id, gate.reason ?? "held for review");
     return;
   }
 
   if (saved) {
-    await queues.linkedinAction.add(
+    // `enqueueOnce`, not `add`: a finished job must never hold this id
+    // (rule 44), or the rep's Send and the maintenance sweep are both refused
+    // as duplicates of work that is already over.
+    await enqueueOnce(
+      queues.linkedinAction,
       "reply",
-      { kind: "reply", workspaceId: job.workspaceId, conversationId: conversation.id, draftId: saved.id },
-      { jobId: jobId("reply", saved.id) },
+      { kind: "reply", workspaceId: job.workspaceId, conversationId: conversation.id, draftId: saved.id as string },
+      { jobId: jobId("reply", saved.id as string) },
     );
   }
+}
+
+/** What a person sees when the model could not write the answer. */
+const UNDRAFTED_REASON = "could not draft a reply, answer this one yourself";
+
+/** What a person sees when the model could not read a reply. */
+const UNREAD_REASON = "The agent could not read this reply, so nothing was sent. Read it and answer it yourself.";
+
+/** The event that marks a held reply with no draft behind it. */
+const HELD_WITHOUT_DRAFT = "reply.held_without_draft";
+
+/**
+ * A hold with no draft, recorded against the message it is about.
+ *
+ * The event is what lets a retry tell "a person was already told about this
+ * message" from "the run died before anybody was". Without it the repair below
+ * could not tell them apart, and would either stay silent after a crash or
+ * re-raise a hold the rep had already dismissed.
+ */
+async function holdWithoutDraft(
+  ctx: WorkerContext,
+  workspaceId: string,
+  conversationId: string,
+  messageId: string,
+  reason: string,
+): Promise<void> {
+  await flagForHuman(ctx.db, conversationId, reason, "reply");
+  await recordEvent(ctx.db, {
+    workspaceId,
+    name: HELD_WITHOUT_DRAFT,
+    subjectType: "message",
+    subjectId: messageId,
+    payload: { reason, conversationId },
+  });
+}
+
+/**
+ * A message already stored, delivered again. Never calls a model.
+ *
+ * Most deliveries are this: the webhook and the poll both carry nearly every
+ * reply, so the second is a no-op — one query for the draft that answered it.
+ * But a stored message is not always a handled one. The run that stored it can
+ * have died before it classified, flagged or drafted anything (a model outage,
+ * a deploy mid-job), and the old `if (existing) return` made that permanent: a
+ * prospect's reply in the database and on no screen (rule 10).
+ *
+ * So the repair finishes the deterministic part. An opt-out is recorded if it
+ * was not. A reply with no draft and no hold on record is put in front of a
+ * person. It does not draft: a second attempt at the model belongs to a person
+ * now, and an answer written twice is worse than one written by hand.
+ */
+async function repairUnanswered(
+  ctx: WorkerContext,
+  job: InboundMessageJob,
+  input: {
+    prospect: { id: string; do_not_contact?: boolean | null };
+    conversationId: string;
+    messageId: string;
+    classification: ReplyClassification | null;
+  },
+): Promise<void> {
+  const { db } = ctx;
+
+  if (containsOptOut(job.text) || input.classification?.optOut) {
+    if (!input.prospect.do_not_contact) {
+      await recordOptOut(ctx, {
+        workspaceId: job.workspaceId,
+        prospectId: input.prospect.id,
+        conversationId: input.conversationId,
+        reason: "opt-out phrase detected",
+      });
+    }
+    return;
+  }
+
+  const { data: draft } = await db
+    .from("reply_drafts")
+    .select("id")
+    .eq("conversation_id", input.conversationId)
+    .eq("in_reply_to", input.messageId)
+    .limit(1)
+    .maybeSingle();
+  if (draft) return;
+
+  // "Not interested" ends the sequence without a draft, which is the answer.
+  if (input.classification?.intent === "not_interested") return;
+
+  const { data: held } = await db
+    .from("events")
+    .select("id")
+    .eq("name", HELD_WITHOUT_DRAFT)
+    .eq("subject_id", input.messageId)
+    .limit(1)
+    .maybeSingle();
+  if (held) return;
+
+  await holdWithoutDraft(
+    ctx,
+    job.workspaceId,
+    input.conversationId,
+    input.messageId,
+    input.classification
+      ? "This reply was read but never answered. Answer it yourself."
+      : UNREAD_REASON,
+  );
+}
+
+/**
+ * Records an opt-out. Only ever sets the flag, never clears it: a prospect who
+ * opted out last month and later sends a neutral "not interested" must not be
+ * quietly returned to the contactable pool (rule 7).
+ *
+ * Every open row on every campaign, not only the latest: a person on two lists
+ * who says "remove me" has said it to both.
+ */
+async function recordOptOut(
+  ctx: WorkerContext,
+  input: { workspaceId: string; prospectId: string; conversationId: string; reason: string },
+): Promise<void> {
+  const { db } = ctx;
+  await db
+    .from("prospects")
+    .update({ do_not_contact: true, do_not_contact_reason: "opted out on LinkedIn" })
+    .eq("id", input.prospectId);
+  await db
+    .from("campaign_prospects")
+    .update({
+      status: "opted_out",
+      status_reason: input.reason,
+      closed_at: new Date().toISOString(),
+      next_action_at: null,
+    })
+    .eq("prospect_id", input.prospectId)
+    .not("status", "in", "(closed,opted_out,failed)");
+  await recordEvent(db, {
+    workspaceId: input.workspaceId,
+    name: "prospect.opted_out",
+    subjectType: "conversation",
+    subjectId: input.conversationId,
+    payload: { reason: input.reason },
+  });
+}
+
+/**
+ * Gives a conversation the campaign its prospect is on, when it has none.
+ *
+ * A conversation opened by an inbound reply — somebody answering the
+ * invitation note before any follow-up went out — was created with no
+ * campaign and kept none for ever, so every count read by campaign (the
+ * digest, the campaign's own page) left out exactly the replies a campaign
+ * exists to produce. Only ever fills a gap: a conversation already tied to a
+ * campaign keeps it.
+ */
+async function linkConversationToCampaign(
+  ctx: WorkerContext,
+  conversationId: string,
+  prospectId: string,
+  campaignId: string | null,
+): Promise<void> {
+  let id = campaignId;
+  if (!id) {
+    // Stopped, opted out or closed rows still say which campaign found them.
+    const { data: latest } = await ctx.db
+      .from("campaign_prospects")
+      .select("campaign_id")
+      .eq("prospect_id", prospectId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    id = (latest?.campaign_id as string | undefined) ?? null;
+  }
+  if (!id) return;
+  await ctx.db.from("conversations").update({ campaign_id: id }).eq("id", conversationId).is("campaign_id", null);
 }
 
 /** A reply ends the automated sequence; the conversation takes over. */
@@ -490,14 +751,26 @@ async function lastOfferedSlots(ctx: WorkerContext, conversationId: string): Pro
   return Array.isArray(data?.proposed_slots) ? (data.proposed_slots as string[]) : [];
 }
 
-function parseWorkingHours(rules: unknown): { start: number; end: number; days: number[] } {
-  const fallback = { start: 9, end: 17, days: [1, 2, 3, 4, 5] };
-  if (!rules || typeof rules !== "object") return fallback;
+/**
+ * The hours slots are offered within: the rep's own when they have set them,
+ * then the campaign's when it explicitly carries some, then the calendar's
+ * defaults. Never a fallback that outranks a real setting.
+ */
+function meetingHours(
+  calendar: CalendarBinding,
+  rules: unknown,
+): { start: number; end: number; days: number[] } {
+  if (calendar.repSettings) return calendar.rules.workingHours;
+  return campaignWorkingHours(rules) ?? calendar.rules.workingHours;
+}
+
+function campaignWorkingHours(rules: unknown): { start: number; end: number; days: number[] } | null {
+  if (!rules || typeof rules !== "object") return null;
   const hours = (rules as { workingHours?: unknown }).workingHours;
-  if (!hours || typeof hours !== "object") return fallback;
+  if (!hours || typeof hours !== "object") return null;
   const h = hours as Partial<{ start: number; end: number; days: number[] }>;
   if (typeof h.start === "number" && typeof h.end === "number" && Array.isArray(h.days)) {
     return { start: h.start, end: h.end, days: h.days };
   }
-  return fallback;
+  return null;
 }

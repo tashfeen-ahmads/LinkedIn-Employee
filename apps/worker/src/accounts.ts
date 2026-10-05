@@ -4,7 +4,7 @@ import type { AccountHealth, ConnectedAccount, LinkedInProvider } from "@le/link
 // itself, once a screen needed the same answer the pacing loop gets. Re-exported
 // so every existing caller keeps its import.
 export { ACCOUNT_USAGE_COLUMNS, parseWorkingHours, toUsage, type AccountRecord } from "@le/linkedin";
-import type { AccountRecord } from "@le/linkedin";
+import { ACCOUNT_USAGE_COLUMNS as USAGE_COLUMNS, type AccountRecord } from "@le/linkedin";
 import { accountPausedEmail } from "@le/email";
 import type { EmailProvider } from "@le/email";
 import { recordEvent } from "./context.js";
@@ -446,9 +446,29 @@ export async function recoverAccounts(
  * Comparing week numbers rather than checking for Monday matters: an account
  * idle over a weekend would never see a Monday reset and would stay capped for
  * a full extra week.
+ *
+ * `today` is the rep's own date (`localDate`), never the server's. It used to
+ * be the UTC date, which put a Californian rep's midnight at five in the
+ * afternoon: the counters emptied an hour before the end of their working day
+ * and the next day's whole allowance went out between five and six.
+ *
+ * Only ever forwards. A row stamped with a date later than the rep's own today
+ * — written under the old UTC rule, or before the rep moved their timezone
+ * west — is left counting into that later day rather than reset a second
+ * time. Resetting backwards would hand out a fresh allowance in the middle of
+ * a day that has already spent one; carrying the count on until the rep's
+ * date catches up only ever sends less.
+ *
+ * And conditional on the stamp it read. The SQL function increments these
+ * counters in one statement (rule 2), but this reset is a read and a write:
+ * two callers that both read yesterday's stamp would otherwise both zero the
+ * row, and an invitation counted between the two writes would vanish. The
+ * second write matches nothing and the row is read back instead.
  */
 export async function resetCountersIfNeeded(db: Db, account: AccountRecord, today: string): Promise<AccountRecord> {
   if (account.counters_reset_on === today) return account;
+  // YYYY-MM-DD compares correctly as a string.
+  if (account.counters_reset_on && account.counters_reset_on > today) return account;
 
   const newWeek =
     !account.counters_reset_on || isoWeekStart(account.counters_reset_on) !== isoWeekStart(today);
@@ -464,8 +484,21 @@ export async function resetCountersIfNeeded(db: Db, account: AccountRecord, toda
     counters_reset_on: today,
     ...(newWeek ? { invites_this_week: 0 } : {}),
   };
-  await db.from("linkedin_accounts").update(update).eq("id", account.id);
-  return { ...account, ...update };
+  const write = db.from("linkedin_accounts").update(update).eq("id", account.id);
+  const { data: written } = await (account.counters_reset_on
+    ? write.eq("counters_reset_on", account.counters_reset_on)
+    : write.is("counters_reset_on", null)
+  ).select("id");
+  if (written?.length) return { ...account, ...update };
+
+  // Somebody else reset it first. Their row is the truth, including anything
+  // counted since; a second reset would erase exactly that.
+  const { data: current } = await db
+    .from("linkedin_accounts")
+    .select(USAGE_COLUMNS)
+    .eq("id", account.id)
+    .maybeSingle();
+  return (current as AccountRecord | null) ?? { ...account, ...update };
 }
 
 /** The Monday of the week a YYYY-MM-DD date falls in, as YYYY-MM-DD. */

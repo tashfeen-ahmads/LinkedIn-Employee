@@ -2,6 +2,7 @@ import { LINKEDIN_LIMITS } from "@le/shared";
 import { classifyProviderError } from "@le/linkedin";
 import type { Db } from "@le/db";
 import { followUpDueAt } from "./acceptance.js";
+import { stepFor } from "../sequence.js";
 
 /**
  * Puts the sequence back on the rails for anybody who fell off it.
@@ -74,6 +75,11 @@ export async function unstickProspects(db: Db, now: Date = new Date(), limit = 2
     }
 
     const nextNumber = (row.last_step_sent ?? 0) + 1;
+    // The same resolution the send path uses, not a second reading of it. This
+    // used to fall back to the campaign-wide step whenever the angle had no
+    // step N — so somebody whose angle's sequence had ended was re-armed for a
+    // step the send path would then refuse, every hour, and a reader of this
+    // loop was told the sequence went on when it did not.
     const step = await stepFor(db, row.campaign_id, row.variant_id ?? null, nextNumber);
     // No step left. The sequence is over for this person, which is an outcome
     // rather than a fault, and inventing one would message somebody twice.
@@ -89,33 +95,6 @@ export async function unstickProspects(db: Db, now: Date = new Date(), limit = 2
     repaired += 1;
   }
   return repaired;
-}
-
-/** This angle's step, falling back to the campaign-wide one. Rule 28. */
-async function stepFor(
-  db: Db,
-  campaignId: string,
-  variantId: string | null,
-  stepNumber: number,
-): Promise<{ delay_days: number } | null> {
-  if (variantId) {
-    const { data } = await db
-      .from("campaign_steps")
-      .select("delay_days")
-      .eq("campaign_id", campaignId)
-      .eq("variant_id", variantId)
-      .eq("step_number", stepNumber)
-      .limit(1);
-    if (data?.[0]) return data[0];
-  }
-  const { data } = await db
-    .from("campaign_steps")
-    .select("delay_days")
-    .eq("campaign_id", campaignId)
-    .is("variant_id", null)
-    .eq("step_number", stepNumber)
-    .limit(1);
-  return data?.[0] ?? null;
 }
 
 /**

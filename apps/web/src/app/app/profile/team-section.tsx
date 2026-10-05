@@ -15,6 +15,19 @@ import { createInviteToken, inviteExpiry, INVITE_TTL_DAYS } from "@/lib/invitati
 import { PageNotice } from "@/components/page-notice";
 import { PageHeader, Section, Empty } from "@/components/page";
 import { cannotSend } from "../team/repair";
+import { SITE } from "@/lib/site";
+
+/**
+ * Where a team action reports back: the profile screen, at the team section.
+ *
+ * These actions redirected to `/app/team?error=…`, and `/app/team` redirects
+ * to `/app/profile#team` — dropping the query on the way, so every refusal
+ * and every "the email was not sent" was said to nobody. The fragment goes
+ * after the query, or the browser treats the query as part of the anchor.
+ */
+function teamQuery(build: (path: string, message: string) => string, message: string): string {
+  return `${build("/app/profile", message)}#team`;
+}
 
 /**
  * The workspace: who is in it, and who is waiting to be.
@@ -57,7 +70,12 @@ async function inviteMember(formData: FormData) {
     ? Math.max(workspace?.seats ?? 1, PLAN_SEATS[(workspace?.plan ?? "trial") as never] ?? 1)
     : FREE_MEMBER_LIMIT;
   if ((members ?? 0) >= seatLimit) {
-    redirect("/app/team?error=" + encodeURIComponent("This workspace has reached its member limit for now. Ask us from Support and we will raise it — there is nothing to pay."));
+    redirect(
+      teamQuery(
+        errorQuery,
+        "This workspace has reached its member limit for now. Ask us from Support and we will raise it — there is nothing to pay.",
+      ),
+    );
   }
 
   // Re-inviting the same person replaces the previous invitation rather than
@@ -88,23 +106,41 @@ async function inviteMember(formData: FormData) {
   // whoever invited them needs to know the email did not go, or they will wait
   // for a reply to a message nobody received.
   if (invitation) {
-    const sent = await callWorker("/jobs/send-invite", {
+    const sent = await callWorker<{ delivered?: boolean }>("/jobs/send-invite", {
       workspaceId: session.workspaceId,
       userId: session.userId,
       invitationId: invitation.id,
     });
     if (!sent.ok) {
-      redirect(errorQuery("/app/team", `Invitation created, but the email was not sent: ${sent.error} Share the link below instead.`));
+      redirect(teamQuery(errorQuery, `Invitation created, but the email was not sent: ${sent.error} Share the link below instead.`));
+    }
+    // A worker that answered but could not deliver — email switched off on
+    // this deployment, or the provider refused it — says so with
+    // `delivered: false` rather than an error. Reading only `ok` reported that
+    // as sent, and the colleague waited for an email that never existed.
+    if (sent.data?.delivered === false) {
+      revalidatePath("/app/profile");
+      redirect(
+        teamQuery(
+          noticeQuery,
+          `Invitation created for ${email}, but the email was not sent. Copy the link below and send it to them yourself.`,
+        ),
+      );
     }
   }
 
-  revalidatePath("/app/team");
+  revalidatePath("/app/profile");
+  redirect(teamQuery(noticeQuery, `Invitation sent to ${email}.`));
 }
 
 
 async function revokeInvitation(formData: FormData) {
   "use server";
-  const id = String(formData.get("invitationId"));
+  // The form names this field `invitationId`. It used to post `id` while this
+  // read `invitationId`, so every Revoke updated a row with the id "null" and
+  // the invitation stayed live — a link anyone holding could still join with.
+  const id = String(formData.get("invitationId") ?? "");
+  if (!id) return;
   const session = await requireSession();
   if (!["owner", "admin", "manager"].includes(session.role)) return;
 
@@ -115,7 +151,7 @@ async function revokeInvitation(formData: FormData) {
     .eq("id", id)
     .eq("workspace_id", session.workspaceId);
 
-  revalidatePath("/app/team");
+  revalidatePath("/app/profile");
 }
 
 /**
@@ -215,7 +251,9 @@ export async function TeamSection({
   const accountByUser = new Map((accounts ?? []).map((a) => [a.user_id, a]));
 
   const canManage = ["owner", "admin", "manager"].includes(session.role);
-  const appUrl = process.env.APP_URL ?? "http://localhost:3000";
+  // `SITE.app`, which is normalised: a trailing slash on APP_URL made every
+  // copied link `https://app…//invite/…`, and an unset one made it localhost.
+  const appUrl = SITE.app;
   const seats = workspace?.seats ?? 1;
   const used = (members ?? []).length + (invitations ?? []).length;
 
@@ -347,7 +385,7 @@ export async function TeamSection({
                         <div className="row">
                           <CopyButton value={`${appUrl}/invite/${invitation.token}`} />
                           <form action={revokeInvitation}>
-                            <input type="hidden" name="id" value={invitation.id} />
+                            <input type="hidden" name="invitationId" value={invitation.id} />
                             <button className="btn ghost small" type="submit">
                               Revoke
                             </button>

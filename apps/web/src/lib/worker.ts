@@ -114,3 +114,21 @@ export function errorQuery(path: string, message: string): string {
 export function noticeQuery(path: string, message: string): string {
   return `${path}?notice=${encodeURIComponent(message)}`;
 }
+
+/**
+ * What a queued agent run says it did, when the worker found one already going.
+ *
+ * `/jobs/strategy` and `/jobs/targeting` treat a second press while the first
+ * run is still working as the same request, and answer `alreadyRunning`. The
+ * page then has to say so: "Writing four more" over a press that started
+ * nothing reads as a second batch on its way, and somebody waits for eight.
+ */
+export const ALREADY_RUNNING = "Already working on it — this takes a few minutes.";
+
+export function isAlreadyRunning(data: unknown): boolean {
+  return (data as { alreadyRunning?: unknown } | null)?.alreadyRunning === true;
+}
+
+export function startedNotice(data: unknown, started: string): string {
+  return isAlreadyRunning(data) ? ALREADY_RUNNING : started;
+}

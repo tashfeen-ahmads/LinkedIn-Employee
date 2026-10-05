@@ -1300,6 +1300,46 @@ tests that were verified by deliberately breaking the code.
     from the database — the sessions are intact — which is why they read as a
     customer who keeps forgetting to log in.
 
+58. **A press is a request, not a job, and a quiet failure is still a failure.**
+    The October audit walked one new customer from signup to a booked meeting
+    through the code and found the same disease at a dozen stations: a step
+    that did nothing and said so to nobody.
+
+    *One run per request.* `/jobs/strategy` and `/jobs/targeting` go through
+    `enqueueOnce` with a key per strategy (`strategyJobKey`, and
+    `targeting--<profile>--<campaign|new>`): a customer pressed Build three
+    times in eight seconds and got four near-identical campaigns over the same
+    people. A press while a run is going answers `alreadyRunning`, and the
+    screen says so. Reply and inbound jobs use `enqueueOnce` too (rule 44),
+    because a finished job holding `reply:<draft>` swallowed the rep's Send.
+
+    *The worker is the tenant boundary.* It holds the service role, so every
+    id that arrived from a form is filtered by `workspace_id` — the targeting
+    job used to run another company's strategy on another company's seat given
+    the right UUID.
+
+    *Nothing waits on a moment that may not come.* A strategy approved before
+    LinkedIn was connected is searched when the account connects and hourly
+    after (`startPendingSearches`); a failed Strategy Agent run has a retry
+    that does not go through `/onboarding`; the invite link is read through
+    the worker by its token, because row-level security hides it from the
+    signed-out person it was sent to.
+
+    *The day is the rep's day.* Counters roll over at the rep's local midnight
+    (`localDate`), and `daily_invite_cap` counts what the campaign sent today
+    plus what is already queued, shared across campaigns on one account — a
+    UTC reset sent a Pacific rep's whole allowance between five and six in the
+    evening. Retries are jittered (`jitteredRetryMs`) so a released backlog
+    never drains at the floor. A warmed invitation is placed inside its
+    four-hour window, and a refused view is sent cold rather than re-warmed
+    for ever.
+
+    *A reply is never lost or misread.* Opt-outs are checked before any model
+    call (rule 7); a reply the model could not read is held for a person; the
+    poll keeps a read position per account; a booking acceptance must match an
+    offered slot's day and minute exactly, is re-checked against the calendar
+    before it is booked, and a refused insert books nothing.
+
 ## Conventions
 
 - Agent output is validated against a zod schema before it touches the

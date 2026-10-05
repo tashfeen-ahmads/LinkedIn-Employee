@@ -15,16 +15,17 @@ import {
   countFunnel,
   stagesFor,
 } from "@le/shared";
-import { ACCOUNT_USAGE_COLUMNS } from "@le/linkedin";
+import { ACCOUNT_USAGE_COLUMNS, dailyInviteCap, localDayStart } from "@le/linkedin";
+import { restoreFromFailure } from "@/lib/retry-failed";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
-import { callWorker, errorQuery, noticeQuery } from "@/lib/worker";
+import { callWorker, errorQuery, noticeQuery, startedNotice } from "@/lib/worker";
 import { SubmitButton } from "@/components/submit-button";
 import { describeSearch } from "./search-state";
 import { describePacing } from "@/lib/pacing";
-import { MIN_SENDS_TO_COMPARE, comparisonReady, standings, profileHref } from "@le/shared";
+import { INVITE_NOTE_MAX_CHARS, MIN_SENDS_TO_COMPARE, comparisonReady, standings, profileHref } from "@le/shared";
 import { PageNotice, type NoticeParams } from "@/components/page-notice";
-import { CONNECTION_NOTE_MAX, daysToSendAll, launchBlockers } from "@/lib/campaign";
+import { daysToSendAll, launchBlockers } from "@/lib/campaign";
 
 /**
  * How many people one press of "Find more" reads.
@@ -57,6 +58,19 @@ async function saveCampaign(formData: FormData) {
   // detaching the agent a campaign is already running on.
   const agentField = formData.get("agentId");
   const warmUp = formData.get("warm_up") === "on";
+
+  // The template is what a prospect with no personalised note receives, so it
+  // is held to the same cap as the send path. The textarea's maxLength stops
+  // typing past it; this stops a form that never had one, and a template
+  // stored under the old 300 being saved again unchanged.
+  if (note.length > INVITE_NOTE_MAX_CHARS) {
+    redirect(
+      errorQuery(
+        `/app/campaigns/${campaignId}`,
+        `The connection note is ${note.length} characters. LinkedIn refuses anything over ${INVITE_NOTE_MAX_CHARS}.`,
+      ),
+    );
+  }
 
   await supabase
     .from("campaigns")
@@ -134,11 +148,11 @@ async function saveInviteNote(formData: FormData) {
 
   // LinkedIn refuses a longer note outright rather than truncating it, so a
   // silent save here would produce an invitation that never sends.
-  if (note.length > CONNECTION_NOTE_MAX) {
+  if (note.length > INVITE_NOTE_MAX_CHARS) {
     redirect(
       errorQuery(
         `/app/campaigns/${campaignId}`,
-        `That note is ${note.length} characters. LinkedIn refuses anything over ${CONNECTION_NOTE_MAX}.`,
+        `That note is ${note.length} characters. LinkedIn refuses anything over ${INVITE_NOTE_MAX_CHARS}.`,
       ),
     );
   }
@@ -330,7 +344,10 @@ async function findMore(formData: FormData) {
   redirect(
     noticeQuery(
       `/app/campaigns/${campaignId}`,
-      "Reading the next page of the same search. It takes about a minute — reload this page and the new names appear at the bottom of the list.",
+      startedNotice(
+        queued.data,
+        "Reading the next page of the same search. It takes about a minute — reload this page and the new names appear at the bottom of the list.",
+      ),
     ),
   );
 }
@@ -393,10 +410,17 @@ async function rewriteNotes(formData: FormData) {
  *
  * Retrying is safe because a failure is not a contact. `runLinkedInAction`
  * returns on a provider error *before* `recordAction` and before stamping
- * `last_contacted_at`, so no daily allowance was spent and the prospect was
- * never written down as reached. Everything that refuses — the limiter, the
- * exclusion list, do-not-contact, the never-twice rule — is re-checked on the
- * way out, so this queues an attempt rather than forcing a send.
+ * `last_contacted_at`, so no daily allowance was spent and the message that
+ * failed was never written down as sent. Everything that refuses — the
+ * limiter, the exclusion list, do-not-contact, the never-twice rule — is
+ * re-checked on the way out, so this queues an attempt rather than forcing a
+ * send.
+ *
+ * Each row goes back to the state it failed *from* (`restoreFromFailure`),
+ * never to the queue wholesale. A failed follow-up belongs to somebody who
+ * already accepted; requeued for an invitation, the never-twice check closed
+ * them as "already contacted", and the button meant to rescue the campaign's
+ * one acceptance wrote it off instead.
  *
  * It is a button and not a retry loop on purpose. "Cannot send invitation to
  * this member" is LinkedIn refusing that person and will fail identically for
@@ -410,27 +434,60 @@ async function retryFailed(formData: FormData) {
   const session = await requireSession();
   const supabase = await createClient();
 
-  const { data, error } = await supabase
+  const { data: failedRows, error: readError } = await supabase
     .from("campaign_prospects")
-    .update({ status: "queued", status_reason: null, next_action_at: null })
+    .select("id, invited_at, accepted_at, last_step_sent")
     .eq("campaign_id", campaignId)
     .eq("workspace_id", session.workspaceId)
-    .eq("status", "failed")
-    .select("id");
+    .eq("status", "failed");
+  if (readError) {
+    redirect(errorQuery(`/app/campaigns/${campaignId}`, `Could not requeue those: ${readError.message}`));
+  }
+
+  // One write per destination state rather than per row: a campaign's failures
+  // land in two or three states at most.
+  const now = new Date();
+  const groups = new Map<string, { restored: ReturnType<typeof restoreFromFailure>; ids: string[] }>();
+  for (const row of failedRows ?? []) {
+    const restored = restoreFromFailure(row, now);
+    const key = `${restored.status}|${restored.next_action_at ?? ""}`;
+    const group = groups.get(key) ?? { restored, ids: [] };
+    group.ids.push(row.id);
+    groups.set(key, group);
+  }
+
+  let invitations = 0;
+  let followUps = 0;
+  for (const { restored, ids } of groups.values()) {
+    const { data, error } = await supabase
+      .from("campaign_prospects")
+      .update({ status: restored.status, status_reason: null, next_action_at: restored.next_action_at })
+      .in("id", ids)
+      .eq("workspace_id", session.workspaceId)
+      // Only rows still failed: anything that moved since the read is left.
+      .eq("status", "failed")
+      .select("id");
+    if (error) {
+      revalidatePath(`/app/campaigns/${campaignId}`);
+      redirect(errorQuery(`/app/campaigns/${campaignId}`, `Could not requeue those: ${error.message}`));
+    }
+    if (restored.status === "queued") invitations += data?.length ?? 0;
+    else followUps += data?.length ?? 0;
+  }
 
   revalidatePath(`/app/campaigns/${campaignId}`);
-  if (error) {
-    redirect(errorQuery(`/app/campaigns/${campaignId}`, `Could not requeue those: ${error.message}`));
-  }
-  const count = data?.length ?? 0;
+  const count = invitations + followUps;
+  const parts: string[] = [];
+  if (invitations) parts.push(`${invitations} back in the invitation queue`);
+  if (followUps) parts.push(`${followUps} back where their sequence stopped`);
   redirect(
     noticeQuery(
       `/app/campaigns/${campaignId}`,
       count === 0
         ? "Nothing to retry — no prospect on this campaign is in a failed state."
-        : `${count} prospect${count === 1 ? "" : "s"} back in the queue. ${
+        : `${parts.join(", ")}. ${
             count === 1 ? "It goes" : "They go"
-          } out at the campaign's normal pace; press Send one now to watch the first.`,
+          } out at the campaign's normal pace${invitations ? "; press Send one now to watch the first invitation" : ""}.`,
     ),
   );
 }
@@ -641,7 +698,16 @@ export default async function CampaignPage({
     prospectCount: queued.length,
     accountStatus: account?.status ?? null,
   });
-  const days = daysToSendAll(queued.length, campaign.daily_invite_cap);
+  // The rate the loop will actually keep: the campaign's cap, or the account's
+  // ramp if that is lower — a new account starts at ten whatever the campaign
+  // asks for (rule 3), and "4 days at 35 a day" on an account allowed ten is a
+  // promise the loop will not keep. Today's ramp, so the estimate only ever
+  // errs long as the ramp climbs.
+  const perDay = Math.min(
+    campaign.daily_invite_cap,
+    account ? dailyInviteCap(account.first_action_at ? new Date(account.first_action_at) : null) : campaign.daily_invite_cap,
+  );
+  const days = daysToSendAll(queued.length, perDay);
   const dropped = ruleStrings(campaign.rules, "droppedFilters");
   // What the words in the customer profile actually became. LinkedIn searches
   // places and industries by id, so every one of them was translated first.
@@ -690,9 +756,14 @@ export default async function CampaignPage({
   const variantStandings = standings(outcomes);
   const readyToCompare = comparisonReady(outcomes);
 
+  // What this campaign has already sent since the rep's own midnight, so the
+  // pace on screen is the one the loop keeps once part of today's cap is spent.
+  const dayStart = localDayStart(new Date(), owner?.timezone ?? "UTC").getTime();
+  const sentToday = rows.filter((r) => r.invited_at && Date.parse(r.invited_at) >= dayStart).length;
   const pacing = describePacing({
     status: campaign.status,
     queued: queued.length,
+    sentToday,
     account: account ?? null,
     timezone: owner?.timezone ?? "UTC",
     lastBeatAt: heartbeat?.beat_at ?? null,
@@ -710,7 +781,7 @@ export default async function CampaignPage({
           <>
             <span className={`pill ${running ? "positive" : ""}`}>{campaign.status}</span>{" "}
             {queued.length} still to invite of {rows.length}
-            {days ? ` · about ${days} working ${days === 1 ? "day" : "days"} at ${campaign.daily_invite_cap} a day` : ""}
+            {days ? ` · about ${days} working ${days === 1 ? "day" : "days"} at ${perDay} a day` : ""}
             {account?.display_name ? ` · sending as ${account.display_name}` : ""}
           </>
         }
@@ -915,13 +986,13 @@ export default async function CampaignPage({
 
           <label className="field">
             <span>
-              Connection request · at most {CONNECTION_NOTE_MAX} characters
+              Connection request · at most {INVITE_NOTE_MAX_CHARS} characters
             </span>
             <textarea
               name="connectionNote"
               rows={3}
               defaultValue={campaign.connection_note}
-              maxLength={CONNECTION_NOTE_MAX}
+              maxLength={INVITE_NOTE_MAX_CHARS}
             />
           </label>
 
@@ -1265,7 +1336,7 @@ export default async function CampaignPage({
                           <textarea
                             name="note"
                             rows={3}
-                            maxLength={CONNECTION_NOTE_MAX}
+                            maxLength={INVITE_NOTE_MAX_CHARS}
                             defaultValue={row.invite_note ?? ""}
                             placeholder={campaign.connection_note}
                           />
@@ -1273,7 +1344,7 @@ export default async function CampaignPage({
                         <div className="between">
                           <p className="tiny subtle">
                             {row.invite_note
-                              ? `${row.invite_note.length}/${CONNECTION_NOTE_MAX}`
+                              ? `${row.invite_note.length}/${INVITE_NOTE_MAX_CHARS}`
                               : "Empty sends the campaign template."}
                           </p>
                           <button className="btn secondary small" type="submit">

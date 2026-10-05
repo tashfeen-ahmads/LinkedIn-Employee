@@ -1,6 +1,6 @@
 import type { WorkerContext } from "../context.js";
 import { recordBeat } from "../heartbeat.js";
-import { jobId, type Queues } from "../queues.js";
+import { enqueueOnce, jobId, type Queues } from "../queues.js";
 
 export const INBOUND_POLL_BEAT = "inbound:poll";
 
@@ -27,6 +27,15 @@ const OVERLAP_MS = 30 * 60_000;
  *
  * A failure for one account is recorded and the others continue: one account
  * the provider refuses must not stop replies reaching everybody else.
+ *
+ * And the place an account is read from does not move past a failure. There
+ * used to be one `at` for every account, stamped after every run, so a run in
+ * which one account failed told the next run that account had been read — and
+ * anything it received more than the overlap before that was never asked for
+ * again. Each account now carries its own `at` in the beat, moved only when
+ * that account was actually read; the shared `at` moves only when every
+ * account was. Re-reading is safe, because `handleInboundMessage` drops a
+ * message it already holds before it does anything else.
  */
 export async function pollInbound(
   ctx: WorkerContext,
@@ -38,12 +47,23 @@ export async function pollInbound(
     .select("detail")
     .eq("name", INBOUND_POLL_BEAT)
     .maybeSingle();
-  const lastAt = (last?.detail as { at?: string } | null)?.at;
-  const lastMs = lastAt ? Date.parse(lastAt) : NaN;
-  const sinceMs = Number.isFinite(lastMs)
-    ? Math.max(lastMs - OVERLAP_MS, now.getTime() - FIRST_LOOKBACK_MS)
-    : now.getTime() - FIRST_LOOKBACK_MS;
-  const since = new Date(sinceMs).toISOString();
+  const lastDetail = (last?.detail ?? null) as { at?: string | null; accountsAt?: Record<string, string> } | null;
+  const lastAt = lastDetail?.at ?? null;
+  const previousAccountsAt =
+    lastDetail?.accountsAt && typeof lastDetail.accountsAt === "object" ? lastDetail.accountsAt : {};
+  // An account with no stamp of its own starts from the shared one, which is
+  // what every account read from before stamps were kept per account.
+  const sinceFor = (accountId: string): string => {
+    const stamp = previousAccountsAt[accountId] ?? lastAt;
+    const ms = stamp ? Date.parse(stamp) : NaN;
+    return new Date(
+      Number.isFinite(ms)
+        ? Math.max(ms - OVERLAP_MS, now.getTime() - FIRST_LOOKBACK_MS)
+        : now.getTime() - FIRST_LOOKBACK_MS,
+    ).toISOString();
+  };
+  const accountsAt: Record<string, string> = { ...previousAccountsAt };
+  let since = now.toISOString();
 
   const { data: accounts } = await ctx.db
     .from("linkedin_accounts")
@@ -57,17 +77,27 @@ export async function pollInbound(
 
   for (const account of accounts ?? []) {
     if (!account.provider_account_id) continue;
+    const accountSince = sinceFor(account.id);
+    if (accountSince < since) since = accountSince;
     let messages;
     try {
-      messages = await ctx.linkedin.listNewMessages({ accountId: account.provider_account_id, since });
+      messages = await ctx.linkedin.listNewMessages({ accountId: account.provider_account_id, since: accountSince });
     } catch (err) {
       failed.push({ account: account.id, error: err instanceof Error ? err.message.slice(0, 300) : String(err) });
+      // Its stamp stays where it was, so the next run asks again from there.
       continue;
     }
+    accountsAt[account.id] = now.toISOString();
     found += messages.length;
     for (const message of messages) {
       if (!message.providerMessageId || !message.fromProviderId) continue;
-      await queues.inbound.add(
+      // `enqueueOnce`, not `add`. The webhook usually delivered this message
+      // first, and a webhook job that finished without storing it — the
+      // sender not yet matched to a prospect, say — would otherwise hold the
+      // id for a day and turn this door away too (rule 44). Reviving a job for
+      // a message that was stored is a single lookup in `handleInboundMessage`.
+      const outcome = await enqueueOnce(
+        queues.inbound,
         "inbound",
         {
           workspaceId: account.workspace_id,
@@ -81,11 +111,15 @@ export async function pollInbound(
         // The id the webhook uses, so the two doors never handle one reply twice.
         { jobId: jobId("inbound", message.providerMessageId) },
       );
-      enqueued++;
+      if (outcome !== "already_pending") enqueued++;
     }
   }
 
   const result = { accounts: (accounts ?? []).length, found, enqueued, failed };
-  await recordBeat(ctx.db, INBOUND_POLL_BEAT, { at: now.toISOString(), since, ...result });
+  // Held back after a failure, for any reader still using the shared stamp.
+  // With no previous stamp the first-run lookback applies again, which is the
+  // same answer.
+  const at = failed.length ? lastAt : now.toISOString();
+  await recordBeat(ctx.db, INBOUND_POLL_BEAT, { at, accountsAt, ranAt: now.toISOString(), since, ...result });
   return result;
 }

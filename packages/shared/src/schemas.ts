@@ -481,9 +481,10 @@ export type CampaignProspectStatus = z.infer<typeof CampaignProspectStatus>;
 export const CAMPAIGN_TRANSITIONS: Record<CampaignProspectStatus, readonly CampaignProspectStatus[]> = {
   queued: ["invited", "closed", "failed"],
   invited: ["accepted", "closed", "failed", "replied"],
-  accepted: ["messaged_1", "replied", "closed"],
-  messaged_1: ["messaged_2", "replied", "closed"],
-  messaged_2: ["messaged_3", "replied", "closed"],
+  // A follow-up the provider refused for good fails the row it was sent from.
+  accepted: ["messaged_1", "replied", "closed", "failed"],
+  messaged_1: ["messaged_2", "replied", "closed", "failed"],
+  messaged_2: ["messaged_3", "replied", "closed", "failed"],
   messaged_3: ["replied", "closed"],
   replied: ["positive", "negative", "opted_out", "closed", "meeting_booked"],
   positive: ["meeting_booked", "negative", "closed", "opted_out"],
@@ -491,7 +492,12 @@ export const CAMPAIGN_TRANSITIONS: Record<CampaignProspectStatus, readonly Campa
   meeting_booked: ["closed"],
   closed: [],
   opted_out: [],
-  failed: ["queued"],
+  // Retry failed puts a row back where it failed from (`restoreFromFailure`):
+  // never invited → queued; invited → invited; accepted or part-way through the
+  // sequence → that step. Requeueing an invited person as a fresh invitation is
+  // the one move this must not allow, and the never-twice check would then close
+  // them anyway.
+  failed: ["queued", "invited", "accepted", "messaged_1", "messaged_2", "messaged_3"],
 };
 
 export function canTransition(from: CampaignProspectStatus, to: CampaignProspectStatus): boolean {
