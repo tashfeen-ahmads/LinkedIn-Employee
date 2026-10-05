@@ -12,3 +12,4 @@ supabase/.temp
 
 # TypeScript incremental build state — a build artifact, not source.
 *.tsbuildinfo
+.claude/worktrees/

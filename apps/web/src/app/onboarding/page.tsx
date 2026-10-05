@@ -190,7 +190,7 @@ export default async function OnboardingPage({
             default for somebody: the search tier is a paid seat we cannot see, and how much rope
             to give the agent is your call rather than ours.
           </p>
-          <fieldset className="field" style={{ border: 0, padding: 0, display: "grid", gap: "0.6rem" }}>
+          <fieldset className="field-group" style={{ border: 0, padding: 0 }}>
             <legend style={{ fontWeight: 600, marginBottom: "0.25rem" }}>
               Does this LinkedIn account have Sales Navigator?
             </legend>

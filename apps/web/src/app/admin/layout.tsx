@@ -34,13 +34,13 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           ]}
         />
 
-        <div className="app-account">
-          <div className="app-account-who">
-            <p className="small">{admin.email}</p>
-            <p className="tiny subtle">platform admin</p>
-          </div>
+        {/* The slot the app's own sign-out uses, so it sits at the foot of
+            the column on a desktop and beside the brand on a phone. The
+            classes this block used before had no styles left in the sheet. */}
+        <div className="app-signout stack-1">
+          <p className="tiny subtle">{admin.email}</p>
           <Link href="/app" className="btn ghost small">
-            Exit
+            Back to the app
           </Link>
         </div>
       </aside>

@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase-server";
 import { callWorker, errorQuery, noticeQuery } from "@/lib/worker";
 import { describeClaim } from "./claim";
 import { linkedInState } from "./linkedin-state";
+import { CopyButton } from "@/components/copy-button";
 import { PLAN_SEATS } from "@le/billing";
 import { createInviteToken, inviteExpiry, INVITE_TTL_DAYS } from "@/lib/invitations";
 import { PageNotice } from "@/components/page-notice";
@@ -294,7 +295,7 @@ export async function TeamSection({
                 <span>Email address</span>
                 <input type="email" name="email" placeholder="colleague@company.com" required />
               </label>
-              <label className="field">
+              <label className="field compact-wide">
                 <span>Role</span>
                 <select name="role" defaultValue="rep">
                   <option value="rep">Rep</option>
@@ -317,7 +318,6 @@ export async function TeamSection({
                     <th>Role</th>
                     <th>Expires</th>
                     <th>Link</th>
-                    <th />
                   </tr>
                 </thead>
                 <tbody>
@@ -335,16 +335,16 @@ export async function TeamSection({
                         */}
                         {formatExpiry(invitation.expires_at)}
                       </td>
-                      <td className="small mono breakable">
-                        {appUrl}/invite/{invitation.token}
-                      </td>
                       <td>
-                        <form action={revokeInvitation}>
-                          <input type="hidden" name="id" value={invitation.id} />
-                          <button className="btn ghost small" type="submit">
-                            Revoke
-                          </button>
-                        </form>
+                        <div className="row">
+                          <CopyButton value={`${appUrl}/invite/${invitation.token}`} />
+                          <form action={revokeInvitation}>
+                            <input type="hidden" name="id" value={invitation.id} />
+                            <button className="btn ghost small" type="submit">
+                              Revoke
+                            </button>
+                          </form>
+                        </div>
                       </td>
                     </tr>
                   ))}

@@ -1102,6 +1102,9 @@ input[type="text"], input[type="email"], input[type="url"], input[type="number"]
   transition: border-color 130ms ease, box-shadow 130ms ease;
 }
 .field textarea { resize: vertical; min-height: 4.5rem; line-height: 1.5; }
+/* One height for a text box and a dropdown, so two fields side by side line
+   up: a native select renders shorter than an input at the same padding. */
+.field input:not([type="checkbox"]):not([type="radio"]), .field select { min-height: 2.75rem; }
 .field input:focus, .field textarea:focus, .field select:focus {
   outline: none;
   border-color: var(--accent);
@@ -1139,6 +1142,12 @@ form > button.btn:not(.block) { align-self: flex-start; }
  * in this sheet states its direction for that reason. */
 .form-row { display: flex; flex-direction: row; flex-wrap: wrap; gap: var(--space-3); align-items: flex-end; }
 .form-row > .field { flex: 1 1 220px; }
+/* The button sits on the fields' baseline. `form > button.btn` above pins a
+   column form's button to the start, and in a row "start" is the top — so
+   every inline form had its button floating level with the labels while the
+   inputs sat a line lower. */
+form.form-row > .btn:not(.block),
+form.form-row > button.btn:not(.block) { align-self: flex-end; }
 
 /* A field that should not grow to fill its row: an hour, a seat count, a
    number with two digits in it. Expressed as a max so it still shrinks on a
@@ -1585,6 +1594,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .app-body {
   display: flex;
   flex-direction: column;
+  min-width: 0;
   /* Gap and padding both scale with the viewport rather than stepping once at
      820px. On a phone the old fixed 1.5rem gutter spent a tenth of the screen
      on empty margin; on a wide monitor the same value left sections touching. */
@@ -1792,7 +1802,11 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 .app-banners + .app-body { padding-top: var(--space-4); }
 
 @media (max-width: 820px) {
-  .app { grid-template-columns: 1fr; background: var(--bg); }
+  /* `minmax(0, 1fr)`, never a bare `1fr`: a bare fraction is `minmax(auto,
+     1fr)`, so the widest table on the page set the column's floor and every
+     phone screen with a table scrolled sideways as a whole page — the table's
+     own scroller never got the chance. */
+  .app { grid-template-columns: minmax(0, 1fr); background: var(--bg); }
   .app-aside {
     border-right: 0;
     border-bottom: 1px solid var(--border);
