@@ -294,7 +294,7 @@ export async function Availability() {
         <div className="stack-1">
           <h3>The next two weeks</h3>
           <p className="small muted prose">
-            Exactly what the Reply Agent can offer, drawn from the same rule it uses — so nothing
+            Exactly what Reese can offer, drawn from the same rule it uses — so nothing
             here is a time it would refuse, and nothing it offers is missing here.
           </p>
         </div>

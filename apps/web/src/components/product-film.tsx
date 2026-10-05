@@ -83,7 +83,7 @@ function scenes(still: boolean): Scene[] {
     {
       id: "strategy",
       label: "Strategy",
-      agent: "Strategy Agent",
+      agent: "Sage · strategist",
       caption: "You give it your website once. It comes back with who to go after.",
       body: (
         <div className="film-rows">
@@ -106,7 +106,7 @@ function scenes(still: boolean): Scene[] {
     {
       id: "targeting",
       label: "Targeting",
-      agent: "Targeting Agent",
+      agent: "Scout · prospector",
       caption: "It searches LinkedIn, opens every profile, and scores the fit against that strategy.",
       body: (
         <div className="film-rows">
@@ -134,7 +134,7 @@ function scenes(still: boolean): Scene[] {
     {
       id: "note",
       label: "The note",
-      agent: "Invite writer",
+      agent: "Quinn · campaign writer",
       caption: "One connection request, written from that person's own profile. Not a template.",
       body: (
         <div className="film-rows">
@@ -161,7 +161,7 @@ function scenes(still: boolean): Scene[] {
     {
       id: "pacing",
       label: "Sending",
-      agent: "The limiter",
+      agent: "Reese · within the limits",
       caption: "Then it goes slowly, on purpose. This is the part that keeps the account alive.",
       body: (
         <div className="film-rows">
@@ -187,7 +187,7 @@ function scenes(still: boolean): Scene[] {
     {
       id: "reply",
       label: "The reply",
-      agent: "Reply Agent",
+      agent: "Reese · replies",
       caption: "It answers what it can answer — and stops on anything that should be yours.",
       body: (
         <div className="film-rows">

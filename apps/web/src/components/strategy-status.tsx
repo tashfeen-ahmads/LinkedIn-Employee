@@ -16,7 +16,7 @@ export function StrategyStatus({ state }: { state: StrategyState }) {
     return (
       <div className="notice danger" role="status">
         <p>
-          <strong>The Strategy Agent could not finish.</strong> Nothing else can start until it
+          <strong>Sage could not finish.</strong> Nothing else can start until it
           does — your customer profiles are what everything downstream is built from.
         </p>
         <p className="small">{state.reason}</p>
@@ -33,8 +33,8 @@ export function StrategyStatus({ state }: { state: StrategyState }) {
   return (
     <div className="notice accent" role="status">
       <p>
-        <strong>The Strategy Agent is working.</strong> It is reading your site and writing your
-        business profile and three to five customer profiles. This usually takes a few minutes.
+        <strong>Sage is working.</strong> Sage is reading your site and writing your business
+        profile and three to five customer profiles. This usually takes a few minutes.
       </p>
       <p className="small muted">
         {minutes < 1 ? "Started just now." : `Started ${minutes} minute${minutes === 1 ? "" : "s"} ago.`}{" "}

@@ -13,7 +13,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
  * than a different colour.
  */
 
-type Actor = "Targeting Agent" | "Reply Agent" | "The prospect" | "You";
+type Actor = "Reese" | "The prospect" | "You";
 
 interface Beat {
   day: number;
@@ -32,11 +32,11 @@ const BEATS: Beat[] = [
     human: true,
     title: "You approve the list and the copy",
     detail:
-      "The Strategy Agent has written your customer profiles and the Targeting Agent has built a ranked list with a connection note and two follow-ups. Nothing has been sent. You read all of it and launch.",
+      "Sage has written your customer strategies, Scout has found and checked the people, and Quinn has written a connection note for each of them and two follow-ups. Nothing has been sent. You read all of it and launch.",
   },
   {
     day: 0,
-    actor: "Targeting Agent",
+    actor: "Reese",
     title: "The first invitations go out",
     detail:
       "Ten on day one, spread across your working hours with two to nine minutes between each. Never at the same minute twice, because a scheduler is the easiest thing in the world to spot.",
@@ -47,14 +47,14 @@ const BEATS: Beat[] = [
     actor: "The prospect",
     title: "Dmitri accepts",
     detail:
-      "Noticed by the nightly connection check, because LinkedIn sends no acceptance event. That check is also what starts the clock on the follow-up.",
+      "Noticed by the hourly connection check, because LinkedIn sends no acceptance event. That check is also what starts the clock on the first message.",
   },
   {
-    day: 5,
-    actor: "Targeting Agent",
-    title: "Follow-up one",
+    day: 3,
+    actor: "Reese",
+    title: "The first message, within the hour",
     detail:
-      "Two days after connecting, inside working hours, under the daily message cap. If he had replied first, this would never have been sent — a reply ends the sequence whatever it says.",
+      "Twenty to ninety minutes after the acceptance is noticed, inside working hours, under the daily message cap — while he still remembers accepting. If he had replied first, this would never have been sent — a reply ends the sequence whatever it says.",
     quote: "Thanks for connecting. Most teams we talk to are stitching lane costs together in a spreadsheet — is that you too?",
   },
   {
@@ -66,10 +66,10 @@ const BEATS: Beat[] = [
   },
   {
     day: 6,
-    actor: "Reply Agent",
+    actor: "Reese",
     title: "Classified, drafted, and held",
     detail:
-      "The reply is classified before anything is written. Pricing goes to a person on every plan, so the draft is written and then parked in your inbox rather than sent. The sequence stops here either way.",
+      "The reply is classified before anything is written. Pricing goes to a person unless you have told it otherwise, so the draft is written and then parked in your inbox rather than sent. The sequence stops here either way.",
   },
   {
     day: 6,
@@ -82,7 +82,7 @@ const BEATS: Beat[] = [
   },
   {
     day: 7,
-    actor: "Reply Agent",
+    actor: "Reese",
     title: "He takes Thursday. It books itself",
     detail:
       "The acceptance is matched against the exact slots that were offered, then written into your calendar with the whole conversation attached. If the calendar write fails, it does not pretend otherwise: it asks you to book it by hand.",

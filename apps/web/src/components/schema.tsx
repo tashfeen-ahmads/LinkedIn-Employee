@@ -35,7 +35,15 @@ export function OrganizationSchema() {
   );
 }
 
-/** The product itself, with the plans as offers. */
+/**
+ * The product itself.
+ *
+ * One offer at zero, because that is what the page says: free for everyone,
+ * for now. The three priced plans this used to carry were removed from every
+ * visible page, and structured data that still advertised them would be the
+ * mismatch Google treats as spam — a price in the markup that no reader can
+ * find on the screen.
+ */
 export function SoftwareSchema() {
   return (
     <Json
@@ -48,21 +56,19 @@ export function SoftwareSchema() {
         operatingSystem: "Web",
         url: SITE.url,
         description: SITE.description,
-        offers: [
-          { "@type": "Offer", name: "Solo", price: "149", priceCurrency: "USD" },
-          { "@type": "Offer", name: "Pro", price: "249", priceCurrency: "USD" },
-          { "@type": "Offer", name: "Teams", price: "199", priceCurrency: "USD" },
-        ].map((offer) => ({
-          ...offer,
-          category: "SaaS subscription, per seat per month",
-          availability: "https://schema.org/PreOrder",
-        })),
+        offers: {
+          "@type": "Offer",
+          name: "Free for everyone, for now",
+          price: "0",
+          priceCurrency: "USD",
+        },
         featureList: [
-          "Ideal customer profiles written from your website",
+          "An AI assistant with four AI employees: a strategist, a prospector, a campaign writer and an outreach and booking specialist",
+          "Customer strategies written from your website, approved by you before anything is searched",
           "Ranked prospect lists with the intent signals behind each score",
           `Sending capped at ${PUBLIC_LIMITS.invitesPerDayMax} invitations a day and ${PUBLIC_LIMITS.invitesPerWeek} a week`,
           "Replies drafted for human approval",
-          "Meetings booked into a connected calendar",
+          "Meetings booked from times you are actually available",
         ],
       }}
     />

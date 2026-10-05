@@ -71,8 +71,8 @@ export default async function OnboardingPage({
             <h2>Your business</h2>
           </div>
           <p className="small muted">
-            The Strategy Agent reads what you publish and drafts your business profile and three to
-            five customer profiles. You read and approve them before anything is searched for.
+            Sage, the team&rsquo;s strategist, reads what you publish and drafts your business
+            profile and three to five customer profiles. You read and approve them before anything is searched for.
           </p>
           <label className="field">
             <span>Company name</span>

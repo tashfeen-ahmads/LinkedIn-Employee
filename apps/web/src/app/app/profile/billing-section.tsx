@@ -1,37 +1,21 @@
 import { entitlementFor, entitlementMessage, trialLimitEnforced } from "@le/billing";
-import { PageHeader, Panel, Section } from "@/components/page";
+import { Panel, Section } from "@/components/page";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
-import { callWorker, errorQuery } from "@/lib/worker";
-import { redirect } from "next/navigation";
 import { PageNotice, type NoticeParams } from "@/components/page-notice";
+import { NORA } from "@/lib/team";
 
-const PLANS = [
-  { id: "solo" as const, name: "Solo", price: "$149", blurb: "One seat, replies drafted for your approval." },
-  { id: "pro" as const, name: "Pro", price: "$249", blurb: "Autopilot replies, intent signals, native CRM." },
-  { id: "teams" as const, name: "Teams", price: "$199", blurb: "Three seats or more, shared exclusions, reporting." },
-];
-
-async function startCheckout(formData: FormData) {
-  "use server";
-  const plan = String(formData.get("plan"));
-  if (!["solo", "pro", "teams"].includes(plan)) return;
-
-  const session = await requireSession();
-  const result = await callWorker<{ url?: string }>("/jobs/checkout", {
-    workspaceId: session.workspaceId,
-    userId: session.userId,
-    plan,
-    seats: Number(formData.get("seats") ?? 1),
-    email: session.email || undefined,
-  });
-  if (!result.ok) redirect(errorQuery("/app/billing", result.error));
-  if (!result.data?.url) {
-    redirect(errorQuery("/app/billing", "Checkout is not available right now. Please try again."));
-  }
-  redirect(result.data.url);
-}
-
+/**
+ * What this workspace costs, which right now is nothing.
+ *
+ * The product is free for everyone while it is being built in the open, so the
+ * three price cards and the checkout buttons are gone from the screen. Only
+ * what people see changed: the entitlement rules in `@le/billing` still run,
+ * and a workspace whose sending is genuinely stopped — a cancelled or unpaid
+ * subscription from before — still gets the notice saying so, because hiding a
+ * real stop behind "it's free" is a screen that lies in the comforting
+ * direction.
+ */
 export async function BillingSection({ searchParams }: { searchParams: NoticeParams }) {
   const params = await searchParams;
   const session = await requireSession();
@@ -39,7 +23,7 @@ export async function BillingSection({ searchParams }: { searchParams: NoticePar
 
   const { data: workspace } = await supabase
     .from("workspaces")
-    .select("plan, trial_ends_at, subscription_status, seats, current_period_end")
+    .select("plan, trial_ends_at, subscription_status, seats")
     .eq("id", session.workspaceId)
     .single();
 
@@ -56,92 +40,48 @@ export async function BillingSection({ searchParams }: { searchParams: NoticePar
       <PageNotice error={params.error} notice={params.notice} />
 
       {message ? (
-        <div className={`notice ${entitlement.canSend ? "warning" : "danger"}`}>
-          {message}
-        </div>
-      ) : entitlement.reason === "trial_unlimited" ? (
-        <div className="notice">
-          No trial limit right now — campaigns run without an end date while pricing is being
-          finalised. We will tell you well before that changes.
-        </div>
-      ) : entitlement.reason === "trial_active" ? (
-        <div className="notice">
-          {entitlement.trialDaysLeft === 0
-            ? "Your trial ends today."
-            : `${entitlement.trialDaysLeft} ${entitlement.trialDaysLeft === 1 ? "day" : "days"} left in your trial.`}{" "}
-          Campaigns keep running while it lasts.
-        </div>
+        <div className={`notice ${entitlement.canSend ? "warning" : "danger"}`}>{message}</div>
       ) : null}
 
       {/*
-        The plan, the plans and the export were four cards in a row under one
-        heading — the plan you are on in a box of its own, three price cards,
-        and a download in a fifth. One section: what you are on, what you could
-        move to, and the file you can take with you. They are one subject and
-        the page was already too many boxes.
+        One section: what it costs, and the file you can take with you. They
+        were the plan, three price cards and the export; with no plan to choose
+        the cards have nothing to say, and the export is still the promise that
+        matters.
       */}
-      <Section id="plan" title="Plan" description="What this workspace is on, and what it can move to.">
+      <Section id="plan" title="Price" description="What this workspace costs, and what you can take with you.">
         <Panel>
-          <p className="small muted">
-            {workspace?.plan ?? "trial"}
-            {workspace?.subscription_status ? ` · ${workspace.subscription_status}` : ""}
-            {workspace?.seats ? ` · ${workspace.seats} ${workspace.seats === 1 ? "seat" : "seats"}` : ""}
-            {workspace?.current_period_end
-              ? ` · renews ${new Date(workspace.current_period_end).toLocaleDateString()}`
-              : ""}
+          <p className="strongish">
+            {NORA} is free for now — for everyone.
           </p>
-
-          <div className="grid grid-2">
-        {PLANS.map((plan) => (
-          <article key={plan.id} className="card">
-            <h3>{plan.name}</h3>
-            <p className="stat-value">
-              {plan.price}
-              <span className="muted small">
-                {" "}
-                / seat / mo
-              </span>
-            </p>
-            <p className="small muted">{plan.blurb}</p>
-            <form action={startCheckout}>
-              <input type="hidden" name="plan" value={plan.id} />
-              <input type="hidden" name="seats" value={Math.max(1, workspace?.seats ?? 1)} />
-              <button className="btn secondary small" type="submit">
-                Choose {plan.name}
-              </button>
-            </form>
-          </article>
-        ))}
-          </div>
+          <p className="small muted prose">
+            No plan to choose and no card on file. Every workspace gets {NORA} and the whole team.
+            If that ever changes, you will hear it from us well before it does.
+          </p>
 
           <hr className="divider" />
           <h3>Export everything</h3>
-        <p className="small muted">
-          Every prospect, conversation, message, meeting and campaign in this workspace, as one JSON
-          file. This is what answers a subject-access request, and it is here rather than behind a
-          support email because a promise only we can keep is not a promise you have.
-        </p>
-        {/*
-          A link, not a form: the answer is a download, and a server action can
-          only redirect or re-render. Owners and admins only — the file holds
-          other people's personal data in bulk.
-        */}
-        {["owner", "admin"].includes(session.role) ? (
-          <p>
-            <a className="btn secondary small" href="/app/export" download>
-              Download workspace export
-            </a>
+          <p className="small muted">
+            Every prospect, conversation, message, meeting and campaign in this workspace, as one JSON
+            file. This is what answers a subject-access request, and it is here rather than behind a
+            support email because a promise only we can keep is not a promise you have.
           </p>
-        ) : (
-          <p className="tiny subtle">An owner or an admin can download this.</p>
-        )}
+          {/*
+            A link, not a form: the answer is a download, and a server action can
+            only redirect or re-render. Owners and admins only — the file holds
+            other people's personal data in bulk.
+          */}
+          {["owner", "admin"].includes(session.role) ? (
+            <p>
+              <a className="btn secondary small" href="/app/export" download>
+                Download workspace export
+              </a>
+            </p>
+          ) : (
+            <p className="tiny subtle">An owner or an admin can download this.</p>
+          )}
         </Panel>
       </Section>
-
-      <p className="small muted">
-        Cancelling stops outreach. Your prospects, conversations and booked meetings stay readable and
-        exportable — we do not hold your record of what was said hostage.
-      </p>
     </>
   );
 }

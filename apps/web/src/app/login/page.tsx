@@ -48,7 +48,7 @@ export default async function LoginPage({
           <header>
             <h1>Not open yet</h1>
             <p className="muted">
-              We are still setting this up. Trials open once the first campaigns have run under
+              We are still setting this up. Sign-ups open once the first campaigns have run under
               supervision — we would rather be late than have the first thing our software does be
               something a stranger receives by mistake.
             </p>

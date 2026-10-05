@@ -1,4 +1,5 @@
 import { PUBLIC_LIMITS } from "@/lib/site";
+import { NORA } from "@/lib/team";
 
 /**
  * What the form is for, beside the form.
@@ -35,15 +36,15 @@ export function AuthAside({ variant = "signin" }: { variant?: "signin" | "signup
         the same on both, since the product is the same product.
       */}
       {variant === "signup" ? (
-        <p className="auth-badge">Seven days free · no card</p>
+        <p className="auth-badge">Free for now · for everyone</p>
       ) : null}
 
       <div className="stack-3">
         <p className="eyebrow">An AI SDR that works inside the limits</p>
         <p className="lede prose">
           {variant === "signup"
-            ? "Give it your website and it writes who to go after. You approve a strategy, approve the words, and press launch — it finds the people, writes to each one by name, and answers what comes back."
-            : "It finds the people, writes to each one by name, answers what comes back and books the call — at a pace that keeps a LinkedIn account alive."}
+            ? `Give ${NORA} your website and her team writes who to go after. You approve a strategy, approve the words, and press launch — they find the people, write to each one by name, and answer what comes back.`
+            : `${NORA}'s team finds the people, writes to each one by name, answers what comes back and books the call — at a pace that keeps a LinkedIn account alive.`}
         </p>
       </div>
 

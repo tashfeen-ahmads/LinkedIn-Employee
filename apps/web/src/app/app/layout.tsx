@@ -213,27 +213,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         />
 
         {/*
-          The trial, where a person looks for it.
-
-          `entitlementMessage` already computed this and the only place it
-          showed was a banner across the top of every page — which is the right
-          shape for something broken and the wrong one for a clock running
-          down. In the rail it is present without interrupting, and it carries
-          the one action it implies.
+          No trial countdown and no "Choose a plan" here: the product is free
+          for everyone for now, so there is no clock to show and no plan to
+          choose. A workspace that genuinely cannot send still gets the banner
+          above the page, which is the right shape for something broken.
         */}
-        {entitlement.trialDaysLeft !== null ? (
-          <div className="app-upsell">
-            <p className="tiny subtle">Trial</p>
-            <p className="small strongish">
-              {entitlement.trialDaysLeft > 0
-                ? `${entitlement.trialDaysLeft} ${entitlement.trialDaysLeft === 1 ? "day" : "days"} left`
-                : "Last day"}
-            </p>
-            <Link className="btn small block" href="/app/billing">
-              Choose a plan
-            </Link>
-          </div>
-        ) : null}
 
         <form action={signOut} className="app-signout">
           <button className="btn ghost small" type="submit">
@@ -317,7 +301,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             {billingMessage ? (
               <div className={`notice ${entitlement.canSend ? "warning" : "danger"}`}>
                 <p>
-                  {billingMessage} <Link href="/app/billing">Billing</Link>
+                  {billingMessage} <Link href="/app/billing">Details</Link>
                 </p>
               </div>
             ) : null}

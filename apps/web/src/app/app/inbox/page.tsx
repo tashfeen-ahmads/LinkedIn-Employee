@@ -268,7 +268,7 @@ export default async function InboxPage({
       <PageNotice error={params.error} notice={params.notice} />
       <PageHeader
         title="Inbox"
-        lede="Everyone this workspace has written to, and what happened next. Anything the Reply Agent will not answer on its own waits under “Waiting on you”."
+        lede="Everyone this workspace has written to, and what happened next. Anything Reese will not answer on its own waits under “Waiting on you”."
       />
 
       {/* One row of stages, each carrying its own count. A stage with nobody in
@@ -299,7 +299,7 @@ export default async function InboxPage({
       {stage === "waiting" ? (
         conversationIds.length === 0 ? (
           <Empty title="Nothing is waiting for you.">
-            Anything the Reply Agent will not answer on its own — a price, a legal question, anything
+            Anything Reese will not answer on its own — a price, a legal question, anything
             negative, or simply low confidence — is held here rather than guessed at. Use the stages
             above to see everyone you have written to.
           </Empty>
