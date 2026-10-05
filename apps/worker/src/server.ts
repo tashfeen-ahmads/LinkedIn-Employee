@@ -34,7 +34,8 @@ import { eraseProspect, exportWorkspace } from "./jobs/retention.js";
 import { inviteEmail, verifyUnsubscribeToken } from "@le/email";
 import { trySend } from "./email.js";
 import { sendAccountEmails } from "./jobs/lifecycle.js";
-import { requestAnnouncementSend, saveAnnouncement, sendAnnouncementTest } from "./jobs/announcements.js";
+import { isPlatformAdmin, requestAnnouncementSend, saveAnnouncement, sendAnnouncementTest } from "./jobs/announcements.js";
+import { collectIssues } from "./jobs/issues.js";
 import { recordEvent } from "./context.js";
 
 const AgentTestRequestSchema = z.object({
@@ -407,6 +408,20 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
    * lock here is `platform_admins`, checked by every op in announcements.ts.
    */
   app.use("/admin/*", requireInternalAuth(ctx.env.INTERNAL_API_SECRET));
+  /*
+   * Everything wrong across the deployment, for the operator console's Issues
+   * tab. The second lock is `platform_admins`, exactly as announcements: the
+   * internal secret proves the web app is asking, this proves who it is asking
+   * for.
+   */
+  app.post("/admin/issues", async (c) => {
+    const body = (await c.req.json().catch(() => null)) as { userId?: string } | null;
+    if (!body?.userId || !(await isPlatformAdmin(ctx.db, body.userId))) {
+      return c.json({ error: "not a platform admin" }, 403);
+    }
+    return c.json({ issues: await collectIssues(ctx), at: new Date().toISOString() });
+  });
+
   app.post("/admin/announcements", async (c) => {
     const parsed = AnnouncementRequest.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) {

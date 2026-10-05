@@ -15,6 +15,7 @@ import { handleInboundMessage } from "./jobs/inbound.js";
 import { runStrategyJob } from "./jobs/strategy.js";
 import { runTargetingJob } from "./jobs/targeting.js";
 import { detectAcceptedInvitations } from "./jobs/acceptance.js";
+import { pollInbound } from "./jobs/inbound-poll.js";
 import { publishApprovedPosts } from "./jobs/publish-posts.js";
 import { recoverThrottledProspects, unstickProspects } from "./jobs/unstick.js";
 import { recoverAccounts } from "./accounts.js";
@@ -139,6 +140,22 @@ if (!/localhost|127\.0\.0\.1/.test(ctx.env.WORKER_URL)) {
   }
 }
 
+/*
+ * Replies the webhook may have missed, asked for once at boot rather than a
+ * quarter of an hour later — a deploy is usually what fixed whatever was
+ * dropping them. Never fatal.
+ */
+if (queueOk) {
+  try {
+    const polled = await pollInbound(ctx, queues);
+    console.log("polled for replies at boot", polled);
+  } catch (err) {
+    console.error("could not poll for replies at boot", {
+      reason: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
 if (!queueOk) {
   // Not a crash: the HTTP API still answers, /health now says 503, and the
   // boot stamp above is readable from the product's own screens. A process
@@ -227,6 +244,10 @@ const workers = [
             .then(() => recoverAccounts(ctx.db, ctx.linkedin))
             .then(() => undefined)
         );
+      }
+      if (job.name === "inbound-poll") {
+        // Replies the webhook did not deliver, found by asking.
+        return pollInbound(ctx, queues).then(() => undefined);
       }
       if (job.name === "posts") {
         // Every quarter of an hour, because a post's time is one a person

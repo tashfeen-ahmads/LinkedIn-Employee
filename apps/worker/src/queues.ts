@@ -242,6 +242,18 @@ export async function scheduleRepeatables(queues: Queues): Promise<void> {
    * trusting. The query is one index lookup that returns nothing on almost
    * every run, which is the cheapest thing in this worker.
    */
+  /*
+   * Replies, asked for every quarter of an hour.
+   *
+   * The webhook is the fast path and stays the fast path. This is the one that
+   * cannot be misconfigured from somebody else's dashboard: a reply the webhook
+   * never delivered is still found within fifteen minutes.
+   */
+  await queues.maintenance.upsertJobScheduler(
+    "inbound-poll",
+    { every: 15 * 60_000 },
+    { name: "inbound-poll", data: {} },
+  );
   await queues.maintenance.upsertJobScheduler(
     "posts",
     { every: 15 * 60_000 },

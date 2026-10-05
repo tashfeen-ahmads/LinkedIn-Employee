@@ -1262,6 +1262,22 @@ tests that were verified by deliberately breaking the code.
     second press sends nothing. Copy is free-product copy — no prices, no
     trials, no vendor names (rule 54).
 
+56. **Replies arrive by two doors, and every fault has a row in Issues.** The
+    webhook is the fast path and it is configured on somebody else's dashboard,
+    so `pollInbound` (`apps/worker/src/jobs/inbound-poll.ts`) asks the provider
+    for new messages every fifteen minutes and once at boot, and queues them
+    under the **same job id** the webhook uses — a reply arriving both ways is
+    one job. `listNewMessages` existed for months and nothing called it, which
+    is how a refused webhook meant a reply lost for good.
+
+    `collectIssues` (`apps/worker/src/jobs/issues.ts`) is the operator's one
+    list: worker health, reply delivery, LinkedIn accounts (unfinished sign-ins,
+    throttling, accounts nobody owns), members (signed up with no workspace, one
+    person with two accounts), campaigns (paused with acceptances waiting, built
+    and never launched, running on a dead account), email configuration and
+    open tickets. Rendered at `/admin/issues`, behind `platform_admins`, and it
+    reads counts and statuses — never a message or a prospect (rule 15).
+
 ## Conventions
 
 - Agent output is validated against a zod schema before it touches the
