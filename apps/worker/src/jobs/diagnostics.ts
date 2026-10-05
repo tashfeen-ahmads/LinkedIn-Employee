@@ -8,6 +8,7 @@ import {
 } from "@le/shared";
 import { isAccountGone } from "@le/linkedin";
 import type { WorkerContext } from "../context.js";
+import { WEBHOOKS_BEAT } from "../webhooks.js";
 
 /**
  * Every precondition between signing up and a booked meeting, checked against
@@ -403,7 +404,7 @@ export async function runDiagnostics(
   const { data: beats } = await db
     .from("worker_heartbeats")
     .select("name, beat_at, detail")
-    .in("name", [PACING_LOOP, BOOT_BEAT, MAINTENANCE_BEAT, MESSAGE_WEBHOOK_BEAT]);
+    .in("name", [PACING_LOOP, BOOT_BEAT, MAINTENANCE_BEAT, MESSAGE_WEBHOOK_BEAT, WEBHOOKS_BEAT]);
   const beat = (beats ?? []).find((b) => b.name === PACING_LOOP);
   const boot = (beats ?? []).find((b) => b.name === BOOT_BEAT);
   const bootDetail =
@@ -460,7 +461,29 @@ export async function runDiagnostics(
     webhook?.detail && typeof webhook.detail === "object"
       ? (webhook.detail as Record<string, unknown>)
       : {};
-  const rejected = Boolean(webhook) && webhookDetail.ok === false;
+  /*
+   * A refusal the worker has since repaired is history, not a fault.
+   *
+   * The endpoint writes one row per delivery, so the last thing it recorded
+   * stays the last thing it recorded until the next prospect replies — which
+   * can be days. Once the worker has registered its own webhooks carrying the
+   * secret (`ensureWebhooks`), a refusal stamped *before* that registration
+   * describes a configuration that no longer exists. Reporting it as live sent
+   * the operator to fix a webhook that was already fixed, on the strength of a
+   * row written three days earlier.
+   */
+  const registration = (beats ?? []).find((b) => b.name === WEBHOOKS_BEAT);
+  const registrationDetail =
+    registration?.detail && typeof registration.detail === "object"
+      ? (registration.detail as Record<string, unknown>)
+      : {};
+  const refusedEarlier = Boolean(webhook) && webhookDetail.ok === false;
+  const repairedSince =
+    refusedEarlier &&
+    registrationDetail.ok === true &&
+    Boolean(registration?.beat_at) &&
+    new Date(registration!.beat_at).getTime() > new Date(webhook!.beat_at).getTime();
+  const rejected = refusedEarlier && !repairedSince;
   const unsigned = rejected && webhookDetail.hadSignature === false;
   add({
     key: "webhook-deliveries",
@@ -469,8 +492,10 @@ export async function runDiagnostics(
     // Never delivered is `waiting`, never `ok`: a campaign that has had no
     // reply yet and a webhook that has never been pointed here look identical
     // from this row, and reporting the second as working is how a week goes.
-    state: !webhook ? "waiting" : rejected ? "blocked" : "ok",
-    detail: !webhook
+    state: !webhook || repairedSince ? "waiting" : rejected ? "blocked" : "ok",
+    detail: repairedSince
+      ? "Replies are set up to arrive here. None has come in since, which is normal until the next prospect answers — if somebody has replied on LinkedIn and it is not here, tell us."
+      : !webhook
       ? "No reply has come through to this inbox yet. That is normal before your first prospect answers — if somebody has replied on LinkedIn and it is not here, tell us."
       : rejected
         ? "A reply was sent to us and we could not accept it, so it stayed on LinkedIn instead of arriving here. This is a fault on our side and we can see it."
@@ -479,7 +504,9 @@ export async function runDiagnostics(
     // else they *can* do: the fault and the remedy are both on our side.
     fix: rejected ? "Nothing to change on your side. Raise it with support and we will fix it." : undefined,
     href: rejected ? "/app/support" : undefined,
-    operator: !webhook
+    operator: repairedSince
+      ? `The last delivery (${webhook!.beat_at}) was refused, but the worker re-registered both webhooks with the Unipile-Auth header at ${registration!.beat_at}. Nothing has been delivered since; the next reply will confirm it.`
+      : !webhook
       ? "Unipile has never called this deployment. Point its messaging webhook at this worker's /webhooks/unipile/messages."
       : unsigned
         ? `Unipile called at ${webhook.beat_at} carrying no credential. Unipile's v1 webhooks are never signed — they authenticate with a custom header set on the webhook itself. Configure each Unipile webhook (messaging and account status) with header \`Unipile-Auth\` set to the value of UNIPILE_WEBHOOK_SECRET. The endpoint refuses an unauthenticated delivery on purpose and will keep doing so.`

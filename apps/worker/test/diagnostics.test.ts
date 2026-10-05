@@ -320,6 +320,41 @@ describe("system check", () => {
     expect(check(report, "webhook-secret").state).toBe("ok");
   });
 
+  it("does not keep reporting a refusal the worker has since repaired", async () => {
+    // The live case: one unsigned delivery on Oct 2, the worker registered its
+    // own webhooks with the header that evening, and no prospect replied for
+    // days — so the console kept reporting the old refusal as a live fault.
+    const { db, ctx } = harness();
+    db.seed("worker_heartbeats", [
+      {
+        name: "webhook:messages",
+        beat_at: "2026-10-02T22:16:46.057Z",
+        detail: { ok: false, reason: "Invalid Unipile webhook signature", hadSignature: false },
+      },
+      { name: "webhooks:registered", beat_at: "2026-10-02T22:49:06.229Z", detail: { ok: true, created: 2 } },
+    ]);
+
+    const row = check(await run(ctx), "webhook-deliveries");
+    expect(row.state).toBe("waiting");
+    expect(row.operator).toMatch(/re-registered/);
+  });
+
+  it("still reports a refusal that came after the registration", async () => {
+    // A registration does not make every later refusal history: one arriving
+    // after it means the header did not take, and that is live.
+    const { db, ctx } = harness();
+    db.seed("worker_heartbeats", [
+      { name: "webhooks:registered", beat_at: "2026-10-02T22:49:06.229Z", detail: { ok: true, created: 2 } },
+      {
+        name: "webhook:messages",
+        beat_at: "2026-10-03T09:00:00.000Z",
+        detail: { ok: false, reason: "Invalid Unipile webhook signature", hadSignature: false },
+      },
+    ]);
+
+    expect(check(await run(ctx), "webhook-deliveries").state).toBe("blocked");
+  });
+
   it("names the secret when a signature arrived and did not verify", async () => {
     const { db, ctx } = harness();
     db.seed("worker_heartbeats", [

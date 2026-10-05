@@ -2248,6 +2248,14 @@ const MUTATIONS = [
     pkg: "@le/worker",
   },
   {
+    id: "webhooks/a-refusal-after-the-fix-is-still-live",
+    rule: "Only a refusal recorded before the worker re-registered its webhooks is treated as repaired; one after it is still a live fault",
+    file: "apps/worker/src/jobs/diagnostics.ts",
+    from: "    new Date(registration!.beat_at).getTime() > new Date(webhook!.beat_at).getTime();",
+    to: "    true;",
+    pkg: "@le/worker",
+  },
+  {
     id: "webhooks/registered-with-the-secret",
     rule: "The worker registers its webhooks carrying the secret header; one without it has every prospect reply refused at the door",
     file: "packages/linkedin/src/unipile.ts",
