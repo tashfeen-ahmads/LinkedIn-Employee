@@ -360,7 +360,7 @@ export function announcementEmail(input: AnnouncementInput): EmailMessage {
       appUrl: input.appUrl,
       body: prose(input.body),
       cta: input.cta ?? undefined,
-      after: signoff(`${BRAND.name} and the team`),
+      after: signoff(`${BRAND.name} and the team`, BRAND.full),
       footer: `You are receiving this product update because you have a ${escapeHtml(BRAND.name)} account.`,
       unsubscribeUrl: input.unsubscribeUrl,
       postalAddress: input.postalAddress,

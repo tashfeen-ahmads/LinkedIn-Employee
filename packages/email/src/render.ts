@@ -345,8 +345,8 @@ export function facts(rows: { label: string; value: string }[]): string {
 }
 
 /** How Nora signs off. The voice of the product, in one place. */
-export function signoff(line: string = BRAND.name): string {
-  return `<p style="margin:8px 0 0;font-family:${FONT};font-size:16px;line-height:24px;color:${C.text};">${escapeHtml(line)}<br><span class="nora-muted" style="font-size:14px;color:${C.muted};">Your AI executive assistant at ${escapeHtml(BRAND.full)}</span></p>`;
+export function signoff(line: string = BRAND.name, role = `Your AI executive assistant at ${BRAND.full}`): string {
+  return `<p style="margin:8px 0 0;font-family:${FONT};font-size:16px;line-height:24px;color:${C.text};">${escapeHtml(line)}<br><span class="nora-muted" style="font-size:14px;color:${C.muted};">${escapeHtml(role)}</span></p>`;
 }
 
 /**
