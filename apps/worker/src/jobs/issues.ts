@@ -57,6 +57,33 @@ function age(at: string | null | undefined, now: Date): number {
 /** The queues, asked how many jobs failed. Optional so the collector runs without Redis in tests. */
 export type QueueCounts = Record<string, { failed: number; reasons: string[] }>;
 
+/** How far back a failed job still counts as a fault rather than history. */
+export const FAILED_JOB_WINDOW_MS = 24 * 60 * 60_000;
+
+/**
+ * The failures in one queue that happened inside the window, newest first.
+ *
+ * A job with no finish time cannot be placed, so it is counted rather than
+ * hidden: a fault we cannot date is still a fault.
+ */
+export function recentFailures(
+  jobs: ReadonlyArray<{ failedReason?: string; finishedOn?: number } | undefined>,
+  now: Date,
+): { failed: number; reasons: string[] } {
+  const since = now.getTime() - FAILED_JOB_WINDOW_MS;
+  const recent = jobs
+    .filter((job): job is { failedReason?: string; finishedOn?: number } => Boolean(job))
+    .filter((job) => typeof job.finishedOn !== "number" || job.finishedOn >= since)
+    .sort((a, b) => (b.finishedOn ?? Infinity) - (a.finishedOn ?? Infinity));
+  return {
+    failed: recent.length,
+    reasons: recent
+      .slice(0, 3)
+      .map((job) => String(job.failedReason ?? "").slice(0, 160))
+      .filter(Boolean),
+  };
+}
+
 export async function collectIssues(
   ctx: WorkerContext,
   now: Date = new Date(),
@@ -245,21 +272,42 @@ export async function collectIssues(
     const payload = (event.payload ?? {}) as Record<string, unknown>;
     add({ id: `campaigns:targeting:${event.workspace_id}:${event.created_at}`, severity: "warning", area: "Campaigns", title: "Finding prospects stopped", detail: String(payload.reason ?? "No reason recorded."), ...at(event.workspace_id), since: event.created_at });
   }
-  for (const event of (events ?? []).filter((e) => e.name === "campaign.notes_missing")) {
-    const payload = (event.payload ?? {}) as Record<string, unknown>;
-    add({ id: `campaigns:notes:${event.subject_id ?? event.created_at}`, severity: "info", area: "Campaigns", title: "Some invitation notes fell back to the template", detail: `${String(payload.missing ?? "Some")} of ${String(payload.prospects ?? "?")} notes were not personalised.`, ...at(event.workspace_id), since: event.created_at });
+  // Read from the campaign as it is now, not from the event. Nightly
+  // maintenance fills the missing notes (`fillMissingNotes`), and a row that
+  // kept saying "1 of 40 not personalised" after the note was written would be
+  // reporting a fault that no longer exists.
+  const notesEvents = (events ?? []).filter((e) => e.name === "campaign.notes_missing" && e.subject_id);
+  const stillMissing = new Map<string, number>();
+  if (notesEvents.length) {
+    const { data: gaps } = await db
+      .from("campaign_prospects")
+      .select("campaign_id")
+      .in("campaign_id", [...new Set(notesEvents.map((e) => e.subject_id as string))])
+      .eq("status", "queued")
+      .is("invite_note", null);
+    for (const row of gaps ?? []) stillMissing.set(row.campaign_id, (stillMissing.get(row.campaign_id) ?? 0) + 1);
+  }
+  const reportedNotes = new Set<string>();
+  for (const event of notesEvents) {
+    const campaignId = event.subject_id as string;
+    const missing = stillMissing.get(campaignId) ?? 0;
+    if (!missing || reportedNotes.has(campaignId)) continue;
+    reportedNotes.add(campaignId);
+    add({ id: `campaigns:notes:${campaignId}`, severity: "info", area: "Campaigns", title: "Some invitation notes fell back to the template", detail: `${missing} ${missing === 1 ? "person is" : "people are"} still queued without a personalised note. Maintenance retries this nightly until the campaign launches.`, ...at(event.workspace_id), since: event.created_at });
   }
 
   // ── Jobs ────────────────────────────────────────────────────────────────
   // Background work that threw past its retries. A failed job is a unit of
-  // work the system promised and did not do, and BullMQ keeps them a week.
+  // work the system promised and did not do. Counted over the last day only
+  // (`recentFailures`), because the queue keeps old ones long after the cause
+  // was fixed.
   for (const [queue, counts] of Object.entries(queueCounts ?? {})) {
     if (counts.failed > 0) {
       add({
         id: `jobs:failed:${queue}`,
         severity: "warning",
         area: "Jobs",
-        title: `${counts.failed} failed job${counts.failed === 1 ? "" : "s"} in the ${queue} queue`,
+        title: `${counts.failed} failed job${counts.failed === 1 ? "" : "s"} in the ${queue} queue in the last day`,
         detail: counts.reasons.length ? `Most recent: ${counts.reasons.join(" · ")}` : "No reason recorded.",
       });
     }

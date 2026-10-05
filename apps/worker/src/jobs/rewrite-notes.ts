@@ -46,6 +46,12 @@ export interface RewriteNotesInput {
   workspaceId: string;
   userId: string;
   campaignId: string;
+  /**
+   * Only the people who have no note of their own — the ones the writer
+   * missed when the campaign was built. Everybody else keeps the copy they
+   * have, which a human may already have read or rewritten.
+   */
+  onlyMissing?: boolean;
 }
 
 export type RewriteNotesResult =
@@ -68,12 +74,14 @@ export async function rewriteCampaignNotes(
 
   // Queued only. Every other status has either already been sent to or has
   // been dealt with, and both are records rather than plans.
-  const { data: queued } = await db
+  let queuedQuery = db
     .from("campaign_prospects")
     .select("id, prospect_id, variant_id")
     .eq("campaign_id", campaign.id)
     .eq("workspace_id", input.workspaceId)
     .eq("status", "queued");
+  if (input.onlyMissing) queuedQuery = queuedQuery.is("invite_note", null);
+  const { data: queued } = await queuedQuery;
 
   if (!queued?.length) {
     return {
@@ -241,7 +249,7 @@ export async function rewriteCampaignNotes(
         unanswered += 1;
         continue;
       }
-      const { error } = await db
+      let write = db
         .from("campaign_prospects")
         .update({
           invite_note: note.note,
@@ -256,6 +264,9 @@ export async function rewriteCampaignNotes(
         // somebody in between. Rewriting what they were sent would leave every
         // screen reporting words nobody received.
         .eq("status", "queued");
+      // Filling a gap never overwrites a note somebody wrote in the meantime.
+      if (input.onlyMissing) write = write.is("invite_note", null);
+      const { error } = await write;
       if (error) return { ok: false, reason: error.message };
       rewritten += 1;
     }
@@ -271,4 +282,48 @@ export async function rewriteCampaignNotes(
   }).catch((err) => console.error("could not record campaign.notes_rewritten", err));
 
   return { ok: true, rewritten, unanswered };
+}
+
+/**
+ * Write the notes the writer missed, on every campaign nobody has launched yet.
+ *
+ * A campaign is built with one note per person, and when the writer comes back
+ * short the gap is recorded (`campaign.notes_missing`) and those people fall
+ * back to the campaign template. Rewriting by hand was the only way out, so a
+ * campaign sat in review with one or two people about to receive the generic
+ * line under a real rep's name, and the operator's Issues tab said so every day.
+ *
+ * Unlaunched campaigns only. Launching is a person approving the copy they
+ * saw, template lines included, and changing it afterwards would send words
+ * nobody approved. A failed fill leaves the template in place, exactly as
+ * before, and is tried again the next night.
+ */
+export async function fillMissingNotes(ctx: WorkerContext): Promise<number> {
+  const { data: gaps } = await ctx.db
+    .from("campaign_prospects")
+    .select("campaign_id")
+    .eq("status", "queued")
+    .is("invite_note", null)
+    .limit(2000);
+  const campaignIds = [...new Set((gaps ?? []).map((row) => row.campaign_id))];
+  if (!campaignIds.length) return 0;
+
+  const { data: campaigns } = await ctx.db
+    .from("campaigns")
+    .select("id, workspace_id, owner_user_id")
+    .in("id", campaignIds)
+    .is("launched_at", null);
+
+  let written = 0;
+  for (const campaign of campaigns ?? []) {
+    if (!campaign.owner_user_id) continue;
+    const result = await rewriteCampaignNotes(ctx, {
+      workspaceId: campaign.workspace_id,
+      userId: campaign.owner_user_id,
+      campaignId: campaign.id,
+      onlyMissing: true,
+    });
+    if (result.ok) written += result.rewritten;
+  }
+  return written;
 }

@@ -35,7 +35,7 @@ import { inviteEmail, verifyUnsubscribeToken } from "@le/email";
 import { trySend } from "./email.js";
 import { sendAccountEmails } from "./jobs/lifecycle.js";
 import { isPlatformAdmin, requestAnnouncementSend, saveAnnouncement, sendAnnouncementTest } from "./jobs/announcements.js";
-import { collectIssues, type QueueCounts } from "./jobs/issues.js";
+import { collectIssues, recentFailures, type QueueCounts } from "./jobs/issues.js";
 import { recordEvent } from "./context.js";
 
 const AgentTestRequestSchema = z.object({
@@ -1924,22 +1924,26 @@ const NOTICE_PULL_DEBOUNCE_MS = 30_000;
 /**
  * Failed jobs per queue, with their most recent reasons, for the Issues tab.
  *
+ * Only the last day's. BullMQ's `removeOnFail: { age }` is applied lazily —
+ * when another job in the same queue fails — so a queue that stopped failing
+ * keeps its old failures for ever. 220 "Custom Id cannot contain :" jobs from
+ * the bug rule 39 fixed sat in campaignTick for weeks, and the Issues tab
+ * reported a fault that no longer existed beside the ones that did. Nightly
+ * maintenance now deletes the old ones too; this keeps the page honest in
+ * between.
+ *
  * Asked with a deadline: a command against an unreachable Redis waits for ever
  * (rule 22), and an operator page that hangs tells nobody anything. A queue
  * that cannot be asked is left out rather than reported as clean — the boot
  * stamp already says when the queue is down.
  */
-async function failedJobCounts(queues: Queues): Promise<QueueCounts | null> {
+async function failedJobCounts(queues: Queues, now: Date = new Date()): Promise<QueueCounts | null> {
   const ask = async (): Promise<QueueCounts> => {
     const out: QueueCounts = {};
     for (const [name, queue] of Object.entries(queues)) {
       const counts = await queue.getJobCounts("failed");
-      const failed = counts.failed ?? 0;
-      const recent = failed > 0 ? await queue.getFailed(0, 2) : [];
-      out[name] = {
-        failed,
-        reasons: recent.map((job: { failedReason?: string } | undefined) => String(job?.failedReason ?? "").slice(0, 160)).filter(Boolean),
-      };
+      const jobs = (counts.failed ?? 0) > 0 ? await queue.getFailed(0, 499) : [];
+      out[name] = recentFailures(jobs, now);
     }
     return out;
   };

@@ -19,7 +19,7 @@ vi.mock("@le/agents", async (importOriginal) => {
   return { ...actual, personalizeInvites: (...args: unknown[]) => notesMock(...args) };
 });
 
-const { rewriteCampaignNotes } = await import("../src/jobs/rewrite-notes.js");
+const { fillMissingNotes, rewriteCampaignNotes } = await import("../src/jobs/rewrite-notes.js");
 
 const WORKSPACE = "11111111-1111-4111-8111-111111111111";
 const USER = "22222222-2222-4222-8222-222222222222";
@@ -285,6 +285,46 @@ describe("rewriting a campaign's notes", () => {
       workspaceId: "99999999-9999-4999-8999-999999999999",
     });
     expect(result.ok).toBe(false);
+    expect(notesMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("filling the notes the writer missed", () => {
+  function gapHarness(launchedAt: string | null) {
+    const { db, ctx } = harness();
+    // Replace, not add to, the base fixture's rows for these three tables.
+    for (const table of ["campaigns", "prospects", "campaign_prospects"]) db.rows(table).length = 0;
+    db.seed("campaigns", [
+      { id: CAMPAIGN, workspace_id: WORKSPACE, name: "Owners — referral partners", agent_id: AGENT, customer_profile_id: PROFILE, owner_user_id: USER, rules: {}, launched_at: launchedAt },
+    ]);
+    db.seed("prospects", [
+      { id: "p-queued", workspace_id: WORKSPACE, provider_id: "pv-queued", first_name: "Dana", last_name: "Rizzo", company: "Rizzo Events", title: "Owner", headline: null, location: null, linkedin_url: "https://linkedin.com/in/dana" },
+      { id: "p-gap", workspace_id: WORKSPACE, provider_id: "pv-gap", first_name: "Omar", last_name: "Diaz", company: "Diaz Law", title: "Owner", headline: null, location: null, linkedin_url: "https://linkedin.com/in/omar" },
+    ]);
+    db.seed("campaign_prospects", [
+      { id: "cp-queued", workspace_id: WORKSPACE, campaign_id: CAMPAIGN, prospect_id: "p-queued", variant_id: null, status: "queued", invite_note: "A note a human already read." },
+      { id: "cp-gap", workspace_id: WORKSPACE, campaign_id: CAMPAIGN, prospect_id: "p-gap", variant_id: null, status: "queued", invite_note: null },
+    ]);
+    notesMock.mockImplementation(async (_ctx: unknown, args: { prospects: Array<{ providerId: string }> }) =>
+      new Map(args.prospects.map((p) => [p.providerId, { note: `Written for ${p.providerId}`, promptVersion: "invite/test", grounding: ["Owner"], tooThin: false }])),
+    );
+    return { db, ctx };
+  }
+
+  it("writes only the missing note on a campaign nobody has launched", async () => {
+    const { db, ctx } = gapHarness(null);
+    expect(await fillMissingNotes(ctx)).toBe(1);
+    const rows = db.rows("campaign_prospects");
+    expect(rows.find((r) => r.id === "cp-gap")?.invite_note).toBe("Written for pv-gap");
+    expect(rows.find((r) => r.id === "cp-queued")?.invite_note).toBe("A note a human already read.");
+    // The writer was only asked about the gap, not about everybody.
+    expect(notesMock.mock.calls[0]?.[1].prospects.map((p: { providerId: string }) => p.providerId)).toEqual(["pv-gap"]);
+  });
+
+  it("never changes the copy of a launched campaign", async () => {
+    const { db, ctx } = gapHarness("2026-10-04T00:00:00Z");
+    expect(await fillMissingNotes(ctx)).toBe(0);
+    expect(db.rows("campaign_prospects").find((r) => r.id === "cp-gap")?.invite_note).toBeNull();
     expect(notesMock).not.toHaveBeenCalled();
   });
 });

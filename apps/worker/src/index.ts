@@ -20,7 +20,8 @@ import { publishApprovedPosts } from "./jobs/publish-posts.js";
 import { recoverThrottledProspects, unstickProspects } from "./jobs/unstick.js";
 import { recoverAccounts } from "./accounts.js";
 import { ensureWebhooks } from "./webhooks.js";
-import { runMaintenance } from "./jobs/maintenance.js";
+import { cleanFailedJobs, runMaintenance } from "./jobs/maintenance.js";
+import { fillMissingNotes } from "./jobs/rewrite-notes.js";
 import { seedMissingAgents } from "./jobs/seed-agent.js";
 import { runDailyDigest } from "./jobs/digest.js";
 import { runWeeklyReport } from "./jobs/weekly-report.js";
@@ -155,6 +156,21 @@ if (queueOk) {
     });
   }
 }
+
+/*
+ * The two repairs the night also runs, once at boot as well: a deploy that
+ * fixes something should not leave the operator's Issues tab reporting the old
+ * fault until 3am. Both are cheap when there is nothing to do — one query and
+ * one Redis call — and neither blocks the API, which is already listening.
+ */
+if (queueOk) {
+  void cleanFailedJobs(queues)
+    .then((removed) => console.log("removed old failed jobs at boot", { removed }))
+    .catch((err) => console.error("could not clean failed jobs at boot", err));
+}
+void fillMissingNotes(ctx)
+  .then((written) => console.log("filled missing invitation notes at boot", { written }))
+  .catch((err) => console.error("could not fill missing notes at boot", err));
 
 if (!queueOk) {
   // Not a crash: the HTTP API still answers, /health now says 503, and the

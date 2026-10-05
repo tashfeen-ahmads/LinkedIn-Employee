@@ -9,6 +9,7 @@ import { seedMissingAgents } from "./seed-agent.js";
 import { syncCalendarFeeds } from "./calendar-feed.js";
 import { runLifecycleEmails } from "./lifecycle.js";
 import { runRetentionSweep } from "./retention.js";
+import { fillMissingNotes } from "./rewrite-notes.js";
 import { jobId } from "../queues.js";
 import type { Queues } from "../queues.js";
 import { recordBeat } from "../heartbeat.js";
@@ -114,6 +115,12 @@ export async function runMaintenance(
   await step("withdraw-stale", () => withdrawStaleInvites(ctx, now));
   await step("close-exhausted", () => closeExhaustedSequences(ctx, now));
   await step("lifecycle-emails", () => runLifecycleEmails(ctx, now));
+  // Notes the writer missed when a campaign was built, before anybody launches it.
+  await step("fill-missing-notes", () => fillMissingNotes(ctx));
+  // Failed jobs older than a week. `removeOnFail: { age }` only runs when
+  // another job in the same queue fails, so a queue that stopped failing kept
+  // its old failures indefinitely and they read as current faults.
+  await step("clean-failed-jobs", () => cleanFailedJobs(queues));
   // Last, and never skipped because something above it threw: this one is a
   // promise about how long other people's data is kept.
   await step("retention", () => runRetentionSweep(ctx, now));
@@ -293,3 +300,17 @@ async function flagPoorAcceptanceRates(ctx: WorkerContext): Promise<void> {
 
 /** Fewer invitations than this and the rate is noise, not a signal. */
 const MIN_INVITES_FOR_RATE = 40;
+
+/** How long a failed job is kept for somebody to read before it is deleted. */
+export const FAILED_JOB_KEEP_MS = 7 * 24 * 60 * 60_000;
+
+/** Delete failed jobs older than a week from every queue; returns how many. */
+export async function cleanFailedJobs(queues: Queues): Promise<number> {
+  let removed = 0;
+  for (const queue of Object.values(queues)) {
+    const clean = (queue as { clean?: (grace: number, limit: number, type: "failed") => Promise<string[]> }).clean;
+    if (typeof clean !== "function") continue;
+    removed += (await clean.call(queue, FAILED_JOB_KEEP_MS, 5_000, "failed")).length;
+  }
+  return removed;
+}

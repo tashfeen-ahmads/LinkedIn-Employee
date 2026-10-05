@@ -3493,6 +3493,30 @@ const MUTATIONS = [
     to: "",
     pkg: "@le/web",
   },
+  {
+    id: "issues/old-failures-are-history",
+    rule: "A failed job from before a fix is not reported as a current fault",
+    file: "apps/worker/src/jobs/issues.ts",
+    from: '    .filter((job) => typeof job.finishedOn !== "number" || job.finishedOn >= since)',
+    to: "    .filter(() => true)",
+    pkg: "@le/worker",
+  },
+  {
+    id: "notes/fill-never-touches-a-launched-campaign",
+    rule: "Missing notes are filled only before launch, so nobody is sent copy that was never approved",
+    file: "apps/worker/src/jobs/rewrite-notes.ts",
+    from: '    .in("id", campaignIds)\n    .is("launched_at", null);',
+    to: '    .in("id", campaignIds);',
+    pkg: "@le/worker",
+  },
+  {
+    id: "notes/fill-only-the-gaps",
+    rule: "Filling a gap never rewrites a note a person already read",
+    file: "apps/worker/src/jobs/rewrite-notes.ts",
+    from: '  if (input.onlyMissing) queuedQuery = queuedQuery.is("invite_note", null);',
+    to: "",
+    pkg: "@le/worker",
+  },
 ];
 
 /**

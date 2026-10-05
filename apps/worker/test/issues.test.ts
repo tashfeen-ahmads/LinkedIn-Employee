@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { FakeDb } from "./fake-db.js";
-import { collectIssues } from "../src/jobs/issues.js";
+import { collectIssues, recentFailures } from "../src/jobs/issues.js";
 import type { WorkerContext } from "../src/context.js";
 
 /**
@@ -78,6 +78,38 @@ describe("collectIssues", () => {
     const ctx = { db: db.asDb(), env: { EMAIL_PROVIDER: "resend", RESEND_API_KEY: "x", EMAIL_FROM: "x", INTERNAL_API_SECRET: "s" } } as unknown as WorkerContext;
     const issues = await collectIssues(ctx, NOW, { linkedinAction: { failed: 3, reasons: ["422: Cannot send invitation"] } });
     expect(ids(issues)).toContain("jobs:failed:linkedinAction");
+  });
+
+  it("counts only the last day's failed jobs, never a fixed fault's leftovers", () => {
+    // 220 "Custom Id cannot contain :" jobs from a bug fixed weeks earlier sat
+    // in campaignTick, because BullMQ only ages failures out when another job
+    // in the same queue fails. They read as a live fault.
+    const old = NOW.getTime() - 8 * 24 * 60 * 60_000;
+    const fresh = NOW.getTime() - 60 * 60_000;
+    const counted = recentFailures(
+      [
+        ...Array.from({ length: 220 }, () => ({ failedReason: "Custom Id cannot contain :", finishedOn: old })),
+        { failedReason: "422: Cannot send invitation", finishedOn: fresh },
+      ],
+      NOW,
+    );
+    expect(counted.failed).toBe(1);
+    expect(counted.reasons).toEqual(["422: Cannot send invitation"]);
+    expect(recentFailures([{ failedReason: "x", finishedOn: old }], NOW).failed).toBe(0);
+  });
+
+  it("stops reporting missing notes once they have been written", async () => {
+    const event = { workspace_id: WS, name: "campaign.notes_missing", subject_id: "c9", payload: { missing: 1, prospects: 40 }, created_at: "2026-10-05T04:05:00Z" };
+    const missing = await harness((db) => {
+      db.seed("events", [event]);
+      db.seed("campaign_prospects", [{ campaign_id: "c9", status: "queued", invite_note: null }]);
+    });
+    expect(ids(missing)).toContain("campaigns:notes:c9");
+    const filled = await harness((db) => {
+      db.seed("events", [event]);
+      db.seed("campaign_prospects", [{ campaign_id: "c9", status: "queued", invite_note: "Hi Dana, …" }]);
+    });
+    expect(ids(filled)).not.toContain("campaigns:notes:c9");
   });
 
   it("reports failing AI calls", async () => {
