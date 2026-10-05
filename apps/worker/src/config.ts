@@ -131,6 +131,18 @@ const EnvSchema = z.object({
   /** e.g. "Nora <hello@norasdr.com>" */
   EMAIL_FROM: z.string().optional(),
   EMAIL_REPLY_TO: z.string().optional(),
+  /**
+   * Extra addresses told about every signup, finished onboarding and connected
+   * LinkedIn account, comma-separated. Everybody in `platform_admins` is told
+   * already; this is for an operator inbox that is not a user of the product.
+   */
+  ADMIN_NOTIFY_EMAILS: z.string().optional(),
+  /**
+   * A postal address for the footer of marketing email (the onboarding
+   * sequence and announcements), which commercial-email law asks for. Optional:
+   * without it the footer simply has no address line.
+   */
+  EMAIL_POSTAL_ADDRESS: z.string().optional(),
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   /** 32 bytes of hex. Encrypts OAuth tokens at rest; see src/crypto.ts. */

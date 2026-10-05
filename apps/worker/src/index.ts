@@ -8,7 +8,7 @@ import { createWorkerContext } from "./context.js";
 import { createConnection, createQueues, QUEUE_NAMES, queueReachable, scheduleRepeatables } from "./queues.js";
 import { recordBeat } from "./heartbeat.js";
 import { BOOT_BEAT } from "@le/shared";
-import type { CampaignTickJob, InboundMessageJob, LinkedInActionJob, StrategyJob, TargetingJob } from "./queues.js";
+import type { CampaignTickJob, DigestJob, InboundMessageJob, LinkedInActionJob, StrategyJob, TargetingJob } from "./queues.js";
 import { runCampaignTick } from "./jobs/campaign-tick.js";
 import { runLinkedInAction, RescheduleError } from "./jobs/linkedin-action.js";
 import { handleInboundMessage } from "./jobs/inbound.js";
@@ -23,6 +23,8 @@ import { runMaintenance } from "./jobs/maintenance.js";
 import { seedMissingAgents } from "./jobs/seed-agent.js";
 import { runDailyDigest } from "./jobs/digest.js";
 import { runWeeklyReport } from "./jobs/weekly-report.js";
+import { runLifecycleEmails } from "./jobs/lifecycle.js";
+import { deliverAnnouncement } from "./jobs/announcements.js";
 import { createServer } from "./server.js";
 
 initObservability();
@@ -243,9 +245,19 @@ const workers = [
    * thing to notice has stopped. These are the same kind of work — write an
    * email about what happened — differing only in the window they describe.
    */
-  new Worker(
+  new Worker<DigestJob>(
     QUEUE_NAMES.digest,
-    (job) => (job.name === "weekly-report" ? runWeeklyReport(ctx) : runDailyDigest(ctx)),
+    async (job) => {
+      if (job.name === "weekly-report") return runWeeklyReport(ctx);
+      if (job.name === "lifecycle") return void (await runLifecycleEmails(ctx));
+      if (job.name === "announcement") {
+        // Never without an id: a nameless "announcement" job must not become
+        // the daily digest by falling through to the default below.
+        if (!job.data.announcementId) return;
+        return void (await deliverAnnouncement(ctx, job.data.announcementId));
+      }
+      return runDailyDigest(ctx);
+    },
     { connection, concurrency: 1 },
   ),
 ];

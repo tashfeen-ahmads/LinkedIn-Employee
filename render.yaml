@@ -110,6 +110,13 @@ services:
         sync: false
       - key: EMAIL_FROM
         sync: false
+      - key: EMAIL_REPLY_TO
+        sync: false
+      # Extra operator inboxes for signup / onboarding / LinkedIn notifications.
+      - key: ADMIN_NOTIFY_EMAILS
+        sync: false
+      - key: EMAIL_POSTAL_ADDRESS
+        sync: false
 
       - key: GOOGLE_CLIENT_ID
         sync: false

@@ -1,6 +1,19 @@
 import { BRAND } from "@le/shared";
 import type { EmailMessage } from "./provider.js";
-import { escapeHtml, layout, list, paragraph } from "./render.js";
+import { escapeHtml, layout, list, note, paragraph, roster, signoff, stats, subheading } from "./render.js";
+
+/** The origin of an absolute URL, for templates that are handed a link but not the app's address. */
+function originOf(url: string): string | undefined {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return undefined;
+  }
+}
+
+function firstName(name: string | null | undefined): string | undefined {
+  return name?.trim().split(/\s+/)[0] || undefined;
+}
 
 export interface InviteEmailInput {
   to: string;
@@ -23,11 +36,16 @@ export function inviteEmail(input: InviteEmailInput): EmailMessage {
     subject: `${inviter} invited you to ${input.workspaceName}`,
     html: layout({
       title: `Join ${input.workspaceName}`,
+      preheader: `${inviter} added you to the team on ${BRAND.name}.`,
+      appUrl: originOf(input.acceptUrl),
       body: lines.map(paragraph).join(""),
       cta: { label: "Accept invitation", url: input.acceptUrl },
-      footer: `This link expires in ${input.expiresInDays} days and works only for ${escapeHtml(
-        input.to,
-      )}. If you were not expecting it, you can ignore this email.`,
+      after: note(
+        `This link expires in ${input.expiresInDays} days and works only for ${input.to}. If you were not expecting it, you can ignore this email.`,
+      ),
+      footer: `You are receiving this because ${escapeHtml(inviter)} invited ${escapeHtml(input.to)} to a ${escapeHtml(
+        BRAND.name,
+      )} workspace.`,
     }),
     text: [
       ...lines,
@@ -57,7 +75,8 @@ export interface DigestEmailInput {
 }
 
 export function digestEmail(input: DigestEmailInput): EmailMessage {
-  const greeting = input.repName ? `Morning, ${input.repName.split(" ")[0]}.` : "Morning.";
+  const first = firstName(input.repName);
+  const greeting = first ? `Morning, ${first}.` : "Morning.";
 
   // The subject line carries the number that decides whether this gets opened.
   const subject =
@@ -67,7 +86,7 @@ export function digestEmail(input: DigestEmailInput): EmailMessage {
         ? `${input.meetingsBooked} ${input.meetingsBooked === 1 ? "meeting" : "meetings"} booked yesterday`
         : `Your ${BRAND.name} digest`;
 
-  const stats = [
+  const stats4 = [
     `${input.invitesSent} ${input.invitesSent === 1 ? "invitation" : "invitations"} sent`,
     `${input.accepted} accepted`,
     `${input.replies} ${input.replies === 1 ? "reply" : "replies"}`,
@@ -76,7 +95,12 @@ export function digestEmail(input: DigestEmailInput): EmailMessage {
 
   const blocks = [
     paragraph(greeting),
-    list(stats),
+    stats([
+      { value: input.invitesSent, label: input.invitesSent === 1 ? "invitation sent" : "invitations sent" },
+      { value: input.accepted, label: "accepted" },
+      { value: input.replies, label: input.replies === 1 ? "reply" : "replies" },
+      { value: input.meetingsBooked, label: input.meetingsBooked === 1 ? "meeting booked" : "meetings booked" },
+    ]),
     input.awaitingApproval > 0
       ? paragraph(
           `${input.awaitingApproval} ${
@@ -84,8 +108,8 @@ export function digestEmail(input: DigestEmailInput): EmailMessage {
           } waiting for your approval.`,
         )
       : "",
-    input.upcoming.length ? `<p style="margin:0 0 8px;font-weight:600">Coming up</p>${list(input.upcoming)}` : "",
-    input.warnings.length ? `<p style="margin:0 0 8px;font-weight:600">Needs attention</p>${list(input.warnings)}` : "",
+    input.upcoming.length ? `${subheading("Coming up")}${list(input.upcoming)}` : "",
+    input.warnings.length ? `${subheading("Needs attention")}${list(input.warnings)}` : "",
   ]
     .filter(Boolean)
     .join("");
@@ -93,7 +117,7 @@ export function digestEmail(input: DigestEmailInput): EmailMessage {
   const textLines = [
     greeting,
     "",
-    ...stats.map((stat) => `- ${stat}`),
+    ...stats4.map((stat) => `- ${stat}`),
     ...(input.awaitingApproval > 0 ? ["", `${input.awaitingApproval} waiting for approval.`] : []),
     ...(input.upcoming.length ? ["", "Coming up:", ...input.upcoming.map((item) => `- ${item}`)] : []),
     ...(input.warnings.length ? ["", "Needs attention:", ...input.warnings.map((item) => `- ${item}`)] : []),
@@ -106,9 +130,11 @@ export function digestEmail(input: DigestEmailInput): EmailMessage {
     subject,
     html: layout({
       title: subject,
+      preheader: `${stats4.join(" · ")}.`,
+      appUrl: input.appUrl,
       body: blocks,
       cta: { label: "Open the inbox", url: `${input.appUrl}/app/inbox` },
-      footer: `You are receiving this because you use ${BRAND.name}. Turn it off in your settings.`,
+      footer: `You are receiving this because you use ${escapeHtml(BRAND.name)}. Turn it off in your settings.`,
     }),
     text: textLines.join("\n"),
   };
@@ -138,6 +164,8 @@ export function accountPausedEmail(input: AccountPausedInput): EmailMessage {
     subject: "Sending paused on your LinkedIn account",
     html: layout({
       title: "Sending is paused",
+      preheader: "Campaigns pick up where they stopped once the account is healthy.",
+      appUrl: input.appUrl,
       body: lines.map(paragraph).join(""),
       cta: { label: "Reconnect your account", url: `${input.appUrl}/app/team` },
     }),
@@ -147,81 +175,95 @@ export function accountPausedEmail(input: AccountPausedInput): EmailMessage {
 
 /* ------------------------------------------------ onboarding and lifecycle */
 
+/**
+ * The four AI employees, in the words every email uses for them.
+ *
+ * One list so the welcome and every later email describe the same team the
+ * same way — a strategist in one email and a "researcher" in the next is a
+ * product that does not know its own staff.
+ */
+export const TEAM = [
+  {
+    name: "Sage",
+    role: "Strategist",
+    detail: "Reads your business and writes the customer strategies worth pursuing.",
+  },
+  {
+    name: "Scout",
+    role: "Prospector",
+    detail: "Finds real people on LinkedIn who fit a strategy you have approved.",
+  },
+  {
+    name: "Quinn",
+    role: "Campaign writer",
+    detail: "Writes each of them a personal note, from their own profile.",
+  },
+  {
+    name: "Reese",
+    role: "Outreach & booking",
+    detail: "Sends on your behalf at a safe pace, answers replies and books the meetings.",
+  },
+] as const;
+
 export interface WelcomeInput {
   to: string;
   repName: string | null;
   appUrl: string;
-  companyName: string;
 }
 
 /**
- * The first email. It arrives while the Strategy Agent is still working, so it
- * says what is happening rather than asking for anything — a first email that
- * opens with a task reads as a chore, and this one has genuinely useful news.
+ * The first email, sent the moment somebody signs up.
+ *
+ * It introduces the team and asks for exactly one thing — the business —
+ * because that is the one input every other step waits on. It makes no promise
+ * about money or a trial: the product is free while it is being built, and an
+ * email that mentions a price is the one people forward with a question mark.
  */
 export function welcomeEmail(input: WelcomeInput): EmailMessage {
-  const first = input.repName?.split(" ")[0];
-  const lines = [
-    `${first ? `${first}, w` : "W"}elcome. The Strategy Agent is reading ${input.companyName}'s site right now and writing your business profile and three to five customer profiles from it.`,
-    "That usually takes a minute or two. When it is done you will find them waiting for you to read — nothing gets searched for, and nobody gets contacted, until you have approved one.",
-    "Two things worth knowing before you start. Your first campaign runs in approval mode, so every reply the agent writes waits for your click. And sending starts at ten invitations a day and takes five weeks to reach thirty-five, because the fastest way to lose a LinkedIn account is to arrive at volume on day one.",
-  ];
+  const first = firstName(input.repName);
+  const opening =
+    "I'm your AI executive assistant, and from today I lead a small team with one job: booking you meetings from LinkedIn, without putting your account at risk.";
+  const approval =
+    "Nothing goes out without you. You approve every strategy, and you read every campaign before it launches.";
+  const ask =
+    "To get started, tell me about your business. Paste your website or write a couple of sentences, and Sage will have strategies for you to read in a minute or two.";
 
   return {
     to: input.to,
-    subject: "Your profiles are being written",
+    subject: `Welcome to ${BRAND.name} — meet your team`,
     html: layout({
-      title: "Welcome — the agent is already working",
-      body: lines.map(paragraph).join(""),
-      cta: { label: "See what it has written", url: `${input.appUrl}/app/strategy` },
-      footer: "Seven days free. No card until you decide.",
+      title: first ? `Welcome, ${first}. I'm ${BRAND.name}.` : `Welcome. I'm ${BRAND.name}.`,
+      preheader: "Four AI employees, one job: meetings from LinkedIn. Nothing sends without your approval.",
+      appUrl: input.appUrl,
+      body: [
+        paragraph(opening),
+        subheading("Your team"),
+        roster([...TEAM]),
+        paragraph(approval),
+        paragraph(ask),
+      ].join(""),
+      cta: { label: "Tell me about your business", url: `${input.appUrl}/onboarding` },
+      after: `${note("It takes about three minutes. Questions? Reply to this email — a person on our team reads every reply.")}${signoff()}`,
+      footer: `You are receiving this because you just created a ${escapeHtml(BRAND.name)} account with this address.`,
     }),
-    text: [...lines, "", `${input.appUrl}/app/strategy`].join("\n"),
-  };
-}
-
-export interface NudgeInput {
-  to: string;
-  repName: string | null;
-  appUrl: string;
-  /** The step they are stuck on, from ONBOARDING_STEPS. */
-  step: { label: string; done: string; nudge: string; href: string };
-  /** How many days their workspace has existed. */
-  daysIn: number;
-  /** Everything already done, so the email can say so rather than nag blindly. */
-  completed: string[];
-}
-
-/**
- * Sent when a workspace stalls on one step.
- *
- * It names what is already done first. Someone who has connected LinkedIn and
- * approved a profile has not been idle, and an email that opens by telling them
- * what they have not done reads as an accusation from a robot with no memory.
- */
-export function onboardingNudgeEmail(input: NudgeInput): EmailMessage {
-  const first = input.repName?.split(" ")[0];
-  const progress =
-    input.completed.length > 0
-      ? `You are further along than you might think — ${listInWords(input.completed)} ${input.completed.length === 1 ? "is" : "are"} done.`
-      : "";
-
-  const lines = [
-    `${first ? `${first}, y` : "Y"}our workspace has been open ${input.daysIn === 1 ? "a day" : `${input.daysIn} days`} and there is one thing between you and a running campaign: ${input.step.done}.`,
-    progress,
-    input.step.nudge,
-  ].filter(Boolean);
-
-  return {
-    to: input.to,
-    subject: input.step.label,
-    html: layout({
-      title: input.step.label,
-      body: lines.map(paragraph).join(""),
-      cta: { label: "Pick up where you left off", url: `${input.appUrl}${input.step.href}` },
-      footer: "One email per step, and only when something is genuinely waiting on you.",
-    }),
-    text: [...lines, "", `${input.appUrl}${input.step.href}`].join("\n"),
+    text: [
+      first ? `Welcome, ${first}.` : "Welcome.",
+      "",
+      opening,
+      "",
+      "Your team:",
+      ...TEAM.map((p) => `- ${p.name} (${p.role}): ${p.detail}`),
+      "",
+      approval,
+      "",
+      ask,
+      "",
+      `${input.appUrl}/onboarding`,
+      "",
+      "Questions? Reply to this email — a person on our team reads every reply.",
+      "",
+      `— ${BRAND.name}`,
+    ].join("\n"),
   };
 }
 
@@ -261,8 +303,11 @@ export function firstMeetingEmail(input: FirstMeetingInput): EmailMessage {
     subject: `Meeting booked with ${input.prospectName}`,
     html: layout({
       title: "Your first meeting is booked",
+      preheader: `${who}, ${input.when}.`,
+      appUrl: input.appUrl,
       body: lines.map(paragraph).join(""),
       cta: { label: "See the conversation", url: `${input.appUrl}/app/meetings` },
+      after: signoff(),
     }),
     text: [...lines, "", `${input.appUrl}/app/meetings`].join("\n"),
   };
@@ -283,9 +328,12 @@ export interface TrialEndingInput {
  * Sent before a trial ends, and it leads with their own numbers rather than a
  * feature list. If those numbers are thin it says so — a trial email that
  * claims success against three invitations insults the reader.
+ *
+ * Only ever sent while `TRIAL_LIMIT_ENFORCED` is on, which it is not while the
+ * product is free; `lifecycle.ts` checks before it gets here.
  */
 export function trialEndingEmail(input: TrialEndingInput): EmailMessage {
-  const first = input.repName?.split(" ")[0];
+  const first = firstName(input.repName);
   const thin = input.invited < 20;
 
   const summary = thin
@@ -303,16 +351,17 @@ export function trialEndingEmail(input: TrialEndingInput): EmailMessage {
     subject: input.daysLeft === 1 ? "Your trial ends tomorrow" : `Your trial ends in ${input.daysLeft} days`,
     html: layout({
       title: "Your trial is nearly up",
+      appUrl: input.appUrl,
       body: lines.map(paragraph).join(""),
       cta: { label: "Choose a plan", url: `${input.appUrl}/app/billing` },
-      footer: "Nothing is deleted if you do not. Sending simply pauses.",
+      after: note("Nothing is deleted if you do not. Sending simply pauses."),
     }),
     text: [...lines, "", `${input.appUrl}/app/billing`].join("\n"),
   };
 }
 
 /** "a, b and c" — an Oxford-comma-free list, because this is prose not data. */
-function listInWords(items: string[]): string {
+export function listInWords(items: string[]): string {
   if (items.length <= 1) return items[0] ?? "";
   return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
 }
@@ -367,7 +416,7 @@ export function weeklyReportEmail(input: WeeklyReportInput): EmailMessage {
     paragraph(greeting),
     ...input.lines.map((line) => paragraph(line)),
     input.knowledge.length
-      ? `<p style="margin:24px 0 8px;font-weight:600">What your agent knows</p>${input.knowledge
+      ? `${subheading("What your agent knows")}${input.knowledge
           .map((line) => paragraph(line))
           .join("")}`
       : "",
@@ -389,9 +438,11 @@ export function weeklyReportEmail(input: WeeklyReportInput): EmailMessage {
     subject,
     html: layout({
       title: subject,
+      preheader: input.lines[0],
+      appUrl: input.appUrl,
       body: blocks,
       cta: { label: "Open your dashboard", url: `${input.appUrl}/app` },
-      footer: `You are receiving this because you use ${BRAND.name}. Turn it off in your settings.`,
+      footer: `You are receiving this because you use ${escapeHtml(BRAND.name)}. Turn it off in your settings.`,
     }),
     text: textLines.join("\n"),
   };

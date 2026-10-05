@@ -30,6 +30,7 @@ export class ResendProvider implements EmailProvider {
         html: message.html,
         text: message.text,
         reply_to: message.replyTo ?? this.config.replyTo,
+        ...(message.headers && Object.keys(message.headers).length ? { headers: message.headers } : {}),
         // Base64, which is what this API takes. A calendar invitation sent as
         // a plain string arrives as an unopenable file.
         ...(message.attachments?.length

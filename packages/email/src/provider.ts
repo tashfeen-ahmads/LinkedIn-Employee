@@ -18,6 +18,14 @@ export interface EmailMessage {
   /** Set so a reply reaches a person rather than a no-reply void. */
   replyTo?: string;
   attachments?: EmailAttachment[];
+  /**
+   * Extra message headers. Used for `List-Unsubscribe` and
+   * `List-Unsubscribe-Post` (RFC 8058) on marketing mail, which is what puts a
+   * native "Unsubscribe" beside the sender's name in Gmail and Apple Mail and
+   * lets the mailbox provider act on it without anybody opening a page. Bulk
+   * senders without it are filtered by both providers now.
+   */
+  headers?: Record<string, string>;
 }
 
 export interface EmailProvider {
