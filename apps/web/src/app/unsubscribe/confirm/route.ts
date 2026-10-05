@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { callWorker } from "@/lib/worker";
+import { seeOther } from "@/lib/see-other";
 
 /*
  * The one-click unsubscribe endpoint, and the URL in every marketing email's
@@ -18,7 +19,7 @@ import { callWorker } from "@/lib/worker";
  */
 export async function GET(request: NextRequest) {
   const token = request.nextUrl.searchParams.get("token") ?? "";
-  return NextResponse.redirect(new URL(`/unsubscribe?token=${encodeURIComponent(token)}`, request.url), 303);
+  return seeOther(`/unsubscribe?token=${encodeURIComponent(token)}`);
 }
 
 export async function POST(request: NextRequest) {
@@ -32,7 +33,7 @@ export async function POST(request: NextRequest) {
     const to = result.ok
       ? "/unsubscribe?done=1"
       : `/unsubscribe?token=${encodeURIComponent(token)}&error=${encodeURIComponent(result.error)}`;
-    return NextResponse.redirect(new URL(to, request.url), 303);
+    return seeOther(to);
   }
 
   // A mailbox provider reads the status and nothing else.

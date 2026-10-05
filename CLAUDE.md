@@ -1279,6 +1279,27 @@ tests that were verified by deliberately breaking the code.
     `platform_admins`, and it reads counts and statuses — never a message or a
     prospect (rule 15).
 
+57. **Saving never signs anybody out.** Two separate faults did it, and each
+    looked like the other. After a server action redirects, Next renders the
+    target by fetching it over HTTP with the visitor's cookie; on Netlify the
+    origin of that fetch is whichever host the instance *first* served, and an
+    instance warmed by norasdr.com fetched from there, was bounced to
+    app.norasdr.com by netlify.toml, and lost the cookie on the cross-host
+    redirect. Every Save then rendered signed out and landed on /login while
+    the browser still held a perfectly good session. `pinRequestOrigin`
+    (called from `createClient`, which every action goes through) points that
+    fetch at the host the request arrived on — only hosts this deployment
+    serves, because the fetch carries the visitor's cookie. Route handlers
+    answer with `seeOther(path)`, a relative 303, never a URL built from
+    `request.url`.
+
+    The second: a token refreshed during a page render cannot be written back,
+    and refresh tokens are single-use, so an hour in, the session ended two
+    clicks later. `middleware.ts` refreshes before the render and writes the
+    cookies to both the request and the response. Neither fault is visible
+    from the database — the sessions are intact — which is why they read as a
+    customer who keeps forgetting to log in.
+
 ## Conventions
 
 - Agent output is validated against a zod schema before it touches the

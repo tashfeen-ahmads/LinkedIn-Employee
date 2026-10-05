@@ -3461,6 +3461,38 @@ const MUTATIONS = [
     to: "  return 86_400_000 - intoDay;",
     pkg: "@le/shared",
   },
+  {
+    id: "session/save-keeps-its-host",
+    rule: "The page after a Save is fetched from the host holding the cookie, not the one the instance first served",
+    file: "apps/web/src/lib/supabase-server.ts",
+    from: "  await pinRequestOrigin();\n",
+    to: "",
+    pkg: "@le/web",
+  },
+  {
+    id: "session/unknown-host-is-never-pinned",
+    rule: "A Host header this deployment does not serve is never fetched with the visitor's cookie",
+    file: "apps/web/src/lib/request-origin.ts",
+    from: "  if (/^(localhost|127\\.0\\.0\\.1|\\[::1\\])(:\\d+)?$/.test(wanted)) {",
+    to: "  if (true) {",
+    pkg: "@le/web",
+  },
+  {
+    id: "session/redirect-cannot-change-host",
+    rule: "A form's 303 carries a path, so it cannot send a signed-in person to another host",
+    file: "apps/web/src/lib/see-other.ts",
+    from: '  if (!path.startsWith("/") || path.startsWith("//")) throw new Error(`seeOther takes a path, got ${path}`);\n',
+    to: "",
+    pkg: "@le/web",
+  },
+  {
+    id: "session/refresh-is-written-back",
+    rule: "A token refreshed before a render is written to the browser, or the next page spends a used refresh token",
+    file: "apps/web/src/middleware.ts",
+    from: "        for (const { name, value, options } of toSet) response.cookies.set(name, value, options);",
+    to: "",
+    pkg: "@le/web",
+  },
 ];
 
 /**

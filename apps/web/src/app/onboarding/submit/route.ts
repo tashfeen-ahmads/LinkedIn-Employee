@@ -1,5 +1,6 @@
-import { NextResponse, type NextRequest } from "next/server";
+import type { NextRequest } from "next/server";
 import { createWorkspace } from "@/lib/create-workspace";
+import { seeOther } from "@/lib/see-other";
 
 /*
  * The onboarding form posts here as a plain HTML form, not a server action.
@@ -12,5 +13,5 @@ import { createWorkspace } from "@/lib/create-workspace";
  */
 export async function POST(request: NextRequest) {
   const to = await createWorkspace(await request.formData());
-  return NextResponse.redirect(new URL(to, request.url), 303);
+  return seeOther(to);
 }

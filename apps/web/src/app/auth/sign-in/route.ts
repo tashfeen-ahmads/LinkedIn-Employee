@@ -1,5 +1,6 @@
-import { NextResponse, type NextRequest } from "next/server";
+import type { NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase-server";
+import { seeOther } from "@/lib/see-other";
 
 /*
  * Password sign-in, as a plain form post.
@@ -20,7 +21,7 @@ export async function POST(request: NextRequest) {
   const password = String(form.get("password") ?? "");
   const invite = String(form.get("invite") ?? "").trim();
   const q = invite ? `&invite=${encodeURIComponent(invite)}` : "";
-  const go = (path: string) => NextResponse.redirect(new URL(path, request.url), 303);
+  const go = seeOther;
 
   if (!email || !password) return go(`/login?error=${encodeURIComponent("Enter your email and password.")}${q}`);
 
