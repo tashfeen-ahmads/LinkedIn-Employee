@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase-server";
 import { callWorker, errorQuery } from "@/lib/worker";
+import { requestAccountEmails } from "@/lib/account-emails";
 import { isValidTimezone } from "@le/shared";
 
 /**
@@ -115,6 +116,10 @@ export async function createWorkspace(formData: FormData): Promise<string> {
     linkedinCompanyUrl: linkedinCompanyUrl || undefined,
     description: description || undefined,
   });
+
+  // The operators hear that onboarding finished, and anybody whose welcome
+  // was lost to a worker blip at signup gets it now.
+  await requestAccountEmails(user.id);
 
   if (!queued.ok) {
     return errorQuery("/app", `Your workspace is ready, but we could not start writing your profiles: ${queued.error}`);
