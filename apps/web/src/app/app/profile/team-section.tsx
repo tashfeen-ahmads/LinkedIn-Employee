@@ -7,7 +7,10 @@ import { callWorker, errorQuery, noticeQuery } from "@/lib/worker";
 import { describeClaim } from "./claim";
 import { linkedInState } from "./linkedin-state";
 import { CopyButton } from "@/components/copy-button";
-import { PLAN_SEATS } from "@le/billing";
+import { PLAN_SEATS, trialLimitEnforced } from "@le/billing";
+
+/** Members a workspace may hold while the product is free. */
+const FREE_MEMBER_LIMIT = 25;
 import { createInviteToken, inviteExpiry, INVITE_TTL_DAYS } from "@/lib/invitations";
 import { PageNotice } from "@/components/page-notice";
 import { PageHeader, Section, Empty } from "@/components/page";
@@ -47,7 +50,12 @@ async function inviteMember(formData: FormData) {
     supabase.from("workspaces").select("plan, seats").eq("id", session.workspaceId).single(),
   ]);
 
-  const seatLimit = Math.max(workspace?.seats ?? 1, PLAN_SEATS[(workspace?.plan ?? "trial") as never] ?? 1);
+  // While NORA is free for everyone the plan's seat count is not the limit —
+  // a free product that refuses to add a colleague is not free. A generous
+  // ceiling stays, so one workspace cannot invite a mailing list.
+  const seatLimit = trialLimitEnforced(process.env.TRIAL_LIMIT_ENFORCED)
+    ? Math.max(workspace?.seats ?? 1, PLAN_SEATS[(workspace?.plan ?? "trial") as never] ?? 1)
+    : FREE_MEMBER_LIMIT;
   if ((members ?? 0) >= seatLimit) {
     redirect("/app/team?error=" + encodeURIComponent("This workspace has reached its member limit for now. Ask us from Support and we will raise it — there is nothing to pay."));
   }
