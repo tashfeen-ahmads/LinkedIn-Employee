@@ -62,7 +62,7 @@ export default async function IssuesPage({
       <PageHeader
         eyebrow="Operator"
         title="Issues"
-        lede="Everything wrong across every workspace — LinkedIn connections, replies, campaigns, members, email and the worker itself. Read live from the worker each time this page opens."
+        lede="System faults only — the worker, the sending loop, reply delivery, the LinkedIn provider, failed background jobs, AI calls and email. Not what a customer has yet to do. Read live from the worker each time this page opens."
       />
 
       {!result.ok ? (
@@ -99,7 +99,7 @@ export default async function IssuesPage({
         ) : null}
 
         {result.ok && shown.length === 0 ? (
-          <Empty title="Nothing is wrong.">Every check the worker runs came back clean.</Empty>
+          <Empty title="No system faults.">Every check the worker runs came back clean.</Empty>
         ) : (
           <div className="table-scroll">
             <table>

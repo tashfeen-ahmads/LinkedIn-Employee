@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase-server";
 import { PageHeader } from "@/components/page";
-import { requirePlatformAdmin, statsByWorkspace, daysUntil, formatUsd, type WorkspaceStats } from "@/lib/admin";
+import { requirePlatformAdmin, statsByWorkspace, formatUsd, type WorkspaceStats } from "@/lib/admin";
 import { MESSAGE_WEBHOOK_BEAT, readWebhookRefusal } from "@le/shared";
 
 export const dynamic = "force-dynamic";
@@ -122,7 +122,6 @@ export default async function AdminWorkspacesPage() {
             <thead>
               <tr>
                 <th>Workspace</th>
-                <th>Plan</th>
                 <th className="num">People</th>
                 <th>LinkedIn</th>
                 <th className="num">Running</th>
@@ -137,20 +136,11 @@ export default async function AdminWorkspacesPage() {
               {workspaces.map((w) => {
                 const s = byWorkspace.get(w.id);
                 const accs = accountsByWorkspace.get(w.id) ?? [];
-                const trialDays = daysUntil(w.trial_ends_at);
                 return (
                   <tr key={w.id}>
                     <td>
                       <Link href={`/admin/workspaces/${w.id}`}>{w.name}</Link>
                       <p className="tiny subtle mono">{w.slug}</p>
-                    </td>
-                    <td>
-                      <span className="small">{w.plan}</span>
-                      {w.plan === "trial" && trialDays !== null ? (
-                        <p className={`tiny ${trialDays < 0 ? "danger-text" : "subtle"}`}>
-                          {trialDays < 0 ? `expired ${-trialDays}d ago` : `${trialDays}d left`}
-                        </p>
-                      ) : null}
                     </td>
                     <td className="num">{memberCount.get(w.id) ?? 0}</td>
                     <td><AccountCell accounts={accs} /></td>

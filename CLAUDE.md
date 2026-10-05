@@ -1270,13 +1270,14 @@ tests that were verified by deliberately breaking the code.
     one job. `listNewMessages` existed for months and nothing called it, which
     is how a refused webhook meant a reply lost for good.
 
-    `collectIssues` (`apps/worker/src/jobs/issues.ts`) is the operator's one
-    list: worker health, reply delivery, LinkedIn accounts (unfinished sign-ins,
-    throttling, accounts nobody owns), members (signed up with no workspace, one
-    person with two accounts), campaigns (paused with acceptances waiting, built
-    and never launched, running on a dead account), email configuration and
-    open tickets. Rendered at `/admin/issues`, behind `platform_admins`, and it
-    reads counts and statuses — never a message or a prospect (rule 15).
+    `collectIssues` (`apps/worker/src/jobs/issues.ts`) is the operator's list
+    of **system** faults — never what a member has not done yet. Worker, loop
+    and nightly health; reply delivery and polling; accounts the provider
+    stopped accepting or holds for nobody; background jobs failed past their
+    retries; failing AI calls; campaigns running on an account that cannot
+    send; email configuration. Rendered at `/admin/issues`, behind
+    `platform_admins`, and it reads counts and statuses — never a message or a
+    prospect (rule 15).
 
 ## Conventions
 

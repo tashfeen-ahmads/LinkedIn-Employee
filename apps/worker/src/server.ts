@@ -35,7 +35,7 @@ import { inviteEmail, verifyUnsubscribeToken } from "@le/email";
 import { trySend } from "./email.js";
 import { sendAccountEmails } from "./jobs/lifecycle.js";
 import { isPlatformAdmin, requestAnnouncementSend, saveAnnouncement, sendAnnouncementTest } from "./jobs/announcements.js";
-import { collectIssues } from "./jobs/issues.js";
+import { collectIssues, type QueueCounts } from "./jobs/issues.js";
 import { recordEvent } from "./context.js";
 
 const AgentTestRequestSchema = z.object({
@@ -419,7 +419,7 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
     if (!body?.userId || !(await isPlatformAdmin(ctx.db, body.userId))) {
       return c.json({ error: "not a platform admin" }, 403);
     }
-    return c.json({ issues: await collectIssues(ctx), at: new Date().toISOString() });
+    return c.json({ issues: await collectIssues(ctx, new Date(), await failedJobCounts(queues)), at: new Date().toISOString() });
   });
 
   app.post("/admin/announcements", async (c) => {
@@ -1920,6 +1920,35 @@ async function claimAccount(
 }
 
 const NOTICE_PULL_DEBOUNCE_MS = 30_000;
+
+/**
+ * Failed jobs per queue, with their most recent reasons, for the Issues tab.
+ *
+ * Asked with a deadline: a command against an unreachable Redis waits for ever
+ * (rule 22), and an operator page that hangs tells nobody anything. A queue
+ * that cannot be asked is left out rather than reported as clean — the boot
+ * stamp already says when the queue is down.
+ */
+async function failedJobCounts(queues: Queues): Promise<QueueCounts | null> {
+  const ask = async (): Promise<QueueCounts> => {
+    const out: QueueCounts = {};
+    for (const [name, queue] of Object.entries(queues)) {
+      const counts = await queue.getJobCounts("failed");
+      const failed = counts.failed ?? 0;
+      const recent = failed > 0 ? await queue.getFailed(0, 2) : [];
+      out[name] = {
+        failed,
+        reasons: recent.map((job: { failedReason?: string } | undefined) => String(job?.failedReason ?? "").slice(0, 160)).filter(Boolean),
+      };
+    }
+    return out;
+  };
+  try {
+    return await Promise.race([ask(), new Promise<null>((resolve) => setTimeout(() => resolve(null), 3_000))]);
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Ask the provider what it actually has, because something says it changed.

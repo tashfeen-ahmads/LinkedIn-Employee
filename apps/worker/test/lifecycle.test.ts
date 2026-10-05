@@ -359,11 +359,11 @@ describe("the welcome and the operators' notifications", () => {
     expect(signups.map((m) => m.to).sort()).toEqual(["ana@nora.test", "ben@nora.test", "ops@nora.test"]);
     expect(signups[0]?.html).toContain("sam@acme.test");
 
-    // Onboarded too, because this user has a workspace: with its console link.
-    const onboarded = email.sent.filter((m) => m.subject.startsWith("Onboarding finished"));
-    expect(onboarded).toHaveLength(3);
-    expect(onboarded[0]?.html).toContain(`https://app.test/admin/workspaces/${WORKSPACE}`);
-    expect(onboarded[0]?.subject).toContain("Acme");
+    // One note per person, at signup — never a second "finished setup" one,
+    // even for a user who already has a workspace. Two near-identical emails
+    // per customer read to the operators as a fault.
+    expect(email.sent.filter((m) => m.subject.startsWith("Onboarding finished"))).toHaveLength(0);
+    expect(email.sent.filter((m) => m.to === "ben@nora.test")).toHaveLength(1);
   });
 
   it("notices a newly connected LinkedIn account on the hourly run", async () => {

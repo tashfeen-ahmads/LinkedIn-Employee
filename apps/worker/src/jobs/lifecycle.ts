@@ -425,17 +425,8 @@ export async function notifyAdminsOfMilestones(ctx: WorkerContext, now: Date = n
     sent += await notifyAdmins(ctx, "signup", user.id, new Date(user.created_at));
   }
 
-  const { data: workspaces } = await db.from("workspaces").select("id, created_at").gte("created_at", since);
-  for (const workspace of workspaces ?? []) {
-    const { data: owner } = await db
-      .from("memberships")
-      .select("user_id")
-      .eq("workspace_id", workspace.id)
-      .eq("role", "owner")
-      .limit(1)
-      .maybeSingle();
-    if (owner) sent += await notifyAdmins(ctx, "onboarded", owner.user_id, new Date(workspace.created_at));
-  }
+  // No separate "finished setup" note: operators asked for one email per
+  // person, sent the moment they sign up, not a second one an hour later.
 
   const { data: accounts } = await db
     .from("linkedin_accounts")
@@ -475,18 +466,9 @@ export async function sendAccountEmails(
     message: welcomeEmail({ to: profile.email, repName: profile.full_name, appUrl: ctx.env.APP_URL }),
   });
 
-  let admins = await notifyAdmins(ctx, "signup", userId, new Date(profile.created_at ?? now));
-
-  const { data: membership } = await db
-    .from("memberships")
-    .select("workspace_id, role, created_at")
-    .eq("user_id", userId)
-    .eq("role", "owner")
-    .limit(1)
-    .maybeSingle();
-  if (membership) {
-    admins += await notifyAdmins(ctx, "onboarded", userId, new Date(membership.created_at ?? now));
-  }
+  // One operator note per person, at signup. Finishing setup used to send a
+  // second, near-identical one — two emails per customer read as a fault.
+  const admins = await notifyAdmins(ctx, "signup", userId, new Date(profile.created_at ?? now));
   return { welcome, admins };
 }
 

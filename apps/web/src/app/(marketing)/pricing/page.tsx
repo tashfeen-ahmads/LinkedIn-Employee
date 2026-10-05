@@ -19,7 +19,7 @@ export const metadata: Metadata = pageMeta({
 const QA = [
   {
     q: "Is there a catch?",
-    a: "No plan, no trial clock and no card. Every workspace gets the whole team and the same limits — the caps that keep a LinkedIn account safe are product rules, not something a higher tier unlocks.",
+    a: "No plan, no time limit and no card. Every workspace gets the whole team and the same limits — the caps that keep a LinkedIn account safe are product rules, not something a higher tier unlocks.",
   },
   {
     q: "Do I need to pay LinkedIn for anything?",

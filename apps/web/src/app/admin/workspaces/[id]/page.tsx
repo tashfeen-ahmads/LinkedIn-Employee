@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase-server";
-import { requirePlatformAdmin, statsByWorkspace, daysUntil, formatUsd, type WorkspaceStats } from "@/lib/admin";
+import { requirePlatformAdmin, statsByWorkspace, formatUsd, type WorkspaceStats } from "@/lib/admin";
 import { dailyInviteCap } from "@le/linkedin";
 import { LINKEDIN_LIMITS } from "@le/shared";
 import { PageHeader, Section } from "@/components/page";
@@ -52,7 +52,6 @@ export default async function AdminWorkspacePage({ params }: { params: Promise<{
   const accountByUser = new Map((accounts ?? []).map((a) => [a.user_id, a]));
 
   const s = statsByWorkspace((stats ?? null) as WorkspaceStats[] | null).get(id);
-  const trialDays = daysUntil(workspace.trial_ends_at);
 
   const priced = (spend ?? []).filter((c) => c.cost_usd !== null);
   const totalSpend = priced.reduce((sum, c) => sum + Number(c.cost_usd), 0);
@@ -72,22 +71,10 @@ export default async function AdminWorkspacePage({ params }: { params: Promise<{
         }
       />
 
-      <Section title="Plan">
+      {/* NORA is free for everyone for now, so there is no plan, seat count or
+          trial clock to show — only when the workspace began. */}
+      <Section title="Workspace">
         <div className="grid grid-4">
-          <Stat label="Plan" value={workspace.plan} />
-          <Stat label="Seats" value={String(workspace.seats)} />
-          <Stat
-            label={workspace.plan === "trial" ? "Trial" : "Subscription"}
-            value={
-              workspace.plan === "trial"
-                ? trialDays === null
-                  ? "no end date"
-                  : trialDays < 0
-                    ? `expired ${-trialDays}d ago`
-                    : `${trialDays}d left`
-                : (workspace.subscription_status ?? "—")
-            }
-          />
           <Stat label="Signed up" value={new Date(workspace.created_at).toLocaleDateString()} />
         </div>
       </Section>

@@ -19,10 +19,9 @@ function harness(seed: (db: FakeDb) => void, env: Record<string, unknown> = {}) 
     "linkedin_accounts",
     "campaigns",
     "campaign_prospects",
-    "customer_profiles",
     "worker_heartbeats",
     "events",
-    "support_tickets",
+    "llm_calls",
     "email_sends",
   ]) {
     db.seed(table, []);
@@ -38,38 +37,54 @@ function harness(seed: (db: FakeDb) => void, env: Record<string, unknown> = {}) 
 const ids = (issues: Array<{ id: string }>) => issues.map((i) => i.id);
 
 describe("collectIssues", () => {
-  it("names somebody who signed up and never finished setup", async () => {
-    const issues = await harness((db) =>
-      db.seed("profiles", [{ id: "brian", email: "brian@example.com", full_name: "Brian", created_at: "2026-10-02T17:20:00Z" }]),
-    );
-    expect(ids(issues)).toContain("members:no-workspace:brian");
-  });
-
-  it("spots one person with two accounts on two addresses of the same mailbox", async () => {
-    const issues = await harness((db) =>
-      db.seed("profiles", [
-        { id: "p1", email: "pdmiltonandassoc.llc@pm.me", full_name: "Patti Dubas", created_at: "2026-10-02T15:21:00Z" },
-        { id: "p2", email: "pdmiltonandassoc.llc@proton.me", full_name: null, created_at: "2026-10-03T18:47:00Z" },
-      ]),
-    );
-    expect(issues.some((i) => i.id.startsWith("members:duplicate:"))).toBe(true);
-  });
-
-  it("reports a LinkedIn sign-in that never finished", async () => {
-    const issues = await harness((db) =>
+  it("never lists what a member simply has not done yet", async () => {
+    // System bugs only. A signup with no workspace, an unfinished LinkedIn
+    // sign-in, a paused or never-launched campaign are a person's choices.
+    const issues = await harness((db) => {
+      db.seed("profiles", [{ id: "brian", email: "brian@example.com", full_name: "Brian", created_at: "2026-10-02T17:20:00Z" }]);
       db.seed("linkedin_accounts", [
         { id: "a1", workspace_id: WS, user_id: "u1", status: "connecting", provider_account_id: null, created_at: "2026-10-05T10:00:00Z" },
-      ]),
-    );
-    expect(ids(issues)).toContain("linkedin:unconnected:a1");
+      ]);
+      db.seed("campaigns", [{ id: "c1", workspace_id: WS, name: "Agency founders", status: "paused", created_at: "2026-09-17T00:00:00Z", updated_at: "2026-09-28T00:00:00Z" }]);
+      db.seed("campaign_prospects", [{ campaign_id: "c1", status: "accepted" }]);
+    });
+    expect(issues.filter((i) => ["Members", "Support"].includes(i.area))).toHaveLength(0);
+    expect(ids(issues)).not.toContain("linkedin:unconnected:a1");
+    expect(ids(issues)).not.toContain("campaigns:paused-waiting:c1");
   });
 
-  it("reports a paused campaign holding people who accepted", async () => {
+  it("reports an account the provider stopped accepting", async () => {
+    const issues = await harness((db) =>
+      db.seed("linkedin_accounts", [
+        { id: "a2", workspace_id: WS, user_id: "u1", status: "reauth_required", provider_account_id: "acct_x", created_at: "2026-10-01T00:00:00Z" },
+      ]),
+    );
+    expect(ids(issues)).toContain("unipile:dropped:a2");
+  });
+
+  it("reports a campaign running on an account that cannot send", async () => {
     const issues = await harness((db) => {
-      db.seed("campaigns", [{ id: "c1", workspace_id: WS, name: "Agency founders", status: "paused", created_at: "2026-09-17T00:00:00Z", updated_at: "2026-09-28T00:00:00Z" }]);
-      db.seed("campaign_prospects", [{ campaign_id: "c1", status: "accepted" }, { campaign_id: "c1", status: "messaged_1" }]);
+      db.seed("linkedin_accounts", [
+        { id: "a3", workspace_id: WS, user_id: "u1", status: "reauth_required", provider_account_id: "acct_y", created_at: "2026-10-01T00:00:00Z" },
+      ]);
+      db.seed("campaigns", [{ id: "c2", workspace_id: WS, name: "Live", status: "running", linkedin_account_id: "a3", created_at: "2026-09-17T00:00:00Z", updated_at: "2026-09-28T00:00:00Z" }]);
     });
-    expect(ids(issues)).toContain("campaigns:paused-waiting:c1");
+    expect(ids(issues)).toContain("campaigns:running-dead:c2");
+  });
+
+  it("reports background jobs that failed past their retries", async () => {
+    const db = new FakeDb();
+    for (const t of ["workspaces", "profiles", "linkedin_accounts", "campaigns", "campaign_prospects", "worker_heartbeats", "events", "llm_calls", "email_sends"]) db.seed(t, []);
+    const ctx = { db: db.asDb(), env: { EMAIL_PROVIDER: "resend", RESEND_API_KEY: "x", EMAIL_FROM: "x", INTERNAL_API_SECRET: "s" } } as unknown as WorkerContext;
+    const issues = await collectIssues(ctx, NOW, { linkedinAction: { failed: 3, reasons: ["422: Cannot send invitation"] } });
+    expect(ids(issues)).toContain("jobs:failed:linkedinAction");
+  });
+
+  it("reports failing AI calls", async () => {
+    const issues = await harness((db) =>
+      db.seed("llm_calls", [{ workspace_id: WS, agent: "targeting.invite-note", error: "model returned no parsable output", created_at: "2026-10-05T17:00:00Z" }]),
+    );
+    expect(ids(issues)).toContain("ai:targeting.invite-note");
   });
 
   it("does not report a webhook refusal the worker has since repaired", async () => {
@@ -102,9 +117,7 @@ describe("collectIssues", () => {
   });
 
   it("puts critical first", async () => {
-    const issues = await harness((db) =>
-      db.seed("profiles", [{ id: "x", email: "x@example.com", full_name: "X", created_at: "2026-10-01T00:00:00Z" }]),
-    );
+    const issues = await harness(() => undefined, { EMAIL_PROVIDER: "off" });
     expect(issues[0]?.severity).toBe("critical");
   });
 });

@@ -25,7 +25,7 @@ import { INBOUND_POLL_BEAT } from "./inbound-poll.js";
  * message, a conversation or a prospect's details (rule 15).
  */
 export type IssueSeverity = "critical" | "warning" | "info";
-export type IssueArea = "Platform" | "Replies" | "LinkedIn" | "Campaigns" | "Members" | "Email" | "Support";
+export type IssueArea = "Platform" | "Jobs" | "Replies" | "Unipile" | "AI" | "Campaigns" | "Email";
 
 export interface Issue {
   id: string;
@@ -54,7 +54,14 @@ function age(at: string | null | undefined, now: Date): number {
   return Number.isFinite(ms) ? now.getTime() - ms : Infinity;
 }
 
-export async function collectIssues(ctx: WorkerContext, now: Date = new Date()): Promise<Issue[]> {
+/** The queues, asked how many jobs failed. Optional so the collector runs without Redis in tests. */
+export type QueueCounts = Record<string, { failed: number; reasons: string[] }>;
+
+export async function collectIssues(
+  ctx: WorkerContext,
+  now: Date = new Date(),
+  queueCounts: QueueCounts | null = null,
+): Promise<Issue[]> {
   const { db } = ctx;
   const issues: Issue[] = [];
   const add = (issue: Issue) => issues.push(issue);
@@ -62,19 +69,16 @@ export async function collectIssues(ctx: WorkerContext, now: Date = new Date()):
   const weekAgo = new Date(now.getTime() - 7 * DAY).toISOString();
   const [
     { data: workspaces },
-    { data: memberships },
     { data: profiles },
     { data: accounts },
     { data: campaigns },
     { data: campaignProspects },
-    { data: strategies },
     { data: beats },
     { data: events },
-    { data: tickets },
+    { data: llmFailures },
     { data: stuckEmails },
   ] = await Promise.all([
     db.from("workspaces").select("id, name, created_at"),
-    db.from("memberships").select("workspace_id, user_id, role"),
     db.from("profiles").select("id, email, full_name, created_at"),
     db
       .from("linkedin_accounts")
@@ -83,20 +87,21 @@ export async function collectIssues(ctx: WorkerContext, now: Date = new Date()):
       ),
     db.from("campaigns").select("id, workspace_id, name, status, launched_at, linkedin_account_id, created_at, updated_at"),
     db.from("campaign_prospects").select("campaign_id, status").limit(20000),
-    db.from("customer_profiles").select("workspace_id, approved_at, do_not_pursue, created_at"),
     db.from("worker_heartbeats").select("name, beat_at, detail"),
     db
       .from("events")
       .select("workspace_id, name, actor_user_id, subject_id, payload, created_at")
       .in("name", [
-        "linkedin.connect.failed",
         "campaign.notes_missing",
         "targeting.stopped",
-        "invite.throttled",
         "linkedin.account.reauth_required",
       ])
       .gte("created_at", weekAgo),
-    db.from("support_tickets").select("id, workspace_id, subject, status, created_at"),
+    db
+      .from("llm_calls")
+      .select("workspace_id, agent, error, created_at")
+      .gte("created_at", new Date(now.getTime() - DAY).toISOString())
+      .not("error", "is", null),
     db.from("email_sends").select("user_id, step, status, created_at").eq("status", "claimed"),
   ]);
 
@@ -183,44 +188,21 @@ export async function collectIssues(ctx: WorkerContext, now: Date = new Date()):
     });
   }
 
-  // ── LinkedIn ────────────────────────────────────────────────────────────
+  // ── Unipile ─────────────────────────────────────────────────────────────
+  // Only what the provider did, never what a member has not done yet: an
+  // account the provider stopped recognising is a system fault, a sign-in a
+  // person never finished is not.
   for (const account of accounts ?? []) {
-    const who = person.get(account.user_id) ?? null;
-    if (!account.provider_account_id) {
-      if (age(account.created_at, now) > HOUR) {
-        add({
-          id: `linkedin:unconnected:${account.id}`,
-          severity: "warning",
-          area: "LinkedIn",
-          title: account.status === "disconnected" ? "LinkedIn sign-in failed and was not retried" : "LinkedIn sign-in started and never finished",
-          detail: account.status_detail ?? "No account is attached, so nothing can send for this person.",
-          ...at(account.workspace_id),
-          person: who,
-          since: account.created_at,
-        });
-      }
-      continue;
-    }
-    if (!["active", "warning"].includes(account.status)) {
+    if (!account.provider_account_id) continue;
+    if (["reauth_required", "disconnected"].includes(account.status)) {
       add({
-        id: `linkedin:status:${account.id}`,
-        severity: account.status === "paused" ? "info" : "critical",
-        area: "LinkedIn",
-        title: `LinkedIn account is ${account.status.replaceAll("_", " ")}`,
-        detail: account.status_detail ?? "Nothing sends from this account until it is fixed.",
+        id: `unipile:dropped:${account.id}`,
+        severity: "critical",
+        area: "Unipile",
+        title: `The provider no longer accepts this account (${account.status.replaceAll("_", " ")})`,
+        detail: account.status_detail ?? "Every job for this account fails until it is reconnected or re-pointed.",
         ...at(account.workspace_id),
-        person: who,
-      });
-    }
-    if (account.invites_paused_until && Date.parse(account.invites_paused_until) > now.getTime()) {
-      add({
-        id: `linkedin:throttled:${account.id}`,
-        severity: "warning",
-        area: "LinkedIn",
-        title: "LinkedIn is refusing invitations from this account",
-        detail: `${account.invites_paused_reason ?? "Throttled."} Invitations resume after ${account.invites_paused_until}.`,
-        ...at(account.workspace_id),
-        person: who,
+        person: person.get(account.user_id) ?? null,
       });
     }
   }
@@ -234,106 +216,10 @@ export async function collectIssues(ctx: WorkerContext, now: Date = new Date()):
       add({
         id: `linkedin:orphan:${providerAccount.providerAccountId}`,
         severity: "info",
-        area: "LinkedIn",
+        area: "Unipile",
         title: "The provider holds an account nobody here owns",
         detail: `Account ${providerAccount.providerAccountId}${providerAccount.reference ? ` labelled "${providerAccount.reference}"` : ""} is connected at the provider and attached to no member. It may be a duplicate connection worth deleting there.`,
       });
-    }
-  }
-
-  const failedSignIns = new Map<string, { count: number; last: string; workspaceId: string }>();
-  for (const event of (events ?? []).filter((e) => e.name === "linkedin.connect.failed")) {
-    const key = event.actor_user_id ?? event.subject_id ?? "unknown";
-    const prev = failedSignIns.get(key);
-    failedSignIns.set(key, {
-      count: (prev?.count ?? 0) + 1,
-      last: prev && prev.last > event.created_at ? prev.last : event.created_at,
-      workspaceId: event.workspace_id,
-    });
-  }
-  for (const [userId, info] of failedSignIns) {
-    add({
-      id: `linkedin:signin-failed:${userId}`,
-      severity: "info",
-      area: "LinkedIn",
-      title: `LinkedIn refused ${info.count} sign-in attempt${info.count === 1 ? "" : "s"} this week`,
-      detail: "Usually a Google/Apple-created LinkedIn account with no password, a verification code not entered, or a mistyped password.",
-      ...at(info.workspaceId),
-      person: person.get(userId) ?? null,
-      since: info.last,
-    });
-  }
-
-  // ── Members ─────────────────────────────────────────────────────────────
-  const memberIds = new Set((memberships ?? []).map((m) => m.user_id));
-  for (const profile of profiles ?? []) {
-    if (!memberIds.has(profile.id) && age(profile.created_at, now) > HOUR) {
-      add({
-        id: `members:no-workspace:${profile.id}`,
-        severity: "warning",
-        area: "Members",
-        title: "Signed up but never finished setup",
-        detail: "This person has an account and no workspace, so they see only the setup form.",
-        person: person.get(profile.id) ?? null,
-        since: profile.created_at,
-      });
-    }
-  }
-
-  // Two accounts that look like one person: the same name, or the same
-  // mailbox name at two providers (pm.me and proton.me are one inbox).
-  const byKey = new Map<string, string[]>();
-  for (const profile of profiles ?? []) {
-    const keys = new Set<string>();
-    if (profile.full_name?.trim()) keys.add(`name:${profile.full_name.trim().toLowerCase()}`);
-    const local = profile.email?.split("@")[0]?.toLowerCase();
-    if (local && local.length >= 5) keys.add(`local:${local}`);
-    for (const key of keys) byKey.set(key, [...(byKey.get(key) ?? []), profile.id]);
-  }
-  const reported = new Set<string>();
-  for (const ids of byKey.values()) {
-    const unique = [...new Set(ids)];
-    if (unique.length < 2) continue;
-    const key = unique.sort().join(",");
-    if (reported.has(key)) continue;
-    reported.add(key);
-    add({
-      id: `members:duplicate:${key}`,
-      severity: "warning",
-      area: "Members",
-      title: "One person may have two accounts",
-      detail: `${unique.map((id) => person.get(id) ?? id).join(" and ")}. Whichever they sign in with decides what they see — an empty second account reads as "nothing is connected".`,
-    });
-  }
-
-  for (const workspace of workspaces ?? []) {
-    if (age(workspace.created_at, now) < DAY) continue;
-    const connected = (accounts ?? []).some((a) => a.workspace_id === workspace.id && a.provider_account_id);
-    if (!connected) {
-      add({
-        id: `members:no-linkedin:${workspace.id}`,
-        severity: "warning",
-        area: "Members",
-        title: "LinkedIn never connected",
-        detail: "Nothing can be searched or sent for this workspace until somebody connects an account.",
-        ...at(workspace.id),
-        since: workspace.created_at,
-      });
-    }
-    const own = (strategies ?? []).filter((s) => s.workspace_id === workspace.id && !s.do_not_pursue);
-    if (own.length && !own.some((s) => s.approved_at)) {
-      const oldest = own.map((s) => s.created_at).sort()[0] ?? null;
-      if (age(oldest, now) > 2 * DAY) {
-        add({
-          id: `members:unapproved:${workspace.id}`,
-          severity: "info",
-          area: "Members",
-          title: `${own.length} strateg${own.length === 1 ? "y" : "ies"} waiting for approval`,
-          detail: "Nothing is searched for until one is approved.",
-          ...at(workspace.id),
-          since: oldest,
-        });
-      }
     }
   }
 
@@ -351,13 +237,6 @@ export async function collectIssues(ctx: WorkerContext, now: Date = new Date()):
     if (campaign.status === "running" && (!account || !["active", "warning"].includes(account.status) || !account.provider_account_id)) {
       add({ id: `campaigns:running-dead:${campaign.id}`, severity: "critical", area: "Campaigns", title: `"${campaign.name}" is running on an account that cannot send`, detail: "The campaign says running and nothing will leave until its LinkedIn account is fixed.", ...base });
     }
-    const waiting = (c.accepted ?? 0) + (c.messaged_1 ?? 0) + (c.messaged_2 ?? 0);
-    if (campaign.status === "paused" && waiting > 0) {
-      add({ id: `campaigns:paused-waiting:${campaign.id}`, severity: "warning", area: "Campaigns", title: `"${campaign.name}" is paused with ${waiting} accepted ${waiting === 1 ? "person" : "people"} mid-conversation`, detail: "People who accepted get no follow-up while it is paused.", ...base, since: campaign.updated_at });
-    }
-    if (campaign.status === "draft" && (c.queued ?? 0) > 0 && age(campaign.created_at, now) > DAY) {
-      add({ id: `campaigns:never-launched:${campaign.id}`, severity: "info", area: "Campaigns", title: `"${campaign.name}" was built and never launched`, detail: `${c.queued} people are queued and waiting for review.`, ...base, since: campaign.created_at });
-    }
     if ((c.failed ?? 0) > 0) {
       add({ id: `campaigns:failed:${campaign.id}`, severity: "warning", area: "Campaigns", title: `${c.failed} failed in "${campaign.name}"`, detail: "Rows marked failed are not retried; read the campaign's failures.", ...base });
     }
@@ -369,6 +248,43 @@ export async function collectIssues(ctx: WorkerContext, now: Date = new Date()):
   for (const event of (events ?? []).filter((e) => e.name === "campaign.notes_missing")) {
     const payload = (event.payload ?? {}) as Record<string, unknown>;
     add({ id: `campaigns:notes:${event.subject_id ?? event.created_at}`, severity: "info", area: "Campaigns", title: "Some invitation notes fell back to the template", detail: `${String(payload.missing ?? "Some")} of ${String(payload.prospects ?? "?")} notes were not personalised.`, ...at(event.workspace_id), since: event.created_at });
+  }
+
+  // ── Jobs ────────────────────────────────────────────────────────────────
+  // Background work that threw past its retries. A failed job is a unit of
+  // work the system promised and did not do, and BullMQ keeps them a week.
+  for (const [queue, counts] of Object.entries(queueCounts ?? {})) {
+    if (counts.failed > 0) {
+      add({
+        id: `jobs:failed:${queue}`,
+        severity: "warning",
+        area: "Jobs",
+        title: `${counts.failed} failed job${counts.failed === 1 ? "" : "s"} in the ${queue} queue`,
+        detail: counts.reasons.length ? `Most recent: ${counts.reasons.join(" · ")}` : "No reason recorded.",
+      });
+    }
+  }
+
+  // ── AI ──────────────────────────────────────────────────────────────────
+  const byAgent = new Map<string, { count: number; last: string; error: string; workspaceId: string }>();
+  for (const call of llmFailures ?? []) {
+    const prev = byAgent.get(call.agent);
+    if (!prev || call.created_at > prev.last) {
+      byAgent.set(call.agent, { count: (prev?.count ?? 0) + 1, last: call.created_at, error: String(call.error), workspaceId: call.workspace_id ?? "" });
+    } else {
+      prev.count += 1;
+    }
+  }
+  for (const [agent, info] of byAgent) {
+    add({
+      id: `ai:${agent}`,
+      severity: info.count >= 5 ? "critical" : "warning",
+      area: "AI",
+      title: `${info.count} failed ${agent} call${info.count === 1 ? "" : "s"} in the last day`,
+      detail: info.error.slice(0, 300),
+      ...at(info.workspaceId || null),
+      since: info.last,
+    });
   }
 
   // ── Email ───────────────────────────────────────────────────────────────
@@ -383,11 +299,6 @@ export async function collectIssues(ctx: WorkerContext, now: Date = new Date()):
   const stuck = (stuckEmails ?? []).filter((e) => age(e.created_at, now) > 30 * 60_000);
   if (stuck.length) {
     add({ id: "email:stuck", severity: "warning", area: "Email", title: `${stuck.length} email${stuck.length === 1 ? "" : "s"} claimed and never sent`, detail: `A run died between claiming and sending: ${[...new Set(stuck.map((e) => e.step))].slice(0, 5).join(", ")}.`, since: stuck.map((e) => e.created_at).sort()[0] ?? null });
-  }
-
-  // ── Support ─────────────────────────────────────────────────────────────
-  for (const ticket of (tickets ?? []).filter((t) => t.status === "open")) {
-    add({ id: `support:${ticket.id}`, severity: "warning", area: "Support", title: `Open ticket: ${ticket.subject}`, detail: "Waiting for an answer in Needs attention.", ...at(ticket.workspace_id), since: ticket.created_at });
   }
 
   const rank: Record<IssueSeverity, number> = { critical: 0, warning: 1, info: 2 };

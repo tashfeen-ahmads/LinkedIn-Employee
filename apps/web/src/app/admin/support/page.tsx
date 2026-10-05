@@ -2,7 +2,7 @@ import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase-server";
-import { requirePlatformAdmin, daysUntil } from "@/lib/admin";
+import { requirePlatformAdmin } from "@/lib/admin";
 import { errorQuery, noticeQuery } from "@/lib/worker";
 import { PageHeader, Section } from "@/components/page";
 import { PageNotice, type NoticeParams } from "@/components/page-notice";
@@ -79,15 +79,9 @@ export default async function AdminSupportPage({ searchParams }: { searchParams:
 
   const names = new Map((workspaces ?? []).map((w) => [w.id, w.name]));
 
-  const expiring = (workspaces ?? [])
-    .filter((w) => w.plan === "trial" && w.trial_ends_at)
-    .map((w) => ({ ...w, days: daysUntil(w.trial_ends_at) }))
-    .filter((w) => w.days !== null && w.days <= 3)
-    .sort((a, b) => (a.days ?? 0) - (b.days ?? 0));
-
   const open = (tickets ?? []).filter((t) => t.status === "open");
   const answered = (tickets ?? []).filter((t) => t.status !== "open");
-  const nothing = !accounts?.length && !failures?.length && !expiring.length && !open.length;
+  const nothing = !accounts?.length && !failures?.length && !open.length;
 
   return (
     <>
@@ -222,32 +216,6 @@ export default async function AdminSupportPage({ searchParams }: { searchParams:
         </Section>
       ) : null}
 
-      {expiring.length ? (
-        <Section title="Trials ending">
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>Workspace</th>
-                  <th className="num">Days left</th>
-                </tr>
-              </thead>
-              <tbody>
-                {expiring.map((w) => (
-                  <tr key={w.id}>
-                    <td>
-                      <Link href={`/admin/workspaces/${w.id}`}>{w.name}</Link>
-                    </td>
-                    <td className="num">
-                      {(w.days ?? 0) < 0 ? `expired ${-(w.days ?? 0)}d ago` : w.days}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Section>
-      ) : null}
 
       {failures?.length ? (
         <Section title="Failed agent calls">
