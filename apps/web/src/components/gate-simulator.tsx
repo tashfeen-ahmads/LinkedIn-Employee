@@ -23,7 +23,7 @@ type Verdict = {
 const HOLD_RULES: ReadonlyArray<{ rule: string; because: string; test: RegExp }> = [
   {
     rule: "Asks about price",
-    because: "Pricing goes to a person on every plan, including autopilot.",
+    because: "Pricing waits for a person by default. You can let Reese answer it — the facts still come only from what you gave it.",
     test: /\b(cost|price|pricing|how much|budget|quote|discount|per seat|contract)\b/i,
   },
   {

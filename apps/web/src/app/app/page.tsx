@@ -13,6 +13,8 @@ import { readStrategyState } from "@/lib/strategy-state";
 import { readSetupState } from "@/lib/setup-state";
 import { readFunnelData } from "@/lib/funnel-data";
 import { StrategyStatus } from "@/components/strategy-status";
+import { TeamPanel } from "@/components/team-panel";
+import type { TeamFacts } from "@/lib/team";
 
 import { DailyReportSection } from "./report-section";
 import { LimitsSection } from "./limits-section";
@@ -31,7 +33,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
   const session = await requireSession();
   const supabase = await createClient();
 
-  const [{ state: setup, next }, funnel, { data: profiles }] = await Promise.all([
+  const [{ state: setup, next }, funnel, { data: profiles }, { count: prospectsFound }] = await Promise.all([
     readSetupState(supabase, session.workspaceId),
     readFunnelData(supabase, session.workspaceId),
     supabase
@@ -39,6 +41,12 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
       .select("id, name, priority, approved_at, do_not_pursue")
       .eq("workspace_id", session.workspaceId)
       .order("priority", { ascending: true }),
+    // A count, not the rows: the team panel needs how many people Scout has
+    // found, and nothing about any of them.
+    supabase
+      .from("prospects")
+      .select("id", { count: "exact", head: true })
+      .eq("workspace_id", session.workspaceId),
   ]);
 
   // The Strategy Agent's own progress, which is a different question from
@@ -65,6 +73,27 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
     const rows = funnel.rowsByCampaign.get(campaign.id)?.length ?? 0;
     byProfile.set(campaign.customer_profile_id, (byProfile.get(campaign.customer_profile_id) ?? 0) + rows);
   }
+
+  // The team panel's facts, every one already on this page except the count
+  // above. Pursued strategies only: one marked "not pursuing" is neither
+  // waiting for approval nor something Scout will search.
+  const pursued = (profiles ?? []).filter((profile) => !profile.do_not_pursue);
+  const team: TeamFacts = {
+    strategyPhase: strategy.phase,
+    strategiesApproved: pursued.filter((profile) => profile.approved_at).length,
+    strategiesAwaiting: pursued.filter((profile) => !profile.approved_at).length,
+    prospectsFound: prospectsFound ?? 0,
+    campaignsTotal: funnel.campaigns.filter((campaign) => campaign.status !== "archived").length,
+    campaignsRunning: funnel.campaigns.filter((campaign) => campaign.status === "running").length,
+    campaignsDraft: funnel.campaigns.filter((campaign) => campaign.status === "draft").length,
+    invited: report.counts.invited,
+    replied: report.counts.replied,
+    meetings: report.counts.meetings,
+    meetingsCounted: report.stages.some((stage) => stage.key === "meetings"),
+    heldReplies: needsFacts.heldReplies,
+    linkedInConnected: needsFacts.linkedInConnected,
+    needsYou: needs.length,
+  };
 
   return (
     <>
@@ -108,6 +137,13 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
           <SetupChecklist state={setup} />
         </PageGroup>
       ) : null}
+
+      {/*
+        Who is doing what, under the list of what needs you rather than above
+        it: the list is the work, and this is the reassurance that everything
+        not on it is in hand — or, where a teammate is stopped, the reason.
+      */}
+      <TeamPanel facts={team} />
 
       {/*
         A summary, and a link — not a second analytics page.
@@ -218,8 +254,8 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
             </table>
           </div>
         ) : (
-          <Empty title="No strategies yet." action="Start the Strategy Agent" href="/app/strategy">
-            The Strategy Agent reads your site and writes who to go after. Your business profile and
+          <Empty title="No strategies yet." action="Ask Sage for strategies" href="/app/strategy">
+            Sage, your strategist, reads your site and writes who to go after. Your business profile and
             its first customer profiles appear here when it finishes.
           </Empty>
         )}

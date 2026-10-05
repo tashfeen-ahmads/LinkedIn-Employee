@@ -137,9 +137,9 @@ const relativeAny = (p: string) => p.slice(appDir.length + 1);
  * The marketing pages, which this file never looked at.
  *
  * Every rule above is scoped to `src/app/app`, and that is how /pricing came
- * to ship with no `<h1>` on it at all: its whole content is the shared
- * `Pricing` component, which renders an `<h2>` because on the home page it is
- * one section under the hero's heading. Nothing checked, so nobody noticed —
+ * to ship with no `<h1>` on it at all: its whole content was a shared
+ * component (the plans then, `FreeForNow` now), which renders an `<h2>`
+ * because on the home page it is one section under the hero's heading. Nothing checked, so nobody noticed —
  * a page whose top heading is an h2 has no heading, for the same reason a page
  * with three h1s has none.
  *
@@ -149,7 +149,7 @@ const relativeAny = (p: string) => p.slice(appDir.length + 1);
 const marketingDir = join(dirname(fileURLToPath(import.meta.url)), "../src/app/(marketing)");
 
 /** Components that render the `<h1>` for the page composing them. */
-const OWNS_AN_H1 = ["<Hero", "<Pricing standalone"];
+const OWNS_AN_H1 = ["<Hero", "<FreeForNow standalone"];
 
 describe("marketing page structure", () => {
   const MARKETING = pages(marketingDir);

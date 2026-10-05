@@ -76,7 +76,7 @@ export default async function CampaignsPage({
             explained itself. */}
         <PageNotice error={notice.error} notice={notice.notice} />
         <Empty title="No campaigns yet." action="Open strategies" href="/app/strategy">
-          The Targeting Agent builds one from an approved strategy — the list, the copy, and a note
+          Scout and Quinn build one from an approved strategy — the list, the copy, and a note
           written for each person. Or press <strong>Start a campaign</strong> above to build one now
           over everybody you already have. Either way it arrives as a draft.
         </Empty>

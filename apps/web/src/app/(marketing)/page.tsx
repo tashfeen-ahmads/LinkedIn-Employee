@@ -4,9 +4,10 @@ import {
   Faq,
   FAQ_ITEMS,
   Film,
+  FreeForNow,
   Hero,
   HowItWorks,
-  Pricing,
+  MeetTheTeam,
   Safety,
   Signals,
   TheGate,
@@ -28,6 +29,7 @@ export default function HomePage() {
       <SoftwareSchema />
       <FaqSchema items={FAQ_ITEMS} />
       <Hero />
+      <MeetTheTeam />
       <Film />
       <HowItWorks />
       <TheSequence />
@@ -36,7 +38,7 @@ export default function HomePage() {
       <Safety />
       <Volume />
       <Extras />
-      <Pricing />
+      <FreeForNow />
       <Faq />
     </>
   );

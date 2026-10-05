@@ -4,44 +4,73 @@ import { BreadcrumbSchema } from "@/components/schema";
 import { Reveal } from "@/components/reveal";
 import { PUBLIC_LIMITS, SITE, pageMeta } from "@/lib/site";
 import { TOUR_STAGES, YOUR_DECISIONS } from "@le/shared";
+import { TeamAvatar } from "@/components/team-avatar";
+import { NORA, type MemberKey } from "@/lib/team";
 
 export const metadata: Metadata = pageMeta({
-  title: "How it works — four agents, three decisions, everything else automatic",
+  title: `How it works — ${NORA}, a team of four, and three decisions`,
   description:
-    "Approve a strategy, approve the words, press launch. The agents find the people, write to each one, answer the replies and book the calls. Anything you would rather do yourself, you can.",
+    "Approve a strategy, approve the words, press launch. Sage, Scout, Quinn and Reese find the people, write to each one, answer the replies and book the calls. Anything you would rather do yourself, you can.",
   path: "/how-it-works",
 });
 
-const AGENTS = [
+/*
+ * The same four the home page introduces, with the detail this page has room
+ * for. Names and roles come from `lib/team.ts`; what each one hands over is
+ * said here because it is the point of this page.
+ */
+const AGENTS: ReadonlyArray<{
+  n: string;
+  key: MemberKey | null;
+  name: string;
+  job: string;
+  detail: string;
+  handover: string;
+  output: string[];
+}> = [
   {
     n: "01",
-    name: "Strategy Agent",
+    key: "sage",
+    name: "Sage, the strategist",
     job: "Learns what you sell and to whom",
     detail:
-      "It reads your website and LinkedIn page and writes a business profile plus three to five customer profiles — each with the pains, the buying signals, three opening angles, and the Sales Navigator filters to execute it.",
+      "Reads your website and LinkedIn page and writes a business profile plus three to five customer strategies — each with the pains, the buying signals, opening angles, and the search filters to execute it. Ask for more and it extends the list rather than starting again.",
     handover: "You approve one. That is what starts the search — there is no second button.",
-    output: ["Business profile", "3–5 customer profiles", "Search filters per profile"],
+    output: ["Business profile", "3–5 customer strategies", "Search filters per strategy"],
   },
   {
     n: "02",
-    name: "Targeting Agent",
-    job: "Builds the list and the campaign",
+    key: "scout",
+    name: "Scout, the prospector",
+    job: "Finds the people",
     detail:
-      "It searches, removes anyone your workspace has already touched or excluded, scores the rest on fit and intent, and writes the connection note and follow-ups. It hands you a draft campaign, never a running one.",
-    handover: "You press Launch. Read the names and the messages first if you want to; nothing has left yet.",
-    output: ["Ranked prospects with reasons", "Connection note", "Two to three follow-ups"],
+      "Searches LinkedIn on the tier your account actually has, opens every profile before it reaches the list, removes anyone your workspace has already contacted or excluded, and scores the rest on fit and intent. Filters it could not apply are named on the campaign, not quietly dropped.",
+    handover: "Hands Quinn a ranked list of real, checked people.",
+    output: ["Ranked prospects with reasons", "Filters it could not apply"],
   },
   {
     n: "03",
-    name: "Reply Agent",
-    job: "Answers, and knows when not to",
+    key: "quinn",
+    name: "Quinn, the campaign writer",
+    job: "Writes to each person",
     detail:
-      "It classifies every reply before writing anything, and answers only from the facts you gave it. You choose how much rope it gets: hold pricing, legal, security and anything negative for you, or let it run and it answers and books on its own. Two things always wait — somebody who asks for a human, and a message it did not understand.",
-    handover: "On autopilot it sends and books by itself. Set it to review instead and it waits for you.",
-    output: ["Classified intent", "Drafted reply", "Times you are genuinely free"],
+      "Builds the campaign and writes every connection note from that person's own headline, role and company, plus the follow-ups. Split a campaign across angles and it keeps the groups even, so a result means something. It hands you a draft campaign, never a running one.",
+    handover: "You press Launch. Read the names and the messages first if you want to; nothing has left yet.",
+    output: ["A note per person", "Follow-ups", "Angles to test"],
   },
   {
     n: "04",
+    key: "reese",
+    name: "Reese, outreach and booking",
+    job: "Sends, answers, and knows when not to",
+    detail:
+      "Sends the invitations and follow-ups under daily caps, spread across your working hours. Classifies every reply before writing anything, and answers only from the facts you gave it. You choose how much rope it gets: hold pricing, legal, security and anything negative for you, or let it answer and book on its own. Two things always wait — somebody who asks for a human, and a message it did not understand.",
+    handover: "On autopilot it sends and books by itself. Set it to review instead and it waits for you.",
+    output: ["Paced invitations", "Drafted replies", "Times you are genuinely free"],
+  },
+  {
+    n: "05",
+    key: null,
     name: "You",
     job: "Close",
     detail:
@@ -66,11 +95,12 @@ export default function HowItWorksPage() {
           <Reveal>
             <header className="stack-4">
               <p className="eyebrow">How it works</p>
-              <h1>Four agents. Three decisions. The rest is automatic.</h1>
+              <h1>{NORA}, a team of four, and three decisions.</h1>
               <p className="lede prose">
-                Approve a strategy, approve the words, press launch. From there the agents find the
-                people, write to each one by name, answer what comes back and book the calls —
-                unattended, inside limits that keep the account alive. Anything you would rather do
+                Approve a strategy, approve the words, press launch. From there {NORA}&rsquo;s team
+                finds the people, writes to each one by name, answers what comes back and books the
+                calls — unattended, inside limits that keep the account alive. {NORA} passes the
+                work along and tells you when something needs you. Anything you would rather do
                 yourself, you still can.
               </p>
             </header>
@@ -123,6 +153,7 @@ export default function HowItWorksPage() {
             {AGENTS.map((agent) => (
               <li key={agent.n} className="card agent-row">
                 <div className="agent-mark">
+                  {agent.key ? <TeamAvatar member={agent.key} /> : null}
                   <span className="eyebrow">{agent.n}</span>
                 </div>
                 <div className="stack-3 grow">
@@ -218,10 +249,10 @@ export default function HowItWorksPage() {
 
           <div className="cluster">
             <Link href={`${SITE.app}/signup`} className="btn large">
-              Start 7-day free trial
+              Sign up free
             </Link>
-            <Link href="/pricing" className="btn secondary large">
-              See pricing
+            <Link href="/#team" className="btn secondary large">
+              Meet the team
             </Link>
           </div>
         </div>

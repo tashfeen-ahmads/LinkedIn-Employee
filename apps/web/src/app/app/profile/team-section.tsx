@@ -48,7 +48,7 @@ async function inviteMember(formData: FormData) {
 
   const seatLimit = Math.max(workspace?.seats ?? 1, PLAN_SEATS[(workspace?.plan ?? "trial") as never] ?? 1);
   if ((members ?? 0) >= seatLimit) {
-    redirect("/app/team?error=" + encodeURIComponent("You have used every seat on your plan."));
+    redirect("/app/team?error=" + encodeURIComponent("This workspace has reached its member limit for now. Ask us from Support and we will raise it — there is nothing to pay."));
   }
 
   // Re-inviting the same person replaces the previous invitation rather than

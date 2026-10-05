@@ -385,7 +385,7 @@ export default async function StrategyPage({
         {strategy.phase === "absent" ? (
           <div className="notice">
             <p>
-              <strong>Nothing here yet.</strong> The Strategy Agent reads what you publish and drafts
+              <strong>Nothing here yet.</strong> Sage, your strategist, reads what you publish and drafts
               your business profile and three to five customer profiles — it has not been asked to
               yet.
             </p>
@@ -473,7 +473,7 @@ export default async function StrategyPage({
       <PageHeader
         eyebrow="Pipeline"
         title="Strategies"
-        lede="Written by the Strategy Agent from what you publish. Nothing is searched for until you approve one, and every message the writer sends is grounded in what is on this page — so it is worth reading properly once."
+        lede="Written by Sage, your strategist, from what you publish. Nothing is searched for until you approve one, and every message the writer sends is grounded in what is on this page — so it is worth reading properly once."
         actions={
           <form action={writeMoreStrategies}>
             <input type="hidden" name="businessProfileId" value={businessRow.id} />
@@ -517,7 +517,7 @@ export default async function StrategyPage({
                 : "The last prospect search stopped early."}
             </strong>{" "}
             {lastStop.name === "targeting.queued"
-              ? "The Targeting Agent was asked to run and has not reported back. If this does not change in a minute, the background worker took the job and did not finish it."
+              ? "Scout was asked to search and has not reported back. If this does not change in a minute, the background worker took the job and did not finish it."
               : String((lastStop.payload as Record<string, unknown>)?.reason ?? "No reason recorded.")}
           </p>
           <p className="tiny subtle">
@@ -548,7 +548,7 @@ export default async function StrategyPage({
         </section>
       ) : (
         <div className="notice danger">
-          The stored business profile does not match the current schema. Re-run the Strategy Agent.
+          The stored business profile does not match the current schema. Ask Sage to write it again.
         </div>
       )}
 

@@ -19,8 +19,8 @@ export function SetupRail() {
       <div className="stack-3">
         <p className="eyebrow">What happens when you press it</p>
         <p className="prose muted">
-          The Strategy Agent reads what you publish and writes three to five customer profiles —
-          who to go after, why they would care, what to say. About a minute.
+          Sage, the team&rsquo;s strategist, reads what you publish and writes three to five
+          customer profiles — who to go after, why they would care, what to say. About a minute.
         </p>
       </div>
 

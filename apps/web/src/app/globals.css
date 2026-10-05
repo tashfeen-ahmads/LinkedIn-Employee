@@ -85,6 +85,24 @@
   --accent-2:        #12A5A0;
 
   /*
+   * NORA's four, one hue each.
+   *
+   * Identity colours for a teammate's mark, never chart series and never a
+   * state: a status is still said by the semantic tokens below. Each was
+   * picked to hold at least 4.5:1 as a letter on white and stay legible as
+   * bold text on its own 13% tint, which is how the mark draws it — and each
+   * has its own dark-mode step rather than an automatic flip, for the same
+   * reason the chart colours do.
+   */
+  --crew-sage:  #0B7A66;
+  --crew-scout: #9E520A;
+  --crew-quinn: #7A3CCB;
+  --crew-reese: #B42D5E;
+  /* The orbit's line and the light that follows the pointer across a card. */
+  --crew-ring:  color-mix(in srgb, var(--accent) 34%, transparent);
+  --crew-glare: color-mix(in srgb, var(--accent) 9%, transparent);
+
+  /*
    * Chart colours, and they are not the interface's.
    *
    * A series colour has one job — telling two lines apart — and the checks it
@@ -182,6 +200,11 @@
     --accent-soft:    #1C1B3A;
     --accent-border:  #322F63;
     --accent-2:       #3ED9D2;
+    --crew-sage:      #4CD3B4;
+    --crew-scout:     #F0A452;
+    --crew-quinn:     #BB98F7;
+    --crew-reese:     #F582AE;
+    --crew-glare:     color-mix(in srgb, var(--accent) 12%, transparent);
 
     --positive:       #55CE97;
     --positive-soft:  #0E2A1F;
@@ -219,6 +242,11 @@
   --accent-soft:    #1C1B3A;
   --accent-border:  #322F63;
   --accent-2:       #3ED9D2;
+  --crew-sage:      #4CD3B4;
+  --crew-scout:     #F0A452;
+  --crew-quinn:     #BB98F7;
+  --crew-reese:     #F582AE;
+  --crew-glare:     color-mix(in srgb, var(--accent) 12%, transparent);
   --positive:       #55CE97;
   --positive-soft:  #0E2A1F;
   --warning:        #E2A94C;
@@ -1565,23 +1593,9 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   letter-spacing: 0.02em;
 }
 
-/* The trial, in the rail. A card rather than a line, because it carries an
-   action and a line with a button in it is not a line. */
-.app-upsell {
-  margin-top: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-  padding: var(--space-3);
-  border-radius: var(--radius);
-  background: var(--accent-soft);
-  border: 1px solid var(--accent-border);
-}
-.app-upsell .btn { margin-top: var(--space-2); justify-content: center; }
 /* Sign-out sits last. `margin-top: auto` on it only reaches the bottom when
    nothing above it already claimed the slack. */
 .app-signout { margin-top: auto; padding-top: var(--space-3); border-top: 1px solid var(--border); }
-.app-upsell + .app-signout { margin-top: var(--space-3); }
 .app-body {
   display: flex;
   flex-direction: column;
@@ -1819,9 +1833,6 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   /* In a bar, sign-out sits beside the brand rather than at the foot of a
      column that no longer exists. */
   .app-signout { grid-column: 2; grid-row: 1; margin-top: 0; padding-top: 0; border-top: 0; }
-  /* The trial card is a rail idea; in a bar it would push the nav off screen,
-     and the same fact is already on the billing page and in the banner. */
-  .app-upsell { display: none; }
   /* The search is in the top bar, which the phone keeps. */
   .app-top-inner { padding-inline: var(--space-4); }
   .app-top-who-text { display: none; }
@@ -2070,45 +2081,6 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 
 ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: none; }
 
-/* Cards in a row are one object, so the buttons sit on one line.
-   The feature lists are different lengths, which put Solo's button 58px above
-   Teams' — three cards that read as three separate things rather than three
-   prices for the same thing. The list takes the slack instead. */
-.plan { border-radius: var(--radius-lg); height: 100%; }
-.plan .bullets { flex: 1; }
-/*
- * The plan's name and its badge share one row of fixed height, so the price
- * below starts on the same line in all three cards. Badged, the featured plan
- * pushed its own price six pixels down, and three prices that nearly line up
- * is the single most obvious tell that a pricing table was assembled by hand.
- */
-.plan > .between:first-child { min-height: 1.9rem; }
-/*
- * The plan being recommended, and it has to look recommended. A paler border
- * plus a slightly larger shadow is a difference nobody sees at a glance — so
- * it takes the accent outline properly and stands a few pixels proud of the
- * cards beside it, which is what every reader already expects the middle
- * column to do.
- */
-.plan-featured {
-  border-color: var(--accent);
-  box-shadow: var(--shadow), 0 0 0 1px var(--accent);
-}
-@media (min-width: 61rem) {
-  .plan-featured { transform: translateY(-0.75rem); }
-}
-/* The number, in the display face on its own tabular figures. It was set in
-   the monospace, which on a price is the one place a tool face reads as a
-   receipt rather than as an offer. */
-.price {
-  font-family: var(--font-display);
-  font-variant-numeric: tabular-nums;
-  font-size: 2.5rem;
-  font-weight: 600;
-  letter-spacing: -0.035em;
-  line-height: 1;
-}
-.price .mono { font-family: inherit; font-size: inherit; }
 
 .faq { display: flex; flex-direction: column; }
 .faq details { border-top: 1px solid var(--border); padding-block: var(--space-4); }
@@ -2159,12 +2131,12 @@ ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: none; }
    sequence is visible without reading the numbers. */
 .agents { list-style: none; margin: 0; padding: 0; }
 .agent-row { display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: var(--space-4); align-items: start; }
+/* The teammate's mark with its number under it, so the rail reads as people in
+   an order rather than as a list of bare numerals. */
 .agent-mark {
-  display: flex; align-items: center; justify-content: center;
-  width: 40px; height: 40px;
-  border-radius: var(--radius-sm);
-  background: var(--accent-soft);
-  border: 1px solid var(--accent-border);
+  display: flex; flex-direction: column; align-items: center; gap: var(--space-2);
+  width: 48px;
+  padding-top: 2px;
 }
 .agent-mark .eyebrow { color: var(--accent); }
 @media (max-width: 620px) { .agent-row { grid-template-columns: minmax(0, 1fr); } }
@@ -3296,31 +3268,6 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
   .film-tab-fill { animation: none; }
 }
 
-/* The column the reader is standing in, on the "what you are choosing between"
-   strip. One border, not a fill: the point is that it belongs to the same set
-   as the other two, and a coloured card would read as the advertisement it is
-   trying not to be. */
-.alt-here {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-}
-/* The one column that is us, said in a word as well as in a colour — a tinted
-   card alone is a decoration somebody has to interpret. */
-.alt-here h3::after {
-  content: "You are here";
-  display: inline-block;
-  margin-left: var(--space-2);
-  padding: 0.1rem 0.4rem;
-  border-radius: var(--radius-pill);
-  background: var(--accent);
-  color: var(--text-inverse);
-  font-size: 0.625rem;
-  font-weight: 650;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  vertical-align: 0.1em;
-}
-
 /* ------------------------------------------------------------ the sequence
 
    What a prospect receives, drawn down a rail. Every competitor ships a
@@ -3659,4 +3606,392 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
    */
   .platform { overflow-x: auto; }
   .platform-svg { min-width: 40rem; }
+}
+
+/* ------------------------------------------------------------- the team */
+
+/*
+ * NORA and her four.
+ *
+ * One family of marks — a rounded plate the shape of the logo's, the initial
+ * in the display face, the teammate's own hue — used on the landing page, on
+ * /how-it-works and in the dashboard's team panel, so the five read as the
+ * same people wherever they appear.
+ *
+ * `--crew-c` is the one thing a teammate's class sets. Everything that wants
+ * "this person's colour" reads it, and the default is the accent, which is
+ * NORA's.
+ */
+.crew-avatar {
+  --crew-c: var(--accent);
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 0.85rem;
+  font-family: var(--font-display);
+  font-weight: 650;
+  font-size: 1.15rem;
+  line-height: 1;
+  color: var(--crew-c);
+  background: color-mix(in srgb, var(--crew-c) 13%, var(--surface-raised));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--crew-c) 32%, transparent);
+}
+.crew-avatar.is-sm { width: 2rem; height: 2rem; border-radius: 0.6rem; font-size: 0.9rem; }
+.crew-avatar.is-lg { width: 3.75rem; height: 3.75rem; border-radius: 1.1rem; font-size: 1.5rem; }
+/* NORA wears the logo, which brings its own plate. */
+.crew-avatar.crew-lead { width: auto; height: auto; background: none; box-shadow: none; border-radius: 0; }
+
+.crew-sage  { --crew-c: var(--crew-sage); }
+.crew-scout { --crew-c: var(--crew-scout); }
+.crew-quinn { --crew-c: var(--crew-quinn); }
+.crew-reese { --crew-c: var(--crew-reese); }
+
+/*
+ * The stage.
+ *
+ * Three small 3D spaces rather than one large one. A single perspective on the
+ * whole stage puts the vanishing point a third of the way down it — which on a
+ * phone, where the stage is two and a half thousand pixels tall, is two
+ * thousand pixels below the orbit, so the ring was seen edge-on and drew as a
+ * line. So the scene leans as a whole, and the orbit, NORA's card and the row
+ * of four each carry their own perspective about their own centre. Inside the
+ * orbit, `preserve-3d` runs down to the marks so they really pass in front of
+ * and behind the core. Nothing in that chain may set `overflow` or `opacity`,
+ * either of which flattens it; the horizontal clip lives on the section.
+ */
+.crew-section {
+  overflow-x: clip;
+  background:
+    radial-gradient(60rem 26rem at 30% 18rem, color-mix(in srgb, var(--accent) 7%, transparent), transparent 70%);
+}
+.crew-stage { position: relative; perspective: 2000px; }
+.crew-scene { position: relative; display: flex; flex-direction: column; transform-style: preserve-3d; }
+
+.crew-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: center;
+}
+.crew-orbit-wrap { position: relative; }
+.crew-lead-wrap { position: relative; perspective: 1400px; }
+
+.crew-orbit {
+  position: relative;
+  width: min(100%, 34rem);
+  /* Wide on its own row: the tilted ring is about a third as tall as it is
+     wide, and a squarer box is a band of empty page above and below it. */
+  aspect-ratio: 2;
+  margin-inline: auto;
+  perspective: 1100px;
+  transform-style: preserve-3d;
+}
+.crew-orbit-plane {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 92%;
+  aspect-ratio: 1;
+  translate: -50% -50%;
+  transform: rotateX(68deg);
+  transform-style: preserve-3d;
+}
+.crew-orbit-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1.5px solid var(--crew-ring);
+  background: radial-gradient(closest-side, transparent 62%, color-mix(in srgb, var(--accent) 9%, transparent));
+}
+.crew-orbit-ring.is-inner {
+  inset: 20%;
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--accent-2) 50%, transparent);
+  background: none;
+}
+.crew-orbit-spin {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  animation: crew-spin 42s linear infinite;
+}
+.crew-orbit-anchor { position: absolute; width: 0; height: 0; transform-style: preserve-3d; }
+.crew-orbit-anchor.at-0 { left: 50%; top: 0; }
+.crew-orbit-anchor.at-1 { left: 100%; top: 50%; }
+.crew-orbit-anchor.at-2 { left: 50%; top: 100%; }
+.crew-orbit-anchor.at-3 { left: 0; top: 50%; }
+/*
+ * Each mark undoes the spin and the tilt it is riding on, in that order, so it
+ * always faces the reader while it travels round: the plane is
+ * rotateX(68°)·rotateZ(θ), and this is rotateZ(−θ)·rotateX(−68°). The two
+ * animations share a duration and a timing function so θ is the same number
+ * in both at every frame.
+ */
+.crew-orbit-dot {
+  position: absolute;
+  left: -1.3rem;
+  top: -1.3rem;
+  width: 2.6rem;
+  height: 2.6rem;
+  display: grid;
+  place-items: center;
+  border-radius: 0.8rem;
+  font-family: var(--font-display);
+  font-weight: 650;
+  font-size: 1.05rem;
+  color: var(--crew-c);
+  background: color-mix(in srgb, var(--crew-c) 14%, var(--surface-raised));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--crew-c) 38%, transparent), var(--shadow-sm);
+  transform: rotateZ(0deg) rotateX(-68deg);
+  animation: crew-counter 42s linear infinite;
+}
+/*
+ * The core stands in front of the ring's plane rather than in it. At z = 0 the
+ * tilted disc slices straight through it, and the lower half renders behind
+ * the near side of the ring — a hard-edged box across the logo. Brought
+ * forward, it sits clear of the disc while the marks on the near side of the
+ * orbit, further forward still, pass in front of it as an orbit should.
+ */
+.crew-core {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+  display: grid;
+  place-items: center;
+  transform: translateZ(90px);
+  animation: crew-float 6s ease-in-out infinite;
+}
+.crew-core .crew-avatar { position: relative; }
+/* The glow lies on the ring's own floor, so it is part of the plane rather
+   than a second flat thing cutting through it. */
+.crew-core-halo {
+  position: absolute;
+  inset: 22%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--accent) 34%, transparent), transparent);
+  animation: crew-breathe 5s ease-in-out infinite;
+}
+
+@keyframes crew-spin { to { transform: rotateZ(360deg); } }
+@keyframes crew-counter {
+  from { transform: rotateZ(0deg) rotateX(-68deg); }
+  to   { transform: rotateZ(-360deg) rotateX(-68deg); }
+}
+@keyframes crew-float { 0%, 100% { transform: translateZ(90px) translateY(0); } 50% { transform: translateZ(90px) translateY(-7px); } }
+@keyframes crew-breathe { 0%, 100% { scale: 1; } 50% { scale: 1.14; } }
+
+/* A card that tilts toward the pointer. The light that follows it sits under
+   the content, so it tints the surface and never the words. */
+.crew-tilt { position: relative; will-change: transform; }
+.crew-tilt > :not(.crew-glare) { position: relative; }
+.crew-glare {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 240ms ease;
+}
+.crew-tilt:hover .crew-glare { opacity: 1; }
+
+.crew-head { display: flex; align-items: center; gap: var(--space-3); }
+.crew-who { display: flex; flex-direction: column; gap: 0.1rem; flex: 1; min-width: 0; }
+.crew-n { align-self: flex-start; font-size: 0.75rem; color: var(--text-subtle); }
+.crew-line-text { font-weight: 560; line-height: 1.45; }
+.crew-does { margin: 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: var(--space-2); }
+.crew-does li::marker { color: var(--crew-c, var(--accent)); }
+.crew-handoff {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--crew-c);
+  font-weight: 650;
+}
+
+.crew-lead-card {
+  border-color: var(--accent-border);
+  background:
+    radial-gradient(28rem 14rem at 100% 0%, color-mix(in srgb, var(--accent-2) 9%, transparent), transparent 70%),
+    linear-gradient(180deg, color-mix(in srgb, var(--accent) 6%, var(--surface-raised)), var(--surface-raised));
+}
+.crew-card { height: 100%; border-top: 3px solid var(--crew-c); }
+
+/* The four, and the line work passes along. One column on a phone, with a
+   short connector in each gap; two on a tablet; one row with the org chart's
+   trunk and bar once they fit side by side. */
+.crew-trunk { display: none; }
+.crew-bar { display: none; }
+.crew-team-wrap { position: relative; margin-top: var(--space-6); }
+.crew-team {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-6);
+  perspective: 1400px;
+}
+.crew-step { position: relative; transform-style: preserve-3d; }
+.crew-step + .crew-step::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: calc(-1 * var(--space-6));
+  width: 2px;
+  height: var(--space-6);
+  background: var(--crew-ring);
+}
+
+@media (min-width: 640px) {
+  .crew-team { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-5); }
+  .crew-step + .crew-step::before { display: none; }
+}
+
+@media (min-width: 900px) {
+  .crew-top { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: var(--space-6); }
+  .crew-orbit { aspect-ratio: 1.4; }
+}
+
+@media (min-width: 1080px) {
+  .crew-team { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-6); }
+  /* Four across, the order is drawn by the bar and the arrows; the numeral
+     only costs the role line its width. */
+  .crew-n { display: none; }
+  .crew-trunk {
+    display: block;
+    width: 2px;
+    height: var(--space-6);
+    margin: var(--space-4) auto 0;
+    background: linear-gradient(to bottom, transparent, var(--crew-ring));
+  }
+  .crew-team-wrap { margin-top: 0; padding-top: var(--space-6); }
+  /* From the first card's centre to the last one's. */
+  .crew-bar {
+    display: block;
+    position: absolute;
+    top: 0;
+    left: calc((100% - 3 * var(--space-6)) / 8);
+    right: calc((100% - 3 * var(--space-6)) / 8);
+    height: 2px;
+    border-radius: 1px;
+    background: var(--crew-ring);
+  }
+  .crew-step::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: calc(-1 * var(--space-6));
+    width: 2px;
+    height: var(--space-6);
+    background: var(--crew-ring);
+  }
+  /* The arrow between two cards, in the gap that separates them. */
+  .crew-step + .crew-step::before {
+    display: grid;
+    place-items: center;
+    content: "\2192";
+    left: calc(-1 * var(--space-6) / 2);
+    top: 50%;
+    translate: -50% -50%;
+    width: 1.6rem;
+    height: 1.6rem;
+    border-radius: 50%;
+    font-size: 0.8rem;
+    color: var(--accent);
+    background: var(--surface-raised);
+    box-shadow: inset 0 0 0 1px var(--accent-border), var(--shadow-xs);
+  }
+}
+
+/* The hand-off itself: a mark travelling the bar, pausing above each card. */
+.crew-packet {
+  position: absolute;
+  top: -4px;
+  left: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent), 0 0 18px var(--accent);
+  animation: crew-packet 7s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+@keyframes crew-packet {
+  0%, 10%   { left: -5px; }
+  25%, 35%  { left: calc(33.333% - 5px); }
+  50%, 60%  { left: calc(66.666% - 5px); }
+  75%, 100% { left: calc(100% - 5px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .crew-orbit-spin,
+  .crew-orbit-dot,
+  .crew-core,
+  .crew-core-halo,
+  .crew-packet { animation: none; }
+  .crew-packet { left: calc(100% - 5px); }
+}
+
+/* Where the price cards were. One card, one sentence, one button. */
+.free-card {
+  align-items: flex-start;
+  gap: var(--space-5);
+  padding: clamp(var(--space-5), 5vw, var(--space-7));
+  border-color: var(--accent-border);
+  background:
+    radial-gradient(36rem 18rem at 100% 0%, color-mix(in srgb, var(--accent-2) 11%, transparent), transparent 65%),
+    radial-gradient(30rem 16rem at 0% 100%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 65%),
+    var(--surface-raised);
+}
+
+/*
+ * The dashboard's team panel.
+ *
+ * Rows rather than cards, for the reason the needs-you list is rows: it is one
+ * roster, and five cards would make five teammates look like five features.
+ * Scoped under `.app` with names nothing unscoped owns (rule 53). The dot is
+ * decoration — every row also says its state in words for a screen reader
+ * (rule 32) — and only a teammate actually working moves at all.
+ */
+.app .roster { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.app .roster > li + li { border-top: 1px solid var(--border); }
+.app .roster > li { animation: roster-in 420ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+.app .roster > li:nth-child(2) { animation-delay: 50ms; }
+.app .roster > li:nth-child(3) { animation-delay: 100ms; }
+.app .roster > li:nth-child(4) { animation-delay: 150ms; }
+.app .roster > li:nth-child(5) { animation-delay: 200ms; }
+.app .roster-row {
+  display: grid;
+  grid-template-columns: auto minmax(8rem, 12rem) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  padding: var(--space-3) var(--space-2);
+  border-radius: var(--radius-sm);
+  color: inherit;
+  transition: background-color 140ms ease;
+}
+.app .roster-row:hover { text-decoration: none; background: var(--surface); }
+.app .roster-who { display: flex; flex-direction: column; min-width: 0; }
+.app .roster-name { font-weight: 600; }
+.app .roster-status { display: flex; align-items: center; gap: var(--space-2); margin: 0; }
+.app .roster-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--text-subtle); }
+.app .roster-dot.working { background: var(--accent); animation: roster-pulse 2.2s ease-in-out infinite; }
+.app .roster-dot.done { background: var(--positive); }
+.app .roster-dot.waiting { background: var(--warning); }
+.app .roster-dot.blocked { background: var(--danger); }
+.app .roster-go { color: var(--text-subtle); transition: transform 140ms ease, color 140ms ease; }
+.app .roster-row:hover .roster-go { color: var(--accent); transform: translateX(3px); }
+
+@keyframes roster-in { from { transform: translateY(4px); } to { transform: none; } }
+@keyframes roster-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 45%, transparent); }
+  50%      { box-shadow: 0 0 0 5px transparent; }
+}
+
+@media (max-width: 640px) {
+  .app .roster-row { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .app .roster-status { grid-column: 2 / -1; grid-row: 2; }
 }

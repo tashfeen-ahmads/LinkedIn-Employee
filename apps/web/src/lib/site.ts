@@ -77,7 +77,8 @@ export const PAGES = [
   { path: "/", changeFrequency: "weekly", priority: 1.0 },
   { path: "/how-it-works", changeFrequency: "monthly", priority: 0.9 },
   { path: "/linkedin-automation-limits", changeFrequency: "monthly", priority: 0.9 },
-  { path: "/pricing", changeFrequency: "monthly", priority: 0.8 },
+  // Kept, and kept indexed: it answers "what does it cost" with "nothing, for now".
+  { path: "/pricing", changeFrequency: "monthly", priority: 0.5 },
   { path: "/security", changeFrequency: "monthly", priority: 0.6 },
   { path: "/about", changeFrequency: "yearly", priority: 0.4 },
 ] as const;

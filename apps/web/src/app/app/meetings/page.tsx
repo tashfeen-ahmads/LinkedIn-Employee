@@ -105,7 +105,7 @@ export default async function MeetingsPage({
           action="Set your hours"
           href="/app/meetings?tab=availability"
         >
-          The Reply Agent offers times from the hours you set and books the one a prospect accepts.
+          Reese offers times from the hours you set and books the one a prospect accepts.
           It never invents a time: the only slots that reach anybody are the ones this product
           worked out you were free for.
         </Empty>

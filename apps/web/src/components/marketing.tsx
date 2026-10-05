@@ -11,6 +11,8 @@ import { ProductFilm } from "./product-film";
 import { Reveal, Stagger, StaggerItem } from "./reveal";
 import { Wordmark } from "./logo";
 import { AgentTimeline } from "./agent-timeline";
+import { TeamStage } from "./team-stage";
+import { NORA } from "@/lib/team";
 
 /**
  * Marketing page sections. Structure mirrors docs/05-go-to-market.md section 2.
@@ -18,11 +20,16 @@ import { AgentTimeline } from "./agent-timeline";
  * we do not ship a stat we have not measured.
  */
 
+/*
+ * No "Pricing" link: the product is free for everyone for now, and a nav item
+ * leading to a page that says so is a detour. The team is what the page is
+ * about, so it takes the slot.
+ */
 const NAV_LINKS = [
+  { href: "/#team", label: "The team" },
   { href: "/how-it-works", label: "How it works" },
   { href: "/linkedin-automation-limits", label: "Limits" },
   { href: "/security", label: "Security" },
-  { href: "/pricing", label: "Pricing" },
 ];
 
 export function SiteHeader() {
@@ -41,10 +48,9 @@ export function SiteHeader() {
         {/*
           Sign in and sign up, which are the two things a header is for.
 
-          The filled button used to say "Start free trial" and point at
-          /login — so the one control aimed at somebody who has never been
-          here before opened a form asking for a password they do not have.
-          The trial is what they get; signing up is what they do.
+          The filled button used to point at /login — so the one control
+          aimed at somebody who has never been here before opened a form
+          asking for a password they do not have. Signing up is what they do.
         */}
         <div className="site-header-actions">
           <Link href={`${SITE.app}/login`} className="site-nav-link site-signin">
@@ -78,11 +84,11 @@ export function Hero() {
           <div className="stack-5 hero-copy">
             {/* What is new, and where to read it — rather than an uppercase
                 label repeating the headline underneath it. */}
-            <Link href="/how-it-works" className="announce">
+            <a href="#team" className="announce">
               <span className="announce-dot" aria-hidden="true" />
-              Four agents, one conversation at a time
-              <span className="announce-chip">See how &rarr;</span>
-            </Link>
+              Meet {NORA} and her team
+              <span className="announce-chip">Say hello &rarr;</span>
+            </a>
             <div className="stack-3">
               {/*
                 The outcome, and nothing but the outcome.
@@ -112,24 +118,23 @@ export function Hero() {
                 <span className="headline-accent">while you sleep.</span>
               </h1>
               <p className="lede prose">
-                {BRAND.name} finds your buyers, writes each invitation from that person&rsquo;s own
-                profile, answers the replies and books the meeting — all inside the daily limits
-                LinkedIn actually watches, so the account doing the sending is not what you are
-                gambling with. You approve the strategy, check the words and press launch — three
-                decisions, not an hour a day.
+                {NORA} is an AI assistant with a team of four. They find your buyers, write each
+                invitation from that person&rsquo;s own profile, answer the replies and book the
+                meeting — all inside the daily limits LinkedIn actually watches, so the account
+                doing the sending is not what you are gambling with. You approve the strategy,
+                check the words and press launch — three decisions, not an hour a day.
               </p>
             </div>
             <div className="cluster">
               <Link href={`${SITE.app}/signup`} className="btn large">
-                Start 7-day free trial
+                Sign up free
               </Link>
-              <a href="#how-it-works" className="btn secondary large">
-                See how it works
+              <a href="#team" className="btn secondary large">
+                Meet the team
               </a>
             </div>
             <p className="small subtle">
-              Every reply is drafted for your approval until you decide to switch a campaign to
-              autopilot.
+              {FREE_LINE} Every reply is drafted for your approval until you switch on autopilot.
             </p>
           </div>
         </Reveal>
@@ -251,56 +256,18 @@ export function Film() {
   );
 }
 
-const STEPS = [
-  {
-    n: "01",
-    agent: "Strategy Agent",
-    lead: "Tell it about your business once.",
-    points: [
-      "Share your website and LinkedIn page.",
-      "It writes a Business Profile and three to five Customer Profiles, each with the Sales Navigator filters to execute it.",
-    ],
-  },
-  {
-    n: "02",
-    agent: "Targeting Agent",
-    lead: "Pick who to pursue.",
-    points: [
-      "It builds a ranked prospect list, showing the fit score and the intent signals behind every row.",
-      "It writes the connection note and follow-ups, then hands you a launch-ready campaign.",
-    ],
-  },
-  {
-    n: "03",
-    agent: "Reply Agent",
-    lead: "Set the rules, then let it work.",
-    points: [
-      "Decide when it may answer and when a human must step in: pricing, legal, negative sentiment, anything it is unsure about.",
-      "Connect your calendar so it can offer times you are actually free.",
-    ],
-  },
-  {
-    n: "04",
-    agent: "You",
-    lead: "Close.",
-    points: [
-      "Meetings land in your calendar with a one-page brief on who you are meeting and why they matched.",
-      "You spend your day in conversations, not in a search box.",
-    ],
-  },
-];
-
 export function HowItWorks() {
   return (
     <section id="how-it-works" className="section band">
       <div className="container stack-6">
         <Reveal>
           <div className="stack-3">
-            <p className="eyebrow section-mark">The four agents</p>
+            <p className="eyebrow section-mark">The team at work</p>
             <h2>Watch one campaign, day by day.</h2>
             <p className="lede prose">
-              Each agent does one job and hands its work to the next. Step through a real one below — every beat names who acted, and the square markers are the moments
-              nothing moves without you.
+              Each teammate does one job and hands its work to the next. Step through a real one
+              below — every beat names who acted, and the square markers are the moments nothing
+              moves without you.
             </p>
           </div>
         </Reveal>
@@ -313,24 +280,6 @@ export function HowItWorks() {
           <Pipeline />
         </Reveal>
 
-        <Stagger className="grid grid-2">
-          {STEPS.map((step) => (
-            <StaggerItem key={step.n}>
-              <article className="card interactive" style={{ height: "100%" }}>
-                <div className="cluster" style={{ alignItems: "baseline" }}>
-                  <span className="eyebrow">{step.n}</span>
-                  <h3>{step.agent}</h3>
-                </div>
-                <p className="strongish">{step.lead}</p>
-                <ul className="muted small bullets">
-                  {step.points.map((point) => (
-                    <li key={point}>{point}</li>
-                  ))}
-                </ul>
-              </article>
-            </StaggerItem>
-          ))}
-        </Stagger>
       </div>
     </section>
   );
@@ -614,147 +563,79 @@ export function Extras() {
   );
 }
 
-const PLANS = [
-  {
-    name: "Solo",
-    price: "$149",
-    features: ["One seat", "All four agents", "Replies drafted for your approval", "CRM via Zapier"],
-    highlight: false,
-  },
-  {
-    name: "Pro",
-    price: "$249",
-    features: [
-      "Everything in Solo",
-      "Autopilot replies, per campaign",
-      "Intent signals on every lead",
-      "Native HubSpot and Salesforce",
-    ],
-    highlight: true,
-  },
-  {
-    name: "Teams",
-    price: "$199",
-    // Cheaper than Pro and listed after it, which reads as a mistake unless the
-    // condition is on the card. It is a volume rate, not a smaller product.
-    note: "3 seats minimum",
-    features: [
-      "Everything in Pro",
-      "Shared exclusion lists — no two reps contact the same person",
-      "Per-rep funnel reporting",
-      "Dedicated account manager",
-    ],
-    highlight: false,
-  },
-];
+/** Said once and reused, so the hero, the band and /pricing cannot drift apart. */
+export const FREE_LINE = "Free for now — for everyone.";
 
 /**
- * What the buyer is actually choosing between.
+ * Where the plans used to be.
  *
- * A price on its own is answered with "there is a tool at a third of that",
- * and the honest reply is that the cheap tool does a different job: it
- * performs actions, and somebody still has to decide who to write to and what
- * to say. Said in the abstract that sounds like a sneer; said as three columns
- * with the trade-off in each, it is the whole argument for the price.
+ * The product is free for everyone while it is being built in the open, so
+ * the three price cards, the per-seat line and the comparison arguing for a
+ * price are gone rather than greyed out: a crossed-out price reads as a sale,
+ * and a sale is a promise about a later price nobody has decided.
  *
- * No competitor is named and no competitor's price is printed. We cannot
- * verify either from here, and a number on a public page that turns out to be
- * last year's is worth less than the comparison it was meant to win.
+ * `standalone` decides the heading level, as it did for the plans: one section
+ * under the hero's `<h1>` on the home page, the whole of /pricing there.
  */
-const ALTERNATIVES = [
-  {
-    name: "A tool that sends",
-    cost: "Cheapest",
-    body: "Merge fields and a long list of actions on autopilot. It does not know who it is writing to, so someone still builds the list, writes the copy and reads every reply — and the volume it is sold on is the thing that gets accounts restricted.",
-  },
-  {
-    name: "A person to do it",
-    cost: "Most expensive",
-    body: "An SDR or an agency retainer, several thousand a month, ramping for a quarter before the first meeting. Good work, and the reason most small teams simply never do outbound at all.",
-  },
-  {
-    name: "This",
-    cost: "In between",
-    body: "The deciding and the sending, and every step of it on a screen: who it picked and why, what it wrote and what it wrote it from, what it sent and what it refused to send.",
-    here: true,
-  },
-];
-
-/**
- * The plans, as a section of the home page and as the whole of /pricing.
- *
- * `standalone` is what decides the heading level, and it is not cosmetic. On
- * the home page this is one section under the hero's `<h1>`, so it is an
- * `<h2>`. On /pricing it *is* the page — and because every other marketing
- * page hand-rolls its own `<h1>` while this one composes a shared component,
- * /pricing shipped with no `<h1>` at all: a page whose top heading was an h2,
- * with nothing above it. The application has a test that catches exactly this
- * and it only ever looked at `src/app/app`.
- */
-export function Pricing({ standalone = false }: { standalone?: boolean } = {}) {
+export function FreeForNow({ standalone = false }: { standalone?: boolean } = {}) {
   const Heading = standalone ? "h1" : "h2";
-  /*
-   * And the cards move with it.
-   *
-   * The comment above got the section's own heading right and stopped there,
-   * so /pricing ran h1 straight to h3 — a level skipped is a level nobody can
-   * hear, and to a screen reader the plans then sit under a heading that is
-   * not in the document. It also put the page's only h2 ("Before you ask")
-   * *after* three h3s, so the outline read inside-out. One switch, applied to
-   * both levels, or the fix is half a fix.
-   */
-  const CardHeading = standalone ? "h2" : "h3";
   return (
-    <section id="pricing" className="section">
+    <section id="free" className="section">
+      <div className="container">
+        <div className="card raised free-card">
+          <div className="stack-3">
+            <p className="eyebrow section-mark">What it costs</p>
+            <Heading>{FREE_LINE}</Heading>
+            <p className="lede prose">
+              Sign up and start right away. No plans to compare and no card to enter — {NORA} and
+              the whole team, for every workspace.
+            </p>
+          </div>
+          <div className="cluster">
+            <Link href={`${SITE.app}/signup`} className="btn large">
+              Sign up free
+            </Link>
+            <Link href="/how-it-works" className="btn secondary large">
+              See how it works
+            </Link>
+          </div>
+          <p className="small subtle prose">
+            If that ever changes, you will hear it from us well before it does — and nothing you
+            have built here is held back to make the point.
+          </p>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * NORA and her four, near the top of the page that has to explain them.
+ *
+ * Every name is a job the product already does — the mapping to the real code
+ * is written down in `lib/team.ts` — and every bullet is read from the same
+ * definition the dashboard's team panel uses, so the site cannot introduce a
+ * teammate the product does not have.
+ */
+export function MeetTheTeam() {
+  return (
+    <section id="team" className="section crew-section">
       <div className="container stack-6">
-        <div className="stack-3">
-          <p className="eyebrow section-mark">Pricing</p>
-          <Heading>Per seat, per month.</Heading>
-          <p className="lede prose">Seven-day free trial on every plan. No card to start.</p>
-        </div>
-
-        <div className="grid grid-3">
-          {ALTERNATIVES.map((option) => (
-            <article key={option.name} className={`card stack-2${option.here ? " alt-here" : ""}`}>
-              <div className="between">
-                <CardHeading className="small">{option.name}</CardHeading>
-                <span className="tiny subtle">{option.cost}</span>
-              </div>
-              <p className="small muted">{option.body}</p>
-            </article>
-          ))}
-        </div>
-
-        <div className="grid grid-2">
-          {PLANS.map((plan) => (
-            <article key={plan.name} className={`card stack-4 plan${plan.highlight ? " plan-featured" : ""}`}>
-              <div className="between">
-                <CardHeading>{plan.name}</CardHeading>
-                {plan.highlight ? <span className="pill accent">Most popular</span> : null}
-              </div>
-
-              <p className="price">
-                <span className="mono">{plan.price}</span>
-                <span className="small muted"> / seat / mo</span>
-              </p>
-              {plan.note ? <p className="tiny subtle">{plan.note}</p> : null}
-
-              <ul className="small muted bullets">
-                {plan.features.map((feature) => (
-                  <li key={feature}>{feature}</li>
-                ))}
-              </ul>
-
-              <Link href={`${SITE.app}/signup`} className={`btn${plan.highlight ? "" : " secondary"} block`}>
-                Start free trial
-              </Link>
-            </article>
-          ))}
-        </div>
-
+        <Reveal>
+          <div className="stack-3">
+            <p className="eyebrow section-mark">Meet the team</p>
+            <h2>One assistant. Four specialists. Your pipeline, handled.</h2>
+            <p className="lede prose">
+              {NORA} runs your dashboard and leads four AI employees. Sage works out who to go
+              after, Scout finds them, Quinn writes to each one, and Reese sends, answers and
+              books — each handing the work to the next, and stopping where a decision is yours.
+            </p>
+          </div>
+        </Reveal>
+        <TeamStage />
         <p className="small subtle prose">
-          A LinkedIn Sales Navigator seat is recommended on Pro and Teams and is billed by LinkedIn,
-          not by us.
+          Names for the jobs, not people pretending to be people: every message still goes out
+          under your own name, in your own voice, from your own LinkedIn account.
         </p>
       </div>
     </section>
@@ -763,20 +644,24 @@ export function Pricing({ standalone = false }: { standalone?: boolean } = {}) {
 
 export const FAQ_ITEMS = [
   {
+    q: "What does it cost?",
+    a: "Nothing, for now — for everyone. Sign up and start right away: no plan to choose and no card to enter. If that changes, you will hear it from us well before it does.",
+  },
+  {
     q: "Is this safe for my LinkedIn account?",
     a: "It is the constraint we designed around. Sending starts at ten connection requests a day and ramps to thirty-five over five weeks, never exceeds one hundred a week, and is spread randomly across your working hours. If LinkedIn shows a warning, a captcha, or an unusual login screen, the account pauses itself and tells you. No tool can promise zero risk — LinkedIn's user agreement prohibits automation — so we tell you that plainly and keep the volume well under the line.",
   },
   {
     q: "Do I need Sales Navigator?",
-    a: "It gives the Targeting Agent much better filters, so we recommend it on Pro and Teams. Solo works without one.",
+    a: "No. Scout works with any LinkedIn account. Sales Navigator, which LinkedIn sells separately, lets it search more precisely — by seniority and company size — and where a filter cannot be applied, the campaign says so before you launch.",
   },
   {
     q: "Can I approve every message?",
-    a: "Yes, and that is the default — the Reply Agent drafts, you approve with one click. Autopilot is a switch you flip once you trust it, and then it answers and books on its own. Two things always wait for you either way: somebody who asks to speak to a person, and a message the agent did not understand.",
+    a: "Yes, and that is the default — Reese drafts, you approve with one click. Autopilot is a switch you flip once you trust it, and then it answers and books on its own. Two things always wait for you either way: somebody who asks to speak to a person, and a message the agent did not understand.",
   },
   {
     q: "What happens when a prospect asks something hard?",
-    a: "It stops and hands the conversation to you. Pricing, legal or security questions, anything negative, a request to speak to a person, or simply low confidence: all of them park the draft in your inbox instead of sending it.",
+    a: "By default it stops and hands the conversation to you. Pricing, legal or security questions, anything negative, a request to speak to a person, or simply low confidence: all of them park the draft in your inbox instead of sending it.",
   },
 ];
 
@@ -806,13 +691,13 @@ export function ClosingCta() {
         <div className="stack-3">
           <h2>Start with ten invitations a day.</h2>
           <p className="lede prose">
-            Seven days free, no card. Your first campaign runs in approval mode, so nothing reaches
-            anyone until you have read it.
+            {FREE_LINE} Sign up and start right away. Your first campaign runs in approval mode, so
+            nothing reaches anyone until you have read it.
           </p>
         </div>
         <div className="cluster">
           <Link href={`${SITE.app}/signup`} className="btn large">
-            Start free trial
+            Sign up free
           </Link>
           <Link href="/how-it-works" className="btn secondary large">
             See how it works
@@ -827,8 +712,9 @@ const FOOTER_COLUMNS = [
   {
     title: "Product",
     links: [
+      { href: "/#team", label: `Meet ${NORA} and the team` },
       { href: "/how-it-works", label: "How it works" },
-      { href: "/pricing", label: "Pricing" },
+      { href: "/pricing", label: "Free for now" },
       { href: "/security", label: "Security and data" },
       // Absolute: the dashboard is another host, and a relative /login here
       // lands on a marketing page that cannot hold a session.
