@@ -1241,6 +1241,26 @@ tests that were verified by deliberately breaking the code.
     a review convention for the same reason `containsLink` exists: a prompt or
     a habit saying so is not what makes it true.
 
+55. **An email to our own users is sent once, and marketing can always be
+    stopped.** Every email to a user goes through `sendOnce`
+    (`apps/worker/src/email.ts`), which claims `(user_id, step)` in
+    `email_sends` (migration 0040) **before** it sends — the unique index is
+    the whole never-twice guarantee, and a failed claim means do not send. A
+    provider failure releases the claim so the next hourly run can retry.
+
+    The onboarding sequence (`apps/worker/src/jobs/lifecycle.ts`) is keyed to
+    what somebody has done, not to the calendar: each step has a moment it is
+    due and a moment it goes stale, and is skipped if the thing it asks for is
+    done. Stale steps are never sent late — that is also what stops a deploy
+    mailing every existing user the whole sequence. Lifecycle and announcement
+    mail honour `profiles.marketing_opt_out_at`, read immediately before the
+    send; transactional mail (welcome, invitation, paused account, operator
+    notifications) never does. A marketing email cannot be built without an
+    unsubscribe URL, and a deployment that cannot sign one (no
+    `INTERNAL_API_SECRET`) sends no marketing email at all. Announcements carry
+    a second guard: `send_requested_at` is claimed in one statement, so a
+    second press sends nothing. Copy is free-product copy — no prices, no
+    trials, no vendor names (rule 54).
 
 ## Conventions
 
