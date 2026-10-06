@@ -83,7 +83,7 @@ export type SupportDraft = z.infer<typeof SupportDraftSchema>;
  * every one this deployment might gain.
  */
 const INTERNAL_WORDS =
-  /\b(unipile|resend|openai|anthropic|gpt-?\d*|redis|render\.com|supabase|bullmq|netlify|webhooks?|api[ _-]?keys?|service[ _-]role|localhost|sql|postgres(ql)?|stack ?trace)\b/i;
+  /\b(unipile|resend|openai|anthropic|gpt-?\d*|redis|render\.com|supabase|bullmq|netlify|webhooks?|api[ _-]?keys?|service[ _-]role|localhost|sql|postgres(ql)?|stack ?trace|needs ?human|reasonforhuman|confidence score)\b/i;
 const INTERNAL_PATHS = /(\/webhooks\/|\/jobs\/|\/admin\b)/i;
 const SHOUTED = /\b[A-Z][A-Z0-9]{2,}_[A-Z0-9_]+\b/;
 

@@ -56,6 +56,9 @@ describe("supportGate", () => {
       "Set UNIPILE_WEBHOOK_SECRET on the worker.",
       "The Redis queue was down for a while.",
       "Check /webhooks/unipile/messages.",
+      // The assistant's own instructions, repeated to the customer — seen in
+      // the first live drafts.
+      "If it is still blocked, set needsHuman to true and we will look.",
     ]) {
       const verdict = supportGate({ ...base, draft: { ...good, answer: `${good.answer} ${leak}` } });
       expect(verdict.send, leak).toBe(false);
