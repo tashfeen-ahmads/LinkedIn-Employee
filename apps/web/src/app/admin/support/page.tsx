@@ -1,12 +1,15 @@
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { SUPPORT_CATEGORY_LABEL, type SupportCategory } from "@le/shared";
 import { createClient } from "@/lib/supabase-server";
-import { requirePlatformAdmin } from "@/lib/admin";
+import { requirePlatformAdmin, ago } from "@/lib/admin";
 import { errorQuery, noticeQuery } from "@/lib/worker";
-import { PageHeader, Section } from "@/components/page";
+import { PageHeader, Section, Empty } from "@/components/page";
 import { PageNotice, type NoticeParams } from "@/components/page-notice";
 import { SubmitButton } from "@/components/submit-button";
+import { Kpi } from "@/components/charts";
+import { ControlButton } from "@/components/admin-control";
 import { describeTicketContext } from "@/lib/support";
 
 export const dynamic = "force-dynamic";
@@ -42,107 +45,161 @@ async function answerTicket(formData: FormData) {
   redirect(noticeQuery("/admin/support", "Answered. It is on their Support page now."));
 }
 
+function categoryLabel(category: string | null): string | null {
+  return category && category in SUPPORT_CATEGORY_LABEL ? SUPPORT_CATEGORY_LABEL[category as SupportCategory] : null;
+}
+
 /**
- * The support queue: everything on the platform that a person needs to look at.
+ * The support queue.
  *
- * Built from the states that stop a workspace working rather than from a ticket
- * system, because nobody files a ticket for "my account has been restricted for
- * three days and I assumed that was normal". The list being empty is the point.
+ * Every ticket is read by the assistant within minutes of being raised. When it
+ * is sure, the question is a how-to and autopilot is on, the answer goes
+ * straight to the customer; otherwise its answer waits here, prefilled, with the
+ * reason it was held. So the list below is only what genuinely needs a person,
+ * and an operator's job is to read a draft rather than write from nothing.
  */
 export default async function AdminSupportPage({ searchParams }: { searchParams: NoticeParams }) {
   const params = await searchParams;
   await requirePlatformAdmin();
   const supabase = await createClient();
+  const weekAgo = new Date(Date.now() - 7 * 86_400_000).toISOString();
 
-  const [{ data: accounts }, { data: workspaces }, { data: failures }, { data: tickets }] = await Promise.all([
-    supabase
-      .from("linkedin_accounts")
-      .select("id, workspace_id, user_id, status, status_detail, display_name, connected_at, first_action_at")
-      .neq("status", "active"),
-    supabase.from("workspaces").select("id, name, plan, trial_ends_at, subscription_status"),
-    // An agent call that errored is the clearest signal something is wrong that
-    // the customer cannot see and would not know to report.
-    supabase
-      .from("llm_calls")
-      .select("id, workspace_id, agent, model, error, created_at")
-      .not("error", "is", null)
-      .order("created_at", { ascending: false })
-      .limit(25),
-    // Somebody typed these. Everything else on this page is inferred from a
-    // state; a ticket is a person asking, and it is read first.
+  const [{ data: workspaces }, { data: tickets }, { data: settings }, { data: users }] = await Promise.all([
+    supabase.from("workspaces").select("id, name"),
     supabase
       .from("support_tickets")
-      .select("id, workspace_id, subject, body, status, answer, context, created_at")
+      .select(
+        "id, workspace_id, raised_by, subject, body, status, answer, answered_by, answered_at, context, created_at, category, draft_answer, draft_confidence, draft_reason, drafted_at, reopened_at, followup",
+      )
       .order("created_at", { ascending: false })
-      .limit(50),
+      .limit(100),
+    supabase.from("platform_settings").select("support_autopilot").maybeSingle(),
+    supabase.rpc("platform_users"),
   ]);
 
   const names = new Map((workspaces ?? []).map((w) => [w.id, w.name]));
+  const who = new Map((users ?? []).map((u) => [u.user_id, u.full_name ? `${u.full_name} · ${u.email}` : u.email]));
+  const autopilot = settings?.support_autopilot !== false;
 
   const open = (tickets ?? []).filter((t) => t.status === "open");
-  const answered = (tickets ?? []).filter((t) => t.status !== "open");
-  const nothing = !accounts?.length && !failures?.length && !open.length;
+  const closed = (tickets ?? []).filter((t) => t.status !== "open");
+  const thisWeek = (tickets ?? []).filter((t) => t.created_at >= weekAgo);
+  const byAssistant = thisWeek.filter((t) => t.answered_by === "agent").length;
+  const byYou = thisWeek.filter((t) => t.answered_by === "operator").length;
+  const reopened = thisWeek.filter((t) => t.reopened_at).length;
 
   return (
     <>
       <PageNotice error={params.error} notice={params.notice} />
       <PageHeader
         eyebrow="Operator"
-        title="Needs attention"
-        lede="States that stop a workspace working. Nobody reports these, because from the inside they look like the product being quiet."
+        title="Support"
+        lede="The assistant reads every ticket first. What it answered is below; what it was not sure about waits here with its draft."
+        actions={<ControlButton op="support-sweep" back="/admin/support" label="Ask the assistant now" pendingLabel="Answering…" />}
       />
 
-      {nothing ? (
-        <div className="notice positive">
-          <p>
-            Nothing needs attention. No ticket is open, every connected account is healthy, and no
-            agent call has failed.
-          </p>
+      <Section title="This week">
+        <div className="kpi-row">
+          <Kpi label="Waiting for you" value={String(open.length)} tone={open.length ? "warning" : "neutral"} />
+          <Kpi label="Answered by the assistant" value={String(byAssistant)} />
+          <Kpi label="Answered by you" value={String(byYou)} />
+          <Kpi label="Said it did not help" value={String(reopened)} note="reopened with Still stuck" />
+          <Kpi
+            label="Autopilot"
+            value={autopilot ? "On" : "Off"}
+            note={<Link href="/admin/settings">{autopilot ? "confident answers are sent" : "every answer waits for you"}</Link>}
+          />
         </div>
-      ) : null}
+      </Section>
 
-      {open.length ? (
-        <Section
-          title="Open tickets"
-          description="Each one carries what the product believed at the moment it was raised, so the first question an operator would ask is already answered."
-        >
-          {open.map((ticket) => (
-            <article key={ticket.id} className="card">
-              <div className="between">
-                <strong>{ticket.subject}</strong>
-                <Link className="small" href={`/admin/workspaces/${ticket.workspace_id}`}>
-                  {names.get(ticket.workspace_id) ?? "—"}
-                </Link>
-              </div>
-              <p className="small">{ticket.body}</p>
-              <ul className="tiny subtle inline-list">
-                {describeTicketContext(ticket.context).map((fact) => (
-                  <li key={fact}>{fact}</li>
-                ))}
-              </ul>
-              <form action={answerTicket} className="stack-2">
-                <input type="hidden" name="ticketId" value={ticket.id} />
-                <label className="field">
-                  <span className="sr-only">Answer</span>
-                  <textarea name="answer" rows={3} placeholder="What you found and what you did." />
-                </label>
-                <div className="row">
-                  <label className="field">
-                    <span className="tiny">Then</span>
-                    <select name="status" defaultValue="answered">
-                      <option value="answered">mark answered</option>
-                      <option value="closed">close it</option>
-                    </select>
-                  </label>
-                  <SubmitButton pendingLabel="Sending…">Answer</SubmitButton>
-                </div>
-              </form>
-            </article>
-          ))}
-        </Section>
-      ) : null}
+      <Section title="Open" description="Each one carries what the product believed when it was raised.">
+        {!open.length ? (
+          <Empty title="Nothing waiting.">Every ticket has an answer.</Empty>
+        ) : (
+          <div className="stack-3">
+            {open.map((ticket) => {
+              const category = categoryLabel(ticket.category);
+              return (
+                <article key={ticket.id} className="card">
+                  <div className="between">
+                    <strong>{ticket.subject}</strong>
+                    <span className="cluster">
+                      {category ? <span className="pill tiny plain">{category}</span> : null}
+                      {ticket.reopened_at ? <span className="pill tiny danger">still stuck</span> : null}
+                      <span className="tiny subtle">{ago(ticket.created_at)}</span>
+                    </span>
+                  </div>
+                  <p className="tiny subtle">
+                    <Link href={`/admin/workspaces/${ticket.workspace_id}`}>{names.get(ticket.workspace_id) ?? "—"}</Link>
+                    {ticket.raised_by ? ` · ${who.get(ticket.raised_by) ?? ""}` : ""}
+                  </p>
+                  <p className="small">{ticket.body}</p>
+                  {ticket.reopened_at ? (
+                    <div className="panel stack-1">
+                      <p className="tiny subtle">We answered:</p>
+                      <p className="small muted">{ticket.answer ?? "—"}</p>
+                      <p className="tiny subtle">They said it did not help, {ago(ticket.reopened_at)}:</p>
+                      <p className="small">{ticket.followup}</p>
+                    </div>
+                  ) : null}
+                  <ul className="tiny subtle inline-list">
+                    {describeTicketContext(ticket.context).map((fact) => (
+                      <li key={fact}>{fact}</li>
+                    ))}
+                  </ul>
 
-      {answered.length ? (
+                  {ticket.drafted_at ? (
+                    <p className="small">
+                      <span className="pill tiny warning">held</span>{" "}
+                      <span className="muted">
+                        {ticket.draft_reason ?? "The assistant held this for you."}
+                        {ticket.draft_confidence !== null ? ` Confidence ${Math.round(ticket.draft_confidence * 100)}%.` : ""}
+                      </span>
+                    </p>
+                  ) : (
+                    <p className="small muted">The assistant has not looked at this one yet.</p>
+                  )}
+
+                  <form action={answerTicket} className="stack-2">
+                    <input type="hidden" name="ticketId" value={ticket.id} />
+                    <label className="field">
+                      <span className="tiny">{ticket.draft_answer ? "The assistant's draft — edit it or send it as it is" : "Answer"}</span>
+                      <textarea
+                        name="answer"
+                        rows={ticket.draft_answer ? 7 : 3}
+                        defaultValue={ticket.draft_answer ?? ""}
+                        placeholder="What you found and what you did."
+                      />
+                    </label>
+                    <div className="row">
+                      <label className="field">
+                        <span className="tiny">Then</span>
+                        <select name="status" defaultValue="answered">
+                          <option value="answered">mark answered</option>
+                          <option value="closed">close it</option>
+                        </select>
+                      </label>
+                      <SubmitButton pendingLabel="Sending…">Send answer</SubmitButton>
+                    </div>
+                  </form>
+                  <div className="cluster">
+                    <ControlButton
+                      op="support-redraft"
+                      fields={{ ticketId: ticket.id }}
+                      back="/admin/support"
+                      label={ticket.drafted_at ? "Draft again" : "Ask the assistant"}
+                      pendingLabel="Drafting…"
+                      tone="ghost"
+                    />
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </Section>
+
+      {closed.length ? (
         <Section title="Answered">
           <div className="table-scroll">
             <table>
@@ -152,105 +209,26 @@ export default async function AdminSupportPage({ searchParams }: { searchParams:
                   <th>Workspace</th>
                   <th>Subject</th>
                   <th>Answer</th>
-                  <th>Status</th>
+                  <th>By</th>
                 </tr>
               </thead>
               <tbody>
-                {answered.map((t) => (
+                {closed.map((t) => (
                   <tr key={t.id}>
                     <td className="small subtle">{new Date(t.created_at).toLocaleDateString()}</td>
                     <td>
-                      <Link href={`/admin/workspaces/${t.workspace_id}`}>
-                        {names.get(t.workspace_id) ?? "—"}
-                      </Link>
+                      <Link href={`/admin/workspaces/${t.workspace_id}`}>{names.get(t.workspace_id) ?? "—"}</Link>
                     </td>
-                    <td className="small">{t.subject}</td>
+                    <td className="small">
+                      {t.subject}
+                      {categoryLabel(t.category) ? <p className="tiny subtle">{categoryLabel(t.category)}</p> : null}
+                    </td>
                     <td className="small muted">{t.answer ?? "—"}</td>
                     <td>
-                      <span className="pill tiny positive">{t.status}</span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Section>
-      ) : null}
-
-      {accounts?.length ? (
-        <Section title="LinkedIn accounts not sending">
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>Workspace</th>
-                  <th>Account</th>
-                  <th>Status</th>
-                  <th>Detail</th>
-                  <th>Connected</th>
-                </tr>
-              </thead>
-              <tbody>
-                {accounts.map((a) => (
-                  <tr key={a.id}>
-                    <td>
-                      <Link href={`/admin/workspaces/${a.workspace_id}`}>
-                        {names.get(a.workspace_id) ?? "—"}
-                      </Link>
-                    </td>
-                    <td className="small">{a.display_name ?? "—"}</td>
-                    <td>
-                      <span className={`pill tiny ${a.status === "restricted" ? "danger" : "warning"}`}>
-                        {a.status.replaceAll("_", " ")}
+                      <span className={`pill tiny ${t.answered_by === "agent" ? "plain" : "positive"}`}>
+                        {t.answered_by === "agent" ? "assistant" : t.answered_by === "operator" ? "you" : t.status}
                       </span>
                     </td>
-                    <td className="small muted">{a.status_detail ?? "—"}</td>
-                    <td className="small subtle">
-                      {a.connected_at ? new Date(a.connected_at).toLocaleDateString() : "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Section>
-      ) : null}
-
-
-      {failures?.length ? (
-        <Section title="Failed agent calls">
-          <p className="small muted">
-            The most recent 25. A refusal or a schema failure here means a draft that never appeared.
-          </p>
-          <div className="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>When</th>
-                  <th>Workspace</th>
-                  <th>Agent</th>
-                  <th>Model</th>
-                  <th>Error</th>
-                </tr>
-              </thead>
-              <tbody>
-                {failures.map((f) => (
-                  <tr key={f.id}>
-                    <td className="small subtle">{new Date(f.created_at).toLocaleString()}</td>
-                    <td>
-                      {/* Nullable: a call can fail before it has a workspace to
-                          charge itself to. */}
-                      {f.workspace_id ? (
-                        <Link href={`/admin/workspaces/${f.workspace_id}`}>
-                          {names.get(f.workspace_id) ?? "—"}
-                        </Link>
-                      ) : (
-                        <span className="subtle">—</span>
-                      )}
-                    </td>
-                    <td className="small">{f.agent}</td>
-                    <td className="small mono">{f.model}</td>
-                    <td className="small muted">{f.error}</td>
                   </tr>
                 ))}
               </tbody>

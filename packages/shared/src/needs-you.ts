@@ -69,6 +69,27 @@ export function readWebhookRefusal(detail: unknown): WebhookRefusal {
   return beat.hadSignature ? "bad_signature" : "no_signature";
 }
 
+/**
+ * A refusal that still stands.
+ *
+ * The delivery beat keeps the last refusal for ever, so a webhook that was
+ * fixed by re-registering it kept reporting "deliveries are being refused" on
+ * the operator console for days afterwards — a fault that no longer existed,
+ * on the screen meant to be trusted. A successful registration stamped after
+ * the refusal is the repair, and the refusal stops counting from then on.
+ */
+export function standingWebhookRefusal(
+  delivery: { detail: unknown; beat_at: string } | null | undefined,
+  registration: { detail: unknown; beat_at: string } | null | undefined,
+): WebhookRefusal {
+  const refusal = readWebhookRefusal(delivery?.detail ?? null);
+  if (!refusal || !delivery) return refusal;
+  const registered = registration?.detail as { ok?: unknown } | null | undefined;
+  const repaired =
+    registered?.ok === true && Date.parse(registration!.beat_at) > Date.parse(delivery.beat_at);
+  return repaired ? null : refusal;
+}
+
 export type NeedsYouKind =
   | "loop_stalled"
   | "linkedin_disconnected"

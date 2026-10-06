@@ -4,6 +4,7 @@ import {
   MESSAGE_WEBHOOK_BEAT,
   PACING_LAST_FAILURE,
   PACING_LOOP,
+  standingWebhookRefusal,
 } from "@le/shared";
 import type { WorkerContext } from "../context.js";
 import { OBSERVED_ACCOUNTS_BEAT } from "../accounts.js";
@@ -25,7 +26,7 @@ import { INBOUND_POLL_BEAT } from "./inbound-poll.js";
  * message, a conversation or a prospect's details (rule 15).
  */
 export type IssueSeverity = "critical" | "warning" | "info";
-export type IssueArea = "Platform" | "Jobs" | "Replies" | "Unipile" | "AI" | "Campaigns" | "Email";
+export type IssueArea = "Platform" | "Jobs" | "Replies" | "Unipile" | "AI" | "Campaigns" | "Email" | "Support";
 
 export interface Issue {
   id: string;
@@ -104,6 +105,8 @@ export async function collectIssues(
     { data: events },
     { data: llmFailures },
     { data: stuckEmails },
+    { data: openTickets },
+    { data: settingsRow },
   ] = await Promise.all([
     db.from("workspaces").select("id, name, created_at"),
     db.from("profiles").select("id, email, full_name, created_at"),
@@ -130,6 +133,8 @@ export async function collectIssues(
       .gte("created_at", new Date(now.getTime() - DAY).toISOString())
       .not("error", "is", null),
     db.from("email_sends").select("user_id, step, status, created_at").eq("status", "claimed"),
+    db.from("support_tickets").select("id, workspace_id, drafted_at, created_at").eq("status", "open"),
+    db.from("platform_settings").select("outreach_paused_at, outreach_paused_reason").maybeSingle(),
   ]);
 
   const workspaceName = new Map((workspaces ?? []).map((w) => [w.id, w.name]));
@@ -167,6 +172,26 @@ export async function collectIssues(
     add({ id: "platform:maintenance-steps", severity: "warning", area: "Platform", title: "Nightly housekeeping had failing steps", detail: nightlyFailed.join(", "), since: nightly.beat_at });
   }
 
+  if (settingsRow?.outreach_paused_at) {
+    add({ id: "platform:outreach-paused", severity: "critical", area: "Platform", title: "Outreach is paused for every account", detail: `${settingsRow.outreach_paused_reason ?? "No reason given."} Lift it on the Settings tab.`, since: settingsRow.outreach_paused_at });
+  }
+
+  // ── Support ─────────────────────────────────────────────────────────────
+  // A ticket the assistant held is a customer waiting on a person. Said here so
+  // it is on the one list an operator reads, not only on the Support tab.
+  const waiting = (openTickets ?? []).filter((t) => t.drafted_at);
+  if (waiting.length) {
+    const oldest = waiting.map((t) => t.created_at).sort()[0] ?? null;
+    add({
+      id: "support:waiting",
+      severity: age(oldest, now) > DAY ? "warning" : "info",
+      area: "Support",
+      title: `${waiting.length} support ticket${waiting.length === 1 ? "" : "s"} waiting for a person`,
+      detail: "The assistant drafted an answer and held it. Read it on the Support tab and send or edit it.",
+      since: oldest,
+    });
+  }
+
   // ── Replies ─────────────────────────────────────────────────────────────
   const registration = beat(WEBHOOKS_BEAT);
   const registrationDetail = detailOf(registration);
@@ -178,22 +203,18 @@ export async function collectIssues(
 
   const delivery = beat(MESSAGE_WEBHOOK_BEAT);
   const deliveryDetail = detailOf(delivery);
-  if (delivery && deliveryDetail.ok === false) {
-    const repaired =
-      registrationDetail.ok === true && registration && Date.parse(registration.beat_at) > Date.parse(delivery.beat_at);
-    if (!repaired) {
-      add({
-        id: "replies:refused",
-        severity: "critical",
-        area: "Replies",
-        title: "Reply deliveries are being refused",
-        detail:
-          deliveryDetail.hadSignature === false
-            ? "Deliveries arrive with no credential. The webhook needs the Unipile-Auth header set to UNIPILE_WEBHOOK_SECRET; restarting the worker re-registers it."
-            : `A credential arrived and did not verify (${String(deliveryDetail.reason ?? "no reason")}).`,
-        since: delivery.beat_at,
-      });
-    }
+  if (delivery && standingWebhookRefusal(delivery, registration)) {
+    add({
+      id: "replies:refused",
+      severity: "critical",
+      area: "Replies",
+      title: "Reply deliveries are being refused",
+      detail:
+        deliveryDetail.hadSignature === false
+          ? "Deliveries arrive with no credential. The webhook needs the Unipile-Auth header set to UNIPILE_WEBHOOK_SECRET; restarting the worker re-registers it."
+          : `A credential arrived and did not verify (${String(deliveryDetail.reason ?? "no reason")}).`,
+      since: delivery.beat_at,
+    });
   }
 
   const poll = beat(INBOUND_POLL_BEAT);

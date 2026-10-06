@@ -36,6 +36,8 @@ import { inviteEmail, verifyUnsubscribeToken } from "@le/email";
 import { trySend } from "./email.js";
 import { sendAccountEmails } from "./jobs/lifecycle.js";
 import { isPlatformAdmin, requestAnnouncementSend, saveAnnouncement, sendAnnouncementTest } from "./jobs/announcements.js";
+import { AdminControlSchema, queueStats, runAdminControl } from "./jobs/admin-control.js";
+import { answerSupportTicket } from "./jobs/support.js";
 import { collectIssues, recentFailures, type QueueCounts } from "./jobs/issues.js";
 import { recordEvent } from "./context.js";
 
@@ -432,6 +434,61 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
       return c.json({ error: "not a platform admin" }, 403);
     }
     return c.json({ issues: await collectIssues(ctx, new Date(), await failedJobCounts(queues)), at: new Date().toISOString() });
+  });
+
+  /*
+   * The operator console's controls and its live readings of the queues.
+   * Same two locks as above; every op is listed, and bounded, in
+   * admin-control.ts.
+   */
+  app.post("/admin/control", async (c) => {
+    const body = (await c.req.json().catch(() => null)) as { userId?: string; control?: unknown } | null;
+    if (!body?.userId || !(await isPlatformAdmin(ctx.db, body.userId))) {
+      return c.json({ error: "not a platform admin" }, 403);
+    }
+    const parsed = AdminControlSchema.safeParse(body.control);
+    if (!parsed.success) return c.json({ error: parsed.error.issues[0]?.message ?? "invalid request" }, 400);
+    try {
+      const result = await runAdminControl(ctx, queues, body.userId, parsed.data);
+      return result.ok ? c.json({ detail: result.detail }) : c.json({ error: result.error }, 409);
+    } catch (err) {
+      return c.json({ error: (err as { message?: string })?.message ?? "that did not work" }, 500);
+    }
+  });
+
+  app.post("/admin/queues", async (c) => {
+    const body = (await c.req.json().catch(() => null)) as { userId?: string } | null;
+    if (!body?.userId || !(await isPlatformAdmin(ctx.db, body.userId))) {
+      return c.json({ error: "not a platform admin" }, 403);
+    }
+    const reachable = connection ? await queueReachable(connection) : true;
+    return c.json({ reachable, queues: reachable ? await queueStats(queues) : null, at: new Date().toISOString() });
+  });
+
+  /*
+   * A member's ticket, handed to the support assistant straight away rather
+   * than at the next sweep. Under /jobs because it is a member's request: the
+   * second lock is membership of the ticket's workspace.
+   */
+  app.post("/jobs/support-ticket", async (c) => {
+    const body = (await c.req.json().catch(() => null)) as { userId?: string; workspaceId?: string; ticketId?: string } | null;
+    if (!body?.userId || !body.workspaceId || !body.ticketId) return c.json({ error: "invalid request" }, 400);
+    if (!(await assertMembership(ctx.db, body.workspaceId, body.userId))) {
+      return c.json({ error: "not a member of that workspace" }, 403);
+    }
+    const { data: ticket } = await ctx.db
+      .from("support_tickets")
+      .select("id")
+      .eq("id", body.ticketId)
+      .eq("workspace_id", body.workspaceId)
+      .maybeSingle();
+    if (!ticket) return c.json({ error: "no such ticket" }, 404);
+    // Answered in the background: the model takes longer than a page should
+    // wait, and the hourly sweep catches anything this misses.
+    void answerSupportTicket(ctx, ticket.id).catch((err) =>
+      console.error("support assistant failed", { ticket: ticket.id, reason: (err as Error)?.message }),
+    );
+    return c.json({ queued: true });
   });
 
   app.post("/admin/announcements", async (c) => {

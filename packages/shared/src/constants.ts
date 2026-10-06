@@ -194,6 +194,9 @@ export const MAINTENANCE_BEAT = "maintenance";
  */
 export const MESSAGE_WEBHOOK_BEAT = "webhook:messages";
 
+/** Stamped each time the worker registers its webhooks with the provider. */
+export const WEBHOOKS_BEAT = "webhooks:registered";
+
 /**
  * How many invitations LinkedIn is still holding for an account, sampled.
  *

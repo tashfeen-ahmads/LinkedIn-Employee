@@ -755,6 +755,25 @@ export type SupportTicketRow = {
   answered_at: string | null;
   answer: string | null;
   created_at: string;
+  /** Migration 0041: what the support assistant made of it. */
+  category: string | null;
+  answered_by: "agent" | "operator" | null;
+  draft_answer: string | null;
+  draft_confidence: number | null;
+  draft_reason: string | null;
+  drafted_at: string | null;
+  reopened_at: string | null;
+  followup: string | null;
+};
+
+/** The one row of platform-wide switches (migration 0041). Written only by the worker. */
+export type PlatformSettingsRow = {
+  id: boolean;
+  outreach_paused_at: string | null;
+  outreach_paused_reason: string | null;
+  outreach_paused_by: string | null;
+  support_autopilot: boolean;
+  updated_at: string;
 };
 
 /** The operators of this deployment (migration 0010). Written only with the service role. */
@@ -861,6 +880,7 @@ export type Database = {
       platform_admins: Table<PlatformAdminRow>;
       email_sends: Table<EmailSendRow>;
       announcements: Table<AnnouncementRow>;
+      platform_settings: Table<PlatformSettingsRow>;
     };
     // `{ [_ in never]: never }` and not `Record<string, never>`: an index
     // signature here intersects with Tables and collapses every row type to
@@ -926,6 +946,42 @@ export type Database = {
       answer_support_ticket: {
         Args: { p_ticket_id: string; p_answer: string | null; p_status: string };
         Returns: undefined;
+      };
+      /** "Still stuck": a member reopens their own ticket with what is still wrong. */
+      reopen_support_ticket: {
+        Args: { p_ticket_id: string; p_followup: string };
+        Returns: undefined;
+      };
+      /** Every person on the platform, with their last sign-in. Admins only. */
+      platform_users: {
+        Args: Record<string, never>;
+        Returns: {
+          user_id: string;
+          email: string;
+          full_name: string | null;
+          created_at: string;
+          last_sign_in_at: string | null;
+          marketing_opt_out_at: string | null;
+          is_admin: boolean;
+        }[];
+      };
+      /** Model spend by day, agent and model. Admins only. */
+      platform_spend_breakdown: {
+        Args: { p_days?: number };
+        Returns: {
+          day: string;
+          agent: string;
+          model: string;
+          calls: number;
+          failed: number;
+          spend_usd: number;
+          unpriced: number;
+        }[];
+      };
+      /** People per campaign per status, counts only. Admins only. */
+      platform_campaign_stats: {
+        Args: Record<string, never>;
+        Returns: { campaign_id: string; status: string; people: number }[];
       };
     };
     Enums: {

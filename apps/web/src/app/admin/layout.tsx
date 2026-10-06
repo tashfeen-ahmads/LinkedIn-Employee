@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { requirePlatformAdmin } from "@/lib/admin";
+import { createClient } from "@/lib/supabase-server";
 import { AppNav } from "@/components/app-nav";
 
 /**
@@ -12,6 +13,17 @@ import { AppNav } from "@/components/app-nav";
  */
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const admin = await requirePlatformAdmin();
+  const supabase = await createClient();
+  // The two things that are waiting on an operator, counted for the sidebar:
+  // tickets the assistant held for a person, and whether outreach is paused.
+  const [{ count: waiting }, { data: settings }] = await Promise.all([
+    supabase
+      .from("support_tickets")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "open")
+      .not("drafted_at", "is", null),
+    supabase.from("platform_settings").select("outreach_paused_at").maybeSingle(),
+  ]);
 
   return (
     <div className="app">
@@ -24,13 +36,38 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <AppNav
           groups={[
             {
-              label: "Platform",
+              label: "Run",
+              alwaysOpen: true,
               items: [
-                { href: "/admin/issues", label: "Issues" },
-                { href: "/admin", label: "Workspaces" },
-                { href: "/admin/activity", label: "Activity" },
-                { href: "/admin/support", label: "Needs attention" },
-                { href: "/admin/announcements", label: "Announcements" },
+                { href: "/admin", label: "Overview", icon: "overview" },
+                { href: "/admin/issues", label: "Issues", icon: "system" },
+                { href: "/admin/support", label: "Support", icon: "support", count: waiting ?? 0 },
+                { href: "/admin/activity", label: "Activity", icon: "knowledge" },
+              ],
+            },
+            {
+              label: "Customers",
+              items: [
+                { href: "/admin/workspaces", label: "Workspaces", icon: "strategies" },
+                { href: "/admin/users", label: "Users", icon: "profile" },
+                { href: "/admin/campaigns", label: "Campaigns", icon: "campaigns" },
+                { href: "/admin/accounts", label: "LinkedIn accounts", icon: "prospects" },
+              ],
+            },
+            {
+              label: "System",
+              items: [
+                { href: "/admin/jobs", label: "Jobs", icon: "agents" },
+                { href: "/admin/spend", label: "AI spend", icon: "billing" },
+                { href: "/admin/announcements", label: "Announcements", icon: "posts" },
+                {
+                  href: "/admin/settings",
+                  label: "Settings",
+                  icon: "shield",
+                  ...(settings?.outreach_paused_at
+                    ? { state: "attention" as const, stateLabel: "Outreach is paused" }
+                    : {}),
+                },
               ],
             },
           ]}

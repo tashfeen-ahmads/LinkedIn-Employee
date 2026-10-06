@@ -24,6 +24,118 @@ import { join } from "node:path";
  */
 const MUTATIONS = [
   /*
+   * The operator's kill switch and the support assistant (migration 0041).
+   *
+   * The switch is pressed on the morning LinkedIn starts restricting accounts,
+   * so it has to hold on the one send path (rule 1) and not only in the loop.
+   * The assistant answers customers by itself, so the gate that decides when it
+   * may is the part that has to be proven to bite.
+   */
+  {
+    id: "operator/pause-on-the-send-path",
+    rule: "Pausing all outreach stops an invitation already sitting in the queue",
+    file: "apps/worker/src/jobs/linkedin-action.ts",
+    from: "  if (paused) {\n    throw new RescheduleError(`outreach_paused: ${paused}`",
+    to: "  if (false) {\n    throw new RescheduleError(`outreach_paused: ${paused}`",
+    pkg: "@le/worker",
+  },
+  {
+    id: "operator/pause-in-the-loop",
+    rule: "Pausing all outreach stops the pacing loop queueing anything",
+    file: "apps/worker/src/jobs/campaign-tick.ts",
+    from: "  if (paused) {\n    await beat(db, now, { campaigns: campaigns.length, enqueued: 0, paused });",
+    to: "  if (false) {\n    await beat(db, now, { campaigns: campaigns.length, enqueued: 0, paused });",
+    pkg: "@le/worker",
+  },
+  {
+    id: "operator/never-launch",
+    rule: "The console resumes a campaign its owner launched and never launches one",
+    file: "apps/worker/src/jobs/admin-control.ts",
+    from: '        if (campaign.status !== "paused" || !campaign.launched_at) {',
+    to: '        if (campaign.status !== "paused") {',
+    pkg: "@le/worker",
+  },
+  {
+    id: "support/autopilot-off-holds",
+    rule: "With support autopilot off, every answer waits for a person",
+    file: "packages/shared/src/support.ts",
+    from: "  if (!input.autopilot) return",
+    to: "  if (false) return",
+    pkg: "@le/shared",
+  },
+  {
+    id: "support/reopened-gets-a-person",
+    rule: "A customer who said the answer did not help is answered by a person",
+    file: "packages/shared/src/support.ts",
+    from: "  if (input.reopened) {",
+    to: "  if (false) {",
+    pkg: "@le/shared",
+  },
+  {
+    id: "support/needs-human",
+    rule: "The assistant asking for a person holds the answer whatever its confidence",
+    file: "packages/shared/src/support.ts",
+    from: "  if (draft.needsHuman) {",
+    to: "  if (false) {",
+    pkg: "@le/shared",
+  },
+  {
+    id: "support/human-categories",
+    rule: "Bugs, billing and feature requests always go to a person",
+    file: "packages/shared/src/support.ts",
+    from: "  if (SUPPORT_HUMAN_CATEGORIES.has(draft.category)) {",
+    to: "  if (false) {",
+    pkg: "@le/shared",
+  },
+  {
+    id: "support/confidence-floor",
+    rule: "An answer below the confidence floor is held",
+    file: "packages/shared/src/support.ts",
+    from: "  if (!(draft.confidence >= SUPPORT_AUTO_CONFIDENCE)) {",
+    to: "  if (false) {",
+    pkg: "@le/shared",
+  },
+  {
+    id: "support/stale-ticket",
+    rule: "An answer to a ticket that waited days is checked by a person",
+    file: "packages/shared/src/support.ts",
+    from: "  if (!(input.ageMs <= SUPPORT_AUTO_MAX_AGE_MS)) {",
+    to: "  if (false) {",
+    pkg: "@le/shared",
+  },
+  {
+    id: "support/no-internals",
+    rule: "An answer naming our suppliers or plumbing is never sent to a customer (rule 54)",
+    file: "packages/shared/src/support.ts",
+    from: "  if (internal) return { send: false",
+    to: "  if (false) return { send: false",
+    pkg: "@le/shared",
+  },
+  {
+    id: "support/gate-is-consulted",
+    rule: "The worker acts on the gate's verdict rather than the model's confidence",
+    file: "apps/worker/src/jobs/support.ts",
+    from: "  if (verdict.send) {",
+    to: "  if (true) {",
+    pkg: "@le/worker",
+  },
+  {
+    id: "support/never-overwrite-operator",
+    rule: "The assistant never overwrites a ticket an operator answered while it was thinking",
+    file: "apps/worker/src/jobs/support.ts",
+    from: '      .update(fields as never)\n      .eq("id", ticket.id)\n      .eq("status", "open");',
+    to: '      .update(fields as never)\n      .eq("id", ticket.id);',
+    pkg: "@le/worker",
+  },
+  {
+    id: "operator/webhook-repair-counts",
+    rule: "A webhook refusal stops being reported once the webhooks were registered again",
+    file: "packages/shared/src/needs-you.ts",
+    from: "  return repaired ? null : refusal;",
+    to: "  return refusal;",
+    pkg: "@le/shared",
+  },
+  /*
    * Posts on the rep's own profile.
    *
    * The only thing this product publishes that is not addressed to anybody: it
@@ -2742,26 +2854,26 @@ const MUTATIONS = [
   {
     id: "support/missing-facts-are-named",
     rule: "A fact a ticket did not capture is said to be missing, never left out",
-    file: "apps/web/src/lib/support.ts",
+    file: "packages/shared/src/support.ts",
     from: '        : "Sending loop: not captured",',
     to: '        : "Sending loop: running",',
-    pkg: "@le/web",
+    pkg: "@le/shared",
   },
   {
     id: "support/stopped-loop-is-not-unknown",
     rule: "A loop that is not running reads differently from one nobody asked about",
-    file: "apps/web/src/lib/support.ts",
+    file: "packages/shared/src/support.ts",
     from: '        ? `Sending loop: NOT running${beat ? ` (last run ${beat})` : " (never run)"}`',
     to: '        ? `Sending loop: running${beat ? ` (last run ${beat})` : " (never run)"}`',
-    pkg: "@le/web",
+    pkg: "@le/shared",
   },
   {
     id: "support/context-can-be-anything",
     rule: "A jsonb context that is not an object still renders the console",
-    file: "apps/web/src/lib/support.ts",
+    file: "packages/shared/src/support.ts",
     from: '  return value && typeof value === "object" && !Array.isArray(value) ? (value as TicketContext) : {};',
     to: "  return value as TicketContext;",
-    pkg: "@le/web",
+    pkg: "@le/shared",
   },
   {
     id: "nav/one-mark-at-a-time",

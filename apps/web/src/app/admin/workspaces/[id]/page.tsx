@@ -5,6 +5,8 @@ import { requirePlatformAdmin, statsByWorkspace, formatUsd, type WorkspaceStats 
 import { dailyInviteCap } from "@le/linkedin";
 import { LINKEDIN_LIMITS } from "@le/shared";
 import { PageHeader, Section } from "@/components/page";
+import { PageNotice } from "@/components/page-notice";
+import { ControlButton } from "@/components/admin-control";
 
 export const dynamic = "force-dynamic";
 
@@ -16,9 +18,17 @@ export const dynamic = "force-dynamic";
  * an expired trial — and they are all on this page, so the answer is read
  * rather than deduced from four other screens.
  */
-export default async function AdminWorkspacePage({ params }: { params: Promise<{ id: string }> }) {
+export default async function AdminWorkspacePage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ error?: string; notice?: string }>;
+}) {
   await requirePlatformAdmin();
   const { id } = await params;
+  const notice = await searchParams;
+  const back = `/admin/workspaces/${id}`;
   const supabase = await createClient();
 
   const { data: workspace } = await supabase
@@ -36,11 +46,13 @@ export default async function AdminWorkspacePage({ params }: { params: Promise<{
       supabase.from("memberships").select("id, user_id, role, created_at").eq("workspace_id", id),
       supabase
         .from("linkedin_accounts")
-        .select("id, user_id, display_name, status, status_detail, has_sales_navigator, invites_today, invites_this_week, messages_today, connected_at, first_action_at, last_action_at")
+        .select("id, user_id, display_name, status, status_detail, has_sales_navigator, invites_today, invites_this_week, messages_today, connected_at, first_action_at, last_action_at, invites_paused_until")
         .eq("workspace_id", id),
       supabase.from("campaigns").select("id, name, status, daily_invite_cap, reply_mode, launched_at, created_at").eq("workspace_id", id).order("created_at", { ascending: false }),
       supabase.rpc("platform_workspace_stats"),
-      supabase.from("llm_calls").select("agent, model, cost_usd, error").eq("workspace_id", id),
+      // Summed in the database. Read row by row this stopped at PostgREST's
+      // thousandth row and reported a bill that was quietly short.
+      supabase.rpc("platform_workspace_spend"),
       supabase.from("events").select("id, name, subject_type, created_at").eq("workspace_id", id).order("created_at", { ascending: false }).limit(20),
     ]);
 
@@ -53,10 +65,15 @@ export default async function AdminWorkspacePage({ params }: { params: Promise<{
 
   const s = statsByWorkspace((stats ?? null) as WorkspaceStats[] | null).get(id);
 
-  const priced = (spend ?? []).filter((c) => c.cost_usd !== null);
-  const totalSpend = priced.reduce((sum, c) => sum + Number(c.cost_usd), 0);
-  const unpriced = (spend ?? []).length - priced.length;
-  const failedCalls = (spend ?? []).filter((c) => c.error).length;
+  const mine = (spend ?? []).find((row) => row.workspace_id === id);
+  const totalSpend = Number(mine?.spend_usd ?? 0);
+  const callCount = Number(mine?.calls ?? 0);
+  const unpriced = callCount - Number(mine?.priced_calls ?? 0);
+  const [{ count: failedCalls }, { count: openTickets }] = await Promise.all([
+    supabase.from("llm_calls").select("id", { count: "exact", head: true }).eq("workspace_id", id).not("error", "is", null),
+    supabase.from("support_tickets").select("id", { count: "exact", head: true }).eq("workspace_id", id).eq("status", "open"),
+  ]);
+  const running = (campaigns ?? []).filter((c) => c.status === "running").length;
 
   return (
     <>
@@ -65,18 +82,36 @@ export default async function AdminWorkspacePage({ params }: { params: Promise<{
         title={workspace.name}
         lede={<span className="mono tiny subtle">{workspace.slug}</span>}
         actions={
-          <Link href="/admin" className="btn ghost small">
-            All workspaces
-          </Link>
+          <>
+            {running ? (
+              <ControlButton
+                op="workspace-pause"
+                fields={{ workspaceId: id }}
+                back={back}
+                label={`Pause ${running} running campaign${running === 1 ? "" : "s"}`}
+                tone="danger"
+              />
+            ) : null}
+            <Link href="/admin/workspaces" className="btn ghost small">
+              All workspaces
+            </Link>
+          </>
         }
       />
+      <PageNotice error={notice.error} notice={notice.notice} />
 
       {/* NORA is free for everyone for now, so there is no plan, seat count or
           trial clock to show — only when the workspace began. */}
       <Section title="Workspace">
         <div className="grid grid-4">
           <Stat label="Signed up" value={new Date(workspace.created_at).toLocaleDateString()} />
+          <Stat label="Open support tickets" value={String(openTickets ?? 0)} />
         </div>
+        {openTickets ? (
+          <p className="small">
+            <Link href="/admin/support">Open the Support tab</Link>
+          </p>
+        ) : null}
       </Section>
 
       <Section title="People">
@@ -117,6 +152,12 @@ export default async function AdminWorkspacePage({ params }: { params: Promise<{
                             </span>
                             {a.status_detail ? <p className="tiny muted">{a.status_detail}</p> : null}
                             {a.has_sales_navigator ? <p className="tiny subtle">Sales Navigator</p> : null}
+                            {a.invites_paused_until && Date.parse(a.invites_paused_until) > Date.now() ? (
+                              <div className="stack-1">
+                                <span className="pill tiny warning">LinkedIn hold until {new Date(a.invites_paused_until).toLocaleString()}</span>
+                                <ControlButton op="account-clear-hold" fields={{ accountId: a.id }} back={back} label="Clear hold" tone="ghost" />
+                              </div>
+                            ) : null}
                           </>
                         )}
                       </td>
@@ -167,6 +208,7 @@ export default async function AdminWorkspacePage({ params }: { params: Promise<{
                   <th>Replies</th>
                   <th className="num">Cap</th>
                   <th>Launched</th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
@@ -181,6 +223,13 @@ export default async function AdminWorkspacePage({ params }: { params: Promise<{
                     <td className="small subtle">
                       {c.launched_at ? new Date(c.launched_at).toLocaleDateString() : "never"}
                     </td>
+                    <td>
+                      {c.status === "running" ? (
+                        <ControlButton op="campaign-pause" fields={{ campaignId: c.id }} back={back} label="Pause" tone="ghost" />
+                      ) : c.status === "paused" && c.launched_at ? (
+                        <ControlButton op="campaign-resume" fields={{ campaignId: c.id }} back={back} label="Resume" tone="ghost" />
+                      ) : null}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -192,8 +241,8 @@ export default async function AdminWorkspacePage({ params }: { params: Promise<{
       <Section title="Model spend">
         <div className="grid grid-4">
           <Stat label="Total" value={formatUsd(totalSpend)} />
-          <Stat label="Calls" value={String((spend ?? []).length)} />
-          <Stat label="Failed" value={String(failedCalls)} />
+          <Stat label="Calls" value={String(callCount)} />
+          <Stat label="Failed" value={String(failedCalls ?? 0)} />
           <Stat label="Unpriced" value={String(unpriced)} />
         </div>
         {unpriced ? (

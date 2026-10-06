@@ -3,11 +3,11 @@ import { Empty, PageHeader, Section } from "@/components/page";
 import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
-import { errorQuery, noticeQuery } from "@/lib/worker";
+import { callWorker, errorQuery, noticeQuery } from "@/lib/worker";
 import { PageNotice, type NoticeParams } from "@/components/page-notice";
 import { SubmitButton } from "@/components/submit-button";
 import { readSetupState } from "@/lib/setup-state";
-import { BOOT_BEAT, PACING_LOOP, PACING_STALE_MS } from "@le/shared";
+import { BOOT_BEAT, BRAND, PACING_LOOP, PACING_STALE_MS } from "@le/shared";
 
 /**
  * Somewhere to say "this is broken" without leaving the product.
@@ -48,7 +48,7 @@ async function raiseTicket(formData: FormData) {
   const boot = (beats ?? []).find((b) => b.name === BOOT_BEAT);
   const beatAge = pacing?.beat_at ? Date.now() - new Date(pacing.beat_at).getTime() : null;
 
-  await supabase.from("support_tickets").insert({
+  const { data: inserted, error: insertError } = await supabase.from("support_tickets").insert({
     workspace_id: session.workspaceId,
     raised_by: session.userId,
     subject,
@@ -65,15 +65,47 @@ async function raiseTicket(formData: FormData) {
       workerBuild: (boot?.detail as { commit?: string } | null)?.commit ?? null,
       raisedAt: new Date().toISOString(),
     } as never,
+  }).select("id").single();
+  if (insertError || !inserted) {
+    redirect(errorQuery("/app/support", "That did not send. Please try again in a moment."));
+  }
+
+  // Handed to the assistant now rather than at the next sweep. A failure here
+  // costs only speed: the hourly sweep answers anything this missed.
+  await callWorker("/jobs/support-ticket", {
+    userId: session.userId,
+    workspaceId: session.workspaceId,
+    ticketId: inserted.id,
   });
 
   revalidatePath("/app/support");
   redirect(
     noticeQuery(
       "/app/support",
-      "Sent. It includes what the product thought was true just now, so nobody has to ask you to check things.",
+      "Sent. You will usually have an answer on this page within a few minutes.",
     ),
   );
+}
+
+/**
+ * "Still stuck": the customer reopens their own ticket and says what is still
+ * wrong. The function keeps their original words and refuses another
+ * workspace's ticket; a reopened ticket is always answered by a person.
+ */
+async function stillStuck(formData: FormData) {
+  "use server";
+  const ticketId = String(formData.get("ticketId") ?? "");
+  const followup = String(formData.get("followup") ?? "").trim();
+  if (!ticketId || !followup) {
+    redirect(errorQuery("/app/support", "Say what is still not working, so whoever picks it up starts from there."));
+  }
+  const session = await requireSession();
+  const supabase = await createClient();
+  const { error } = await supabase.rpc("reopen_support_ticket", { p_ticket_id: ticketId, p_followup: followup });
+  if (error) redirect(errorQuery("/app/support", "That did not send. Please try again in a moment."));
+  await callWorker("/jobs/support-ticket", { userId: session.userId, workspaceId: session.workspaceId, ticketId });
+  revalidatePath("/app/support");
+  redirect(noticeQuery("/app/support", "Reopened. A person from our team will pick this one up."));
 }
 
 export default async function SupportPage({ searchParams }: { searchParams: NoticeParams }) {
@@ -83,7 +115,7 @@ export default async function SupportPage({ searchParams }: { searchParams: Noti
 
   const { data: tickets } = await supabase
     .from("support_tickets")
-    .select("id, subject, body, status, answer, answered_at, created_at")
+    .select("id, subject, body, status, answer, answered_by, answered_at, created_at, reopened_at, followup")
     .eq("workspace_id", session.workspaceId)
     .order("created_at", { ascending: false })
     .limit(25);
@@ -131,11 +163,34 @@ export default async function SupportPage({ searchParams }: { searchParams: Noti
                   <span className={`pill ${ticket.status === "open" ? "" : "positive"}`}>{ticket.status}</span>
                 </div>
                 <p className="small muted">{ticket.body}</p>
-                {ticket.answer ? (
-                  <p className="small panel">{ticket.answer}</p>
+                {ticket.reopened_at ? (
+                  <p className="tiny subtle">
+                    You said this did not help: &ldquo;{ticket.followup}&rdquo; A person from our team is on it.
+                  </p>
+                ) : ticket.answer ? (
+                  <>
+                    <p className="small panel">{ticket.answer}</p>
+                    <p className="tiny subtle">
+                      {ticket.answered_by === "agent" ? `Answered by the ${BRAND.name} assistant` : "Answered by our team"}
+                      {ticket.answered_at ? `, ${new Date(ticket.answered_at).toLocaleString()}` : ""}.
+                    </p>
+                    {ticket.status !== "open" ? (
+                      <details>
+                        <summary className="small">Still stuck?</summary>
+                        <form action={stillStuck} className="stack-2">
+                          <input type="hidden" name="ticketId" value={ticket.id} />
+                          <label className="field">
+                            <span className="small">What is still not working?</span>
+                            <textarea name="followup" rows={3} maxLength={4000} />
+                          </label>
+                          <SubmitButton pendingLabel="Sending…">Send to a person</SubmitButton>
+                        </form>
+                      </details>
+                    ) : null}
+                  </>
                 ) : (
                   <p className="tiny subtle">
-                    Raised {new Date(ticket.created_at).toLocaleString()}. No answer yet.
+                    Raised {new Date(ticket.created_at).toLocaleString()}. No answer yet — usually within a few minutes.
                   </p>
                 )}
               </article>

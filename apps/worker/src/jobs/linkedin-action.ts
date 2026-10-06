@@ -44,6 +44,7 @@ import { clearHold, flagForHuman } from "../holds.js";
 import { pitchFor } from "../pitch.js";
 import { agentForCampaign } from "../agent.js";
 import { createBookingLink } from "./book.js";
+import { OUTREACH_PAUSE_RETRY_MS, outreachPause } from "../platform.js";
 import type { LinkedInActionJob } from "../queues.js";
 
 /**
@@ -160,6 +161,18 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
     .eq("id", campaign.linkedin_account_id)
     .single();
   if (!accountRow || accountRow.status !== "active" || !accountRow.provider_account_id) return;
+
+  /*
+   * The operator's kill switch, checked on the one path every send takes
+   * (rule 1). The pacing loop stops enqueuing while it is set, but jobs already
+   * sitting delayed in the queue were placed before it — and they fire straight
+   * through a switch that only the loop reads. Waiting, never failing: nobody
+   * here did anything wrong, and lifting the switch resumes them.
+   */
+  const paused = await outreachPause(db);
+  if (paused) {
+    throw new RescheduleError(`outreach_paused: ${paused}`, jitteredRetryMs(OUTREACH_PAUSE_RETRY_MS, "outreach_paused"));
+  }
 
   const { data: profile } = await db.from("profiles").select("timezone").eq("id", accountRow.user_id).single();
   const timezone = profile?.timezone ?? "UTC";

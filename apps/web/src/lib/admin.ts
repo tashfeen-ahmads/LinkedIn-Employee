@@ -82,3 +82,29 @@ export function formatUsd(total: number): string {
   if (total === 0) return "$0.00";
   return total < 0.01 ? "<$0.01" : `$${total.toFixed(2)}`;
 }
+
+/** "12m ago", "3h ago", "in 2h" — or "never" for nothing at all. */
+export function ago(iso: string | null | undefined, now: number = Date.now()): string {
+  if (!iso) return "never";
+  const ms = now - Date.parse(iso);
+  if (!Number.isFinite(ms)) return "—";
+  const span = span_(Math.abs(ms));
+  if (span === "just now") return span;
+  return ms < 0 ? `in ${span}` : `${span} ago`;
+}
+
+function span_(ms: number): string {
+  const minutes = Math.round(ms / 60_000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.round(minutes / 60);
+  return hours < 48 ? `${hours}h` : `${Math.round(hours / 24)}d`;
+}
+
+/** A timestamp an operator can read, in UTC so two operators read the same thing. */
+export function when(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const ms = Date.parse(iso);
+  if (!Number.isFinite(ms)) return "—";
+  return `${new Date(ms).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" })} UTC`;
+}

@@ -4040,3 +4040,9 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
   .app .roster-row { grid-template-columns: auto minmax(0, 1fr) auto; }
   .app .roster-status { grid-column: 2 / -1; grid-row: 2; }
 }
+
+/* An operator control: one button in its own form, sitting inline in a row of
+   them. Forms are a column by default (see `form` above), which would stack a
+   row of controls into a staircase. */
+.control-form { display: inline-flex; flex-direction: row; align-items: center; gap: var(--space-2); }
+.control-form > .btn { align-self: center; }

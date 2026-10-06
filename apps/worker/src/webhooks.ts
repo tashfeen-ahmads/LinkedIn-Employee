@@ -3,7 +3,9 @@ import type { Db } from "@le/db";
 import type { LinkedInProvider } from "@le/linkedin";
 import { recordBeat } from "./heartbeat.js";
 
-export const WEBHOOKS_BEAT = "webhooks:registered";
+import { WEBHOOKS_BEAT } from "@le/shared";
+
+export { WEBHOOKS_BEAT };
 
 /**
  * Make sure the provider calls this deployment with the secret it checks.

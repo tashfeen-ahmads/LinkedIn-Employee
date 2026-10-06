@@ -9,7 +9,7 @@ plan. This file is for whoever works on the code next.
 pnpm install
 pnpm build          # packages compile to dist/; apps typecheck against those
 pnpm typecheck
-pnpm test           # 857 tests, no network, no API key needed
+pnpm test           # ~1,760 tests, no network, no API key needed
 node scripts/mutation-check.mjs   # proves the safety tests actually bite
 node scripts/preflight.mjs        # is a deployment actually able to send?
 pnpm --filter @le/web dev
@@ -1339,6 +1339,34 @@ tests that were verified by deliberately breaking the code.
     poll keeps a read position per account; a booking acceptance must match an
     offered slot's day and minute exactly, is re-checked against the calendar
     before it is booked, and a refused insert books nothing.
+
+59. **The console controls the product; it never speaks for a customer.**
+    Every fix an operator made used to be SQL: pausing a campaign, clearing a
+    LinkedIn hold, retrying a failed job, answering a ticket that had sat four
+    days. `/admin` now does each of those through `runAdminControl`
+    (`apps/worker/src/jobs/admin-control.ts`), which the worker performs after
+    checking `platform_admins` itself. Two things are deliberately missing:
+    **launching** a campaign (the owner's yes is the one gate with no way round
+    it — the console resumes what its owner launched, never a draft) and
+    **granting admin** (rule 15).
+
+    `platform_settings.outreach_paused_at` is the kill switch. It is read on
+    the send path itself (rule 1) as well as in the pacing loop, because jobs
+    already sitting delayed in the queue were placed before anybody pressed it.
+    Waiting, never failing, and a settings row that cannot be **read** counts
+    as paused: a database hiccup must not be what quietly turns it off.
+    Customers are told sending is paused, never the operator's reason.
+
+    Support is answered by an assistant (`answerSupportTicket`), and
+    `supportGate` — pure, like `applyRules` — decides whether the customer sees
+    the answer now or a person reads it first. The model's confidence is one
+    input, never the verdict. Bugs, billing and feature requests, a ticket older
+    than two days, a customer who pressed **Still stuck**, and any answer that
+    names our suppliers or plumbing (rule 54) always wait for a person. A held
+    answer is not lost: it is prefilled in the operator's reply box, so holding
+    costs a minute and a wrong answer sent costs a customer. Every write is
+    conditional on the ticket still being open, so the model never overwrites an
+    operator who answered while it was thinking.
 
 ## Conventions
 

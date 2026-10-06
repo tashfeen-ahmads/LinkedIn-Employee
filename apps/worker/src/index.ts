@@ -28,6 +28,7 @@ import { runDailyDigest } from "./jobs/digest.js";
 import { runWeeklyReport } from "./jobs/weekly-report.js";
 import { runLifecycleEmails } from "./jobs/lifecycle.js";
 import { deliverAnnouncement } from "./jobs/announcements.js";
+import { sweepSupportTickets } from "./jobs/support.js";
 import { createServer } from "./server.js";
 
 initObservability();
@@ -172,6 +173,10 @@ if (queueOk) {
 void fillMissingNotes(ctx)
   .then((written) => console.log("filled missing invitation notes at boot", { written }))
   .catch((err) => console.error("could not fill missing notes at boot", err));
+// Tickets nobody has looked at, looked at now rather than within the hour.
+void sweepSupportTickets(ctx)
+  .then((tally) => console.log("support sweep at boot", tally))
+  .catch((err) => console.error("could not sweep support tickets at boot", err));
 
 if (!queueOk) {
   // Not a crash: the HTTP API still answers, /health now says 503, and the
@@ -262,6 +267,9 @@ const workers = [
              * touched when what the provider holds disagrees with it.
              */
             .then(() => recoverAccounts(ctx.db, ctx.linkedin))
+            // Support tickets the immediate hand-off missed — a worker that
+            // was restarting, a model that was down.
+            .then(() => sweepSupportTickets(ctx))
             .then(() => undefined)
         );
       }

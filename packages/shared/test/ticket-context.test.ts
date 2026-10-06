@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeTicketContext } from "../src/lib/support";
+import { describeTicketContext } from "../src/support.js";
 
 /**
  * What a ticket tells the person answering it.

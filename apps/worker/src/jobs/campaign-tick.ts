@@ -25,6 +25,7 @@ import { enqueueOnce, jobId } from "../queues.js";
 import type { Queues } from "../queues.js";
 import { resetCountersIfNeeded, toUsage, type AccountRecord, ACCOUNT_USAGE_COLUMNS } from "../accounts.js";
 import { recordBeat } from "../heartbeat.js";
+import { outreachPause } from "../platform.js";
 
 /**
  * The pacing loop. Runs every few minutes and, for each running campaign, asks
@@ -77,6 +78,14 @@ async function tick(db: Db, queues: Queues, now: Date, linkedin?: unknown): Prom
     .eq("status", "running");
   if (!campaigns?.length) {
     await beat(db, now, { campaigns: 0, enqueued: 0 });
+    return 0;
+  }
+
+  // The operator's kill switch. Said in the stamp, because "paused by us" and
+  // "nothing to do" are otherwise the same `enqueued: 0` (rule 21).
+  const paused = await outreachPause(db);
+  if (paused) {
+    await beat(db, now, { campaigns: campaigns.length, enqueued: 0, paused });
     return 0;
   }
 

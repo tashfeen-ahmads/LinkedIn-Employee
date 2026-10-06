@@ -224,6 +224,7 @@ function Chevron({ open }: { open: boolean }) {
  * so a campaign's detail page keeps Campaigns lit.
  */
 function isCurrent(pathname: string, href: string): boolean {
-  if (href === "/app") return pathname === "/app";
+  // A root is current only on itself, or every page under it would be.
+  if (href === "/app" || href === "/admin") return pathname === href;
   return pathname === href || pathname.startsWith(`${href}/`);
 }

@@ -69,6 +69,14 @@ export async function sendOneNow(
       campaignProspectId: next.id,
     });
   } catch (err) {
+    if (err instanceof RescheduleError && err.reason.startsWith("outreach_paused")) {
+      // The operator's own reason is ours, not theirs (rule 54).
+      return {
+        ok: false,
+        campaignProspectId: next.id,
+        detail: "Sending is paused across the platform for a short while. Nothing is lost — it resumes on its own.",
+      };
+    }
     if (err instanceof RescheduleError) {
       // The limiter declining is the system working. Said as such, with its own
       // word for it, rather than as a failure.
