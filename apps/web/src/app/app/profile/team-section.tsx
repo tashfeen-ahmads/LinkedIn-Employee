@@ -12,7 +12,6 @@ import { PLAN_SEATS, trialLimitEnforced } from "@le/billing";
 /** Members a workspace may hold while the product is free. */
 const FREE_MEMBER_LIMIT = 25;
 import { createInviteToken, inviteExpiry, INVITE_TTL_DAYS } from "@/lib/invitations";
-import { PageNotice } from "@/components/page-notice";
 import { PageHeader, Section, Empty } from "@/components/page";
 import { cannotSend } from "../team/repair";
 import { SITE } from "@/lib/site";
@@ -260,7 +259,6 @@ export async function TeamSection({
   return (
     <>
 
-      <PageNotice error={params.error} notice={params.notice} />
 
       {/*
         Members and invitations are one section, not two.

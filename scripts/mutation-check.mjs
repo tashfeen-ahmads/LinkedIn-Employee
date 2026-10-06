@@ -23,6 +23,22 @@ import { join } from "node:path";
  * sentence about the product rather than a diff.
  */
 const MUTATIONS = [
+  {
+    id: "profile/rebuild-never-under-a-campaign",
+    rule: "Rewriting strategies from Profile is refused once a campaign was built from them",
+    file: "apps/web/src/app/app/profile/page.tsx",
+    from: "  if (campaigns) {\n    redirect(",
+    to: "  if (false) {\n    redirect(",
+    pkg: "@le/web",
+  },
+  {
+    id: "profile/company-name-required",
+    rule: "A company cannot be saved without a name",
+    file: "apps/web/src/lib/profile-business.ts",
+    from: '  if (!companyName) return { ok: false, reason: "Your company needs a name." };',
+    to: "",
+    pkg: "@le/web",
+  },
   /*
    * The operator's kill switch and the support assistant (migration 0041).
    *

@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
-import { callWorker, errorQuery, noticeQuery } from "@/lib/worker";
+import { callWorker, errorQuery, noticeQuery, startedNotice } from "@/lib/worker";
 import { checkCtaUrl, LINKEDIN_LIMITS, describeWorkingHours } from "@le/shared";
 import { TimezoneSelect } from "@/components/timezone-select";
 import {
@@ -20,7 +20,8 @@ import { linkedInState } from "./linkedin-state";
 import { BillingSection } from "./billing-section";
 import { PageHeader, PageGroup, Panel, Section } from "@/components/page";
 import { AllowanceMeter } from "@/components/charts";
-import { mergeStash, readOnboardingStash, stashedAccountAnswers } from "@/lib/onboarding-stash";
+import { hasStrategySource, mergeStash, readOnboardingStash, stashedAccountAnswers } from "@/lib/onboarding-stash";
+import { BUSINESS_DESCRIPTION_MAX, COMPANY_NAME_MAX, readBusinessForm } from "@/lib/profile-business";
 
 /**
  * You, and the account you send from.
@@ -142,7 +143,61 @@ async function saveProfile(formData: FormData) {
   const session = await requireSession();
   const supabase = await createClient();
 
+  /* ---- the business: what onboarding asked first, editable here ---- */
+  // Owners and admins only, and only when the form carried the section: a
+  // member's form does not render it, and a missing field must not read as
+  // "clear the company name".
+  if (formData.has("companyName") && ["owner", "admin"].includes(session.role)) {
+    const business = readBusinessForm(formData);
+    if (!business.ok) redirect(errorQuery("/app/profile?edit=1", business.reason));
+
+    const { data: renamed } = await supabase
+      .from("workspaces")
+      .update({ name: business.companyName })
+      .eq("id", session.workspaceId)
+      .select("onboarding");
+    if (!renamed?.length) redirect(errorQuery("/app/profile?edit=1", "Your company details could not be saved."));
+
+    // What Sage reads next time, kept where onboarding kept it. Replaced as a
+    // whole rather than merged field by field: a website from the old answer
+    // beside a description of the new one describes two businesses.
+    await supabase
+      .from("workspaces")
+      .update({
+        onboarding: mergeStash(renamed[0]?.onboarding, {
+          source: {
+            ...(business.websiteUrl ? { websiteUrl: business.websiteUrl } : {}),
+            ...(business.linkedinCompanyUrl ? { linkedinCompanyUrl: business.linkedinCompanyUrl } : {}),
+            ...(business.description ? { description: business.description } : {}),
+          },
+        }) as never,
+      })
+      .eq("id", session.workspaceId);
+
+    // The name every agent writes under. A workspace with one business
+    // profile is a workspace whose company is that profile, so a corrected
+    // spelling reaches the agents too; with several, each keeps its own name
+    // and is edited on the Strategy page.
+    const { data: businesses } = await supabase
+      .from("business_profiles")
+      .select("id, spec")
+      .eq("workspace_id", session.workspaceId);
+    if (businesses?.length === 1) {
+      const only = businesses[0]!;
+      const spec = (only.spec && typeof only.spec === "object" ? only.spec : {}) as Record<string, unknown>;
+      await supabase
+        .from("business_profiles")
+        .update({ spec: { ...spec, companyName: business.companyName } as never })
+        .eq("id", only.id)
+        .eq("workspace_id", session.workspaceId);
+    }
+  }
+
   /* ---- who you are, and how the agent sounds ---- */
+  const fullName = String(formData.get("fullName") ?? "").trim();
+  if (formData.has("fullName") && !fullName) {
+    redirect(errorQuery("/app/profile?edit=1", "Your name is what a prospect sees the invitation come from, so it cannot be blank."));
+  }
   const bio = String(formData.get("bio") ?? "").trim();
   const timezone = String(formData.get("timezone") ?? "").trim();
   const address = String(formData.get("address") ?? "").trim();
@@ -161,6 +216,7 @@ async function saveProfile(formData: FormData) {
   await supabase
     .from("profiles")
     .update({
+      ...(fullName ? { full_name: fullName.slice(0, 120) } : {}),
       bio: bio || null,
       address: address || null,
       booking_url: bookingUrl,
@@ -293,6 +349,67 @@ async function saveProfile(formData: FormData) {
   );
 }
 
+/**
+ * Sage reads the business again, from the details saved on this page.
+ *
+ * For somebody who set up the wrong company — a website typed for a client, a
+ * name from a previous job. Correcting the details changes what Sage reads
+ * next time; this is the next time. Only while no campaign exists: a campaign
+ * was built from these strategies and copy a person read, and replacing them
+ * under it would leave a list nobody's strategy explains. With campaigns, the
+ * corrected business is added beside it on the Strategy page instead.
+ */
+async function rebuildBusiness() {
+  "use server";
+  const session = await requireSession();
+  if (!["owner", "admin"].includes(session.role)) {
+    redirect(errorQuery("/app/profile", "Only an owner or admin can rebuild the business profile."));
+  }
+  const supabase = await createClient();
+  const [{ count: campaigns }, { data: ws }] = await Promise.all([
+    supabase.from("campaigns").select("id", { count: "exact", head: true }).eq("workspace_id", session.workspaceId),
+    supabase.from("workspaces").select("onboarding").eq("id", session.workspaceId).maybeSingle(),
+  ]);
+  if (campaigns) {
+    redirect(
+      errorQuery(
+        "/app/profile",
+        "Your campaigns were built from the current business profile, so it cannot be replaced here. Add the corrected business on the Strategy page instead.",
+      ),
+    );
+  }
+  const source = readOnboardingStash(ws?.onboarding).source;
+  if (!hasStrategySource(source)) {
+    redirect(
+      errorQuery(
+        "/app/profile?edit=1",
+        "Add a website, a LinkedIn page or a description first — Sage will not invent a business from nothing.",
+      ),
+    );
+  }
+
+  // Strategies hang off the business profile and go with it.
+  const { error } = await supabase.from("business_profiles").delete().eq("workspace_id", session.workspaceId);
+  if (error) redirect(errorQuery("/app/profile", "Your old business profile could not be cleared. Please try again."));
+
+  const queued = await callWorker("/jobs/strategy", {
+    workspaceId: session.workspaceId,
+    userId: session.userId,
+    ...source,
+  });
+  if (!queued.ok) redirect(errorQuery("/app/strategy", `Sage could not be started: ${queued.error}`));
+  revalidatePath("/app/profile");
+  redirect(
+    noticeQuery(
+      "/app/strategy",
+      startedNotice(
+        queued.data,
+        "Sage is reading your business again. New strategies appear on this page in a few minutes, unapproved — nothing is searched for until you approve one.",
+      ),
+    ),
+  );
+}
+
 /** Validated against the runtime's own list rather than a hand-kept one. */
 function isKnownTimezone(value: string): boolean {
   try {
@@ -326,7 +443,7 @@ export default async function ProfilePage({
    * that still falls back to its campaigns rather than to a guess.
    */
   const [{ data: wsRow }, { data: ruleRows }] = await Promise.all([
-    supabase.from("workspaces").select("onboarding").eq("id", session.workspaceId).maybeSingle(),
+    supabase.from("workspaces").select("name, onboarding").eq("id", session.workspaceId).maybeSingle(),
     supabase.from("campaigns").select("rules").eq("workspace_id", session.workspaceId),
   ]);
   const stated = (wsRow?.onboarding as { autonomy?: string } | null)?.autonomy;
@@ -404,6 +521,14 @@ export default async function ProfilePage({
   const hasSalesNavigator = found ? found.has_sales_navigator : (stash.hasSalesNavigator ?? false);
   const editing = params.edit === "1";
   const canManage = ["owner", "admin", "manager"].includes(session.role);
+  // The business half is the workspace's, so it is an owner's or admin's to
+  // change; everybody else reads it.
+  const canEditBusiness = ["owner", "admin"].includes(session.role);
+  const companyName = wsRow?.name ?? session.workspaceName;
+  const source = stash.source;
+  // Rebuilding replaces the strategies, so it is offered only before any
+  // campaign was built from them.
+  const canRebuild = canEditBusiness && (ruleRows ?? []).length === 0 && hasStrategySource(source);
 
   return (
     <>
@@ -412,8 +537,8 @@ export default async function ProfilePage({
         title="Your profile"
         lede={
           editing
-            ? "Change anything here, then save it all at once."
-            : "How the agent writes as you, when it may send, and the LinkedIn account it sends from."
+            ? "Everything you answered during setup. Change anything, then save it all at once."
+            : "Your business, how the agent writes as you, when it may send, and the account it sends from."
         }
         actions={
           editing ? null : (
@@ -451,21 +576,53 @@ export default async function ProfilePage({
       */}
       {editing ? (
         <form action={saveProfile} className="stack-5">
-          {/*
-            One section and one Panel in edit mode too, matching the one it
-            edits. Three headings above one Save read as three forms — somebody
-            changes their bio and their hours, presses the Save under the first
-            group, and has no reason to believe the second was kept. The groups
-            are still there, as labelled blocks inside one card rather than as
-            three cards.
-          */}
-          <Section
-            id="sound"
-            title="You, and how your agent works"
-            description="Everything on this page is one form with one Save. The agent writes in your voice, sends inside your working day, and finishes as much as you let it."
-          >
+          {canEditBusiness ? (
+            <Section
+              id="business"
+              title="Your business"
+              description="What you told us during setup. Sage reads the website, LinkedIn page and description when it writes your strategies."
+            >
+              <Panel>
+                <div className="stack-4">
+                  <label className="field medium">
+                    <span>Company name</span>
+                    <input name="companyName" required maxLength={COMPANY_NAME_MAX} defaultValue={companyName} />
+                  </label>
+                  <label className="field medium">
+                    <span>Website</span>
+                    <input name="websiteUrl" type="url" placeholder="https://acme.com" defaultValue={source.websiteUrl ?? ""} />
+                  </label>
+                  <label className="field medium">
+                    <span>LinkedIn company page</span>
+                    <input
+                      name="linkedinCompanyUrl"
+                      type="url"
+                      placeholder="https://linkedin.com/company/acme"
+                      defaultValue={source.linkedinCompanyUrl ?? ""}
+                    />
+                  </label>
+                  <label className="field">
+                    <span>About the business</span>
+                    <textarea
+                      name="description"
+                      rows={3}
+                      maxLength={BUSINESS_DESCRIPTION_MAX}
+                      defaultValue={source.description ?? ""}
+                      placeholder="Who you sell to, what you charge, what makes you different."
+                    />
+                  </label>
+                </div>
+              </Panel>
+            </Section>
+          ) : null}
+
+          <Section id="sound" title="You" description="Invitations and replies go out under your name, in your voice.">
             <Panel>
               <div className="stack-4">
+                <label className="field medium">
+                  <span>Your name</span>
+                  <input name="fullName" required autoComplete="name" defaultValue={session.fullName ?? ""} />
+                </label>
                 <label className="field">
                   <span>How you would describe yourself to a prospect</span>
                   <textarea
@@ -475,29 +632,10 @@ export default async function ProfilePage({
                     placeholder="Twelve years in logistics ops before this. I care about the boring parts."
                   />
                 </label>
-                {/*
-                  Asked at signup, and this is where it changes. Left off the
-                  profile it was a field somebody typed into once and could
-                  then never see again, let alone correct — which is the same
-                  disease as research that is gathered, scored, stored and then
-                  dropped at the moment it matters.
-                */}
                 <label className="field">
-                  <span>Business address</span>
-                  <textarea
-                    name="address"
-                    rows={2}
-                    autoComplete="street-address"
-                    defaultValue={me?.address ?? ""}
-                  />
-                  <span className="hint">For invoices, and for knowing which rules apply to you.</span>
+                  <span>Business address · optional</span>
+                  <textarea name="address" rows={2} autoComplete="street-address" defaultValue={me?.address ?? ""} />
                 </label>
-                {/*
-                  The link the agent sends when a campaign is asking for a
-                  meeting. Optional: without one the product offers times from
-                  its own calendar, which it can see and protect from
-                  double-booking.
-                */}
                 <label className="field medium">
                   <span>Your scheduling link · optional</span>
                   <input
@@ -507,36 +645,20 @@ export default async function ProfilePage({
                     defaultValue={me?.booking_url ?? ""}
                   />
                   <span className="hint">
-                    Calendly, Cal.com, SavvyCal — whatever you already use. The agent sends this
-                    instead of offering times from here. A booking made there is invisible to this
-                    product, so meetings booked through your own link will not appear in the funnel;
-                    everything up to the reply still does.
+                    Calendly or Cal.com. Meetings booked there do not appear in your funnel.
                   </span>
                 </label>
                 <label className="field medium">
                   <span>Your timezone</span>
-                  {/*
-                    A picker, not a text box. Every sending window, meeting slot
-                    and warm-up day is evaluated in this zone, and a typed "EST"
-                    parses to nothing and falls back to UTC in silence — which is
-                    how this deployment came to invite people in New York at four
-                    in the morning while its screen read "8 to 18".
-                  */}
                   <TimezoneSelect value={me?.timezone} />
                 </label>
               </div>
+            </Panel>
+          </Section>
 
-                <hr className="divider" />
-                <div className="stack-2" id="sending">
-                  <h3>When it may send</h3>
-                  <p className="small muted">
-                    Nothing leaves this account outside these hours, in the timezone above.
-                  </p>
-                </div>
+          <Section id="sending" title="When it may send" description="Nothing leaves your account outside these hours, in your timezone.">
+            <Panel>
               <div className="stack-4">
-                <p className="small">
-                  <strong>{describeWorkingHours(hours, me?.timezone ?? "UTC")}</strong>
-                </p>
                 <div className="form-row">
                   <label className="field compact">
                     <span>From</span>
@@ -560,57 +682,36 @@ export default async function ProfilePage({
                   </div>
                 </div>
                 <label className="small check">
-                  <input
-                    type="checkbox"
-                    name="hasSalesNavigator"
-                    defaultChecked={hasSalesNavigator}
-                  />
+                  <input type="checkbox" name="hasSalesNavigator" defaultChecked={hasSalesNavigator} />
                   <span>
                     This account has Sales Navigator
                     <span className="tiny subtle hint">
-                      Without it, prospect search cannot filter on seniority or company size, and
-                      campaigns say so before you launch them. With it, the full customer profile is
-                      used.
+                      Without it, search cannot filter on seniority or company size.
                     </span>
                   </span>
                 </label>
               </div>
+            </Panel>
+          </Section>
 
-              {canManage ? (
-                <>
-                <hr className="divider" />
-                <div className="stack-2" id="autonomy">
-                  <h3>How much the agent finishes on its own</h3>
-                  <p className="small muted">
-                    A hold is not a pause, it is a full stop. A prospect who replies on a Friday and
-                    is never answered is a warm lead lost, and nothing on any screen explains why.
-                  </p>
-                </div>
+          {canManage ? (
+            <Section id="autonomy" title="When a reply arrives">
+              <Panel>
                 <label className="field">
-                  <span>When a reply arrives</span>
+                  <span className="sr-only">When a reply arrives</span>
                   <select name="autonomy" defaultValue={autonomy}>
                     <option value="autonomous">The agent answers and books, on its own</option>
                     <option value="supervised">Hold anything uncertain for me to read first</option>
                   </select>
                   <span className="hint">
-                    Either way the agent only ever states facts from your knowledge base, never sends
-                    a link it was not given, and stops the moment somebody asks not to be contacted.
-                    Two things always wait for you: a prospect who asks to speak to a person, and a
-                    message the agent did not understand. You can still take over any conversation by
-                    hand from the Inbox.
+                    Either way, a prospect who asks for a person and a message the agent did not
+                    understand always wait for you, and an opt-out stops everything.
                   </span>
                 </label>
-                </>
-              ) : null}
-            </Panel>
-          </Section>
+              </Panel>
+            </Section>
+          ) : null}
 
-          {/*
-            One Save, at the end, for everything above it. Sticky, because the
-            form is longer than a screen and a Save you have to scroll for is a
-            Save people forget — which is the failure this whole change is
-            about.
-          */}
           <div className="edit-bar">
             <SubmitButton pendingLabel="Saving…">Save changes</SubmitButton>
             <Link className="btn secondary" href="/app/profile">
@@ -620,21 +721,59 @@ export default async function ProfilePage({
         </form>
       ) : (
         <>
-          {/*
-            One section, not three.
-            "How you sound", "When it may send" and "How much the agent
-            finishes on its own" were three cards, three headings and three
-            Edit buttons pointing at one form with one Save — three doors into
-            the same room, and a page that reads as a pile of boxes rather than
-            a profile. They are all one answer to one question: what the agent
-            is, working as you. The anchors stay on the groups inside, so every
-            existing link into #sending or #autonomy still lands in the right
-            place.
-          */}
+          <Section
+            id="business"
+            title="Your business"
+            action={
+              canEditBusiness ? (
+                <Link className="btn secondary small" href="/app/profile?edit=1#business">
+                  Edit
+                </Link>
+              ) : undefined
+            }
+          >
+            <Panel>
+              <dl className="facts">
+                <Fact label="Company name">{companyName}</Fact>
+                <Fact label="Website" wide>
+                  {source.websiteUrl ? (
+                    <a href={source.websiteUrl} target="_blank" rel="noreferrer">
+                      {source.websiteUrl}
+                    </a>
+                  ) : (
+                    <span className="subtle">Not set</span>
+                  )}
+                </Fact>
+                <Fact label="LinkedIn company page" wide>
+                  {source.linkedinCompanyUrl ? (
+                    <a href={source.linkedinCompanyUrl} target="_blank" rel="noreferrer">
+                      {source.linkedinCompanyUrl}
+                    </a>
+                  ) : (
+                    <span className="subtle">Not set</span>
+                  )}
+                </Fact>
+                <Fact label="About the business" wide>
+                  {source.description || <span className="subtle">Not set</span>}
+                </Fact>
+              </dl>
+              {canRebuild ? (
+                <form action={rebuildBusiness} className="stack-2">
+                  <p className="small muted">
+                    Changed the website or description? Sage can read your business again and write
+                    new strategies. Your current strategies are replaced; nothing has been sent yet.
+                  </p>
+                  <SubmitButton className="btn secondary small" pendingLabel="Starting…">
+                    Rewrite my strategies from these details
+                  </SubmitButton>
+                </form>
+              ) : null}
+            </Panel>
+          </Section>
+
           <Section
             id="sound"
             title="You, and how your agent works"
-            description="Everything the agent writes as, sends inside, and decides on its own. One Edit, one Save."
             action={
               <Link className="btn secondary small" href="/app/profile?edit=1#sound">
                 Edit
@@ -649,42 +788,29 @@ export default async function ProfilePage({
                 </Fact>
                 <Fact label="Role">{session.role}</Fact>
                 <Fact label="How you describe yourself" wide>
-                  {me?.bio || <span className="subtle">Nothing yet — the agent falls back to your business profile.</span>}
+                  {me?.bio || <span className="subtle">Nothing yet</span>}
                 </Fact>
-                {/* A URL has no spaces in it, so in a third of a row it breaks
-                    wherever the column happens to end — "…/15mi" above a lone
-                    "n". A whole row is the width the value actually needs. */}
                 <Fact label="Your scheduling link" wide>
                   {me?.booking_url ? (
                     <a href={me.booking_url} target="_blank" rel="noreferrer">
                       {me.booking_url}
                     </a>
                   ) : (
-                    <span className="subtle">None — the agent offers times from this product&rsquo;s own calendar.</span>
+                    <span className="subtle">None — times are offered from this product&rsquo;s calendar.</span>
                   )}
                 </Fact>
                 <Fact label="Timezone">{me?.timezone || "UTC"}</Fact>
                 <Fact label="Business address" wide>
                   {me?.address || <span className="subtle">Not set</span>}
                 </Fact>
-
                 <Fact label="Sending hours" id="sending" wide>
                   {describeWorkingHours(hours, me?.timezone ?? "UTC")}
                 </Fact>
-                <Fact label="Sales Navigator" wide>
-                  {hasSalesNavigator
-                    ? "Yes — the full customer profile is used in search."
-                    : "No — search cannot filter on seniority or company size."}
-                </Fact>
-
+                <Fact label="Sales Navigator">{hasSalesNavigator ? "Yes" : "No"}</Fact>
                 <Fact label="When a reply arrives" id="autonomy" wide>
                   {autonomy === "autonomous"
                     ? "The agent answers and books on its own."
                     : "Anything uncertain is held for you to read first."}
-                </Fact>
-                <Fact label="Always held for you" wide>
-                  A prospect who asks to speak to a person, and a message the agent did not
-                  understand. An opt-out stops everything, on either setting.
                 </Fact>
               </dl>
             </Panel>
@@ -857,7 +983,7 @@ export default async function ProfilePage({
         <TeamSection searchParams={searchParams} />
       </PageGroup>
       <PageGroup id="billing">
-        <BillingSection searchParams={searchParams} />
+        <BillingSection />
       </PageGroup>
     </>
   );
