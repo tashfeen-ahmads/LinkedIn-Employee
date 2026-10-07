@@ -24,6 +24,22 @@ import { join } from "node:path";
  */
 const MUTATIONS = [
   {
+    id: "recovery/only-to-the-address-typed",
+    rule: "A recovery email goes only to the address typed (an alias of the same inbox), never to another account's",
+    file: "apps/worker/src/jobs/account-recovery.ts",
+    from: '  const to = id.kind === "email" ? id.email : (accounts[0]?.email ?? null);',
+    to: "  const to = accounts[0]?.email ?? null;",
+    pkg: "@le/worker",
+  },
+  {
+    id: "recovery/aliases-are-one-inbox",
+    rule: "Every Proton spelling of an address finds the same account",
+    file: "packages/shared/src/accounts.ts",
+    from: "    return PROTON_DOMAINS.map((d) => `${local}@${d}`);",
+    to: "    return [email];",
+    pkg: "@le/shared",
+  },
+  {
     id: "profile/rebuild-never-under-a-campaign",
     rule: "Rewriting strategies from Profile is refused once a campaign was built from them",
     file: "apps/web/src/app/app/profile/page.tsx",

@@ -38,6 +38,7 @@ import { sendAccountEmails } from "./jobs/lifecycle.js";
 import { isPlatformAdmin, requestAnnouncementSend, saveAnnouncement, sendAnnouncementTest } from "./jobs/announcements.js";
 import { AdminControlSchema, queueStats, runAdminControl } from "./jobs/admin-control.js";
 import { answerSupportTicket } from "./jobs/support.js";
+import { emailForLogin, sendRecovery } from "./jobs/account-recovery.js";
 import { collectIssues, recentFailures, type QueueCounts } from "./jobs/issues.js";
 import { recordEvent } from "./context.js";
 
@@ -414,6 +415,34 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
       .is("marketing_opt_out_at", null);
     if (error) return c.json({ error: "We could not record that just now. Please try the link again." }, 500);
     return c.json({ ok: true });
+  });
+
+  /*
+   * Getting back in. Under /account rather than /jobs because none of it needs
+   * the queue — somebody locked out at the moment Redis is having a bad minute
+   * must still get their email. Same shared secret.
+   *
+   * `/account/recover` answers the same way whether or not an account exists:
+   * a reset form that says "no such address" is a way to learn who is a
+   * customer.
+   */
+  app.use("/account/*", requireInternalAuth(ctx.env.INTERNAL_API_SECRET));
+  app.post("/account/recover", async (c) => {
+    const body = (await c.req.json().catch(() => null)) as { identifier?: unknown; kind?: unknown } | null;
+    const identifier = typeof body?.identifier === "string" ? body.identifier.slice(0, 254) : "";
+    const kind = body?.kind === "signin" ? "signin" : "password";
+    try {
+      const outcome = await sendRecovery(ctx, { identifier, kind });
+      console.log("account recovery", { kind, outcome });
+    } catch (err) {
+      console.error("account recovery failed", { reason: (err as Error)?.message });
+    }
+    return c.json({ ok: true });
+  });
+  app.post("/account/resolve", async (c) => {
+    const body = (await c.req.json().catch(() => null)) as { identifier?: unknown } | null;
+    const identifier = typeof body?.identifier === "string" ? body.identifier : "";
+    return c.json({ email: await emailForLogin(ctx, identifier) });
   });
 
   /*

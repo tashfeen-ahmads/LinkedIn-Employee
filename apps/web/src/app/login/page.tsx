@@ -90,8 +90,8 @@ export default async function LoginPage({
         <form action="/auth/sign-in" method="post" className="card">
           {params.invite ? <input type="hidden" name="invite" value={params.invite} /> : null}
           <label className="field">
-            <span>Work email</span>
-            <input type="email" name="email" required autoComplete="username" placeholder="you@company.com" />
+            <span>Email or username</span>
+            <input name="email" required autoComplete="username" placeholder="you@company.com" />
           </label>
           <PasswordField name="password" label="Password" autoComplete="current-password" />
           <PostButton className="btn block" pendingLabel="Signing in…">
@@ -100,13 +100,23 @@ export default async function LoginPage({
         </form>
 
         {/*
+          The two ways people get locked out, named where they are standing.
+          Every login complaint so far was one of these: a forgotten password,
+          or a different address from the one the workspace was set up with —
+          which signs in fine and then asks them to start over.
+        */}
+        <p className="small">
+          <Link href="/forgot">Forgot password?</Link> · <Link href="/forgot?kind=signin">Forgot which email you used?</Link>
+        </p>
+
+        {/*
           Kept, not replaced. It is the way back in for anybody who has
           forgotten a password, and the only way in for the accounts made
           before passwords existed — several of which are real people using
           this today.
         */}
         <details className="auth-alt">
-          <summary className="small muted">Forgotten it, or never set one?</summary>
+          <summary className="small muted">Never set a password? Email me a sign-in link</summary>
           <form action={sendMagicLink} className="card">
             {params.invite ? <input type="hidden" name="invite" value={params.invite} /> : null}
             <label className="field">

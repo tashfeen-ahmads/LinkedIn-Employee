@@ -2,6 +2,8 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase-server";
 import { requirePlatformAdmin, ago } from "@/lib/admin";
 import { PageHeader, Section, Empty } from "@/components/page";
+import { PageNotice } from "@/components/page-notice";
+import { ControlButton } from "@/components/admin-control";
 
 export const dynamic = "force-dynamic";
 
@@ -13,8 +15,12 @@ export const dynamic = "force-dynamic";
  * they are asked — somebody who signed up a week ago and never came back is
  * not having a problem with a campaign.
  */
-export default async function AdminUsersPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
-  const { q } = await searchParams;
+export default async function AdminUsersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string; error?: string; notice?: string }>;
+}) {
+  const { q, error, notice } = await searchParams;
   await requirePlatformAdmin();
   const supabase = await createClient();
 
@@ -47,6 +53,7 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: P
         lede={`${users?.length ?? 0} people across ${workspaces?.length ?? 0} workspaces, newest first.`}
       />
 
+      <PageNotice error={error} notice={notice} />
       <Section title="Find someone">
         <form method="get" className="form-row">
           <label className="field">
@@ -72,6 +79,7 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: P
                   <th>LinkedIn</th>
                   <th>Signed up</th>
                   <th>Last signed in</th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
@@ -112,6 +120,16 @@ export default async function AdminUsersPage({ searchParams }: { searchParams: P
                       </td>
                       <td className="small subtle">{new Date(u.created_at).toLocaleDateString()}</td>
                       <td className="small subtle">{ago(u.last_sign_in_at)}</td>
+                      <td>
+                        <ControlButton
+                          op="user-password-reset"
+                          fields={{ targetUserId: u.user_id }}
+                          back="/admin/users"
+                          label="Email reset link"
+                          pendingLabel="Sending…"
+                          tone="ghost"
+                        />
+                      </td>
                     </tr>
                   );
                 })}

@@ -47,5 +47,5 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   // Only the screens that hold a session. Marketing pages stay off this path.
-  matcher: ["/app/:path*", "/admin/:path*", "/onboarding/:path*", "/invite/:path*"],
+  matcher: ["/app/:path*", "/admin/:path*", "/onboarding/:path*", "/invite/:path*", "/reset-password"],
 };

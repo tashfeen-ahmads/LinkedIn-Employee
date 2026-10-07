@@ -5,7 +5,7 @@
  * the result again with its own schema; this only decides which fields a form
  * may send, so a hidden input cannot smuggle anything else along.
  */
-export const CONTROL_FIELDS = ["reason", "ticketId", "campaignId", "workspaceId", "accountId", "task", "queue"] as const;
+export const CONTROL_FIELDS = ["reason", "ticketId", "campaignId", "workspaceId", "accountId", "task", "queue", "targetUserId"] as const;
 
 export type ControlInput = { op: string } & Partial<Record<(typeof CONTROL_FIELDS)[number], string>> & { on?: boolean };
 

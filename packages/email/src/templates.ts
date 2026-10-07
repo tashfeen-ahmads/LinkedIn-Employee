@@ -447,3 +447,114 @@ export function weeklyReportEmail(input: WeeklyReportInput): EmailMessage {
     text: textLines.join("\n"),
   };
 }
+
+export interface RecoveryAccount {
+  email: string;
+  /** The workspace this sign-in opens, or null for one that never finished setting up. */
+  workspace: string | null;
+}
+
+export interface PasswordResetInput {
+  to: string;
+  appUrl: string;
+  name: string | null;
+  /** One link per account found for this address, each signing in as that account. */
+  links: Array<RecoveryAccount & { url: string }>;
+}
+
+/**
+ * A link to choose a new password.
+ *
+ * Several links when the address has several accounts behind it — the Proton
+ * aliases are one inbox and can be three sign-ins, and the one with the
+ * workspace is the one the person is looking for, so it is named as such.
+ */
+export function passwordResetEmail(input: PasswordResetInput): EmailMessage {
+  const first = firstName(input.name);
+  const many = input.links.length > 1;
+  const describe = (a: RecoveryAccount) =>
+    a.workspace ? `${a.email} — your ${a.workspace} workspace` : `${a.email} — not set up yet`;
+  const ordered = [...input.links].sort((a, b) => Number(Boolean(b.workspace)) - Number(Boolean(a.workspace)));
+  const primary = ordered[0]!;
+  const lines = [
+    first ? `Hi ${first},` : "Hi,",
+    many
+      ? "This address has more than one sign-in. Each link below sets a new password for that one; the one with your workspace is first."
+      : "Somebody asked to reset the password for this address. If it was you, choose a new one with the button below.",
+  ];
+  return {
+    to: input.to,
+    subject: `Reset your ${BRAND.name} password`,
+    html: layout({
+      title: "Choose a new password",
+      preheader: `A link to reset your ${BRAND.name} password. It works once and expires in an hour.`,
+      appUrl: input.appUrl,
+      body: [
+        ...lines.map(paragraph),
+        many
+          ? ordered
+              .map(
+                (l) =>
+                  `<p style="margin:0 0 12px;font-size:16px;line-height:24px;"><a href="${escapeHtml(l.url)}">${escapeHtml(describe(l))}</a></p>`,
+              )
+              .join("")
+          : "",
+      ].join(""),
+      cta: { label: many ? `Reset ${primary.email}` : "Choose a new password", url: primary.url },
+      after: note(
+        "Each link works once and expires in an hour. If you did not ask for this, ignore it — your password has not changed.",
+      ),
+      footer: `You are receiving this because a password reset was requested for ${escapeHtml(input.to)} on ${escapeHtml(
+        BRAND.name,
+      )}.`,
+    }),
+    text: [
+      ...lines,
+      "",
+      ...ordered.map((l) => `${describe(l)}:\n${l.url}`),
+      "",
+      "Each link works once and expires in an hour. If you did not ask for this, ignore it.",
+    ].join("\n"),
+  };
+}
+
+export interface SignInReminderInput {
+  to: string;
+  appUrl: string;
+  name: string | null;
+  accounts: Array<RecoveryAccount & { username: string | null }>;
+}
+
+/** Which address — and username, if any — signs in to which workspace. */
+export function signInReminderEmail(input: SignInReminderInput): EmailMessage {
+  const first = firstName(input.name);
+  const ordered = [...input.accounts].sort((a, b) => Number(Boolean(b.workspace)) - Number(Boolean(a.workspace)));
+  const rows = ordered.map(
+    (a) =>
+      `${a.email}${a.username ? ` (username ${a.username})` : ""} — ${
+        a.workspace ? `signs in to ${a.workspace}` : "not set up yet"
+      }`,
+  );
+  const lines = [
+    first ? `Hi ${first},` : "Hi,",
+    ordered.length > 1
+      ? "You have more than one sign-in. Use the one with your workspace — signing in with another starts a new, empty setup."
+      : "Here is how you sign in:",
+  ];
+  return {
+    to: input.to,
+    subject: `How you sign in to ${BRAND.name}`,
+    html: layout({
+      title: "Your sign-in",
+      preheader: "The email address that opens your workspace.",
+      appUrl: input.appUrl,
+      body: [...lines.map(paragraph), list(rows)].join(""),
+      cta: { label: "Sign in", url: `${input.appUrl}/login` },
+      after: note(`Forgot the password too? Use "Forgot password" on the sign-in page.`),
+      footer: `You are receiving this because somebody asked which sign-in belongs to ${escapeHtml(input.to)} on ${escapeHtml(
+        BRAND.name,
+      )}.`,
+    }),
+    text: [...lines, "", ...rows.map((r) => `- ${r}`), "", `Sign in: ${input.appUrl}/login`].join("\n"),
+  };
+}

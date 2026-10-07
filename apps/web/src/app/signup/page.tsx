@@ -289,7 +289,8 @@ export default async function SignupPage({
         </form>
 
         <p className="muted small">
-          Already have an account? <Link href="/login">Sign in</Link>
+          Already have an account? <Link href="/login">Sign in</Link> ·{" "}
+          <Link href="/forgot">Forgot password?</Link>
         </p>
       </main>
       <AuthAside variant="signup" />

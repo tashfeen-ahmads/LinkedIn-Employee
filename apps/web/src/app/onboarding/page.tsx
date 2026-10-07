@@ -9,7 +9,16 @@ import { StrategyStatus } from "@/components/strategy-status";
 import { StrategyDetailsForm, StrategyRetryButton } from "@/components/strategy-retry";
 import { readStrategyState } from "@/lib/strategy-state";
 import { hasStrategySource, readOnboardingStash } from "@/lib/onboarding-stash";
+import { BRAND } from "@le/shared";
 
+
+/** Out of the empty account, and straight to "which email did I use". */
+async function signOutToFind() {
+  "use server";
+  const supabase = await createClient();
+  await supabase.auth.signOut();
+  redirect("/forgot?kind=signin");
+}
 
 export default async function OnboardingPage({
   searchParams,
@@ -115,6 +124,26 @@ export default async function OnboardingPage({
       </header>
 
       {params.error ? <div className="notice danger">{params.error}</div> : null}
+
+      {/*
+        The page somebody lands on when they sign in with a different address
+        from the one their workspace was set up with: the sign-in works, and
+        they are asked to start over. Said here, before they do.
+      */}
+      <div className="notice" role="note">
+        <p>
+          <strong>Set up {BRAND.name} before?</strong> You are signed in as {user.email}, which has no
+          workspace yet. If you used a different email, sign out and sign in with that one — your
+          workspace is waiting there.
+        </p>
+        <div className="cluster">
+          <form action={signOutToFind}>
+            <button className="btn secondary small" type="submit">
+              Sign out and find my account
+            </button>
+          </form>
+        </div>
+      </div>
 
       {/*
         One form, in sections, rather than a wizard.

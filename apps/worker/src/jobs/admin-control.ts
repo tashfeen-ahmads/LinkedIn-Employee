@@ -6,6 +6,7 @@ import { recoverAccounts } from "../accounts.js";
 import { answerSupportTicket, sweepSupportTickets } from "./support.js";
 import { startPendingSearches } from "./pending-searches.js";
 import { unstickProspects } from "./unstick.js";
+import { sendRecovery } from "./account-recovery.js";
 
 /**
  * What an operator can do from the console without opening a SQL editor.
@@ -32,6 +33,7 @@ export const AdminControlSchema = z.discriminatedUnion("op", [
   z.object({ op: z.literal("workspace-pause"), workspaceId: z.string().uuid() }),
   z.object({ op: z.literal("account-clear-hold"), accountId: z.string().uuid() }),
   z.object({ op: z.literal("accounts-recover") }),
+  z.object({ op: z.literal("user-password-reset"), targetUserId: z.string().uuid() }),
   z.object({
     op: z.literal("run-task"),
     task: z.enum(["tick", "acceptance", "inbound-poll", "posts", "lifecycle", "nightly", "pending-searches", "unstick"]),
@@ -185,6 +187,19 @@ export async function runAdminControl(
         ok: true,
         detail: "Hold cleared. If LinkedIn is still refusing, the next refusal puts it straight back — that is the safety working.",
       };
+    }
+    case "user-password-reset": {
+      const { data: person } = await db.from("profiles").select("email").eq("id", control.targetUserId).maybeSingle();
+      if (!person?.email) return { ok: false, error: "No such person." };
+      const outcome = await sendRecovery(ctx, { identifier: String(person.email), kind: "password" });
+      const said: Record<typeof outcome, ControlResult> = {
+        sent: { ok: true, detail: `A password reset link was emailed to ${person.email}.` },
+        throttled: { ok: true, detail: `A reset link already went to ${person.email} in the last ten minutes.` },
+        no_account: { ok: false, error: "That person has no sign-in to reset." },
+        no_provider: { ok: false, error: "Email is switched off on this deployment." },
+        failed: { ok: false, error: "The reset link could not be made or sent. Try again in a minute." },
+      };
+      return said[outcome];
     }
     case "accounts-recover": {
       const run = await recoverAccounts(db, ctx.linkedin);

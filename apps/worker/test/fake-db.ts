@@ -4,7 +4,7 @@ import type { Db } from "@le/db";
 type Row = Record<string, unknown>;
 
 interface Filter {
-  kind: "eq" | "neq" | "in" | "not-in" | "is" | "lt" | "lte" | "gte";
+  kind: "eq" | "neq" | "in" | "not-in" | "is" | "lt" | "lte" | "gte" | "ilike";
   column: string;
   value: unknown;
 }
@@ -161,6 +161,12 @@ class QueryBuilder implements PromiseLike<{ data: Row[] | null; error: null | { 
 
   eq(column: string, value: unknown): this {
     this.filters.push({ kind: "eq", column, value });
+    return this;
+  }
+
+  /** Postgres `ilike`: `%` and `_` are wildcards, a backslash escapes, case is ignored. */
+  ilike(column: string, pattern: string): this {
+    this.filters.push({ kind: "ilike", column, value: pattern });
     return this;
   }
 
@@ -346,6 +352,19 @@ function matches(row: Row, filter: Filter): boolean {
         : filter.value === null
           ? value === null || value === undefined
           : value === filter.value;
+    case "ilike": {
+      if (value === null || value === undefined) return false;
+      let source = "";
+      const pattern = String(filter.value);
+      for (let i = 0; i < pattern.length; i += 1) {
+        const c = pattern[i]!;
+        if (c === "\\" && i + 1 < pattern.length) source += pattern[++i]!.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        else if (c === "%") source += ".*";
+        else if (c === "_") source += ".";
+        else source += c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      }
+      return new RegExp(`^${source}$`, "is").test(String(value));
+    }
     case "neq":
       return value !== null && value !== undefined && value !== filter.value;
     case "lt":
