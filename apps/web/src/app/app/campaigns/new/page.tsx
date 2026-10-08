@@ -11,7 +11,7 @@ import {
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { errorQuery, noticeQuery } from "@/lib/worker";
-import { PageNotice, type NoticeParams } from "@/components/page-notice";
+import { PageNotice } from "@/components/page-notice";
 import { PageHeader, Section, Empty } from "@/components/page";
 import { SubmitButton } from "@/components/submit-button";
 import { SelectAll } from "@/components/select-all";
@@ -37,11 +37,41 @@ import { SelectAll } from "@/components/select-all";
  * can legitimately queue the same person.
  */
 
+/**
+ * Back to this form with the answers it was given, and the reason it refused.
+ *
+ * A refusal used to redirect to the bare page, so a missed tick on the list
+ * cost somebody the name, the agent, the goal and the wait they had already
+ * chosen. The choices travel back in the query string and become the form's
+ * defaults; the prospect ticks do not, because two hundred ids is not a URL.
+ */
+function refuse(formData: FormData, message: string): never {
+  const keep = new URLSearchParams();
+  for (const key of ["name", "agent", "cta", "account", "follow_up_days"]) {
+    const value = String(formData.get(key) ?? "").trim();
+    if (value) keep.set(key, value.slice(0, 200));
+  }
+  keep.set("warm_up", formData.get("warm_up") === "on" ? "on" : "off");
+  keep.set("error", message);
+  redirect(`/app/campaigns/new?${keep.toString()}`);
+}
+
+/**
+ * What a database refusal says to the person who caused it.
+ *
+ * Postgres error text ("violates foreign key constraint …") was handed to the
+ * banner verbatim. It names our tables to a customer and tells them nothing
+ * they can do, so it goes to the log and a sentence goes to the screen.
+ */
+function failed(stage: string, error: { message?: string } | null): string {
+  if (error?.message) console.error(`[campaigns/new] ${stage}: ${error.message}`);
+  return "The campaign could not be saved. Nothing was sent — try again, and tell us through Support if it keeps happening.";
+}
+
 async function createCampaign(formData: FormData) {
   "use server";
   const session = await requireSession();
   const supabase = await createClient();
-  const here = "/app/campaigns/new";
 
   const name = String(formData.get("name") ?? "").trim();
   const agentId = String(formData.get("agent") ?? "").trim();
@@ -51,11 +81,11 @@ async function createCampaign(formData: FormData) {
   const warmUp = formData.get("warm_up") === "on";
   const chosen = formData.getAll("prospect").map(String).filter(Boolean);
 
-  if (!name) redirect(errorQuery(here, "Give the campaign a name you will recognise."));
-  if (!accountId) redirect(errorQuery(here, "Connect a LinkedIn account before building a campaign."));
-  if (chosen.length === 0) redirect(errorQuery(here, "Pick at least one person for this campaign."));
+  if (!name) refuse(formData, "Give the campaign a name you will recognise.");
+  if (!accountId) refuse(formData, "Connect a LinkedIn account before building a campaign.");
+  if (chosen.length === 0) refuse(formData, "Pick at least one person for this campaign.");
   if (!Number.isFinite(followUpDays) || followUpDays < 1 || followUpDays > 30) {
-    redirect(errorQuery(here, "The follow-up wait has to be between 1 and 30 days."));
+    refuse(formData, "The follow-up wait has to be between 1 and 30 days.");
   }
 
   // The agent's own opener is the campaign's template note: the line every
@@ -126,9 +156,7 @@ async function createCampaign(formData: FormData) {
     .select("id")
     .single();
 
-  if (error || !campaign) {
-    redirect(errorQuery(here, error?.message ?? "The campaign could not be created."));
-  }
+  if (error || !campaign) refuse(formData, failed("insert campaign", error));
 
   // Both steps in one statement. A campaign holding step 1 and not step 2
   // sends a follow-up and then silently stops, and a partial sequence is not a
@@ -156,7 +184,17 @@ async function createCampaign(formData: FormData) {
       message: `{{pitch}}`,
     },
   ]);
-  if (stepsError) redirect(errorQuery(here, stepsError.message));
+  if (stepsError) {
+    // The draft exists without its messages; send them to it rather than back
+    // here, where pressing Create again would make a second one.
+    failed("insert steps", stepsError);
+    redirect(
+      errorQuery(
+        `/app/campaigns/${campaign.id}`,
+        "The campaign was created as a draft, but its messages could not be saved. Nothing was sent — write them here before launching.",
+      ),
+    );
+  }
 
   const { error: linkError } = await supabase.from("campaign_prospects").insert(
     chosen.map((prospectId) => ({
@@ -170,7 +208,15 @@ async function createCampaign(formData: FormData) {
       invite_note: null,
     })),
   );
-  if (linkError) redirect(errorQuery(here, linkError.message));
+  if (linkError) {
+    failed("insert prospects", linkError);
+    redirect(
+      errorQuery(
+        `/app/campaigns/${campaign.id}`,
+        "The campaign was created as a draft, but the people you chose could not be added to it. Nothing was sent.",
+      ),
+    );
+  }
 
   redirect(
     noticeQuery(
@@ -183,7 +229,17 @@ async function createCampaign(formData: FormData) {
 export default async function NewCampaignPage({
   searchParams,
 }: {
-  searchParams: Promise<NoticeParams>;
+  searchParams: Promise<{
+    error?: string;
+    notice?: string;
+    // What a refused submit sent back, so nothing has to be chosen twice.
+    name?: string;
+    agent?: string;
+    cta?: string;
+    account?: string;
+    follow_up_days?: string;
+    warm_up?: string;
+  }>;
 }) {
   const params = await searchParams;
   const session = await requireSession();
@@ -252,11 +308,16 @@ export default async function NewCampaignPage({
           <Section title="What it is" description="A name for you, and who it sends from.">
             <label className="field">
               <span>Campaign name</span>
-              <input name="name" maxLength={120} required />
+              <input name="name" maxLength={120} required autoComplete="off" defaultValue={params.name ?? ""} />
             </label>
             <label className="field">
               <span>Sends from</span>
-              <select name="account" defaultValue={(accounts ?? [])[0]?.id}>
+              <select
+                name="account"
+                defaultValue={
+                  (accounts ?? []).some((a) => a.id === params.account) ? params.account : (accounts ?? [])[0]?.id
+                }
+              >
                 {(accounts ?? []).map((account) => (
                   <option key={account.id} value={account.id}>
                     {account.display_name ?? "Your LinkedIn account"}
@@ -272,7 +333,7 @@ export default async function NewCampaignPage({
           >
             <label className="field">
               <span>Call to action</span>
-              <select name="cta" defaultValue="">
+              <select name="cta" defaultValue={(ctas ?? []).some((c) => c.id === params.cta) ? params.cta : ""}>
                 <option value="">Just start a conversation</option>
                 {(ctas ?? []).map((cta) => (
                   <option key={cta.id} value={cta.id}>
@@ -294,7 +355,12 @@ export default async function NewCampaignPage({
             ) : (
               <label className="field">
                 <span>Agent</span>
-                <select name="agent" defaultValue={defaultAgent?.id ?? ""}>
+                <select
+                  name="agent"
+                  defaultValue={
+                    (agents ?? []).some((a) => a.id === params.agent) ? params.agent : (defaultAgent?.id ?? "")
+                  }
+                >
                   {(agents ?? []).map((agent) => (
                     <option key={agent.id} value={agent.id}>
                       {agent.name}
@@ -311,7 +377,7 @@ export default async function NewCampaignPage({
             description="Look at each person's profile a few hours before asking to connect."
           >
             <label className="inline-check">
-              <input type="checkbox" name="warm_up" defaultChecked />
+              <input type="checkbox" name="warm_up" defaultChecked={params.warm_up !== "off"} />
               <span>Warm each prospect up first</span>
             </label>
             <p className="small muted">
@@ -338,7 +404,14 @@ export default async function NewCampaignPage({
             </p>
             <label className="field">
               <span>Days before message 2</span>
-              <input name="follow_up_days" type="number" min={1} max={30} defaultValue={3} />
+              <input
+                name="follow_up_days"
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={30}
+                defaultValue={Number(params.follow_up_days) || 3}
+              />
               <span className="small muted">
                 It stops on its own if they reply or opt out.
               </span>
@@ -347,7 +420,11 @@ export default async function NewCampaignPage({
 
           <Section
             title="Who is on it"
-            description="Only people this workspace has never contacted. Ranked by fit."
+            description={
+              (prospects ?? []).length >= 200
+                ? "Only people this workspace has never contacted. Ranked by fit — the 200 best fits are listed here."
+                : "Only people this workspace has never contacted. Ranked by fit."
+            }
             action={<SelectAll name="prospect" label={`Select all ${(prospects ?? []).length}`} />}
           >
             <div className="scroll-box">
@@ -359,14 +436,21 @@ export default async function NewCampaignPage({
                     </th>
                     <th scope="col">Name</th>
                     <th scope="col">Company</th>
-                    <th scope="col">Fit</th>
+                    <th scope="col" className="num">Fit</th>
                   </tr>
                 </thead>
                 <tbody>
                   {(prospects ?? []).map((prospect) => (
                     <tr key={prospect.id}>
                       <td>
-                        <input type="checkbox" name="prospect" value={prospect.id} />
+                        <input
+                          type="checkbox"
+                          name="prospect"
+                          value={prospect.id}
+                          aria-label={`Include ${
+                            [prospect.first_name, prospect.last_name].filter(Boolean).join(" ") || "this person"
+                          }`}
+                        />
                       </td>
                       <td>
                         {[prospect.first_name, prospect.last_name].filter(Boolean).join(" ")}

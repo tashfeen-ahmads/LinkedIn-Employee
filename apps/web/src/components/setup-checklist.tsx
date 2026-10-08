@@ -88,6 +88,9 @@ export function SetupChecklist({ state }: { state: OnboardingState }) {
               <span className="checklist-tick" aria-hidden="true">
                 {complete ? "✓" : ""}
               </span>
+              {/* The tick is decoration; the state is said in words, or a
+                  screen reader hears six rows with nothing to tell them apart. */}
+              <span className="sr-only">{complete ? "Done: " : "To do: "}</span>
               <div className="stack-1 grow">
                 <div className="cluster">
                   <span className="small">{step.label}</span>
@@ -100,7 +103,11 @@ export function SetupChecklist({ state }: { state: OnboardingState }) {
                   doubling as a link. A row that was both a sentence and a
                   control never said which part to click. */}
               {complete ? null : (
-                <Link href={step.href} className="btn ghost small checklist-go">
+                <Link
+                  href={step.href}
+                  className="btn ghost small checklist-go"
+                  aria-label={`Open ${step.label}`}
+                >
                   Open
                 </Link>
               )}

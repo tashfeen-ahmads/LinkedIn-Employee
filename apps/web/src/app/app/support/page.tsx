@@ -8,6 +8,8 @@ import { PageNotice, type NoticeParams } from "@/components/page-notice";
 import { SubmitButton } from "@/components/submit-button";
 import { readSetupState } from "@/lib/setup-state";
 import { BOOT_BEAT, BRAND, PACING_LOOP, PACING_STALE_MS } from "@le/shared";
+import { formatDateTime, isoAttr } from "@/lib/format";
+import { label } from "@/lib/labels";
 
 /**
  * Somewhere to say "this is broken" without leaving the product.
@@ -113,16 +115,19 @@ export default async function SupportPage({ searchParams }: { searchParams: Noti
   const session = await requireSession();
   const supabase = await createClient();
 
-  const { data: tickets } = await supabase
-    .from("support_tickets")
-    .select("id, subject, body, status, answer, answered_by, answered_at, created_at, reopened_at, followup")
-    .eq("workspace_id", session.workspaceId)
-    .order("created_at", { ascending: false })
-    .limit(25);
+  const [{ data: tickets }, { data: me }] = await Promise.all([
+    supabase
+      .from("support_tickets")
+      .select("id, subject, body, status, answer, answered_by, answered_at, created_at, reopened_at, followup")
+      .eq("workspace_id", session.workspaceId)
+      .order("created_at", { ascending: false })
+      .limit(25),
+    supabase.from("profiles").select("timezone").eq("id", session.userId).maybeSingle(),
+  ]);
+  const timezone = me?.timezone ?? null;
 
   return (
     <>
-      <PageNotice error={params.error} notice={params.notice} />
       <PageHeader
         eyebrow="Help"
         title="Support"
@@ -134,24 +139,34 @@ export default async function SupportPage({ searchParams }: { searchParams: Noti
           </>
         }
       />
+      <PageNotice error={params.error} notice={params.notice} />
 
-      <section className="card">
-        <form action={raiseTicket}>
-          <label className="field">
-            <span>What is wrong, in a line</span>
-            <input type="text" name="subject" maxLength={140} placeholder="Find prospects does nothing" />
-          </label>
-          <label className="field">
-            <span>What you did and what happened</span>
-            <textarea
-              name="body"
-              rows={5}
-              placeholder="I approved a customer profile, pressed Find prospects, and the Prospects page is still empty ten minutes later."
-            />
-          </label>
-          <SubmitButton pendingLabel="Sending…">Raise a ticket</SubmitButton>
-        </form>
-      </section>
+      <Section title="Raise a ticket">
+        <div className="card">
+          <form action={raiseTicket}>
+            <label className="field">
+              <span>What is wrong, in a line</span>
+              <input
+                type="text"
+                name="subject"
+                maxLength={140}
+                required
+                placeholder="Find prospects does nothing"
+              />
+            </label>
+            <label className="field">
+              <span>What you did and what happened</span>
+              <textarea
+                name="body"
+                rows={5}
+                required
+                placeholder="I approved a customer profile, pressed Find prospects, and the Prospects page is still empty ten minutes later."
+              />
+            </label>
+            <SubmitButton pendingLabel="Sending…">Raise a ticket</SubmitButton>
+          </form>
+        </div>
+      </Section>
 
       <Section title="Your tickets">
         {tickets?.length ? (
@@ -160,7 +175,7 @@ export default async function SupportPage({ searchParams }: { searchParams: Noti
               <article key={ticket.id} className="card">
                 <div className="between">
                   <strong>{ticket.subject}</strong>
-                  <span className={`pill ${ticket.status === "open" ? "" : "positive"}`}>{ticket.status}</span>
+                  <span className={`pill ${ticket.status === "open" ? "" : "positive"}`}>{label(ticket.status)}</span>
                 </div>
                 <p className="small muted">{ticket.body}</p>
                 {ticket.reopened_at ? (
@@ -172,7 +187,15 @@ export default async function SupportPage({ searchParams }: { searchParams: Noti
                     <p className="small panel">{ticket.answer}</p>
                     <p className="tiny subtle">
                       {ticket.answered_by === "agent" ? `Answered by the ${BRAND.name} assistant` : "Answered by our team"}
-                      {ticket.answered_at ? `, ${new Date(ticket.answered_at).toLocaleString()}` : ""}.
+                      {ticket.answered_at ? (
+                        <>
+                          ,{" "}
+                          <time dateTime={isoAttr(ticket.answered_at)}>
+                            {formatDateTime(ticket.answered_at, timezone)}
+                          </time>
+                        </>
+                      ) : null}
+                      .
                     </p>
                     {ticket.status !== "open" ? (
                       <details>
@@ -181,7 +204,7 @@ export default async function SupportPage({ searchParams }: { searchParams: Noti
                           <input type="hidden" name="ticketId" value={ticket.id} />
                           <label className="field">
                             <span className="small">What is still not working?</span>
-                            <textarea name="followup" rows={3} maxLength={4000} />
+                            <textarea name="followup" rows={3} maxLength={4000} required />
                           </label>
                           <SubmitButton pendingLabel="Sending…">Send to a person</SubmitButton>
                         </form>
@@ -190,14 +213,16 @@ export default async function SupportPage({ searchParams }: { searchParams: Noti
                   </>
                 ) : (
                   <p className="tiny subtle">
-                    Raised {new Date(ticket.created_at).toLocaleString()}. No answer yet — usually within a few minutes.
+                    Raised{" "}
+                    <time dateTime={isoAttr(ticket.created_at)}>{formatDateTime(ticket.created_at, timezone)}</time>.
+                    No answer yet — usually within a few minutes.
                   </p>
                 )}
               </article>
             ))}
           </div>
         ) : (
-          <Empty title="Nothing raised yet.">
+          <Empty title="Nothing raised yet">
             A ticket carries what the product could see at the moment you raised it — which step you
             are on, whether LinkedIn is connected, whether the sending loop has run — so you do not
             have to go and check first.

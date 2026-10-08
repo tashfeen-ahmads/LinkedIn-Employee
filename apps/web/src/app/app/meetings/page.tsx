@@ -5,6 +5,7 @@ import { PageNotice } from "@/components/page-notice";
 import { PageHeader, Section, Empty } from "@/components/page";
 import { Availability } from "./availability";
 import { profileHref } from "@le/shared";
+import { dayKey, formatTime, isoAttr } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -49,9 +50,12 @@ export default async function MeetingsPage({
       .eq("workspace_id", session.workspaceId)
       .order("starts_at", { ascending: true })
       .limit(200),
-    supabase.from("profiles").select("booking_url").eq("id", session.userId).maybeSingle(),
+    supabase.from("profiles").select("booking_url, timezone").eq("id", session.userId).maybeSingle(),
   ]);
 
+  // Every time on this screen is on the rep's clock. Rendered on the server
+  // these were UTC, so a 7pm New York call sat under tomorrow's heading.
+  const timezone = me?.timezone || "UTC";
   const all = meetings ?? [];
   // Cancelled meetings are never "upcoming", whatever their time says.
   const upcoming = all.filter((m) => m.starts_at >= now.toISOString() && m.status !== "cancelled");
@@ -101,7 +105,7 @@ export default async function MeetingsPage({
         <Availability />
       ) : shown.length === 0 ? (
         <Empty
-          title={tab === "past" ? "Nothing has happened yet." : "Nothing booked yet."}
+          title={tab === "past" ? "Nothing has happened yet" : "Nothing booked yet"}
           action="Set your hours"
           href="/app/meetings?tab=availability"
         >
@@ -111,7 +115,7 @@ export default async function MeetingsPage({
         </Empty>
       ) : (
         <>
-          {groupByDay(shown, now).map((group) => (
+          {groupByDay(shown, now, timezone).map((group) => (
             <Section key={group.label} title={group.label}>
               <div className="stack-2">
                 {group.meetings.map((meeting) => {
@@ -129,9 +133,9 @@ export default async function MeetingsPage({
                       {/* The time first and in its own column: this list is
                           scanned down the left edge, not read across. */}
                       <div className="meeting-when">
-                        <span className="meeting-time">
-                          {starts.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-                        </span>
+                        <time className="meeting-time" dateTime={isoAttr(meeting.starts_at)}>
+                          {formatTime(meeting.starts_at, timezone)}
+                        </time>
                         <span className="tiny subtle">
                           {Math.max(
                             1,
@@ -171,6 +175,7 @@ export default async function MeetingsPage({
                             href={meeting.meeting_url}
                             target="_blank"
                             rel="noreferrer noopener"
+                            aria-label={`Join the call with ${name}`}
                           >
                             Join
                           </a>
@@ -181,6 +186,7 @@ export default async function MeetingsPage({
                             href={profileHref(prospect.linkedin_url) ?? undefined}
                             target="_blank"
                             rel="noreferrer noopener"
+                            aria-label={`${name}'s LinkedIn profile`}
                           >
                             Profile
                           </a>
@@ -208,14 +214,15 @@ export default async function MeetingsPage({
 function groupByDay<T extends { starts_at: string }>(
   meetings: T[],
   now: Date,
+  timezone: string,
 ): { label: string; meetings: T[] }[] {
-  const dayKey = (d: Date) => d.toISOString().slice(0, 10);
-  const today = dayKey(now);
-  const tomorrow = dayKey(new Date(now.getTime() + 86_400_000));
+  // Days are the rep's days, not UTC's — "Today" means today where they are.
+  const today = dayKey(now, timezone);
+  const tomorrow = dayKey(new Date(now.getTime() + 86_400_000), timezone);
 
   const groups = new Map<string, T[]>();
   for (const meeting of meetings) {
-    const key = dayKey(new Date(meeting.starts_at));
+    const key = dayKey(meeting.starts_at, timezone);
     groups.set(key, [...(groups.get(key) ?? []), meeting]);
   }
 
@@ -225,10 +232,14 @@ function groupByDay<T extends { starts_at: string }>(
         ? "Today"
         : key === tomorrow
           ? "Tomorrow"
-          : new Date(`${key}T12:00:00Z`).toLocaleDateString(undefined, {
+          : // The key is already the rep's calendar day, so it is read back at
+            // noon UTC and printed in UTC: that names the same date whatever
+            // the server's own zone is.
+            new Date(`${key}T12:00:00Z`).toLocaleDateString("en-GB", {
               weekday: "long",
               day: "numeric",
               month: "long",
+              timeZone: "UTC",
             }),
     meetings: items,
   }));

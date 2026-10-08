@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { PageHeader } from "@/components/page";
+import { PageHeader, Section } from "@/components/page";
 import { TOUR_STAGES, stageStatus } from "@le/shared";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
@@ -92,7 +92,11 @@ export default async function TutorialPage() {
 
                 {stage.href ? (
                   <p>
-                    <Link className="btn ghost small" href={stage.href}>
+                    <Link
+                      className="btn ghost small"
+                      href={stage.href}
+                      aria-label={`${status === "current" ? "Go and do this" : "Open"}: ${stage.title}`}
+                    >
                       {status === "current" ? "Go and do this" : "Open"}
                     </Link>
                   </p>
@@ -103,19 +107,16 @@ export default async function TutorialPage() {
         })}
       </ol>
 
-      <section className="card">
-        <h3>Still stuck</h3>
-        <p className="small muted">
-          Raise a ticket and it carries what the product believed at that moment — which step you
-          are on, whether LinkedIn is connected, whether the sending loop is running. You do not
-          have to go and check any of that first.
-        </p>
+      <Section
+        title="Still stuck"
+        description="Raise a ticket and it carries what the product believed at that moment — which step you are on, whether LinkedIn is connected, whether the sending loop is running. You do not have to go and check any of that first."
+      >
         <p>
           <Link className="btn secondary small" href="/app/support">
             Raise a ticket
           </Link>
         </p>
-      </section>
+      </Section>
     </>
   );
 }

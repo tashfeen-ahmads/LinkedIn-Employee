@@ -9,7 +9,31 @@ import { StrategyStatus } from "@/components/strategy-status";
 import { StrategyDetailsForm, StrategyRetryButton } from "@/components/strategy-retry";
 import { readStrategyState } from "@/lib/strategy-state";
 import { hasStrategySource, readOnboardingStash } from "@/lib/onboarding-stash";
+import { SubmitButton } from "@/components/submit-button";
 import { BRAND } from "@le/shared";
+import { NORA } from "@/lib/team";
+
+/*
+ * What `?error=` may say. `createWorkspace` sends two sentences of its own,
+ * matched here exactly, and otherwise passes on whatever the database said,
+ * which is not a sentence for a customer and was printed verbatim along with
+ * anything else somebody put in the URL.
+ */
+const ERRORS: Record<string, string> = {
+  "Company name is required": "Enter your company name.",
+  "Give us a website, a LinkedIn page, or a description to work from":
+    "Give us a website, a LinkedIn page or a description to work from. Sage will not invent a business from nothing.",
+};
+const UNKNOWN_ERROR = "Your workspace could not be set up just now. Try again in a minute.";
+
+/** An hour of the day as somebody reads it, for the sending-window selects. */
+function hourLabel(hour: number): string {
+  if (hour === 0 || hour === 24) return "Midnight";
+  if (hour === 12) return "Noon";
+  return `${hour % 12}:00 ${hour < 12 ? "am" : "pm"}`;
+}
+const START_HOURS = Array.from({ length: 24 }, (_, h) => h);
+const END_HOURS = Array.from({ length: 24 }, (_, h) => h + 1);
 
 
 /** Out of the empty account, and straight to "which email did I use". */
@@ -28,6 +52,11 @@ export default async function OnboardingPage({
   if (!isAppConfigured()) redirect("/login");
 
   const params = await searchParams;
+  const error = params.error
+    ? Object.prototype.hasOwnProperty.call(ERRORS, params.error)
+      ? ERRORS[params.error]
+      : UNKNOWN_ERROR
+    : null;
   const supabase = await createClient();
   const {
     data: { user },
@@ -64,7 +93,7 @@ export default async function OnboardingPage({
 
     return (
       <div className="auth-split">
-        <main className="auth-page wide">
+        <main className="auth-page wide" id="main" tabIndex={-1}>
           <header>
             <h1>Your profiles are not written yet</h1>
             <p className="muted">
@@ -72,7 +101,11 @@ export default async function OnboardingPage({
               profile and three to five customer profiles, which everything else is built from.
             </p>
           </header>
-          {params.error ? <div className="notice danger">{params.error}</div> : null}
+          {error ? (
+            <div className="notice danger" role="alert">
+              {error}
+            </div>
+          ) : null}
           <StrategyStatus state={strategy} />
           {strategy.phase === "absent" && known ? (
             <div className="notice">
@@ -113,17 +146,21 @@ export default async function OnboardingPage({
 
   return (
     <div className="auth-split">
-    <main className="auth-page wide">
+    <main className="auth-page wide" id="main" tabIndex={-1}>
       <header>
         <h1>Set up your agent</h1>
         <p className="muted">
-          Four sections, one form, one button. This is what the agent works from — the words it
-          writes in, the hours it may send in, and who it looks for. Answer it once; it all lands
-          on your profile, where you can change any of it later.
+          Four sections, one form, one button. This is what the agent works from: the words it
+          writes in, the hours it may send in, and who it looks for. Answer it once and it all
+          lands on your profile, where you can change any of it later.
         </p>
       </header>
 
-      {params.error ? <div className="notice danger">{params.error}</div> : null}
+      {error ? (
+        <div className="notice danger" role="alert">
+          {error}
+        </div>
+      ) : null}
 
       {/*
         The page somebody lands on when they sign in with a different address
@@ -133,14 +170,14 @@ export default async function OnboardingPage({
       <div className="notice" role="note">
         <p>
           <strong>Set up {BRAND.name} before?</strong> You are signed in as {user.email}, which has no
-          workspace yet. If you used a different email, sign out and sign in with that one — your
+          workspace yet. If you used a different email, sign out and sign in with that one. Your
           workspace is waiting there.
         </p>
         <div className="cluster">
           <form action={signOutToFind}>
-            <button className="btn secondary small" type="submit">
+            <SubmitButton className="btn secondary small" pendingLabel="Signing out…">
               Sign out and find my account
-            </button>
+            </SubmitButton>
           </form>
         </div>
       </div>
@@ -164,15 +201,40 @@ export default async function OnboardingPage({
           </p>
           <label className="field">
             <span>Company name</span>
-            <input name="companyName" required placeholder="Acme Inc" />
+            <input name="companyName" required autoComplete="organization" placeholder="Brightwater Dental Group" />
           </label>
+          {/*
+            Text with a URL keyboard, not `type="url"`: the browser's URL check
+            refuses "brightwaterdental.com", which is how almost everybody
+            types their own site, and it refused it with a tooltip that never
+            said a scheme was the problem. The Strategy Agent adds the
+            https:// itself when it reads the site.
+          */}
           <label className="field">
             <span>Website</span>
-            <input name="websiteUrl" type="url" placeholder="https://acme.com" />
+            <input
+              name="websiteUrl"
+              type="text"
+              inputMode="url"
+              autoComplete="url"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              placeholder="brightwaterdental.com"
+            />
           </label>
           <label className="field">
             <span>LinkedIn company page</span>
-            <input name="linkedinCompanyUrl" type="url" placeholder="https://linkedin.com/company/acme" />
+            <input
+              name="linkedinCompanyUrl"
+              type="text"
+              inputMode="url"
+              autoComplete="off"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              placeholder="linkedin.com/company/brightwater-dental"
+            />
           </label>
           <label className="field">
             <span>Anything else worth knowing</span>
@@ -182,8 +244,8 @@ export default async function OnboardingPage({
               placeholder="Who you sell to, what you charge, what makes you different."
             />
             <span className="hint">
-              A website or a description — one of them is required. The agent will not invent a
-              business from nothing.
+              A website, a LinkedIn page or a description: one of them is required. The agent will
+              not invent a business from nothing.
             </span>
           </label>
         </section>
@@ -205,7 +267,7 @@ export default async function OnboardingPage({
                 a second time for something it already has. */}
             <input
               name="fullName"
-              placeholder="Jane Doe"
+              placeholder="Maya Lindqvist"
               autoComplete="name"
               defaultValue={me?.full_name ?? ""}
             />
@@ -241,13 +303,28 @@ export default async function OnboardingPage({
             <TimezoneSelect value={undefined} />
           </label>
           <div className="form-row">
+            {/* Two lists of readable times rather than two boxes taking 0 to
+                23, which asked people to work out that five in the afternoon
+                is 17. Same field names and values, so nothing downstream moves. */}
             <label className="field compact">
               <span>From</span>
-              <input type="number" name="start" min={0} max={23} defaultValue={9} />
+              <select name="start" defaultValue={9}>
+                {START_HOURS.map((hour) => (
+                  <option key={hour} value={hour}>
+                    {hourLabel(hour)}
+                  </option>
+                ))}
+              </select>
             </label>
             <label className="field compact">
               <span>To</span>
-              <input type="number" name="end" min={1} max={24} defaultValue={17} />
+              <select name="end" defaultValue={17}>
+                {END_HOURS.map((hour) => (
+                  <option key={hour} value={hour}>
+                    {hourLabel(hour)}
+                  </option>
+                ))}
+              </select>
             </label>
             <div className="cluster-3">
               {[
@@ -278,13 +355,11 @@ export default async function OnboardingPage({
             default for somebody: the search tier is a paid seat we cannot see, and how much rope
             to give the agent is your call rather than ours.
           </p>
-          <fieldset className="field-group" style={{ border: 0, padding: 0 }}>
-            <legend style={{ fontWeight: 600, marginBottom: "0.25rem" }}>
-              Does this LinkedIn account have Sales Navigator?
-            </legend>
+          <fieldset className="field-group">
+            <legend>Does this LinkedIn account have Sales Navigator?</legend>
             <span className="tiny subtle hint">
-              NORA works either way. This decides how precisely it can search, so pick the one that
-              is true — searching with a tier the account doesn&rsquo;t have finds nobody.
+              {NORA} works either way. This decides how precisely it can search, so pick the
+              one that is true: searching with a tier the account doesn&rsquo;t have finds nobody.
             </span>
             <label className="small check">
               <input type="radio" name="hasSalesNavigator" value="on" required />
@@ -302,8 +377,8 @@ export default async function OnboardingPage({
               <span>
                 <strong>No, a regular LinkedIn account</strong>
                 <span className="tiny subtle hint">
-                  Searches use job title, location and industry only — no seniority, company size or
-                  excluded titles — so lists are broader and you&rsquo;ll review more of them. LinkedIn
+                  Searches use job title, location and industry only (no seniority, company size or
+                  excluded titles), so lists are broader and you&rsquo;ll review more of them. LinkedIn
                   also caps how many searches a free account can run each month. You can switch to
                   Sales Navigator later on your profile.
                 </span>
@@ -325,7 +400,7 @@ export default async function OnboardingPage({
           </label>
         </section>
 
-        <PostButton className="btn block" pendingLabel="Reading your site…">
+        <PostButton className="btn block" pendingLabel="Building your profiles…">
           Build my profiles
         </PostButton>
       </form>

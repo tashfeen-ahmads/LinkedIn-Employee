@@ -38,7 +38,12 @@ export function PlatformDiagram() {
   const y = 74;
 
   return (
-    <figure className="platform">
+    /*
+     * Focusable because it scrolls. Below 720px the drawing keeps a minimum
+     * width and the figure scrolls sideways, and a scrolling box nobody can
+     * focus is one a keyboard user can see the start of and never the end.
+     */
+    <figure className="platform" tabIndex={0} role="region" aria-label="How the product works, end to end">
       <svg
         viewBox={`0 0 ${W} ${H}`}
         role="img"
@@ -79,16 +84,16 @@ export function PlatformDiagram() {
               height={boxH}
               rx={10}
             />
-            <text className="platform-step" x={stage.x + 12} y={y + 20}>
-              {String(i + 1).padStart(2, "0")}
-            </text>
-            <text className="platform-title" x={stage.x + 12} y={y + 42}>
+            {/* No "01" to "05" above the titles: the arrows already say the
+                order, and a number on every box was a label for its position
+                rather than for anything in it. */}
+            <text className="platform-title" x={stage.x + 12} y={y + 30}>
               {stage.title}
             </text>
-            <text className="platform-line" x={stage.x + 12} y={y + 60}>
+            <text className="platform-line" x={stage.x + 12} y={y + 52}>
               {stage.line}
             </text>
-            <text className="platform-sub" x={stage.x + 12} y={y + 76}>
+            <text className="platform-sub" x={stage.x + 12} y={y + 70}>
               {stage.sub}
             </text>
           </g>

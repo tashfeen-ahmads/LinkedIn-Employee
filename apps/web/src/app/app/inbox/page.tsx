@@ -5,8 +5,28 @@ import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { callWorker, errorQuery, noticeQuery } from "@/lib/worker";
 import { redirect } from "next/navigation";
-import { PageNotice, type NoticeParams } from "@/components/page-notice";
+import { PageNotice } from "@/components/page-notice";
+import { SubmitButton } from "@/components/submit-button";
+import { ConfirmButton } from "@/components/confirm-button";
+import { formatDate, formatDateTime, isoAttr } from "@/lib/format";
+import { label } from "@/lib/labels";
 import { profileHref } from "@le/shared";
+
+/** How many invitations the stage tabs read. Said on screen when reached. */
+const FUNNEL_LIMIT = 300;
+/** How many held conversations and pending drafts are read. */
+const HELD_LIMIT = 100;
+
+/**
+ * What a reply that was approved but not yet handed to the sender says.
+ *
+ * It used to append the worker's own error text — which often ended "Please
+ * try again." — to "It will be retried automatically", so the banner told the
+ * person to press Send again and not to, in one breath. Pressing again is the
+ * one thing that would send a prospect two replies, so it says the true half.
+ */
+const SEND_DELAYED =
+  "Your reply is approved but has not gone out yet. It will be sent automatically in the next few minutes — there is no need to press Send again.";
 
 /**
  * Everything waiting on a person.
@@ -23,19 +43,26 @@ const MANUAL_PROMPT_VERSION = "manual";
 
 async function approveDraft(formData: FormData) {
   "use server";
-  const draftId = String(formData.get("draftId"));
+  const draftId = String(formData.get("draftId") ?? "");
   const body = String(formData.get("body") ?? "").trim();
-  if (!draftId || !body) return;
+  // Said, never a silent return: a Send that does nothing looks exactly like
+  // one that worked.
+  if (!draftId) redirect(errorQuery("/app/inbox", "That draft could not be found. Reload the inbox and try again."));
+  if (!body) redirect(errorQuery("/app/inbox", "The reply is empty, so nothing was sent. Write something, then press Send."));
 
   const session = await requireSession();
   const supabase = await createClient();
 
   // The edited body is what gets sent; the worker reads the row, not the form.
-  await supabase
+  const { error: saveError } = await supabase
     .from("reply_drafts")
     .update({ body, status: "approved", resolved_by: session.userId, resolved_at: new Date().toISOString() })
     .eq("id", draftId)
     .eq("workspace_id", session.workspaceId);
+  if (saveError) {
+    console.error(`[inbox] approve draft: ${saveError.message}`);
+    redirect(errorQuery("/app/inbox", "Your reply could not be saved, so nothing was sent. Try again."));
+  }
 
   // The draft is approved in the database either way, and the worker's
   // maintenance sweep re-enqueues approved drafts — so a failure here delays the
@@ -48,7 +75,9 @@ async function approveDraft(formData: FormData) {
     draftId,
   });
   if (!queued.ok) {
-    redirect(errorQuery("/app/inbox", `Approved, but sending could not be confirmed: ${queued.error} It will be retried automatically.`));
+    console.error(`[inbox] send-reply not queued: ${queued.error}`);
+    revalidatePath("/app/inbox");
+    redirect(errorQuery("/app/inbox", SEND_DELAYED));
   }
 
   revalidatePath("/app/inbox");
@@ -58,14 +87,17 @@ async function approveDraft(formData: FormData) {
 /** A reply a person wrote themselves, for a conversation with no draft. */
 async function sendManualReply(formData: FormData) {
   "use server";
-  const conversationId = String(formData.get("conversationId"));
+  const conversationId = String(formData.get("conversationId") ?? "");
   const body = String(formData.get("body") ?? "").trim();
-  if (!conversationId || !body) return;
+  if (!conversationId) {
+    redirect(errorQuery("/app/inbox", "That conversation could not be found. Reload the inbox and try again."));
+  }
+  if (!body) redirect(errorQuery("/app/inbox", "The reply is empty, so nothing was sent. Write something, then press Send."));
 
   const session = await requireSession();
   const supabase = await createClient();
 
-  const { data: draft } = await supabase
+  const { data: draft, error: insertError } = await supabase
     .from("reply_drafts")
     .insert({
       workspace_id: session.workspaceId,
@@ -78,7 +110,10 @@ async function sendManualReply(formData: FormData) {
     })
     .select("id")
     .single();
-  if (!draft) return;
+  if (!draft) {
+    if (insertError) console.error(`[inbox] manual reply: ${insertError.message}`);
+    redirect(errorQuery("/app/inbox", "Your reply could not be saved, so nothing was sent. Try again."));
+  }
 
   // Sent through the same path as everything else, so it still passes the rate
   // limiter and lands in the message history. Rule 1 in CLAUDE.md.
@@ -88,10 +123,13 @@ async function sendManualReply(formData: FormData) {
     draftId: draft.id,
   });
   if (!queued.ok) {
-    redirect(errorQuery("/app/inbox", `Saved, but sending could not be confirmed: ${queued.error} It will be retried automatically.`));
+    console.error(`[inbox] send-reply not queued: ${queued.error}`);
+    revalidatePath("/app/inbox");
+    redirect(errorQuery("/app/inbox", SEND_DELAYED));
   }
 
   revalidatePath("/app/inbox");
+  redirect(noticeQuery("/app/inbox", "Your reply is sending."));
 }
 
 async function dismissDraft(formData: FormData) {
@@ -111,7 +149,7 @@ async function dismissDraft(formData: FormData) {
   await clearConversationHold(conversationId, session.workspaceId, "reply");
 
   revalidatePath("/app/inbox");
-  redirect(noticeQuery("/app/inbox", "Dismissed."));
+  redirect(noticeQuery("/app/inbox", draftId ? "Draft discarded. Nothing was sent." : "Dismissed. Nothing was sent."));
 }
 
 /**
@@ -215,21 +253,21 @@ export default async function InboxPage({
 
   const stage: StageKey = (STAGES.find((s) => s.key === params.stage)?.key ?? "waiting") as StageKey;
 
-  const [{ data: held }, { data: drafts }, { data: funnelRows }] = await Promise.all([
+  const [{ data: held }, { data: drafts }, { data: funnelRows }, { data: me }] = await Promise.all([
     supabase
       .from("conversations")
       .select("id, prospect_id, needs_human_reason, needs_human_kind, last_message_at")
       .eq("workspace_id", session.workspaceId)
       .eq("needs_human", true)
       .order("last_message_at", { ascending: true })
-      .limit(100),
+      .limit(HELD_LIMIT),
     supabase
       .from("reply_drafts")
       .select("id, conversation_id, body, proposes_meeting, unanswered_questions, created_at")
       .eq("workspace_id", session.workspaceId)
       .eq("status", "pending")
       .order("created_at", { ascending: true })
-      .limit(100),
+      .limit(HELD_LIMIT),
     // Everyone this workspace has actually contacted. `campaign_prospects` is
     // the record rather than `conversations`, because an invitation that has
     // not been accepted has no conversation at all — and those are most of the
@@ -240,8 +278,13 @@ export default async function InboxPage({
       .eq("workspace_id", session.workspaceId)
       .not("invited_at", "is", null)
       .order("invited_at", { ascending: false })
-      .limit(300),
+      .limit(FUNNEL_LIMIT),
+    // Dates in the rep's own timezone, not the server's.
+    supabase.from("profiles").select("timezone").eq("id", session.userId).maybeSingle(),
   ]);
+  const timezone = me?.timezone ?? null;
+  const funnelCut = (funnelRows ?? []).length >= FUNNEL_LIMIT;
+  const heldCut = (held ?? []).length >= HELD_LIMIT || (drafts ?? []).length >= HELD_LIMIT;
 
   const draftByConversation = new Map((drafts ?? []).map((d) => [d.conversation_id, d]));
   const conversationIds = [
@@ -293,11 +336,11 @@ export default async function InboxPage({
 
   return (
     <>
-      <PageNotice error={params.error} notice={params.notice} />
       <PageHeader
         title="Inbox"
         lede="Everyone this workspace has written to, and what happened next. Anything Reese will not answer on its own waits under “Waiting on you”."
       />
+      <PageNotice error={params.error} notice={params.notice} />
 
       {/* One row of stages, each carrying its own count. A stage with nobody in
           it still shows, because "zero replied" is an answer and a missing tab
@@ -323,6 +366,20 @@ export default async function InboxPage({
           </Link>
         ))}
       </nav>
+
+      {/* The lists stop reading at a limit, and used to stop silently: the
+          counts above looked like totals when they were a window. */}
+      {stage === "waiting" && heldCut ? (
+        <p className="small muted">
+          Showing the first {HELD_LIMIT} conversations waiting on you, oldest first. Deal with these
+          and the rest appear.
+        </p>
+      ) : stage !== "waiting" && funnelCut ? (
+        <p className="small muted">
+          Showing the {FUNNEL_LIMIT} most recent invitations; the counts above cover those, not
+          everyone ever invited.
+        </p>
+      ) : null}
 
       {stage === "waiting" ? (
         conversationIds.length === 0 ? (
@@ -376,7 +433,14 @@ export default async function InboxPage({
                 there is nothing to show, it says so instead of drawing one.
               */}
               {thread.length ? (
-                <div className="panel scroll">
+                // Focusable and named, so a keyboard can scroll a long thread
+                // and a screen reader knows whose it is.
+                <div
+                  className="panel scroll"
+                  tabIndex={0}
+                  role="region"
+                  aria-label={`Conversation with ${nameOf(prospect as never)}`}
+                >
                   {thread.map((message, index) => (
                     <p key={index} className="small">
                       <span className="muted">{message.direction === "outbound" ? "You: " : "Them: "}</span>
@@ -404,9 +468,7 @@ export default async function InboxPage({
                   </p>
                   <form action={markBooked}>
                     <input type="hidden" name="conversationId" value={conversationId} />
-                    <button className="btn" type="submit">
-                      I have booked it
-                    </button>
+                    <SubmitButton pendingLabel="Saving…">I have booked it</SubmitButton>
                   </form>
                 </>
               ) : copy && !draft ? (
@@ -422,9 +484,9 @@ export default async function InboxPage({
                     </Link>
                     <form action={dismissCopyHold}>
                       <input type="hidden" name="conversationId" value={conversationId} />
-                      <button className="btn secondary small" type="submit">
+                      <SubmitButton className="btn secondary small" pendingLabel="Dismissing…">
                         Dismiss
-                      </button>
+                      </SubmitButton>
                     </form>
                   </div>
                 </>
@@ -434,18 +496,24 @@ export default async function InboxPage({
                     <input type="hidden" name="draftId" value={draft.id} />
                     <label className="field">
                       <span>Reply</span>
-                      <textarea name="body" rows={4} defaultValue={draft.body} />
+                      <textarea name="body" rows={4} defaultValue={draft.body} required />
                     </label>
-                    <button className="btn" type="submit">
-                      Send
-                    </button>
+                    {/* Disabled while it runs: a second press here is a second
+                        LinkedIn message to a real person. */}
+                    <SubmitButton pendingLabel="Sending…">Send</SubmitButton>
                   </form>
                   <form action={dismissDraft}>
                     <input type="hidden" name="draftId" value={draft.id} />
                     <input type="hidden" name="conversationId" value={conversationId} />
-                    <button className="btn secondary small" type="submit">
+                    {/* Two presses: this throws the draft away and takes the
+                        conversation off this list, and neither comes back. */}
+                    <ConfirmButton
+                      className="btn secondary small"
+                      confirmLabel="Discard the draft"
+                      pendingLabel="Discarding…"
+                    >
                       Dismiss, I will handle it on LinkedIn
-                    </button>
+                    </ConfirmButton>
                   </form>
                 </>
               ) : (
@@ -460,15 +528,17 @@ export default async function InboxPage({
                       <span>Your reply</span>
                       <textarea name="body" rows={4} required />
                     </label>
-                    <button className="btn" type="submit">
-                      Send
-                    </button>
+                    <SubmitButton pendingLabel="Sending…">Send</SubmitButton>
                   </form>
                   <form action={dismissDraft}>
                     <input type="hidden" name="conversationId" value={conversationId} />
-                    <button className="btn secondary small" type="submit">
+                    <ConfirmButton
+                      className="btn secondary small"
+                      confirmLabel="Take it off this list"
+                      pendingLabel="Dismissing…"
+                    >
                       Dismiss, I will handle it on LinkedIn
-                    </button>
+                    </ConfirmButton>
                   </form>
                 </>
               )}
@@ -508,8 +578,16 @@ export default async function InboxPage({
                       )}
                     </td>
                     <td className="muted">{(p?.company as string) || "—"}</td>
-                    <td>{STAGES.find((s) => s.key === stageOf(row.status))?.label ?? row.status}</td>
-                    <td className="muted">{when ? new Date(when).toLocaleDateString() : "—"}</td>
+                    <td>{STAGES.find((s) => s.key === stageOf(row.status))?.label ?? label(row.status)}</td>
+                    <td className="muted">
+                      {when ? (
+                        <time dateTime={isoAttr(when)} title={formatDateTime(when, timezone)}>
+                          {formatDate(when, timezone)}
+                        </time>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
                   </tr>
                 );
               })}

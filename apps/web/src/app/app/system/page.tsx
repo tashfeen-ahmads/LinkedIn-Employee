@@ -1,6 +1,8 @@
 import Link from "next/link";
-import { PageHeader } from "@/components/page";
+import { PageHeader, Section } from "@/components/page";
 import { requireSession } from "@/lib/workspace";
+import { createClient } from "@/lib/supabase-server";
+import { formatDateTime, isoAttr } from "@/lib/format";
 import { isPlatformAdmin } from "@/lib/admin";
 import { callWorker } from "@/lib/worker";
 
@@ -39,6 +41,9 @@ const MARK: Record<CheckState, { glyph: string; word: string; tone: string }> = 
   unknown: { glyph: "?", word: "Unknown", tone: "plain" },
 };
 
+/** One name for this screen, whichever branch renders it. */
+const TITLE = "System check";
+
 export default async function SystemPage() {
   const session = await requireSession();
   /*
@@ -59,7 +64,7 @@ export default async function SystemPage() {
   if (!result.ok) {
     return (
       <>
-        <PageHeader eyebrow="Help" title="System check" />
+        <PageHeader eyebrow="Help" title={TITLE} />
         <div className="notice danger">
           <p>
             <strong>The background service could not be reached.</strong> {result.error}
@@ -74,6 +79,9 @@ export default async function SystemPage() {
     );
   }
 
+  const supabase = await createClient();
+  const { data: me } = await supabase.from("profiles").select("timezone").eq("id", session.userId).maybeSingle();
+
   const checks = result.data?.checks ?? [];
   const blocked = checks.filter((c) => c.state === "blocked");
   const todo = checks.filter((c) => c.state === "todo");
@@ -87,10 +95,10 @@ export default async function SystemPage() {
     <>
       <PageHeader
         eyebrow="Help"
-        title="What is standing in the way"
+        title={TITLE}
         lede={
           <>
-          Every step between signing up and a booked meeting, checked against what is true right now.
+          What is standing in the way. Every step between signing up and a booked meeting, checked against what is true right now.
           Two of these ask LinkedIn itself rather than trusting what is stored here — which is the
           difference between an account that says it is connected and one that is. Anything on this
           list that is ours to fix says so.
@@ -108,7 +116,7 @@ export default async function SystemPage() {
             <p className="small">
               {next.fix}{" "}
               {next.href ? (
-                <Link href={next.href} className="btn small">
+                <Link href={next.href} className="btn small" aria-label={`Go and fix: ${next.label}`}>
                   Go
                 </Link>
               ) : null}
@@ -125,45 +133,58 @@ export default async function SystemPage() {
       )}
 
       {stages.map((stage) => (
-        <section className="card" key={stage}>
-          <h3>{stage}</h3>
-          <ul className="checklist">
-            {checks
-              .filter((c) => c.stage === stage)
-              .map((check) => {
-                const mark = MARK[check.state] ?? MARK.unknown;
-                return (
-                  <li key={check.key} className={`checklist-row${check.state === "ok" ? " is-done" : ""}`}>
-                    <span className="checklist-tick" aria-hidden="true">
-                      {mark.glyph}
-                    </span>
-                    <div className="stack-1 grow">
-                      <div className="cluster">
-                        <span className="small">{check.label}</span>
-                        <span className={`pill ${mark.tone} tiny`}>{mark.word}</span>
+        <Section key={stage} title={stage}>
+          <div className="card">
+            <ul className="checklist">
+              {checks
+                .filter((c) => c.stage === stage)
+                .map((check) => {
+                  const mark = MARK[check.state] ?? MARK.unknown;
+                  return (
+                    <li key={check.key} className={`checklist-row${check.state === "ok" ? " is-done" : ""}`}>
+                      <span className="checklist-tick" aria-hidden="true">
+                        {mark.glyph}
+                      </span>
+                      <div className="stack-1 grow">
+                        <div className="cluster">
+                          <span className="small">{check.label}</span>
+                          <span className={`pill ${mark.tone} tiny`}>{mark.word}</span>
+                        </div>
+                        <p className="tiny subtle prewrap">{check.detail}</p>
+                        {check.fix ? <p className="tiny">{check.fix}</p> : null}
+                        {operator && check.operator ? (
+                          <p className="tiny prewrap operator-note">
+                            <strong>Operator:</strong> {check.operator}
+                          </p>
+                        ) : null}
                       </div>
-                      <p className="tiny subtle prewrap">{check.detail}</p>
-                      {check.fix ? <p className="tiny">{check.fix}</p> : null}
-                      {operator && check.operator ? (
-                        <p className="tiny prewrap operator-note">
-                          <strong>Operator:</strong> {check.operator}
-                        </p>
+                      {check.href ? (
+                        <Link
+                          href={check.href}
+                          className="btn ghost small checklist-go"
+                          aria-label={`Open: ${check.label}`}
+                        >
+                          Open
+                        </Link>
                       ) : null}
-                    </div>
-                    {check.href ? (
-                      <Link href={check.href} className="btn ghost small checklist-go">
-                        Open
-                      </Link>
-                    ) : null}
-                  </li>
-                );
-              })}
-          </ul>
-        </section>
+                    </li>
+                  );
+                })}
+            </ul>
+          </div>
+        </Section>
       ))}
 
       <p className="tiny subtle">
-        Checked {result.data?.checkedAt ? new Date(result.data.checkedAt).toLocaleString() : "just now"}.
+        Checked{" "}
+        {result.data?.checkedAt ? (
+          <time dateTime={isoAttr(result.data.checkedAt)}>
+            {formatDateTime(result.data.checkedAt, me?.timezone)}
+          </time>
+        ) : (
+          "just now"
+        )}
+        .
         Reload to run it again — the LinkedIn checks are live calls, so they are not cached.
       </p>
     </>

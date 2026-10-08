@@ -4,6 +4,8 @@ import { isAppConfigured } from "@/lib/config";
 import { checkInvite, inviteRejectionMessage } from "@/lib/invitations";
 import { callWorker } from "@/lib/worker";
 import { SiteFooter, SiteHeader } from "@/components/marketing";
+import { SubmitButton } from "@/components/submit-button";
+import { label } from "@/lib/labels";
 
 /**
  * Accepting an invitation. The token is looked up server-side and checked
@@ -88,7 +90,7 @@ export default async function InvitePage({
   return (
     <>
       <SiteHeader />
-      <main style={{ padding: "5rem 0" }}>
+      <main id="main" tabIndex={-1} style={{ padding: "5rem 0" }}>
         <div className="narrow" style={{ maxWidth: 460 }}>
           {!invite ? (
             <>
@@ -116,19 +118,17 @@ export default async function InvitePage({
             <>
               <h1>Join {workspaceName}</h1>
               <p className="muted">
-                You will join as a <strong>{invite.role}</strong>. You will connect your own LinkedIn
-                account; nobody shares a login.
+                You will join with the <strong>{label(invite.role)}</strong> role, and connect your
+                own LinkedIn account. Nobody shares a login.
               </p>
               {error ? (
-                <div className="notice danger">
+                <div className="notice danger" role="alert">
                   Something went wrong accepting this invitation. Try again, or ask for a new link.
                 </div>
               ) : null}
               <form action={acceptInvite}>
                 <input type="hidden" name="token" value={token} />
-                <button className="btn" type="submit">
-                  Accept invitation
-                </button>
+                <SubmitButton pendingLabel="Joining…">Accept invitation</SubmitButton>
               </form>
             </>
           )}

@@ -27,6 +27,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <div className="app">
+      <a href="#main" className="skip-link">
+        Skip to content
+      </a>
       <aside className="app-aside">
         <div className="app-brand">
           <Link href="/admin">Operator</Link>
@@ -85,7 +88,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       </aside>
 
       <div className="app-main">
-        <main className="app-body">{children}</main>
+        <main id="main" className="app-body">{children}</main>
       </div>
     </div>
   );

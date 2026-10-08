@@ -4,7 +4,7 @@ import { BreadcrumbSchema } from "@/components/schema";
 import { pageMeta } from "@/lib/site";
 
 export const metadata: Metadata = pageMeta({
-  title: "Security and data — where your data sits and who can reach it",
+  title: "Security and data: where your data sits and who can reach it",
   description:
     "Your LinkedIn password never reaches us. Tokens are encrypted before storage, every tenant is isolated at the database, and a prospect can be erased on request.",
   path: "/security",
@@ -17,7 +17,7 @@ const POINTS = [
   },
   {
     title: "Tokens are encrypted before they are stored",
-    body: "Every OAuth credential — LinkedIn, calendar, CRM — is encrypted with AES-256-GCM before it touches the database, using a key held only by the worker. A copy of the database on its own is not enough to act as you.",
+    body: "Every OAuth credential (LinkedIn, calendar, CRM) is encrypted with AES-256-GCM before it touches the database, using a key held only by the worker. A copy of the database on its own is not enough to act as you.",
   },
   {
     title: "One workspace cannot read another",
@@ -25,7 +25,7 @@ const POINTS = [
   },
   {
     title: "A prospect can be erased",
-    body: "One click removes a person and everything written about them, and records that they must not be contacted again — the record of the erasure is the only thing that survives it, because otherwise the next campaign would find them afresh.",
+    body: "One click removes a person and everything written about them, and records that they must not be contacted again. The record of the erasure is the only thing that survives it, because otherwise the next campaign would find them afresh.",
   },
   {
     title: "Retention is a limit, not a promise",
@@ -76,7 +76,7 @@ export default function SecurityPage() {
           </div>
 
           <p className="small subtle prose">
-            The other half of safety is not losing the account in the first place — that is on{" "}
+            The other half of safety is not losing the account in the first place. That is on{" "}
             <Link href="/linkedin-automation-limits">the limits page</Link>.
           </p>
         </div>

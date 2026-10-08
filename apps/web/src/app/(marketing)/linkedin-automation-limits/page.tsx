@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArticleSchema, BreadcrumbSchema, FaqSchema } from "@/components/schema";
-import { PUBLIC_LIMITS, SITE, pageMeta } from "@/lib/site";
+import { PUBLIC_LIMITS, pageMeta } from "@/lib/site";
 import { Reveal } from "@/components/reveal";
 
 const TITLE = "LinkedIn automation limits in 2026: the numbers that keep an account safe";
@@ -12,10 +12,20 @@ const PUBLISHED = "2026-09-10";
 
 export const metadata: Metadata = pageMeta({ title: TITLE, description: DESCRIPTION, path: PATH });
 
+/**
+ * What the weekly ceiling works out to across a five-day working week.
+ *
+ * The daily cap at the top of the ramp is higher than the figure most guides
+ * quote, and saying "we sit below every commonly cited figure" beside a table
+ * showing 35 against 20 to 25 was a claim the page itself contradicted. The
+ * honest version is arithmetic: the week binds before the day does.
+ */
+const WEEKDAY_AVERAGE = Math.floor(PUBLIC_LIMITS.invitesPerWeek / 5);
+
 const FAQ = [
   {
     q: "How many LinkedIn connection requests can I send per day in 2026?",
-    a: `Between 20 and 25 a day is where most accounts are safe, and going consistently above 25 raises the risk of a restriction whatever the account's history. A new or recently warmed account should start nearer 10 and climb over several weeks. We cap sending at ${PUBLIC_LIMITS.invitesPerDayMax} a day at the very top of the ramp and start every account at ${PUBLIC_LIMITS.invitesPerDayStart}.`,
+    a: `Most guidance puts it at 20 to 25 a day for an established account, with a new account starting nearer 10 and climbing over several weeks. We start every account at ${PUBLIC_LIMITS.invitesPerDayStart} and ramp it over ${PUBLIC_LIMITS.warmupWeeks} weeks. A fully warmed account may send up to ${PUBLIC_LIMITS.invitesPerDayMax} on a single day, but never more than ${PUBLIC_LIMITS.invitesPerWeek} in a week, which averages ${WEEKDAY_AVERAGE} a day across a five-day working week.`,
   },
   {
     q: "What is the weekly connection request limit?",
@@ -27,7 +37,7 @@ const FAQ = [
   },
   {
     q: "Will LinkedIn restrict my account without warning?",
-    a: "Rarely. There is usually a two to three day window where the account starts behaving oddly — search results thinning, invitations silently failing, an unexpected verification screen. That window is the chance to stop. An account that keeps sending through it is the one that gets restricted.",
+    a: "Rarely. There is usually a two to three day window where the account starts behaving oddly: search results thinning, invitations silently failing, an unexpected verification screen. That window is the chance to stop. An account that keeps sending through it is the one that gets restricted.",
   },
   {
     q: "Is LinkedIn automation against the terms of service?",
@@ -99,24 +109,24 @@ export default function LimitsPage() {
                 <tbody>
                   <tr>
                     <td>Connection requests a day</td>
-                    <td className="num mono">20–25</td>
+                    <td className="num mono">20 to 25</td>
                     <td className="num mono">
                       {PUBLIC_LIMITS.invitesPerDayStart} → {PUBLIC_LIMITS.invitesPerDayMax}
                     </td>
                   </tr>
                   <tr>
                     <td>Connection requests a week</td>
-                    <td className="num mono">100–200</td>
+                    <td className="num mono">100 to 200</td>
                     <td className="num mono">{PUBLIC_LIMITS.invitesPerWeek}</td>
                   </tr>
                   <tr>
                     <td>Messages a day</td>
-                    <td className="num mono">50–100</td>
+                    <td className="num mono">50 to 100</td>
                     <td className="num mono">{PUBLIC_LIMITS.messagesPerDay}</td>
                   </tr>
                   <tr>
                     <td>Warm-up before full volume</td>
-                    <td className="num mono">2–4 weeks</td>
+                    <td className="num mono">2 to 4 weeks</td>
                     <td className="num mono">{PUBLIC_LIMITS.warmupWeeks} weeks</td>
                   </tr>
                   <tr>
@@ -128,9 +138,14 @@ export default function LimitsPage() {
               </table>
             </div>
             <p className="small subtle">
-              We sit at or below every commonly cited figure. That is a deliberate trade: a campaign
-              that runs for a year at twenty a day reaches far more people than one that runs for six
-              weeks at fifty and then loses the account.
+              One figure is above the usual guidance on purpose: a fully warmed account may send up
+              to {PUBLIC_LIMITS.invitesPerDayMax} invitations on a single day. It cannot keep that
+              up, because the weekly ceiling of {PUBLIC_LIMITS.invitesPerWeek} averages{" "}
+              {WEEKDAY_AVERAGE} a day across a five-day week, and no account reaches that daily
+              maximum until it has been sending for {PUBLIC_LIMITS.warmupWeeks} weeks. Everything else sits at or below the
+              commonly cited figures. That is a deliberate trade: a campaign that runs for a year at
+              twenty a day reaches far more people than one that runs for six weeks at fifty and then
+              loses the account.
             </p>
           </section>
 
@@ -161,7 +176,7 @@ export default function LimitsPage() {
             <h2>The two or three days before a restriction</h2>
             <p className="prose">
               LinkedIn rarely restricts an account with no signal beforehand. There is almost always a
-              window where things behave oddly first — and it is a window most tools sail straight
+              window where things behave oddly first, and it is a window most tools sail straight
               through, because they are counting sends rather than watching outcomes.
             </p>
             <div className="grid grid-2">
@@ -214,17 +229,9 @@ export default function LimitsPage() {
             <h2>These limits are the product</h2>
             <p className="muted">
               Every number on this page is read from one constants file that the sending code checks
-              before each action. They are not settings a campaign can raise — an account override may
+              before each action. They are not settings a campaign can raise; an account override may
               only make them stricter.
             </p>
-            <div className="cluster">
-              <Link href={`${SITE.app}/signup`} className="btn">
-                Sign up free
-              </Link>
-              <Link href="/how-it-works" className="btn secondary">
-                See how it works
-              </Link>
-            </div>
           </aside>
         </div>
       </article>

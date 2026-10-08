@@ -1,7 +1,8 @@
 "use client";
 
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { LINKEDIN_LIMITS } from "@le/shared";
 
 /**
  * The product, moving, directly under the hero.
@@ -42,6 +43,15 @@ import { useCallback, useEffect, useState } from "react";
  */
 
 const SCENE_MS = 5200;
+
+/*
+ * The pacing scene's numbers, from the constants the limiter obeys. The film
+ * said "2–11 minutes" while the safety section said "2–9" and the constants
+ * said 2 and 9: three readings of one rule on one page.
+ */
+const GAP_MIN = Math.round(LINKEDIN_LIMITS.minGapMs / 60_000);
+const GAP_MAX = Math.round(LINKEDIN_LIMITS.maxGapMs / 60_000);
+const WARMUP_WEEKS = Math.round(LINKEDIN_LIMITS.warmupDays / 7);
 
 interface Scene {
   id: string;
@@ -119,7 +129,7 @@ function scenes(still: boolean): Scene[] {
               <span className="film-row-main">
                 <strong>{row.name}</strong>
                 <span className="tiny subtle">
-                  {row.title} — {row.why}
+                  {row.title} · {row.why}
                 </span>
               </span>
               <span className="film-score nums">{row.score}</span>
@@ -152,7 +162,7 @@ function scenes(still: boolean): Scene[] {
             <span className="pill plain tiny">her title</span>
           </Line>
           <Line index={2} still={still} className="tiny subtle">
-            A note carrying a link is dropped, not trimmed — LinkedIn penalises links in
+            A note carrying a link is dropped, not trimmed, because LinkedIn penalises links in
             invitations. You read every note before anything is sent.
           </Line>
         </div>
@@ -167,9 +177,12 @@ function scenes(still: boolean): Scene[] {
         <div className="film-rows">
           {[
             { k: "Today", v: "8 of 14 invitations" },
-            { k: "Gap between sends", v: "2–11 minutes, randomised" },
-            { k: "Week", v: "never above 100" },
-            { k: "Warm-up", v: "starts at 10 a day, five weeks to full" },
+            { k: "Gap between sends", v: `${GAP_MIN} to ${GAP_MAX} minutes at the closest, spread across your hours` },
+            { k: "Week", v: `never above ${LINKEDIN_LIMITS.invitesPerWeek}` },
+            {
+              k: "Warm-up",
+              v: `starts at ${LINKEDIN_LIMITS.invitesPerDayStart} a day, ${WARMUP_WEEKS} weeks to full`,
+            },
           ].map((row, i) => (
             <Line key={row.k} index={i} still={still} className="film-row">
               <span className="film-row-main">
@@ -188,12 +201,12 @@ function scenes(still: boolean): Scene[] {
       id: "reply",
       label: "The reply",
       agent: "Reese · replies",
-      caption: "It answers what it can answer — and stops on anything that should be yours.",
+      caption: "It answers what it can, and stops on anything that should be yours.",
       body: (
         <div className="film-rows">
           <Line index={0} still={still} className="film-note">
             <span className="tiny subtle">Dana replied</span>
-            <p className="small">Interesting — what does this actually cost?</p>
+            <p className="small">Interesting. What does this actually cost?</p>
           </Line>
           <Line index={1} still={still} className="film-note film-note-draft">
             <span className="tiny subtle">Drafted, not sent</span>
@@ -202,7 +215,7 @@ function scenes(still: boolean): Scene[] {
             </p>
           </Line>
           <Line index={2} still={still} className="film-chips">
-            <span className="pill warning tiny">Held for you — pricing</span>
+            <span className="pill warning tiny">Held for you: pricing</span>
           </Line>
         </div>
       ),
@@ -233,22 +246,46 @@ export function ProductFilm() {
   const all = scenes(still);
 
   const [active, setActive] = useState(0);
-  // Stops the timer while the reader is deliberately looking at one scene, and
-  // while the tab is in the background — a film that advanced four times
-  // behind somebody's back returns to a scene that means nothing.
-  const [held, setHeld] = useState(false);
+  /*
+   * Three reasons the film stands still, kept apart because they end
+   * differently.
+   *
+   * `playing` is the reader's own choice: the Pause button, or picking a
+   * scene. Picking one used to set the same flag hovering did, so the scene a
+   * reader chose to look at moved on the moment the pointer left the strip or
+   * focus moved to the next control, which is a carousel taking its eyes back.
+   * Only Play undoes it.
+   *
+   * `hovering` and `hidden` are transient: a pointer or focus resting on the
+   * controls, and the tab being in the background, where a film that advanced
+   * four times behind somebody's back returns to a scene that means nothing.
+   */
+  const [playing, setPlaying] = useState(true);
+  const [hovering, setHovering] = useState(false);
+  const [hidden, setHidden] = useState(false);
+  const running = mounted && !still && playing && !hovering && !hidden;
+
+  // The progress bar is a CSS animation and the advance is a timer. Each time
+  // the film starts again both begin from zero, or the bar finishes early and
+  // the scene changes under a bar that says it has seconds left.
+  const [epoch, setEpoch] = useState(0);
+  const wasRunning = useRef(running);
+  useEffect(() => {
+    if (running && !wasRunning.current) setEpoch((n) => n + 1);
+    wasRunning.current = running;
+  }, [running]);
 
   const next = useCallback(() => setActive((i) => (i + 1) % all.length), [all.length]);
 
   useEffect(() => {
-    if (!mounted || still || held) return;
+    if (!running) return;
     const timer = window.setTimeout(next, SCENE_MS);
     return () => window.clearTimeout(timer);
-  }, [active, held, mounted, next, still]);
+  }, [active, epoch, next, running]);
 
   useEffect(() => {
     if (still) return;
-    const onVisibility = () => setHeld(document.hidden);
+    const onVisibility = () => setHidden(document.hidden);
     document.addEventListener("visibilitychange", onVisibility);
     return () => document.removeEventListener("visibilitychange", onVisibility);
   }, [still]);
@@ -282,7 +319,20 @@ export function ProductFilm() {
       <figure className="card raised film-card">
         <figcaption className="film-head">
           <span className="eyebrow">{scene.label}</span>
-          <span className="tiny subtle">{scene.agent}</span>
+          <span className="cluster">
+            <span className="tiny subtle">{scene.agent}</span>
+            {/* Autoplay that runs beside other content needs a way to stop it
+                (WCAG 2.2.2), and a visible one: hovering the strip pauses it
+                too, but nobody can be expected to discover that. */}
+            <button
+              type="button"
+              className="btn secondary small film-toggle"
+              aria-label={playing ? "Pause the walkthrough" : "Play the walkthrough"}
+              onClick={() => setPlaying((was) => !was)}
+            >
+              {playing ? "Pause" : "Play"}
+            </button>
+          </span>
         </figcaption>
 
         {/* Height is held by the tallest scene rather than animated, so the page
@@ -290,11 +340,9 @@ export function ProductFilm() {
         <div className="film-stage">
           {/*
             `initial={false}`, exactly as the timeline and the gate already do
-            it. Without it the first scene mounts at its `initial` opacity —
+            it. Without it the first scene mounts at its `initial` opacity,
             which framer writes into the server's HTML, so the film's whole
-            body is invisible until the client hydrates, and stays invisible
-            for ever if it never does. A crossfade between scenes is a
-            client-side event; the first frame is just the page.
+            body would be invisible until the client hydrates.
           */}
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
@@ -311,34 +359,44 @@ export function ProductFilm() {
         </div>
       </figure>
 
-      {/* Controllable, not decorative. A film that cannot be stopped is one a
-          reader fights; these are real buttons, reachable by keyboard, and the
-          labels say what each scene is rather than "slide 3". */}
-      <div className="film-rail" role="tablist" aria-label="What the product does">
+      {/*
+        Plain toggle buttons with `aria-pressed`, not tabs. The strip carried
+        `role="tab"` without the tab panel, the roving focus or the arrow keys
+        that role promises, so a screen reader announced a widget that then
+        did not behave like one. A button that says which scene is showing is
+        the honest version of what this is.
+      */}
+      <div
+        className="film-rail"
+        role="group"
+        aria-label="Choose a stage"
+        onMouseEnter={() => setHovering(true)}
+        onMouseLeave={() => setHovering(false)}
+        onFocus={() => setHovering(true)}
+        onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setHovering(false);
+        }}
+      >
         {all.map((s, i) => (
           <button
             key={s.id}
             type="button"
-            role="tab"
-            aria-selected={i === active}
+            aria-pressed={i === active}
             className={`film-tab${i === active ? " is-active" : ""}`}
             onClick={() => {
               setActive(i);
-              setHeld(true);
+              setPlaying(false);
             }}
-            onMouseEnter={() => setHeld(true)}
-            onMouseLeave={() => setHeld(false)}
-            onFocus={() => setHeld(true)}
-            onBlur={() => setHeld(false)}
           >
             <span className="film-tab-label">{s.label}</span>
             <span className="film-tab-track" aria-hidden="true">
               <span
+                key={i === active ? `${s.id}-${epoch}` : s.id}
                 className="film-tab-fill"
                 style={{
                   animationDuration: `${SCENE_MS}ms`,
-                  animationPlayState: i === active && !held ? "running" : "paused",
-                  width: i < active ? "100%" : undefined,
+                  animationPlayState: i === active && running ? "running" : "paused",
+                  transform: i < active ? "scaleX(1)" : undefined,
                 }}
               />
             </span>

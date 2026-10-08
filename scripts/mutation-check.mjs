@@ -3737,8 +3737,8 @@ const MUTATIONS = [
     id: "web/strategy-no-payload-json",
     rule: "Rule 54: an event payload is never printed to the customer",
     file: "apps/web/src/app/app/strategy/page.tsx",
-    from: "<p className=\"tiny subtle\">{new Date(lastSearch.at).toLocaleString()}</p>",
-    to: "<p className=\"tiny subtle\">{JSON.stringify(lastStop?.payload)}</p>",
+    from: "<time dateTime={isoAttr(lastSearch.at)}>{formatDateTime(lastSearch.at, timezone)}</time>",
+    to: "<time dateTime={isoAttr(lastSearch.at)}>{JSON.stringify(lastStop?.payload)}</time>",
     pkg: "@le/web",
   },
   {

@@ -83,7 +83,11 @@ export default async function IssuesPage({
       >
         {areas.length > 1 ? (
           <div className="cluster">
-            <Link className={`btn small ${params.area ? "ghost" : "secondary"}`} href="/admin/issues">
+            <Link
+              className={`btn small ${params.area ? "ghost" : "secondary"}`}
+              href="/admin/issues"
+              aria-current={params.area ? undefined : "page"}
+            >
               All ({all.length})
             </Link>
             {areas.map((area) => (
@@ -91,6 +95,7 @@ export default async function IssuesPage({
                 key={area}
                 className={`btn small ${params.area === area ? "secondary" : "ghost"}`}
                 href={`/admin/issues?area=${encodeURIComponent(area)}`}
+                aria-current={params.area === area ? "page" : undefined}
               >
                 {area} ({all.filter((i) => i.area === area).length})
               </Link>

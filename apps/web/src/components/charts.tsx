@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { ReactNode } from "react";
 
 /**
@@ -68,9 +69,16 @@ export function FunnelChart({ steps }: { steps: FunnelStep[] }) {
             </div>
             {/* The conversion from the stage above, which is the number a rep
                 actually acts on. Absent on the first row, where there is no
-                "from" — never rendered as 100%, which would read as a result. */}
+                "from" — never rendered as 100%, which would read as a result.
+                A later stage whose previous stage is empty has no rate either,
+                and says so with a dash rather than claiming people "entered"
+                halfway down the funnel. */}
             <span className="funnel-rate tiny subtle">
-              {share === null ? "entered" : `${Math.round(share * 100)}% of ${steps[i - 1]!.label.toLowerCase()}`}
+              {i === 0
+                ? "entered"
+                : share === null
+                  ? "—"
+                  : `${Math.round(share * 100)}% of ${steps[i - 1]!.label.toLowerCase()}`}
             </span>
           </div>
         );
@@ -199,8 +207,17 @@ export function RankedBars({ data, max }: { data: BarDatum[]; max?: number }) {
       {data.map((d) => (
         <div className="ranked-row" key={d.label}>
           <div className="ranked-head">
-            <span className="ranked-label">{d.label}</span>
-            <span className="mono small">{d.value.toLocaleString()}</span>
+            {/* A row that names somewhere to go links there; `href` used to be
+                accepted and dropped, so the bars looked like the way in and
+                were not. */}
+            {d.href ? (
+              <Link className="ranked-label" href={d.href}>
+                {d.label}
+              </Link>
+            ) : (
+              <span className="ranked-label">{d.label}</span>
+            )}
+            <span className="nums small">{d.value.toLocaleString()}</span>
           </div>
           <div className="ranked-track">
             <span
@@ -405,24 +422,31 @@ export function StackedDays({
           {days.map((day, i) => {
             const total = day.values.reduce((sum, v) => sum + v, 0);
             return (
-              <div className="bars-col" key={day.date}>
-                {/*
-                  `aria-label` rather than `title`, and a drawn tip beside it.
+              /*
+                `aria-label` rather than `title`, and a drawn tip beside it.
 
-                  The native tooltip is placed by the operating system, not by
-                  this page: hovering the empty top of a column — and the stack
-                  is full height, so most of it is empty — put a grey OS box
-                  over the allowance figures above the chart. It is also
-                  unstyleable, so it looked like a browser artefact sitting on
-                  the product. `aria-label` keeps the same sentence for a
-                  screen reader; `.bars-tip` draws it where we choose.
-                */}
-                <div
-                  className="bars-stack"
-                  aria-label={`${dayLabel(day.date)} — ${series
-                    .map((name, i) => `${name}: ${day.values[i] ?? 0}`)
-                    .join(", ")}`}
-                >
+                The native tooltip is placed by the operating system, not by
+                this page: hovering the empty top of a column — and the stack
+                is full height, so most of it is empty — put a grey OS box
+                over the allowance figures above the chart. It is also
+                unstyleable, so it looked like a browser artefact sitting on
+                the product. `aria-label` keeps the same sentence for a
+                screen reader; `.bars-tip` draws it where we choose.
+
+                The label sits on the column with `role="img"`: an
+                `aria-label` on a plain div is ignored by most screen readers.
+                Focusable, so a keyboard reaches the same tip a mouse does.
+              */
+              <div
+                className="bars-col"
+                key={day.date}
+                role="img"
+                tabIndex={0}
+                aria-label={`${dayLabel(day.date)} — ${series
+                  .map((name, n) => `${name}: ${day.values[n] ?? 0}`)
+                  .join(", ")}`}
+              >
+                <div className="bars-stack" aria-hidden="true">
                   {/*
                     Bottom-first, so the largest series is the base the others
                     sit on rather than a block floating above a gap.

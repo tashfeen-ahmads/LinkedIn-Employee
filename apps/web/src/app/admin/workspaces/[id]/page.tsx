@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase-server";
-import { requirePlatformAdmin, statsByWorkspace, formatUsd, type WorkspaceStats } from "@/lib/admin";
+import { requirePlatformAdmin, statsByWorkspace, formatUsd, when, type WorkspaceStats } from "@/lib/admin";
+import { isoAttr } from "@/lib/format";
+import { label as statusLabel } from "@/lib/labels";
 import { dailyInviteCap } from "@le/linkedin";
 import { LINKEDIN_LIMITS } from "@le/shared";
 import { PageHeader, Section } from "@/components/page";
@@ -90,6 +92,8 @@ export default async function AdminWorkspacePage({
                 back={back}
                 label={`Pause ${running} running campaign${running === 1 ? "" : "s"}`}
                 tone="danger"
+                confirm={`Pause all ${running} in ${workspace.name}`}
+                pendingLabel="Pausing…"
               />
             ) : null}
             <Link href="/admin/workspaces" className="btn ghost small">
@@ -104,7 +108,7 @@ export default async function AdminWorkspacePage({
           trial clock to show — only when the workspace began. */}
       <Section title="Workspace">
         <div className="grid grid-4">
-          <Stat label="Signed up" value={new Date(workspace.created_at).toLocaleDateString()} />
+          <Stat label="Signed up" value={when(workspace.created_at)} />
           <Stat label="Open support tickets" value={String(openTickets ?? 0)} />
         </div>
         {openTickets ? (
@@ -141,20 +145,20 @@ export default async function AdminWorkspacePage({
                         <span className="small">{p?.full_name ?? "—"}</span>
                         <p className="tiny subtle">{p?.email ?? "—"}</p>
                       </td>
-                      <td className="small">{m.role}</td>
+                      <td className="small">{statusLabel(m.role)}</td>
                       <td>
                         {!a ? (
                           <span className="pill plain tiny">not connected</span>
                         ) : (
                           <>
                             <span className={`pill tiny ${a.status === "active" ? "positive" : a.status === "restricted" ? "danger" : "warning"}`}>
-                              {a.status.replaceAll("_", " ")}
+                              {statusLabel(a.status)}
                             </span>
                             {a.status_detail ? <p className="tiny muted">{a.status_detail}</p> : null}
                             {a.has_sales_navigator ? <p className="tiny subtle">Sales Navigator</p> : null}
                             {a.invites_paused_until && Date.parse(a.invites_paused_until) > Date.now() ? (
                               <div className="stack-1">
-                                <span className="pill tiny warning">LinkedIn hold until {new Date(a.invites_paused_until).toLocaleString()}</span>
+                                <span className="pill tiny warning">LinkedIn hold until {when(a.invites_paused_until)}</span>
                                 <ControlButton op="account-clear-hold" fields={{ accountId: a.id }} back={back} label="Clear hold" tone="ghost" />
                               </div>
                             ) : null}
@@ -208,7 +212,9 @@ export default async function AdminWorkspacePage({
                   <th>Replies</th>
                   <th className="num">Cap</th>
                   <th>Launched</th>
-                  <th />
+                  <th>
+                    <span className="sr-only">Actions</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -216,12 +222,12 @@ export default async function AdminWorkspacePage({
                   <tr key={c.id}>
                     <td className="small">{c.name}</td>
                     <td>
-                      <span className={`pill tiny ${c.status === "running" ? "positive" : "plain"}`}>{c.status}</span>
+                      <span className={`pill tiny ${c.status === "running" ? "positive" : "plain"}`}>{statusLabel(c.status)}</span>
                     </td>
                     <td className="small">{c.reply_mode}</td>
                     <td className="num mono">{c.daily_invite_cap ?? "—"}</td>
                     <td className="small subtle">
-                      {c.launched_at ? new Date(c.launched_at).toLocaleDateString() : "never"}
+                      {c.launched_at ? <time dateTime={isoAttr(c.launched_at)}>{when(c.launched_at)}</time> : "never"}
                     </td>
                     <td>
                       {c.status === "running" ? (
@@ -261,7 +267,9 @@ export default async function AdminWorkspacePage({
             {events.map((e) => (
               <li key={e.id} className="small">
                 <span className="mono">{e.name}</span>{" "}
-                <span className="subtle">{new Date(e.created_at).toLocaleString()}</span>
+                <time className="subtle" dateTime={isoAttr(e.created_at)}>
+                  {when(e.created_at)}
+                </time>
               </li>
             ))}
           </ul>

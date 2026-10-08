@@ -15,6 +15,8 @@ import {
 } from "../team/repair";
 import { PageNotice } from "@/components/page-notice";
 import { SubmitButton } from "@/components/submit-button";
+import { ConfirmButton } from "@/components/confirm-button";
+import { label } from "@/lib/labels";
 import { TeamSection } from "./team-section";
 import { linkedInState } from "./linkedin-state";
 import { BillingSection } from "./billing-section";
@@ -586,17 +588,30 @@ export default async function ProfilePage({
                 <div className="stack-4">
                   <label className="field medium">
                     <span>Company name</span>
-                    <input name="companyName" required maxLength={COMPANY_NAME_MAX} defaultValue={companyName} />
+                    <input
+                      name="companyName"
+                      required
+                      maxLength={COMPANY_NAME_MAX}
+                      autoComplete="organization"
+                      defaultValue={companyName}
+                    />
                   </label>
                   <label className="field medium">
                     <span>Website</span>
-                    <input name="websiteUrl" type="url" placeholder="https://acme.com" defaultValue={source.websiteUrl ?? ""} />
+                    <input
+                      name="websiteUrl"
+                      type="url"
+                      autoComplete="url"
+                      placeholder="https://acme.com"
+                      defaultValue={source.websiteUrl ?? ""}
+                    />
                   </label>
                   <label className="field medium">
                     <span>LinkedIn company page</span>
                     <input
                       name="linkedinCompanyUrl"
                       type="url"
+                      autoComplete="url"
                       placeholder="https://linkedin.com/company/acme"
                       defaultValue={source.linkedinCompanyUrl ?? ""}
                     />
@@ -641,6 +656,7 @@ export default async function ProfilePage({
                   <input
                     type="url"
                     name="bookingUrl"
+                    autoComplete="url"
                     placeholder="https://cal.com/you/intro"
                     defaultValue={me?.booking_url ?? ""}
                   />
@@ -668,18 +684,24 @@ export default async function ProfilePage({
                     <span>To</span>
                     <input type="number" name="end" min={1} max={24} defaultValue={hours.end} />
                   </label>
-                  <div className="cluster-3">
-                    {DAYS.map((day) => (
-                      <label key={day.value} className="small check">
-                        <input
-                          type="checkbox"
-                          name={`day-${day.value}`}
-                          defaultChecked={hours.days.includes(day.value)}
-                        />
-                        {day.label}
-                      </label>
-                    ))}
-                  </div>
+                  {/* A group, so a screen reader says "Sending days" before
+                      "Mon, checkbox" — seven bare checkboxes are seven
+                      unexplained days. */}
+                  <fieldset className="field">
+                    <legend className="small">Sending days</legend>
+                    <div className="cluster-3">
+                      {DAYS.map((day) => (
+                        <label key={day.value} className="small check">
+                          <input
+                            type="checkbox"
+                            name={`day-${day.value}`}
+                            defaultChecked={hours.days.includes(day.value)}
+                          />
+                          {day.label}
+                        </label>
+                      ))}
+                    </div>
+                  </fieldset>
                 </div>
                 <label className="small check">
                   <input type="checkbox" name="hasSalesNavigator" defaultChecked={hasSalesNavigator} />
@@ -763,9 +785,13 @@ export default async function ProfilePage({
                     Changed the website or description? Sage can read your business again and write
                     new strategies. Your current strategies are replaced; nothing has been sent yet.
                   </p>
-                  <SubmitButton className="btn secondary small" pendingLabel="Starting…">
+                  <ConfirmButton
+                    className="btn secondary small"
+                    confirmLabel="Replace my business profile and strategies"
+                    pendingLabel="Starting…"
+                  >
                     Rewrite my strategies from these details
-                  </SubmitButton>
+                  </ConfirmButton>
                 </form>
               ) : null}
             </Panel>
@@ -786,7 +812,7 @@ export default async function ProfilePage({
                 <Fact label="Username">
                   {me?.username || <span className="subtle">Not set</span>}
                 </Fact>
-                <Fact label="Role">{session.role}</Fact>
+                <Fact label="Role">{label(session.role)}</Fact>
                 <Fact label="How you describe yourself" wide>
                   {me?.bio || <span className="subtle">Nothing yet</span>}
                 </Fact>
@@ -846,9 +872,7 @@ export default async function ProfilePage({
                   is what attaches the account to you here.
                 </p>
                 <form action={connectLinkedIn}>
-                  <button className="btn" type="submit">
-                    Connect LinkedIn again
-                  </button>
+                  <SubmitButton pendingLabel="Opening LinkedIn…">Connect LinkedIn again</SubmitButton>
                 </form>
               </div>
             ) : (
@@ -899,18 +923,18 @@ export default async function ProfilePage({
                 connected account never sees it. */}
             <div className="cluster">
               <form action={refreshLinkedIn}>
-                <button className="btn secondary small" type="submit">
+                <SubmitButton className="btn secondary small" pendingLabel="Checking…">
                   Check connection
-                </button>
+                </SubmitButton>
               </form>
               {/* Always offered. A rep who changed their LinkedIn password, or
                   wants a different account on this seat, has no other way
                   back to the sign-in page while this one reads as working. */}
               {needsReconnect ? null : (
                 <form action={connectLinkedIn}>
-                  <button className="btn secondary small" type="submit">
+                  <SubmitButton className="btn secondary small" pendingLabel="Opening LinkedIn…">
                     Reconnect LinkedIn
-                  </button>
+                  </SubmitButton>
                 </form>
               )}
               <span className="tiny subtle">
@@ -956,15 +980,13 @@ export default async function ProfilePage({
             )}
             <div className="cluster">
               <form action={connectLinkedIn}>
-                <button className="btn" type="submit">
-                  Connect LinkedIn
-                </button>
+                <SubmitButton pendingLabel="Opening LinkedIn…">Connect LinkedIn</SubmitButton>
               </form>
               {awaitingProvider ? (
                 <form action={refreshLinkedIn}>
-                  <button className="btn secondary" type="submit">
+                  <SubmitButton className="btn secondary" pendingLabel="Checking…">
                     I already finished — check again
-                  </button>
+                  </SubmitButton>
                 </form>
               ) : null}
             </div>

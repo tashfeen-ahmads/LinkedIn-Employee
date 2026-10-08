@@ -9,6 +9,8 @@ import { PageNotice, type NoticeParams } from "@/components/page-notice";
 import { AgentKnows } from "@/components/agent-knows";
 import { PageHeader, Section, Empty } from "@/components/page";
 import { SubmitButton } from "@/components/submit-button";
+import { ConfirmButton } from "@/components/confirm-button";
+import { formatDate, isoAttr } from "@/lib/format";
 
 /**
  * The agents a workspace keeps.
@@ -71,18 +73,53 @@ async function archiveAgent(formData: FormData) {
   redirect(noticeQuery("/app/agents", "Retired. Campaigns that used it keep their history."));
 }
 
+/**
+ * Bring a retired agent back.
+ *
+ * Retiring only stamps `archived_at`, so undoing it is clearing the stamp. It
+ * comes back as an ordinary agent, never as the default: the default is a
+ * decision about new campaigns, and restoring something is not that decision.
+ */
+async function restoreAgent(formData: FormData) {
+  "use server";
+  const session = await requireSession();
+  const supabase = await createClient();
+  const id = String(formData.get("id") ?? "");
+  if (!id) redirect(errorQuery("/app/agents", "No agent was named."));
+
+  const { error } = await supabase
+    .from("agents")
+    .update({ archived_at: null })
+    .eq("id", id)
+    .eq("workspace_id", session.workspaceId)
+    .not("archived_at", "is", null);
+
+  if (error) redirect(errorQuery("/app/agents", error.message));
+  revalidatePath("/app/agents");
+  redirect(noticeQuery("/app/agents", "Restored. Campaigns can pick it again."));
+}
+
 export default async function AgentsPage({ searchParams }: { searchParams: Promise<NoticeParams> }) {
   const params = await searchParams;
   const session = await requireSession();
   const supabase = await createClient();
 
-  const { data: agents } = await supabase
-    .from("agents")
-    .select("id, name, model, from_name, is_default, updated_at")
-    .eq("workspace_id", session.workspaceId)
-    .is("archived_at", null)
-    .order("is_default", { ascending: false })
-    .order("updated_at", { ascending: false });
+  const [{ data: agents }, { data: retired }, { data: me }] = await Promise.all([
+    supabase
+      .from("agents")
+      .select("id, name, model, from_name, is_default, updated_at")
+      .eq("workspace_id", session.workspaceId)
+      .is("archived_at", null)
+      .order("is_default", { ascending: false })
+      .order("updated_at", { ascending: false }),
+    supabase
+      .from("agents")
+      .select("id, name, archived_at")
+      .eq("workspace_id", session.workspaceId)
+      .not("archived_at", "is", null)
+      .order("archived_at", { ascending: false }),
+    supabase.from("profiles").select("timezone").eq("id", session.userId).maybeSingle(),
+  ]);
 
   const ids = (agents ?? []).map((a) => a.id);
 
@@ -196,10 +233,16 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
         description="Openers and offer lines are still approved one at a time. Nothing unapproved ever opens a conversation."
       >
         {(agents ?? []).length === 0 ? (
-          <Empty title="No agents yet">
+          <Empty
+            title={(retired ?? []).length ? "No agent in use" : "No agents yet"}
+            action={(retired ?? []).length ? undefined : "Go to your strategy"}
+            href={(retired ?? []).length ? undefined : "/app/strategy"}
+          >
             An agent carries the voice, the opener, the offer and the playbook your campaigns run
-            on. Make one, train it on your own words, and test it against a real prospect before a
-            stranger reads anything.
+            on.{" "}
+            {(retired ?? []).length
+              ? "Restore a retired one below to give your campaigns a voice again."
+              : "Yours is built from your business profile the first time your strategy is written, so there is nothing to fill in by hand."}
           </Empty>
         ) : (
           <div className="table-scroll">
@@ -235,10 +278,10 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
                         {isSelectableModel(agent.model) ? (
                           agent.model
                         ) : (
-                          <span className="small warn">Pick a model</span>
+                          <span className="small warning-text">Pick a model</span>
                         )}
                       </td>
-                      <td className="num">{openerCount || <span className="small warn">none</span>}</td>
+                      <td className="num">{openerCount || <span className="small warning-text">none</span>}</td>
                       <td className="num">{offerCount}</td>
                       <td className="num">{campaignCounts.get(agent.id) ?? 0}</td>
                       <td className="row-actions">
@@ -252,9 +295,12 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
                         )}
                         <form action={archiveAgent}>
                           <input type="hidden" name="id" value={agent.id} />
-                          <SubmitButton className="btn secondary small" pendingLabel="Retiring…">
+                          <ConfirmButton
+                            confirmLabel={`Retire ${agent.name}`}
+                            pendingLabel="Retiring…"
+                          >
                             Retire
-                          </SubmitButton>
+                          </ConfirmButton>
                         </form>
                       </td>
                     </tr>
@@ -265,6 +311,48 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
           </div>
         )}
       </Section>
+
+      {(retired ?? []).length ? (
+        <Section
+          id="retired"
+          title="Retired"
+          description="Kept so the campaigns that ran on them can still say what they were. Restoring one makes it available to campaigns again; it does not become the default."
+        >
+          <div className="table-scroll">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th scope="col">Agent</th>
+                  <th scope="col">Retired</th>
+                  <th scope="col">
+                    <span className="sr-only">Actions</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {(retired ?? []).map((agent) => (
+                  <tr key={agent.id}>
+                    <td>{agent.name}</td>
+                    <td className="small muted">
+                      <time dateTime={isoAttr(agent.archived_at)}>
+                        {formatDate(agent.archived_at, me?.timezone)}
+                      </time>
+                    </td>
+                    <td className="row-actions">
+                      <form action={restoreAgent}>
+                        <input type="hidden" name="id" value={agent.id} />
+                        <SubmitButton className="btn secondary small" pendingLabel="Restoring…">
+                          Restore
+                        </SubmitButton>
+                      </form>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Section>
+      ) : null}
     </>
   );
 }

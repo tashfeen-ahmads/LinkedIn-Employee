@@ -6,6 +6,7 @@ import { callWorker, errorQuery, noticeQuery } from "@/lib/worker";
 import { PageNotice, type NoticeParams } from "@/components/page-notice";
 import { PageHeader, Section, Empty } from "@/components/page";
 import { SubmitButton } from "@/components/submit-button";
+import { formatDateTime, isoAttr } from "@/lib/format";
 
 /**
  * What this agent would actually write to somebody.
@@ -106,7 +107,7 @@ export default async function AgentTestPage({
     .maybeSingle();
   if (!agent) notFound();
 
-  const [{ data: prospects }, { data: runs }] = await Promise.all([
+  const [{ data: prospects }, { data: runs }, { data: me }] = await Promise.all([
     supabase
       .from("prospects")
       .select("id, first_name, last_name, company, title")
@@ -119,7 +120,9 @@ export default async function AgentTestPage({
       .eq("agent_id", id)
       .order("created_at", { ascending: false })
       .limit(10),
+    supabase.from("profiles").select("timezone").eq("id", session.userId).maybeSingle(),
   ]);
+  const timezone = me?.timezone ?? null;
 
   return (
     <>
@@ -195,10 +198,10 @@ export default async function AgentTestPage({
                   <p className="small muted">
                     {subject.firstName ?? "someone"}
                     {subject.company ? ` at ${subject.company}` : ""} · {run.model ?? "no model"} ·{" "}
-                    {run.created_at}
+                    <time dateTime={isoAttr(run.created_at)}>{formatDateTime(run.created_at, timezone)}</time>
                   </p>
                   {run.error ? (
-                    <p className="warn">{run.error}</p>
+                    <p className="warning-text">{run.error}</p>
                   ) : (
                     <p className="prose">{run.invite_note}</p>
                   )}
@@ -206,7 +209,7 @@ export default async function AgentTestPage({
                       A placeholder the data cannot fill is the one thing this
                       screen exists to catch before a prospect does. */}
                   {missing.length > 0 ? (
-                    <p className="small warn">
+                    <p className="small warning-text">
                       Nothing to fill {missing.map((f) => `{{${f}}}`).join(", ")} for this person.
                     </p>
                   ) : null}

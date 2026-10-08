@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /**
  * A submit button for a form that posts to a URL rather than a server action.
@@ -20,6 +20,21 @@ export function PostButton({
 }) {
   const [pending, setPending] = useState(false);
   const ref = useRef<HTMLButtonElement>(null);
+
+  /*
+   * Back from the next page, the browser may restore this one from its
+   * back-forward cache exactly as it was left: React state included, so the
+   * button still said "Signing in…" and refused every press, and the form was
+   * dead until a reload. A restored page fires `pageshow` with `persisted`,
+   * which is the one moment to put the button back.
+   */
+  useEffect(() => {
+    const onShow = (event: PageTransitionEvent) => {
+      if (event.persisted) setPending(false);
+    };
+    window.addEventListener("pageshow", onShow);
+    return () => window.removeEventListener("pageshow", onShow);
+  }, []);
 
   return (
     <button

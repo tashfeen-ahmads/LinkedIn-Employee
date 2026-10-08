@@ -1,7 +1,13 @@
 "use client";
 
-import { motion, useReducedMotion, type Variants } from "framer-motion";
-import type { ReactNode } from "react";
+import {
+  motion,
+  useAnimationControls,
+  useInView,
+  useReducedMotion,
+  type Variants,
+} from "framer-motion";
+import { useEffect, useRef, type ReactNode } from "react";
 
 /*
  * Motion, on two rules.
@@ -121,25 +127,26 @@ export function StaggerItem({ children, className }: { children: ReactNode; clas
 /**
  * A line that draws itself as it comes into view, used on the diagrams to show
  * direction of flow. Purely an SVG path length trick.
+ *
+ * The server's markup is the finished line. This used to start from
+ * `initial={{ pathLength: 0 }}`, which framer writes into the server's HTML as
+ * a dash pattern with nothing drawn, so without the script (a crawler, a link
+ * preview, a page whose JavaScript failed) the ramp chart had an axis, a fill
+ * and no line. Now nothing is hidden until the client has seen the path come
+ * into view; only then is it reset to zero and drawn, which is the same
+ * movement to look at and a whole chart to everybody else.
  */
 export function DrawPath({ d, className }: { d: string; className?: string }) {
   const reduced = useReducedMotion();
+  const ref = useRef<SVGPathElement>(null);
+  const inView = useInView(ref, { once: true, margin: "-40px" });
+  const controls = useAnimationControls();
 
-  // `motion.path` with no animation props is a plain path, so the element is
-  // the same on both sides and only the drawing stops.
-  return (
-    <motion.path
-      d={d}
-      className={className}
-      /*
-       * The one place a zero start is right, and it is `pathLength` rather
-       * than opacity: without the script the path renders at its full length,
-       * which is the finished drawing rather than a blank.
-       */
-      initial={{ pathLength: 0 }}
-      whileInView={{ pathLength: 1 }}
-      viewport={{ once: true, margin: "-40px" }}
-      transition={reduced ? { duration: 0 } : { duration: 0.9, ease: "easeInOut" }}
-    />
-  );
+  useEffect(() => {
+    if (!inView || reduced) return;
+    controls.set({ pathLength: 0 });
+    void controls.start({ pathLength: 1, transition: { duration: 0.9, ease: "easeInOut" } });
+  }, [controls, inView, reduced]);
+
+  return <motion.path ref={ref} d={d} className={className} initial={false} animate={controls} />;
 }

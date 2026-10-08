@@ -1,7 +1,7 @@
 "use client";
 
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
 
 /**
  * The one search box, in the top bar rather than in the rail.
@@ -15,7 +15,14 @@ import { useState } from "react";
  */
 export function AppSearch() {
   const router = useRouter();
-  const [query, setQuery] = useState("");
+  const pathname = usePathname();
+  const params = useSearchParams();
+  // On the prospect list the box shows what that list is filtered by, so the
+  // search you ran is still visible after it ran — and clearing it there is
+  // the same act as clearing the filter.
+  const current = pathname === "/app/prospects" ? (params.get("q") ?? "") : "";
+  const [query, setQuery] = useState(current);
+  useEffect(() => setQuery(current), [current]);
 
   return (
     <form
@@ -38,6 +45,9 @@ export function AppSearch() {
         id="app-search"
         type="search"
         value={query}
+        name="q"
+        autoComplete="off"
+        spellCheck={false}
         placeholder="Search prospects…"
         onChange={(event) => setQuery(event.target.value)}
         onKeyDown={(event) => {

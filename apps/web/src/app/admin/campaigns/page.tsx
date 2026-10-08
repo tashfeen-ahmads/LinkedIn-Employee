@@ -4,6 +4,7 @@ import { requirePlatformAdmin, ago } from "@/lib/admin";
 import { PageHeader, Section, Empty } from "@/components/page";
 import { PageNotice } from "@/components/page-notice";
 import { ControlButton } from "@/components/admin-control";
+import { label } from "@/lib/labels";
 
 export const dynamic = "force-dynamic";
 
@@ -54,15 +55,19 @@ export default async function AdminCampaignsPage({
 
   return (
     <>
-      <PageNotice error={params.error} notice={params.notice} />
       <PageHeader
         eyebrow="Operator"
         title="Campaigns"
         lede={`${campaigns?.length ?? 0} across every workspace. Pause any running campaign; resume one its owner launched.`}
       />
+      <PageNotice error={params.error} notice={params.notice} />
 
       <div className="cluster">
-        <Link className={`btn small ${filter ? "ghost" : "secondary"}`} href="/admin/campaigns">
+        <Link
+          className={`btn small ${filter ? "ghost" : "secondary"}`}
+          href="/admin/campaigns"
+          aria-current={filter ? undefined : "page"}
+        >
           All ({campaigns?.length ?? 0})
         </Link>
         {STATUSES.map((status) => {
@@ -73,14 +78,15 @@ export default async function AdminCampaignsPage({
               key={status}
               className={`btn small ${filter === status ? "secondary" : "ghost"}`}
               href={`/admin/campaigns?status=${status}`}
+              aria-current={filter === status ? "page" : undefined}
             >
-              {status} ({n})
+              {label(status)} ({n})
             </Link>
           );
         })}
       </div>
 
-      <Section title={filter ? `${shown.length} ${filter}` : "Every campaign"}>
+      <Section title={filter ? `${label(filter)} (${shown.length})` : "Every campaign"}>
         {!shown.length ? (
           <Empty title="None.">No campaign has this status.</Empty>
         ) : (
@@ -97,7 +103,9 @@ export default async function AdminCampaignsPage({
                   <th className="num">Replied</th>
                   <th className="num">Failed</th>
                   <th>Launched</th>
-                  <th />
+                  <th>
+                    <span className="sr-only">Actions</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -112,7 +120,7 @@ export default async function AdminCampaignsPage({
                         <p className="tiny subtle">
                           <Link href={`/admin/workspaces/${c.workspace_id}`}>{workspaceName.get(c.workspace_id) ?? "—"}</Link>
                           {c.status === "running" && account !== "active" ? (
-                            <span className="pill tiny danger"> account {account?.replaceAll("_", " ") ?? "missing"}</span>
+                            <span className="pill tiny danger"> account {account ? label(account).toLowerCase() : "missing"}</span>
                           ) : null}
                         </p>
                       </td>
@@ -120,7 +128,7 @@ export default async function AdminCampaignsPage({
                         <span
                           className={`pill tiny ${c.status === "running" ? "positive" : c.status === "paused" ? "warning" : "plain"}`}
                         >
-                          {c.status}
+                          {label(c.status)}
                         </span>
                       </td>
                       <td className="num mono">{total}</td>

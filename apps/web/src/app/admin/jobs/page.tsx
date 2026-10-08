@@ -62,12 +62,12 @@ export default async function AdminJobsPage({ searchParams }: { searchParams: No
 
   return (
     <>
-      <PageNotice error={params.error} notice={params.notice} />
       <PageHeader
         eyebrow="Operator"
         title="Jobs"
         lede="The worker's queues as they stand right now, the schedules behind them, and the buttons to run any of them early."
       />
+      <PageNotice error={params.error} notice={params.notice} />
 
       {!result.ok ? (
         <div className="notice danger">
@@ -95,7 +95,9 @@ export default async function AdminJobsPage({ searchParams }: { searchParams: No
                   <th className="num">Scheduled</th>
                   <th className="num">Failed</th>
                   <th className="num">Done (24h)</th>
-                  <th />
+                  <th>
+                    <span className="sr-only">Actions</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -110,8 +112,23 @@ export default async function AdminJobsPage({ searchParams }: { searchParams: No
                     <td>
                       {q.failed ? (
                         <div className="cluster">
-                          <ControlButton op="jobs-retry-failed" fields={{ queue: name }} back={back} label="Retry failed" tone="ghost" />
-                          <ControlButton op="jobs-clean-failed" fields={{ queue: name }} back={back} label="Clear failed" tone="ghost" />
+                          <ControlButton
+                            op="jobs-retry-failed"
+                            fields={{ queue: name }}
+                            back={back}
+                            label="Retry failed"
+                            tone="secondary"
+                            pendingLabel="Retrying…"
+                          />
+                          <ControlButton
+                            op="jobs-clean-failed"
+                            fields={{ queue: name }}
+                            back={back}
+                            label="Clear failed"
+                            tone="danger"
+                            confirm={`Delete ${q.failed} failed job${q.failed === 1 ? "" : "s"}`}
+                            pendingLabel="Clearing…"
+                          />
                         </div>
                       ) : null}
                     </td>

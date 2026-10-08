@@ -2,13 +2,13 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { BreadcrumbSchema } from "@/components/schema";
 import { Reveal } from "@/components/reveal";
-import { PUBLIC_LIMITS, SITE, pageMeta } from "@/lib/site";
+import { PUBLIC_LIMITS, pageMeta } from "@/lib/site";
 import { TOUR_STAGES, YOUR_DECISIONS } from "@le/shared";
 import { TeamAvatar } from "@/components/team-avatar";
 import { NORA, type MemberKey } from "@/lib/team";
 
 export const metadata: Metadata = pageMeta({
-  title: `How it works — ${NORA}, a team of four, and three decisions`,
+  title: `How it works: ${NORA}, a team of four, and three decisions`,
   description:
     "Approve a strategy, approve the words, press launch. Sage, Scout, Quinn and Reese find the people, write to each one, answer the replies and book the calls. Anything you would rather do yourself, you can.",
   path: "/how-it-works",
@@ -20,7 +20,6 @@ export const metadata: Metadata = pageMeta({
  * said here because it is the point of this page.
  */
 const AGENTS: ReadonlyArray<{
-  n: string;
   key: MemberKey | null;
   name: string;
   job: string;
@@ -29,17 +28,15 @@ const AGENTS: ReadonlyArray<{
   output: string[];
 }> = [
   {
-    n: "01",
     key: "sage",
     name: "Sage, the strategist",
     job: "Learns what you sell and to whom",
     detail:
-      "Reads your website and LinkedIn page and writes a business profile plus three to five customer strategies — each with the pains, the buying signals, opening angles, and the search filters to execute it. Ask for more and it extends the list rather than starting again.",
-    handover: "You approve one. That is what starts the search — there is no second button.",
-    output: ["Business profile", "3–5 customer strategies", "Search filters per strategy"],
+      "Reads your website and LinkedIn page and writes a business profile plus three to five customer strategies, each with the pains, the buying signals, opening angles, and the search filters to execute it. Ask for more and it extends the list rather than starting again.",
+    handover: "You approve one. That is what starts the search; there is no second button.",
+    output: ["Business profile", "3 to 5 customer strategies", "Search filters per strategy"],
   },
   {
-    n: "02",
     key: "scout",
     name: "Scout, the prospector",
     job: "Finds the people",
@@ -49,7 +46,6 @@ const AGENTS: ReadonlyArray<{
     output: ["Ranked prospects with reasons", "Filters it could not apply"],
   },
   {
-    n: "03",
     key: "quinn",
     name: "Quinn, the campaign writer",
     job: "Writes to each person",
@@ -59,17 +55,15 @@ const AGENTS: ReadonlyArray<{
     output: ["A note per person", "Follow-ups", "Angles to test"],
   },
   {
-    n: "04",
     key: "reese",
     name: "Reese, outreach and booking",
     job: "Sends, answers, and knows when not to",
     detail:
-      "Sends the invitations and follow-ups under daily caps, spread across your working hours. Classifies every reply before writing anything, and answers only from the facts you gave it. You choose how much rope it gets: hold pricing, legal, security and anything negative for you, or let it answer and book on its own. Two things always wait — somebody who asks for a human, and a message it did not understand.",
+      "Sends the invitations and follow-ups under daily caps, spread across your working hours. Classifies every reply before writing anything, and answers only from the facts you gave it. You choose how much rope it gets: hold pricing, legal, security and anything negative for you, or let it answer and book on its own. Two things always wait: somebody who asks for a human, and a message it did not understand.",
     handover: "On autopilot it sends and books by itself. Set it to review instead and it waits for you.",
     output: ["Paced invitations", "Drafted replies", "Times you are genuinely free"],
   },
   {
-    n: "05",
     key: null,
     name: "You",
     job: "Close",
@@ -99,7 +93,7 @@ export default function HowItWorksPage() {
               <p className="lede prose">
                 Approve a strategy, approve the words, press launch. From there {NORA}&rsquo;s team
                 finds the people, writes to each one by name, answers what comes back and books the
-                calls — unattended, inside limits that keep the account alive. {NORA} passes the
+                calls, unattended and inside limits that keep the account alive. {NORA} passes the
                 work along and tells you when something needs you. Anything you would rather do
                 yourself, you still can.
               </p>
@@ -140,8 +134,8 @@ export default function HowItWorksPage() {
                 ))}
               </ol>
               <p className="small muted prose">
-                Everything else — the search, the scoring, a note written for each person, the
-                pacing, the follow-ups, the replies, the booking — runs without you. Every one of
+                Everything else runs without you: the search, the scoring, a note written for each
+                person, the pacing, the follow-ups, the replies, the booking. Every one of
                 them can be taken over by hand if you would rather: read the drafts before they
                 send, cut names off a list, write a reply yourself, or send one invitation now and
                 watch what happens.
@@ -149,12 +143,13 @@ export default function HowItWorksPage() {
             </section>
           </Reveal>
 
+          {/* An ordered list already says the order; the "01" to "05" labels
+              repeated it, and numbered "You" as the fifth agent. */}
           <ol className="stack-5 agents">
             {AGENTS.map((agent) => (
-              <li key={agent.n} className="card agent-row">
+              <li key={agent.name} className="card agent-row">
                 <div className="agent-mark">
                   {agent.key ? <TeamAvatar member={agent.key} /> : null}
-                  <span className="eyebrow">{agent.n}</span>
                 </div>
                 <div className="stack-3 grow">
                   <div className="stack-2">
@@ -245,15 +240,6 @@ export default function HowItWorksPage() {
               {PUBLIC_LIMITS.invitesPerDayStart}.{" "}
               <Link href="/linkedin-automation-limits">Why those numbers</Link>.
             </p>
-          </div>
-
-          <div className="cluster">
-            <Link href={`${SITE.app}/signup`} className="btn large">
-              Sign up free
-            </Link>
-            <Link href="/#team" className="btn secondary large">
-              Meet the team
-            </Link>
           </div>
         </div>
       </section>

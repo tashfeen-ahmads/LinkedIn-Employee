@@ -27,6 +27,23 @@ import { StrategyStatus } from "@/components/strategy-status";
 import { StrategyDetailsForm, StrategyRetryButton } from "@/components/strategy-retry";
 import { hasStrategySource, readOnboardingStash } from "@/lib/onboarding-stash";
 import { SubmitButton } from "@/components/submit-button";
+import { formatDateTime, isoAttr } from "@/lib/format";
+
+/**
+ * Where an action on this page returns to: the business tab it was pressed on.
+ * Only an id this form carried, and only as a query value, so it cannot be
+ * turned into a redirect anywhere else.
+ */
+function strategyHref(formData: FormData): string {
+  const business = String(formData.get("business") ?? "").trim();
+  return /^[0-9a-f-]{36}$/i.test(business) ? `/app/strategy?business=${business}` : "/app/strategy";
+}
+
+/** `noticeQuery` for an address that may already carry `?business=`. */
+function noticeAt(href: string, message: string): string {
+  const query = noticeQuery("", message);
+  return href.includes("?") ? `${href}&${query.slice(1)}` : `${href}${query}`;
+}
 
 /**
  * The Strategy Agent's output, and the only place it can be approved.
@@ -144,13 +161,25 @@ async function dropProfile(formData: FormData) {
 
   // Kept, not deleted: "we decided not to pursue this market" is worth
   // remembering, and undoing it is one click.
-  await supabase
+  const { error } = await supabase
     .from("customer_profiles")
     .update({ do_not_pursue: true, approved_at: null })
     .eq("id", id)
     .eq("workspace_id", session.workspaceId);
+  if (error) {
+    console.error(`[strategy] drop profile: ${error.message}`);
+    redirect(errorQuery("/app/strategy", "That strategy could not be set aside. Try again."));
+  }
 
   revalidatePath("/app/strategy");
+  // Said, because the card only dims: without a sentence the press looked like
+  // nothing had happened.
+  redirect(
+    noticeAt(
+      strategyHref(formData),
+      "Set aside. Nothing will be searched for it, and Pursue after all brings it back.",
+    ),
+  );
 }
 
 async function saveProfile(formData: FormData) {
@@ -165,7 +194,7 @@ async function saveProfile(formData: FormData) {
     .eq("id", id)
     .eq("workspace_id", session.workspaceId)
     .maybeSingle();
-  if (!row) return;
+  if (!row) redirect(errorQuery("/app/strategy", "That strategy could not be found. Reload the page and try again."));
 
   const filters = Object.fromEntries(
     FILTER_FIELDS.map((field) => [field.key, String(formData.get(field.key) ?? "")]),
@@ -196,7 +225,7 @@ async function saveProfile(formData: FormData) {
     ctaUrl = checked.url;
   }
 
-  await supabase
+  const { error: saveError } = await supabase
     .from("customer_profiles")
     .update({
       spec: result.spec as never,
@@ -209,8 +238,13 @@ async function saveProfile(formData: FormData) {
     })
     .eq("id", id)
     .eq("workspace_id", session.workspaceId);
+  if (saveError) {
+    console.error(`[strategy] save profile: ${saveError.message}`);
+    redirect(errorQuery("/app/strategy", "The search could not be saved. Nothing changed — try again."));
+  }
 
   revalidatePath("/app/strategy");
+  redirect(noticeAt(strategyHref(formData), "Search saved. The next search for this strategy uses it."));
 }
 
 /**
@@ -372,7 +406,7 @@ export default async function StrategyPage({
    * is what every writer resolves through: the first business is the one the
    * workspace was set up around, not the one somebody added last night.
    */
-  const [{ data: businessRows }, { data: profileRows }, { data: account }] = await Promise.all([
+  const [{ data: businessRows }, { data: profileRows }, { data: account }, { data: me }] = await Promise.all([
     supabase
       .from("business_profiles")
       .select("id, spec, website_url, created_at")
@@ -391,7 +425,10 @@ export default async function StrategyPage({
       .eq("workspace_id", session.workspaceId)
       .eq("user_id", session.userId)
       .maybeSingle(),
+    // Times in the rep's own timezone, not the server's.
+    supabase.from("profiles").select("timezone").eq("id", session.userId).maybeSingle(),
   ]);
+  const timezone = me?.timezone ?? null;
 
   const lastSearch = describeLastSearch(lastStop);
   const businesses = businessRows ?? [];
@@ -542,14 +579,14 @@ export default async function StrategyPage({
       {businesses.length > 1 ? (
         <nav className="tabs" aria-label="Which business these strategies are for">
           {businesses.map((row) => (
-            <a
+            <Link
               key={row.id}
               className={`pill ${row.id === businessRow.id ? "accent" : ""}`}
               href={`/app/strategy?business=${row.id}`}
               aria-current={row.id === businessRow.id ? "page" : undefined}
             >
               {labelOf(row)} ({strategyCount.get(row.id) ?? 0})
-            </a>
+            </Link>
           ))}
         </nav>
       ) : null}
@@ -564,34 +601,46 @@ export default async function StrategyPage({
           {/* When, and nothing else. The payload is the worker's record —
               build ids and internal fields — and never the customer's to read
               (rule 54). */}
-          <p className="tiny subtle">{new Date(lastSearch.at).toLocaleString()}</p>
+          <p className="tiny subtle">
+            <time dateTime={isoAttr(lastSearch.at)}>{formatDateTime(lastSearch.at, timezone)}</time>
+          </p>
         </div>
       ) : null}
 
       {!connected ? (
         <div className="notice">
-          Connect your LinkedIn account on the Team page before looking for prospects.
+          {/* Profile, not Team: the connect button lives on the profile, and
+              this sentence used to send people to a page with nothing to press. */}
+          <p>
+            Connect your LinkedIn account before looking for prospects.{" "}
+            <Link href="/app/profile#linkedin-heading">Connect it on your profile</Link>
+          </p>
         </div>
       ) : null}
 
-      {business.success ? (
-        <section className="card">
-          <h3>{business.data.companyName}</h3>
-          <p>{business.data.oneLiner}</p>
-          <p className="small muted">{business.data.offering}</p>
-          <div className="grid grid-3"
-          >
-            <Facts label="Tone of voice" values={[business.data.toneOfVoice]} />
-            <Facts label="Proof points" values={business.data.proofPoints} />
-            <Facts label="Differentiators" values={business.data.differentiators} />
-            <Facts label="Objections we hear" values={business.data.commonObjections} />
+      {/*
+        Inside a Section, so the card's h3 sits under an h2 rather than
+        straight under the page title — a heading that skipped a level.
+      */}
+      <Section id="business" title="Business profile">
+        {business.success ? (
+          <div className="card">
+            <h3>{business.data.companyName}</h3>
+            <p>{business.data.oneLiner}</p>
+            <p className="small muted">{business.data.offering}</p>
+            <div className="grid grid-3">
+              <Facts label="Tone of voice" values={[business.data.toneOfVoice]} />
+              <Facts label="Proof points" values={business.data.proofPoints} />
+              <Facts label="Differentiators" values={business.data.differentiators} />
+              <Facts label="Objections we hear" values={business.data.commonObjections} />
+            </div>
           </div>
-        </section>
-      ) : (
-        <div className="notice danger">
-          The stored business profile does not match the current schema. Ask Sage to write it again.
-        </div>
-      )}
+        ) : (
+          <div className="notice danger">
+            <p>This business profile can no longer be read. Press Write more strategies, or ask us through Support.</p>
+          </div>
+        )}
+      </Section>
 
       {/*
         The heading belongs to the list under it, so the frame owns both.
@@ -629,7 +678,10 @@ export default async function StrategyPage({
             : null;
 
           return (
-            <article key={row.id} className="card" style={row.do_not_pursue ? { opacity: 0.6 } : undefined}>
+            // Set-aside strategies dim their words, not their buttons: at 60%
+            // opacity "Pursue after all" looked disabled, and it is the one
+            // thing on the card that still works.
+            <article key={row.id} className={row.do_not_pursue ? "card muted" : "card"}>
               <header className="between">
                 <div>
                   <h3>{profile.name}</h3>
@@ -664,9 +716,9 @@ export default async function StrategyPage({
                   {row.do_not_pursue ? (
                     <form action={approveProfile}>
                       <input type="hidden" name="profileId" value={row.id} />
-                      <button className="btn secondary small" type="submit">
+                      <SubmitButton className="btn secondary small" pendingLabel="Approving…">
                         Pursue after all
-                      </button>
+                      </SubmitButton>
                     </form>
                   ) : approved ? (
                     <form action={findProspects}>
@@ -683,17 +735,18 @@ export default async function StrategyPage({
                   ) : (
                     <form action={approveProfile}>
                       <input type="hidden" name="profileId" value={row.id} />
-                      <button className="btn small" type="submit">
+                      <SubmitButton className="btn small" pendingLabel="Approving…">
                         Approve
-                      </button>
+                      </SubmitButton>
                     </form>
                   )}
                   {row.do_not_pursue ? null : (
                     <form action={dropProfile}>
                       <input type="hidden" name="profileId" value={row.id} />
-                      <button className="btn secondary small" type="submit">
+                      <input type="hidden" name="business" value={businessRow.id} />
+                      <SubmitButton className="btn secondary small" pendingLabel="Setting aside…">
                         Not this market
-                      </button>
+                      </SubmitButton>
                     </form>
                   )}
                 </div>
@@ -746,6 +799,7 @@ export default async function StrategyPage({
                 </summary>
                 <form action={saveProfile}>
                   <input type="hidden" name="profileId" value={row.id} />
+                  <input type="hidden" name="business" value={businessRow.id} />
                   <p className="small muted">
                     One per line. These go straight into the Sales Navigator search, so a title here is
                     a title LinkedIn has to recognise.
@@ -806,9 +860,9 @@ export default async function StrategyPage({
                       </span>
                     </label>
                   </div>
-                  <button className="btn secondary small" type="submit">
+                  <SubmitButton className="btn secondary small" pendingLabel="Saving…">
                     Save search
-                  </button>
+                  </SubmitButton>
                 </form>
               </details>
             </article>

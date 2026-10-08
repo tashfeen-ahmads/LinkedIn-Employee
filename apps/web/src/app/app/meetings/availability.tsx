@@ -5,6 +5,8 @@ import { createClient } from "@/lib/supabase-server";
 import { callWorker, errorQuery, noticeQuery } from "@/lib/worker";
 import { planDays } from "@le/calendar";
 import { AvailabilityCalendar } from "@/components/availability-calendar";
+import { SubmitButton } from "@/components/submit-button";
+import { formatDateTime, isoAttr, wallTimeToUtc } from "@/lib/format";
 
 /**
  * When this rep will take a call, and when they will not.
@@ -93,21 +95,30 @@ async function addBlackout(formData: FormData) {
   const session = await requireSession();
   const supabase = await createClient();
 
+  const { data: row } = await supabase
+    .from("availability")
+    .select("timezone")
+    .eq("workspace_id", session.workspaceId)
+    .eq("user_id", session.userId)
+    .maybeSingle();
+  const timezone = row?.timezone || DEFAULTS.timezone;
+
   const from = String(formData.get("from") ?? "");
   const to = String(formData.get("to") ?? "");
-  const starts = Date.parse(from);
-  const ends = Date.parse(to);
+  const starts = wallTimeToUtc(from, timezone);
+  const ends = wallTimeToUtc(to, timezone);
   if (!Number.isFinite(starts) || !Number.isFinite(ends) || ends <= starts) {
     redirect(errorQuery("/app/meetings", "A blocked period needs a start and a later end."));
   }
 
-  await supabase.from("availability_blackouts").insert({
+  const { error } = await supabase.from("availability_blackouts").insert({
     workspace_id: session.workspaceId,
     user_id: session.userId,
     starts_at: new Date(starts).toISOString(),
     ends_at: new Date(ends).toISOString(),
     reason: String(formData.get("reason") ?? "").trim() || null,
   });
+  if (error) redirect(errorQuery("/app/meetings", `That did not save: ${error.message}`));
 
   redirect(noticeQuery("/app/meetings", "Blocked. Nothing will be offered in that window."));
 }
@@ -399,7 +410,7 @@ export async function Availability() {
                 <p className="tiny subtle">
                   {feed.status === "ok"
                     ? `${feed.event_count} busy period${feed.event_count === 1 ? "" : "s"} · last read ${
-                        feed.last_synced_at ? new Date(feed.last_synced_at).toLocaleString() : "just now"
+                        feed.last_synced_at ? formatDateTime(feed.last_synced_at, current.timezone) : "just now"
                       }`
                     : "Not being read."}
                 </p>
@@ -461,21 +472,21 @@ export async function Availability() {
         </div>
 
         <form action={addBlackout} className="form-row">
-          <label className="field compact">
-            <span>From</span>
+          <label className="field">
+            <span>From ({current.timezone})</span>
             <input type="datetime-local" name="from" required />
           </label>
-          <label className="field compact">
-            <span>To</span>
+          <label className="field">
+            <span>To ({current.timezone})</span>
             <input type="datetime-local" name="to" required />
           </label>
           <label className="field grow">
             <span>Reason (optional)</span>
             <input name="reason" maxLength={120} placeholder="Client workshop" />
           </label>
-          <button className="btn secondary" type="submit">
+          <SubmitButton className="btn secondary" pendingLabel="Blocking…">
             Block it
-          </button>
+          </SubmitButton>
         </form>
 
         {(blackouts ?? []).length === 0 ? (
@@ -485,14 +496,16 @@ export async function Availability() {
             {blackouts!.map((b) => (
               <li key={b.id} className="between">
                 <span className="small">
-                  {new Date(b.starts_at).toLocaleString()} → {new Date(b.ends_at).toLocaleString()}
+                  <time dateTime={isoAttr(b.starts_at)}>{formatDateTime(b.starts_at, current.timezone)}</time>
+                  {" → "}
+                  <time dateTime={isoAttr(b.ends_at)}>{formatDateTime(b.ends_at, current.timezone)}</time>
                   {b.reason ? ` · ${b.reason}` : ""}
                 </span>
                 <form action={removeBlackout}>
                   <input type="hidden" name="id" value={b.id} />
-                  <button className="btn ghost small" type="submit">
+                  <SubmitButton className="btn ghost small" pendingLabel="Removing…">
                     Remove
-                  </button>
+                  </SubmitButton>
                 </form>
               </li>
             ))}

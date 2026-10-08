@@ -18,7 +18,7 @@ import { FaqSchema, SoftwareSchema } from "@/components/schema";
 import { SITE, pageMeta } from "@/lib/site";
 
 export const metadata: Metadata = pageMeta({
-  title: `${SITE.tagline} — books meetings while you sleep`,
+  title: `${SITE.tagline} that books meetings while you sleep`,
   description: SITE.description,
   path: "/",
 });

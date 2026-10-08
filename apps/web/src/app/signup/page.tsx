@@ -10,6 +10,51 @@ import { checkEmail, checkPassword, PASSWORD_MIN } from "@/lib/auth-fields";
 import { requestAccountEmails } from "@/lib/account-emails";
 import { SITE } from "@/lib/site";
 
+/*
+ * What `?error=` may say. The action below redirects with a short code, and
+ * the page owns the sentence: printing the query string verbatim let anybody
+ * write a red banner under our logo, and printing the provider's own message
+ * put "AuthApiError: over_email_send_rate_limit" in front of a new customer.
+ */
+type SignupError = "name" | "email" | "short" | "mismatch" | "exists" | "rate-limit" | "weak" | "failed";
+
+function errorFor(code: string | undefined): React.ReactNode {
+  if (!code) return null;
+  switch (code as SignupError) {
+    case "name":
+      return "Tell us your name. It is what a prospect sees the invitation come from.";
+    case "email":
+      return "That does not look like an email address. Check it and try again.";
+    case "short":
+      return `Use at least ${PASSWORD_MIN} characters. A short phrase is fine.`;
+    case "mismatch":
+      return "The two passwords do not match. Both boxes can be shown, so you can check them.";
+    case "weak":
+      return "That password is too easy to guess. Try a longer phrase.";
+    case "rate-limit":
+      return "Too many attempts from here in a short time. Wait a few minutes, then try again.";
+    case "exists":
+      return (
+        <>
+          There is already an account with that email. <Link href="/login">Sign in</Link>, or{" "}
+          <Link href="/forgot">reset your password</Link> if you have forgotten it.
+        </>
+      );
+    default:
+      return "Your account could not be created just now. Try again in a minute.";
+  }
+}
+
+/** A provider refusal, as one of the codes above. Never its own words. */
+function signupErrorCode(error: { message?: string; code?: string; status?: number }): SignupError {
+  const text = `${error.code ?? ""} ${error.message ?? ""}`.toLowerCase();
+  if (/user_already_exists|email_exists|already (been )?registered|already exists/.test(text)) return "exists";
+  if (error.status === 429 || /rate[ _-]?limit|too many/.test(text)) return "rate-limit";
+  if (/email_address_invalid|invalid.*email|email.*invalid/.test(text)) return "email";
+  if (/weak_password|password/.test(text)) return "weak";
+  return "failed";
+}
+
 /**
  * Creating an account, as its own page and its own act.
  *
@@ -43,7 +88,7 @@ async function signUp(formData: FormData) {
    * password is deliberately not echoed — it would be in the URL bar, the
    * browser history and every access log between here and the CDN.
    */
-  const back = (reason: string) => {
+  const back = (reason: SignupError) => {
     const params = new URLSearchParams({ error: reason });
     if (fullName) params.set("name", fullName);
     if (typed) params.set("email", typed);
@@ -51,16 +96,16 @@ async function signUp(formData: FormData) {
     redirect(`/signup?${params.toString()}`);
   };
 
-  if (!fullName) back("Tell us your name.");
+  if (!fullName) back("name");
 
   const email = checkEmail(typed);
-  if (!email.ok) back(email.reason);
+  if (!email.ok) back("email");
 
-  const password = checkPassword(
-    String(formData.get("password") ?? ""),
-    String(formData.get("confirm") ?? ""),
-  );
-  if (!password.ok) back(password.reason);
+  const rawPassword = String(formData.get("password") ?? "");
+  const password = checkPassword(rawPassword, String(formData.get("confirm") ?? ""));
+  // `checkPassword` has two refusals and they are told apart by the one input
+  // that decides between them, rather than by reading its sentence back.
+  if (!password.ok) back(rawPassword.length < PASSWORD_MIN ? "short" : "mismatch");
 
   const supabase = await createClient();
 
@@ -82,7 +127,7 @@ async function signUp(formData: FormData) {
     },
   });
 
-  if (error) back(error.message);
+  if (error) back(signupErrorCode(error));
 
   /*
    * Signing up signs you in, when the project lets it.
@@ -125,18 +170,19 @@ export default async function SignupPage({
   searchParams: Promise<{ sent?: string; error?: string; invite?: string; name?: string; email?: string }>;
 }) {
   const params = await searchParams;
+  const error = errorFor(params.error);
 
   if (!isAppConfigured()) {
     return (
       <>
         <SiteHeader />
         <div className="auth-split">
-        <main className="auth-page">
+        <main className="auth-page" id="main" tabIndex={-1}>
           <header>
             <h1>Not open yet</h1>
             <p className="muted">
               We are still setting this up. Sign-ups open once the first campaigns have run under
-              supervision — we would rather be late than have the first thing our software does be
+              supervision. We would rather be late than have the first thing our software does be
               something a stranger receives by mistake.
             </p>
           </header>
@@ -159,22 +205,27 @@ export default async function SignupPage({
    * mail and a question about which link is the real one.
    */
   if (params.sent) {
+    // Shown back only if it is an address: the query string is anybody's to
+    // write, and this sentence sits in the product's own voice.
+    const sentCheck = checkEmail(params.sent);
+    const sentTo = sentCheck.ok ? sentCheck.value : null;
     return (
       <>
         <SiteHeader />
         <div className="auth-split">
-        <main className="auth-page">
+        <main className="auth-page" id="main" tabIndex={-1}>
           <header>
             <h1>Confirm your email</h1>
             <p className="muted">
-              We sent a link to <strong>{params.sent}</strong>. Open it and your account is ready —
-              it is what proves the address is yours, so nothing sends until you do.
+              We sent a link to{" "}
+              {sentTo ? <strong>{sentTo}</strong> : "the address you gave"}. Open it and your account is ready.
+              It is what proves the address is yours, so nothing sends until you do.
             </p>
           </header>
-          <div className="notice">
+          <div className="notice" role="status">
             <p className="small">
               Nothing in your inbox after a minute or two? Check spam, and make sure the address
-              above is right — if it is wrong, sign up again with the correct one.
+              above is right. If it is wrong, sign up again with the correct one.
             </p>
           </div>
           <p className="muted small">
@@ -192,7 +243,7 @@ export default async function SignupPage({
     <>
       <SiteHeader />
       <div className="auth-split">
-      <main className="auth-page wide">
+      <main className="auth-page wide" id="main" tabIndex={-1}>
         <header>
           <h1>Create your account</h1>
           <p className="muted">
@@ -201,7 +252,11 @@ export default async function SignupPage({
           </p>
         </header>
 
-        {params.error ? <div className="notice danger">{params.error}</div> : null}
+        {error ? (
+          <div className="notice danger" role="alert">
+            {error}
+          </div>
+        ) : null}
 
         {/*
           Two groups, not six boxes in a row.
@@ -226,10 +281,10 @@ export default async function SignupPage({
                 name="fullName"
                 required
                 autoComplete="name"
-                placeholder="Sam Patel"
+                placeholder="Daniel Okafor"
                 defaultValue={params.name ?? ""}
               />
-              <span className="hint">Yours, not your company&rsquo;s — a prospect reads it on the invitation.</span>
+              <span className="hint">Yours, not your company&rsquo;s. A prospect reads it on the invitation.</span>
             </label>
 
           </div>
@@ -251,6 +306,9 @@ export default async function SignupPage({
                 name="email"
                 required
                 autoComplete="username"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
                 placeholder="you@company.com"
                 defaultValue={params.email ?? ""}
               />
@@ -266,7 +324,7 @@ export default async function SignupPage({
                 minLength={PASSWORD_MIN}
                 hint={`At least ${PASSWORD_MIN} characters.`}
               />
-              <PasswordField name="confirm" label="Again" minLength={PASSWORD_MIN} />
+              <PasswordField name="confirm" label="Confirm password" minLength={PASSWORD_MIN} />
             </div>
             <span className="hint">
               Length is the only rule. A demand for a capital, a digit and a symbol produces

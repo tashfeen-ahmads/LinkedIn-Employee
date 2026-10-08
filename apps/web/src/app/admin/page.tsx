@@ -79,6 +79,13 @@ export default async function AdminOverviewPage({ searchParams }: { searchParams
    * row because a worse row exists is how a ticket waits four days.
    */
   const waiting: Array<{ tone: "danger" | "warning"; text: string; href: string }> = [];
+  const destinations: Record<string, string> = {
+    "/admin/settings": "Settings",
+    "/admin/jobs": "Jobs",
+    "/admin/issues": "Issues",
+    "/admin/support": "Support",
+    "/admin/accounts": "LinkedIn accounts",
+  };
   if (settings?.outreach_paused_at) {
     waiting.push({ tone: "danger", text: `Outreach is paused for every account (${ago(settings.outreach_paused_at)}).`, href: "/admin/settings" });
   }
@@ -95,16 +102,16 @@ export default async function AdminOverviewPage({ searchParams }: { searchParams
 
   return (
     <>
-      <PageNotice error={params.error} notice={params.notice} />
       <PageHeader
         eyebrow="Operator"
         title="Overview"
         lede="Everything on the platform, what is waiting on you, and the switches that control it."
       />
+      <PageNotice error={params.error} notice={params.notice} />
 
       <Section title="Waiting on you">
         {waiting.length === 0 ? (
-          <div className="notice positive">
+          <div className="notice accent">
             <p>Nothing. The loop is running, no ticket is waiting, and no account or issue needs you.</p>
           </div>
         ) : (
@@ -115,7 +122,7 @@ export default async function AdminOverviewPage({ searchParams }: { searchParams
                   <span className={`pill tiny ${row.tone}`}>{row.tone === "danger" ? "Now" : "Soon"}</span>
                   <span className="small">{row.text}</span>
                 </span>
-                <Link className="small" href={row.href}>
+                <Link className="small" href={row.href} aria-label={`Open ${destinations[row.href] ?? "the page"}: ${row.text}`}>
                   Open
                 </Link>
               </li>
@@ -150,14 +157,14 @@ export default async function AdminOverviewPage({ searchParams }: { searchParams
           <table>
             <tbody>
               <tr>
-                <th>Sending loop</th>
+                <th scope="row">Sending loop</th>
                 <td>
                   <span className={`pill tiny ${loopFresh ? "positive" : "danger"}`}>{loopFresh ? "running" : "stopped"}</span>
                 </td>
                 <td className="small subtle">last run {ago(pacing?.beat_at)}</td>
               </tr>
               <tr>
-                <th>Worker</th>
+                <th scope="row">Worker</th>
                 <td>
                   <span className={`pill tiny ${bootDetail.queueReachable === false ? "danger" : "positive"}`}>
                     {bootDetail.queueReachable === false ? "queue unreachable" : "up"}
@@ -168,7 +175,7 @@ export default async function AdminOverviewPage({ searchParams }: { searchParams
                 </td>
               </tr>
               <tr>
-                <th>Issues</th>
+                <th scope="row">Issues</th>
                 <td>
                   <span className={`pill tiny ${critical ? "danger" : warnings ? "warning" : "positive"}`}>
                     {issues.ok ? `${critical} critical · ${warnings} warning` : "could not check"}
@@ -177,7 +184,7 @@ export default async function AdminOverviewPage({ searchParams }: { searchParams
                 <td className="small subtle">{issues.ok ? "" : issues.error}</td>
               </tr>
               <tr>
-                <th>Support autopilot</th>
+                <th scope="row">Support autopilot</th>
                 <td>
                   <span className={`pill tiny ${settings?.support_autopilot === false ? "plain" : "positive"}`}>
                     {settings?.support_autopilot === false ? "off" : "on"}
@@ -200,7 +207,14 @@ export default async function AdminOverviewPage({ searchParams }: { searchParams
           <ControlButton op="support-sweep" back="/admin" label="Answer open tickets now" pendingLabel="Answering…" />
           <ControlButton op="accounts-recover" back="/admin" label="Re-check LinkedIn accounts" pendingLabel="Checking…" />
           {settings?.outreach_paused_at ? (
-            <ControlButton op="outreach-resume" back="/admin" label="Resume all outreach" tone="primary" />
+            <ControlButton
+              op="outreach-resume"
+              back="/admin"
+              label="Resume all outreach"
+              tone="primary"
+              confirm="Resume every account's outreach"
+              pendingLabel="Resuming…"
+            />
           ) : (
             <Link className="btn small danger" href="/admin/settings">
               Pause all outreach…

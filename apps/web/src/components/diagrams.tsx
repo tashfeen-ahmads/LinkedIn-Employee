@@ -53,7 +53,7 @@ export function WarmupRamp() {
       <figcaption className="stack-1">
         <h3>What a new account is allowed to send, from its first invitation</h3>
         <p className="small muted">
-          Drawn by calling <code>dailyInviteCap</code> — the same function the sender checks before
+          Drawn by calling <code>dailyInviteCap</code>, the same function the sender checks before
           every invitation. Not a redrawing of it.
         </p>
       </figcaption>
@@ -177,56 +177,13 @@ export function ReplyGate() {
         </ol>
 
         <div className="gate-out">
-          <span className="pill positive">Everything else — a reply is drafted</span>
+          <span className="pill positive">Everything else: a reply is drafted</span>
           <p className="small muted prose">
             On approval mode it waits for your click. On autopilot it sends. The conditions above do
             not change between the two; only what happens to a clean message does.
           </p>
         </div>
       </div>
-    </figure>
-  );
-}
-
-/* ------------------------------------------------------------ the pipeline */
-
-const STAGES = [
-  { name: "Strategy", does: "Writes your customer profiles" },
-  { name: "Targeting", does: "Builds the list and the copy" },
-  { name: "Reply", does: "Answers and books" },
-] as const;
-
-export function Pipeline() {
-  return (
-    <figure className="pipeline stack-4">
-      <figcaption className="stack-1">
-        <h3>Where a person sits in the loop</h3>
-        <p className="small muted">
-          Three agents, and a human gate before each one&rsquo;s work is acted on.
-        </p>
-      </figcaption>
-
-      <ol className="pipeline-row">
-        {STAGES.map((stage, index) => (
-          <li key={stage.name} className="pipeline-stage">
-            <div className="card tight pipeline-card">
-              <span className="eyebrow">Agent {index + 1}</span>
-              <strong>{stage.name}</strong>
-              <span className="small muted">{stage.does}</span>
-            </div>
-            <div className="pipeline-gate">
-              <span className="pill plain">You approve</span>
-            </div>
-          </li>
-        ))}
-        <li className="pipeline-stage">
-          <div className="card tight pipeline-card pipeline-end">
-            <span className="eyebrow">Outcome</span>
-            <strong>A meeting</strong>
-            <span className="small muted">In your calendar, with the conversation attached</span>
-          </div>
-        </li>
-      </ol>
     </figure>
   );
 }

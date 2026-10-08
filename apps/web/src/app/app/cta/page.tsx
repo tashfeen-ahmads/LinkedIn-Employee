@@ -228,16 +228,16 @@ export default async function CtaPage({ searchParams }: { searchParams: NoticePa
                   </form>
                   <form action={archiveCta}>
                     <input type="hidden" name="id" value={cta.id} />
-                    <button className="btn ghost small" type="submit">
+                    <SubmitButton className="btn ghost small" pendingLabel="Archiving…">
                       Archive
-                    </button>
+                    </SubmitButton>
                   </form>
                 </article>
               );
             })}
           </div>
         ) : (
-          <Empty title="No calls to action yet.">
+          <Empty title="No calls to action yet">
             Add one above and every campaign can point at it. Until then a campaign carries its own
             destination, which is fine for one and unmanageable for ten.
           </Empty>
@@ -257,7 +257,9 @@ export default async function CtaPage({ searchParams }: { searchParams: NoticePa
                   <th>Name</th>
                   <th>Asks for</th>
                   <th>Destination</th>
-                  <th />
+                  <th>
+                    <span className="sr-only">Actions</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -270,9 +272,9 @@ export default async function CtaPage({ searchParams }: { searchParams: NoticePa
                       <form action={archiveCta}>
                         <input type="hidden" name="id" value={cta.id} />
                         <input type="hidden" name="restore" value="1" />
-                        <button className="btn ghost small" type="submit">
+                        <SubmitButton className="btn ghost small" pendingLabel="Restoring…">
                           Restore
-                        </button>
+                        </SubmitButton>
                       </form>
                     </td>
                   </tr>

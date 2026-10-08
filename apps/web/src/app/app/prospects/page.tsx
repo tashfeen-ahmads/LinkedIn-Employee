@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { Empty, PageHeader } from "@/components/page";
 import { requireSession } from "@/lib/workspace";
@@ -6,6 +7,48 @@ import { callWorker, errorQuery, noticeQuery } from "@/lib/worker";
 import { isPublicProfileUrl, profileHref } from "@le/shared";
 import { redirect } from "next/navigation";
 import { PageNotice } from "@/components/page-notice";
+import { ConfirmButton } from "@/components/confirm-button";
+import { formatDate, formatDateTime, isoAttr } from "@/lib/format";
+
+/** How many rows the list reads at once. Said on screen when there are more. */
+const PAGE_LIMIT = 200;
+
+/**
+ * The list's own address, with whatever it is filtered by.
+ *
+ * Every link and every redirect on this page goes through here, so erasing
+ * somebody from a filtered list lands back on that list rather than on
+ * everybody — and a filter tab keeps the search that was typed.
+ */
+function listHref(filters: { strategy?: string | null; show?: string | null; q?: string | null }): string {
+  const query = new URLSearchParams();
+  if (filters.strategy) query.set("strategy", filters.strategy);
+  if (filters.show && filters.show !== "all") query.set("show", filters.show);
+  if (filters.q) query.set("q", filters.q);
+  const text = query.toString();
+  return text ? `/app/prospects?${text}` : "/app/prospects";
+}
+
+/** Appends a banner message to an address that may already carry a query. */
+function withMessage(href: string, key: "notice" | "error", message: string): string {
+  const base = key === "notice" ? noticeQuery("", message) : errorQuery("", message);
+  return href.includes("?") ? `${href}&${base.slice(1)}` : `${href}${base}`;
+}
+
+/**
+ * A search term as a PostgREST `or` filter value, matched anywhere in the text.
+ *
+ * Two levels of escaping, because there are two parsers. `%` and `_` are
+ * wildcards to `ilike`, so "50%" would match everything starting with 50 — they
+ * are escaped for LIKE. The value is then double-quoted so a comma or a bracket
+ * in somebody's company name is read as text rather than as the next filter,
+ * and inside those quotes PostgREST treats `"` and `\` as escapes of their own.
+ * `*` is PostgREST's URL-friendly alias for `%`, so it is dropped.
+ */
+function containsPattern(term: string): string {
+  const like = term.replaceAll("*", "").replace(/[\\%_]/g, (c) => `\\${c}`);
+  return `"%${like.replace(/["\\]/g, (c) => `\\${c}`)}%"`;
+}
 
 /**
  * Erasure on request. A prospect who asks to be forgotten is a request the
@@ -14,8 +57,13 @@ import { PageNotice } from "@/components/page-notice";
  */
 async function eraseProspect(formData: FormData) {
   "use server";
-  const prospectId = String(formData.get("prospectId"));
+  const prospectId = String(formData.get("prospectId") ?? "");
   if (!prospectId) return;
+  // Back to the list as it was filtered, never to an address the form names
+  // freely: only this page's own path is accepted.
+  const backRaw = String(formData.get("back") ?? "");
+  const back = backRaw.startsWith("/app/prospects") ? backRaw : "/app/prospects";
+  const who = String(formData.get("prospectName") ?? "").trim().slice(0, 120) || "this person";
 
   const session = await requireSession();
   // Erasure is a promise made to a person about their own data. A silent
@@ -28,10 +76,17 @@ async function eraseProspect(formData: FormData) {
     reason: "requested by the individual",
   });
   if (!erased.ok) {
-    redirect(errorQuery("/app/prospects", `This person was not erased: ${erased.error}`));
+    console.error(`[prospects] erase failed: ${erased.error}`);
+    redirect(
+      withMessage(
+        back,
+        "error",
+        `${who} was not erased — nothing was deleted. Try again, and tell us through Support if it keeps happening.`,
+      ),
+    );
   }
   revalidatePath("/app/prospects");
-  redirect(noticeQuery("/app/prospects", "Saved."));
+  redirect(withMessage(back, "notice", `Erased ${who}. Only a do-not-contact record remains.`));
 }
 
 interface Signal {
@@ -57,7 +112,7 @@ const SIGNAL_LABELS: Record<string, string> = {
 export default async function ProspectsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; notice?: string; show?: string; strategy?: string }>;
+  searchParams: Promise<{ error?: string; notice?: string; show?: string; strategy?: string; q?: string }>;
 }) {
   const params = await searchParams;
   const session = await requireSession();
@@ -78,11 +133,21 @@ export default async function ProspectsPage({
   // Read from the customer profiles rather than trusted from the query string:
   // an id in a URL is a claim, and this one would otherwise be a way to name
   // another workspace's strategy and see whether it exists.
-  const { data: strategies } = await supabase
-    .from("customer_profiles")
-    .select("id, name")
-    .eq("workspace_id", session.workspaceId)
-    .order("priority", { ascending: true });
+  const [{ data: strategies }, { data: me }] = await Promise.all([
+    supabase
+      .from("customer_profiles")
+      .select("id, name")
+      .eq("workspace_id", session.workspaceId)
+      .order("priority", { ascending: true }),
+    // Dates on this page are the rep's own days, not the server's.
+    supabase.from("profiles").select("timezone").eq("id", session.userId).maybeSingle(),
+  ]);
+  const timezone = me?.timezone ?? null;
+
+  // The search box in the top bar lands here with `?q=`, which nothing used to
+  // read: somebody typed a name, pressed Enter, and got the whole list back.
+  const search = (params.q ?? "").trim().slice(0, 100);
+  const words = search.split(/\s+/).filter(Boolean).slice(0, 4);
 
   const strategyList = strategies ?? [];
   const strategy = strategyList.find((s) => s.id === params.strategy) ?? null;
@@ -91,21 +156,32 @@ export default async function ProspectsPage({
     .from("prospects")
     .select(
       "id, provider_id, first_name, last_name, headline, title, company, location, linkedin_url, fit_score, fit_reasons, intent_score, signals, do_not_contact, last_contacted_at, customer_profile_id",
+      // Counted with the same filters, so "the first 200 of N" is N for this
+      // list rather than for the workspace.
+      { count: "exact" },
     )
     .eq("workspace_id", session.workspaceId);
 
   if (showing === "contacted") query = query.not("last_contacted_at", "is", null);
   if (showing === "new") query = query.is("last_contacted_at", null);
   if (strategy) query = query.eq("customer_profile_id", strategy.id);
+  // Every word has to appear somewhere — "Jane Acme" finds Jane at Acme — and
+  // each may be in any of the four fields a person is recognised by.
+  for (const word of words) {
+    const pattern = containsPattern(word);
+    query = query.or(
+      `first_name.ilike.${pattern},last_name.ilike.${pattern},company.ilike.${pattern},title.ilike.${pattern}`,
+    );
+  }
 
-  const { data: prospects } = await query
+  const { data: prospects, count: matching } = await query
     // Most recently contacted first when that is what is being read; by fit
     // otherwise, which is the order you build a list in rather than review one.
     .order(showing === "contacted" ? "last_contacted_at" : "fit_score", {
       ascending: false,
       nullsFirst: false,
     })
-    .limit(200);
+    .limit(PAGE_LIMIT);
 
   // Counted within the strategy being viewed, not across the workspace. A
   // header reading "412 in this workspace, 9 contacted" above a list of
@@ -150,7 +226,16 @@ export default async function ProspectsPage({
     (prospect) => Array.isArray(prospect.signals) && prospect.signals.length > 0,
   );
 
-  if (!prospects?.length && showing === "all") {
+  /*
+   * The whole-page empty state is for a workspace with nobody in it at all.
+   *
+   * It used to fire whenever the list came back empty under "Everyone" — so
+   * choosing a strategy that had found nobody yet replaced the filters with
+   * "No prospects yet. Approve a strategy", and the only way back to the list
+   * was the browser's Back button.
+   */
+  const filtered = Boolean(strategy || words.length || showing !== "all");
+  if (!prospects?.length && !filtered && (perStrategy?.length ?? 0) === 0) {
     return (
       <>
         <PageHeader
@@ -158,6 +243,7 @@ export default async function ProspectsPage({
           title="Prospects"
           lede="Everyone this workspace has found, and who has been reached out to."
         />
+        <PageNotice error={params.error} notice={params.notice} />
         <Empty title="No prospects yet." action="Approve a strategy" href="/app/strategy">
           A strategy produces a search, and a search produces this list. Nobody is contacted until
           you have read the names and the copy.
@@ -166,9 +252,11 @@ export default async function ProspectsPage({
     );
   }
 
+  const here = listHref({ strategy: strategy?.id, show: showing, q: search });
+  const shown = prospects?.length ?? 0;
+
   return (
     <>
-      <PageNotice error={params.error} notice={params.notice} />
       <PageHeader
         eyebrow="Pipeline"
         title="Prospects"
@@ -181,6 +269,7 @@ export default async function ProspectsPage({
           </>
         }
       />
+      <PageNotice error={params.error} notice={params.notice} />
       {/* The filters, which are the whole reason this page is usable at all. */}
       <div className="stack-3">
         {/*
@@ -196,23 +285,23 @@ export default async function ProspectsPage({
         */}
         {strategyList.length > 0 ? (
           <nav className="tabs" aria-label="Which strategy found them">
-            <a
+            <Link
               className={`pill ${strategy ? "" : "accent"}`}
-              href={showing === "all" ? "/app/prospects" : `/app/prospects?show=${showing}`}
+              href={listHref({ show: showing, q: search })}
               aria-current={strategy ? undefined : "page"}
             >
               All strategies ({perStrategy?.length ?? 0})
-            </a>
+            </Link>
             {strategyList.map((s) => (
-              <a
+              <Link
                 key={s.id}
                 className={`pill ${strategy?.id === s.id ? "accent" : ""}`}
-                href={`/app/prospects?strategy=${s.id}${showing === "all" ? "" : `&show=${showing}`}`}
+                href={listHref({ strategy: s.id, show: showing, q: search })}
                 aria-current={strategy?.id === s.id ? "page" : undefined}
                 title={s.name}
               >
                 {shortName(s.name)} ({countByStrategy.get(s.id) ?? 0})
-              </a>
+              </Link>
             ))}
             {countByStrategy.get("none") ? (
               // Named rather than hidden. These are people found before the
@@ -233,29 +322,56 @@ export default async function ProspectsPage({
               { key: "new", label: `Not yet contacted (${Math.max(0, (totalCount ?? 0) - (contactedCount ?? 0))})` },
             ] as const
           ).map((tab) => (
-            <a
+            <Link
               key={tab.key}
               className={`pill ${showing === tab.key ? "accent" : ""}`}
-              href={`/app/prospects?${new URLSearchParams({
-                ...(strategy ? { strategy: strategy.id } : {}),
-                ...(tab.key === "all" ? {} : { show: tab.key }),
-              }).toString()}`}
+              href={listHref({ strategy: strategy?.id, show: tab.key, q: search })}
               aria-current={showing === tab.key ? "page" : undefined}
             >
               {tab.label}
-            </a>
+            </Link>
           ))}
         </nav>
+
+        {search ? (
+          <p className="small">
+            Results for “{search}” · <Link href={listHref({ strategy: strategy?.id, show: showing })}>Clear</Link>
+          </p>
+        ) : null}
       </div>
 
-      {prospects?.length === 0 ? (
+      {shown === 0 ? (
+        // Said under the filters rather than instead of them, so the way back
+        // to a list with people in it is still on the screen.
+        <Empty
+          title={
+            search
+              ? `Nobody here matches “${search}”.`
+              : showing === "contacted"
+                ? "Nobody here has been contacted yet."
+                : showing === "new"
+                  ? "Everybody here has been contacted."
+                  : "This strategy has not found anybody yet."
+          }
+        >
+          {search
+            ? "Search looks at first and last names, companies and job titles. Try fewer words, or clear the search."
+            : strategy
+              ? "Its search runs once it is approved, and people appear here as it finds them. Choose another strategy above to see theirs."
+              : "Choose another filter above to see the rest of the list."}
+        </Empty>
+      ) : null}
+
+      {matching !== null && matching > shown ? (
+        // Two hundred rows is where this list stops reading, and it used to
+        // stop silently — the 201st person looked like they did not exist.
         <p className="small muted">
-          {showing === "contacted"
-            ? "Nobody has been contacted yet."
-            : "Everybody here has been contacted."}
+          Showing the first {shown.toLocaleString()} of {matching.toLocaleString()}. Choose a strategy
+          or search to narrow it.
         </p>
       ) : null}
 
+      {shown > 0 ? (
       <div className="table-scroll">
         <table>
           <thead>
@@ -276,7 +392,9 @@ export default async function ProspectsPage({
               {anySignals ? <th className="num">Intent</th> : null}
               {anySignals ? <th>Why</th> : null}
               <th>Status</th>
-              <th />
+              <th>
+                <span className="sr-only">Actions</span>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -364,8 +482,11 @@ export default async function ProspectsPage({
                       // answer the question somebody opens this page with,
                       // which is when, and therefore whether it was this
                       // campaign or one from two months ago.
-                      <span className="pill" title={prospect.last_contacted_at}>
-                        Contacted {prospect.last_contacted_at.slice(0, 10)}
+                      <span className="pill" title={formatDateTime(prospect.last_contacted_at, timezone)}>
+                        Contacted{" "}
+                        <time dateTime={isoAttr(prospect.last_contacted_at)}>
+                          {formatDate(prospect.last_contacted_at, timezone)}
+                        </time>
                       </span>
                     ) : (
                       <span className="pill positive">New</span>
@@ -373,15 +494,18 @@ export default async function ProspectsPage({
                   </td>
                   <td>
                     {prospect.do_not_contact ? null : (
-                      <form action={eraseProspect}>
+                      <form
+                        action={eraseProspect}
+                        title="Delete everything we hold about this person, keeping only a do-not-contact record"
+                      >
                         <input type="hidden" name="prospectId" value={prospect.id} />
-                        <button
-                          className="btn secondary small"
-                          type="submit"
-                          title="Delete everything we hold about this person, keeping only a do-not-contact record"
-                        >
-                          Erase
-                        </button>
+                        <input type="hidden" name="prospectName" value={displayName(prospect)} />
+                        <input type="hidden" name="back" value={here} />
+                        {/* Two presses: erasure cannot be undone, and it sat
+                            one misclick away on every row of the list. */}
+                        <ConfirmButton confirmLabel="Erase for good" pendingLabel="Erasing…">
+                          Erase<span className="sr-only"> {displayName(prospect)}</span>
+                        </ConfirmButton>
                       </form>
                     )}
                   </td>
@@ -391,6 +515,7 @@ export default async function ProspectsPage({
           </tbody>
         </table>
       </div>
+      ) : null}
     </>
   );
 }

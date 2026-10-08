@@ -42,8 +42,8 @@ export default async function AdminSettingsPage({ searchParams }: { searchParams
 
   return (
     <>
-      <PageNotice error={params.error} notice={params.notice} />
       <PageHeader eyebrow="Operator" title="Settings" lede="Switches that apply to every workspace on the platform." />
+      <PageNotice error={params.error} notice={params.notice} />
 
       <Section
         title="Outreach"
@@ -60,7 +60,14 @@ export default async function AdminSettingsPage({ searchParams }: { searchParams
             </p>
             <p className="small muted">Reason: {settings.outreach_paused_reason ?? "none given"}</p>
             <p className="tiny subtle">Customers see only that sending is paused for a short while; the reason stays here.</p>
-            <ControlButton op="outreach-resume" back="/admin/settings" label="Resume all outreach" tone="primary" />
+            <ControlButton
+              op="outreach-resume"
+              back="/admin/settings"
+              label="Resume all outreach"
+              tone="primary"
+              confirm="Resume every account's outreach"
+              pendingLabel="Resuming…"
+            />
           </div>
         ) : (
           <form action={adminControl} className="card">
@@ -136,15 +143,15 @@ export default async function AdminSettingsPage({ searchParams }: { searchParams
           <table>
             <tbody>
               <tr>
-                <th>Worker build</th>
+                <th scope="row">Worker build</th>
                 <td className="mono small">{bootDetail.commit?.slice(0, 12) ?? "unknown"}</td>
               </tr>
               <tr>
-                <th>Worker started</th>
+                <th scope="row">Worker started</th>
                 <td className="small">{when(boot?.beat_at)}</td>
               </tr>
               <tr>
-                <th>Settings last changed</th>
+                <th scope="row">Settings last changed</th>
                 <td className="small">{when(settings?.updated_at)}</td>
               </tr>
             </tbody>

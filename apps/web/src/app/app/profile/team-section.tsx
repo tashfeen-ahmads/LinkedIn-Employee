@@ -15,6 +15,10 @@ import { createInviteToken, inviteExpiry, INVITE_TTL_DAYS } from "@/lib/invitati
 import { PageHeader, Section, Empty } from "@/components/page";
 import { cannotSend } from "../team/repair";
 import { SITE } from "@/lib/site";
+import { SubmitButton } from "@/components/submit-button";
+import { ConfirmButton } from "@/components/confirm-button";
+import { formatDate, isoAttr } from "@/lib/format";
+import { label } from "@/lib/labels";
 
 /**
  * Where a team action reports back: the profile screen, at the team section.
@@ -144,13 +148,24 @@ async function revokeInvitation(formData: FormData) {
   if (!["owner", "admin", "manager"].includes(session.role)) return;
 
   const supabase = await createClient();
-  await supabase
+  const { data, error } = await supabase
     .from("invitations")
     .update({ revoked_at: new Date().toISOString() })
     .eq("id", id)
-    .eq("workspace_id", session.workspaceId);
+    .eq("workspace_id", session.workspaceId)
+    .select("email");
 
+  // Said either way. A revoke that failed quietly leaves a live link that
+  // anyone holding it can still join with, while the list looks cleared.
+  if (error) redirect(teamQuery(errorQuery, `That invitation is still live: ${error.message}`));
   revalidatePath("/app/profile");
+  const email = data?.[0]?.email;
+  redirect(
+    teamQuery(
+      noticeQuery,
+      email ? `Revoked. The link sent to ${email} no longer works.` : "That invitation was already gone.",
+    ),
+  );
 }
 
 /**
@@ -161,10 +176,8 @@ async function revokeInvitation(formData: FormData) {
  */
 
 /** A date, or a dash — never the words "Invalid Date". */
-function formatExpiry(value: string | null): string {
-  if (!value) return "—";
-  const when = new Date(value);
-  return Number.isNaN(when.getTime()) ? "—" : when.toLocaleDateString();
+function formatExpiry(value: string | null, timezone: string | null | undefined): string {
+  return formatDate(value, timezone);
 }
 
 export async function TeamSection({
@@ -253,6 +266,7 @@ export async function TeamSection({
   // `SITE.app`, which is normalised: a trailing slash on APP_URL made every
   // copied link `https://app…//invite/…`, and an unset one made it localhost.
   const appUrl = SITE.app;
+  const myTimezone = personById.get(session.userId)?.timezone ?? null;
   const seats = workspace?.seats ?? 1;
   const used = (members ?? []).length + (invitations ?? []).length;
 
@@ -297,7 +311,7 @@ export async function TeamSection({
                       ) : null}
                       <p className="small muted">{person?.email}</p>
                     </td>
-                    <td className="small">{member.role}</td>
+                    <td className="small">{label(member.role)}</td>
                     <td>
                       {linkedInState(account).kind !== "attached" ? (
                         <span className="pill tiny">not connected</span>
@@ -309,7 +323,11 @@ export async function TeamSection({
                       {member.user_id === session.userId && broken ? (
                         <>
                           {" "}
-                          <Link className="small" href="/app/profile">
+                          <Link
+                            className="small"
+                            href="/app/profile#linkedin"
+                            aria-label="Fix your LinkedIn connection"
+                          >
                             Fix
                           </Link>
                         </>
@@ -337,7 +355,14 @@ export async function TeamSection({
             <form action={inviteMember} className="form-row">
               <label className="field grow">
                 <span>Email address</span>
-                <input type="email" name="email" placeholder="colleague@company.com" required />
+                <input
+                  type="email"
+                  name="email"
+                  placeholder="colleague@company.com"
+                  required
+                  autoComplete="off"
+                  spellCheck={false}
+                />
               </label>
               <label className="field compact-wide">
                 <span>Role</span>
@@ -347,9 +372,7 @@ export async function TeamSection({
                   <option value="admin">Admin</option>
                 </select>
               </label>
-              <button className="btn" type="submit">
-                Send invitation
-              </button>
+              <SubmitButton pendingLabel="Sending…">Send invitation</SubmitButton>
             </form>
           </div>
 
@@ -368,7 +391,7 @@ export async function TeamSection({
                   {invitations.map((invitation) => (
                     <tr key={invitation.id}>
                       <td>{invitation.email}</td>
-                      <td className="small">{invitation.role}</td>
+                      <td className="small">{label(invitation.role)}</td>
                       <td className="small subtle">
                         {/*
                           `new Date(x).toLocaleDateString()` prints the literal
@@ -377,16 +400,21 @@ export async function TeamSection({
                           A date we do not have is said as a dash, the way
                           every other missing value on this page is.
                         */}
-                        {formatExpiry(invitation.expires_at)}
+                        <time dateTime={isoAttr(invitation.expires_at)}>
+                          {formatExpiry(invitation.expires_at, myTimezone)}
+                        </time>
                       </td>
                       <td>
                         <div className="row">
                           <CopyButton value={`${appUrl}/invite/${invitation.token}`} />
                           <form action={revokeInvitation}>
                             <input type="hidden" name="invitationId" value={invitation.id} />
-                            <button className="btn ghost small" type="submit">
+                            <ConfirmButton
+                              confirmLabel={`Revoke ${invitation.email}'s link`}
+                              pendingLabel="Revoking…"
+                            >
                               Revoke
-                            </button>
+                            </ConfirmButton>
                           </form>
                         </div>
                       </td>
@@ -396,7 +424,7 @@ export async function TeamSection({
               </table>
             </div>
           ) : (
-            <Empty title="Nobody is waiting to join.">
+            <Empty title="Nobody is waiting to join">
               An invitation sent here appears in this list until it is accepted or revoked.
             </Empty>
           )}

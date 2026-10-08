@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase-server";
-import { requirePlatformAdmin, ago } from "@/lib/admin";
+import { requirePlatformAdmin, ago, when } from "@/lib/admin";
+import { isoAttr } from "@/lib/format";
+import { label } from "@/lib/labels";
 import { PageHeader, Section, Empty } from "@/components/page";
 import { PageNotice } from "@/components/page-notice";
 import { ControlButton } from "@/components/admin-control";
@@ -52,13 +54,20 @@ export default async function AdminUsersPage({
         title="Users"
         lede={`${users?.length ?? 0} people across ${workspaces?.length ?? 0} workspaces, newest first.`}
       />
-
       <PageNotice error={error} notice={notice} />
+
       <Section title="Find someone">
         <form method="get" className="form-row">
           <label className="field">
             <span className="sr-only">Email or name</span>
-            <input type="search" name="q" defaultValue={q ?? ""} placeholder="Email or name" />
+            <input
+              type="search"
+              name="q"
+              defaultValue={q ?? ""}
+              placeholder="Email or name…"
+              autoComplete="off"
+              spellCheck={false}
+            />
           </label>
           <button className="btn secondary" type="submit">
             Search
@@ -79,7 +88,9 @@ export default async function AdminUsersPage({
                   <th>LinkedIn</th>
                   <th>Signed up</th>
                   <th>Last signed in</th>
-                  <th />
+                  <th>
+                    <span className="sr-only">Actions</span>
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -99,7 +110,7 @@ export default async function AdminUsersPage({
                           homes.map((m) => (
                             <p key={m.workspace_id}>
                               <Link href={`/admin/workspaces/${m.workspace_id}`}>{workspaceName.get(m.workspace_id) ?? "—"}</Link>{" "}
-                              <span className="tiny subtle">{m.role}</span>
+                              <span className="tiny subtle">{label(m.role)}</span>
                             </p>
                           ))
                         ) : (
@@ -113,12 +124,14 @@ export default async function AdminUsersPage({
                           <span
                             className={`pill tiny ${account.status === "active" ? "positive" : account.status === "restricted" ? "danger" : "warning"}`}
                           >
-                            {account.status.replaceAll("_", " ")}
+                            {label(account.status)}
                             {account.status === "active" && !account.first_action_at ? ", idle" : ""}
                           </span>
                         )}
                       </td>
-                      <td className="small subtle">{new Date(u.created_at).toLocaleDateString()}</td>
+                      <td className="small subtle">
+                        <time dateTime={isoAttr(u.created_at)}>{when(u.created_at)}</time>
+                      </td>
                       <td className="small subtle">{ago(u.last_sign_in_at)}</td>
                       <td>
                         <ControlButton

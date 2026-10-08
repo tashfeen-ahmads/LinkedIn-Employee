@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Bricolage_Grotesque, Geist, Geist_Mono, Instrument_Sans } from "next/font/google";
 import "./globals.css";
 import { SITE } from "@/lib/site";
@@ -73,6 +73,16 @@ export const metadata: Metadata = {
   },
   twitter: { card: "summary_large_image" },
   robots: { index: true, follow: true, "max-image-preview": "large", "max-snippet": -1 },
+};
+
+/*
+ * The browser's own chrome — the address bar on a phone, the status bar —
+ * takes the page's ground rather than a default white band above it. Light
+ * only, matching the stamped theme below.
+ */
+export const viewport: Viewport = {
+  themeColor: "#F4F5F9",
+  colorScheme: "light",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

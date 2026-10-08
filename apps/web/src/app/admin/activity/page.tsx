@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase-server";
 import { PageHeader } from "@/components/page";
-import { requirePlatformAdmin } from "@/lib/admin";
+import { requirePlatformAdmin, when } from "@/lib/admin";
+import { isoAttr } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
 
@@ -60,7 +61,9 @@ export default async function AdminActivityPage() {
             <tbody>
               {events.map((e) => (
                 <tr key={e.id}>
-                  <td className="small subtle">{new Date(e.created_at).toLocaleString()}</td>
+                  <td className="small subtle">
+                    <time dateTime={isoAttr(e.created_at)}>{when(e.created_at)}</time>
+                  </td>
                   <td>
                     <Link href={`/admin/workspaces/${e.workspace_id}`}>
                       {workspaceName.get(e.workspace_id) ?? "—"}

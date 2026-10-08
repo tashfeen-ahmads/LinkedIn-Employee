@@ -32,6 +32,23 @@ export function PageNotice({
   dismissAfterMs?: number;
 }) {
   const [hidden, setHidden] = useState(false);
+  /*
+   * The words arrive a tick after the region does.
+   *
+   * A live region that is mounted with its text already inside is, in most
+   * screen readers, never announced: they watch a region for *changes*, and a
+   * region that appears fully formed has not changed. So the region renders
+   * empty on the server and on first paint, and the message is put into it
+   * after mount — which is a change, and is read out.
+   */
+  const message = error ?? notice ?? "";
+  const [spoken, setSpoken] = useState("");
+  useEffect(() => {
+    setSpoken("");
+    if (!message) return;
+    const frame = requestAnimationFrame(() => setSpoken(message));
+    return () => cancelAnimationFrame(frame);
+  }, [message]);
   const router = useRouter();
   const pathname = usePathname();
   const search = useSearchParams();
@@ -60,7 +77,12 @@ export function PageNotice({
       className={`notice ${error ? "danger" : "accent"} ${error ? "" : "notice-transient"}`}
       role={error ? "alert" : "status"}
     >
-      <p>{error ?? notice}</p>
+      {/* What is seen is rendered at once, so the server render and a page
+          with no script still show it. What is *read* is the screen-reader
+          copy, filled in after mount (above) so it is announced — one sentence
+          for each audience, and nothing read twice. */}
+      <p aria-hidden="true">{message}</p>
+      <span className="sr-only">{spoken}</span>
     </div>
   );
 }

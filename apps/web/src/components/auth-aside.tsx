@@ -43,8 +43,8 @@ export function AuthAside({ variant = "signin" }: { variant?: "signin" | "signup
         <p className="eyebrow">An AI SDR that works inside the limits</p>
         <p className="lede prose">
           {variant === "signup"
-            ? `Give ${NORA} your website and her team writes who to go after. You approve a strategy, approve the words, and press launch — they find the people, write to each one by name, and answer what comes back.`
-            : `${NORA}'s team finds the people, writes to each one by name, answers what comes back and books the call — at a pace that keeps a LinkedIn account alive.`}
+            ? `Give ${NORA} your website and her team writes who to go after. You approve a strategy, approve the words and press launch. They find the people, write to each one by name and answer what comes back.`
+            : `${NORA}'s team finds the people, writes to each one by name, answers what comes back and books the call, at a pace that keeps a LinkedIn account alive.`}
         </p>
       </div>
 
@@ -77,19 +77,19 @@ export function AuthAside({ variant = "signin" }: { variant?: "signin" | "signup
             <span className="auth-card-value">Dana R.</span>
           </div>
           <span className="auth-card-note">
-            Your opener goes out within the hour — not three days later, and not while she is
+            Your opener goes out within the hour. Not three days later, and not while she is
             asleep.
           </span>
         </div>
 
         <div className="auth-card">
           <div className="auth-card-head">
-            <span className="auth-card-label">Reply drafted</span>
-            <span className="auth-card-value">“What does this cost?”</span>
+            <span className="auth-card-label">Reply in</span>
+            <span className="auth-card-value">“Can I talk to a person?”</span>
           </div>
           <span className="auth-card-note">
-            Answered only from facts you gave it. On autopilot it sends; set to review, it waits
-            for you.
+            Somebody who asks for a human always reaches you, on autopilot or not. Everything else
+            is answered only from facts you gave it.
           </span>
           <span className="auth-pill">Held for you</span>
         </div>
@@ -97,12 +97,12 @@ export function AuthAside({ variant = "signin" }: { variant?: "signin" | "signup
 
       <p className="sr-only">
         A worked example: {today} invitations on the first day against a cap of {cap}, an acceptance
-        followed up within the hour, and a pricing question drafted and held for a person to read.
+        followed up within the hour, and a prospect asking for a person held for you to answer.
       </p>
 
       <p className="auth-foot">
         Not affiliated with LinkedIn Corporation. LinkedIn is a trademark of its owner, and
-        automated access is against their user agreement — which is why the limits here are what
+        automated access is against their user agreement, which is why the limits here are what
         they are.
       </p>
     </aside>

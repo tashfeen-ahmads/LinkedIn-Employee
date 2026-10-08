@@ -80,7 +80,10 @@ export function AvailabilityCalendar({
               <span className="cal-daynum">{dayNumber(day.date)}</span>
             </p>
 
-            <div className="cal-track">
+            {/* Drawn for the eye only. The times live in `title` attributes on
+                empty spans, which a screen reader does not reach, so the same
+                marks are listed in words underneath. */}
+            <div className="cal-track" aria-hidden="true">
               {/* Hour lines first, so every mark sits on the same scale. */}
               {hours.slice(1).map((hour) => (
                 <span key={hour} className="cal-rule" style={pos(hour, hour, bounds)} aria-hidden="true" />
@@ -116,6 +119,18 @@ export function AvailabilityCalendar({
                 />
               ))}
             </div>
+
+            {marksInWords(day, timezone).length ? (
+              <ul
+                className="sr-only"
+                role="list"
+                aria-label={`${weekdayName(day.date)} ${dayNumber(day.date)}`}
+              >
+                {marksInWords(day, timezone).map((line, i) => (
+                  <li key={i}>{line}</li>
+                ))}
+              </ul>
+            ) : null}
 
             <p className="cal-note tiny">{note(day)}</p>
           </div>
@@ -164,6 +179,27 @@ function note(day: DayPlan): string {
   if (day.meetings.length > 0) return "At your daily maximum";
   if (day.blocked.length > 0) return "Blocked all day";
   return "Nothing offerable — inside your notice period";
+}
+
+/**
+ * Every mark on one day as a sentence, in time order — the same facts the
+ * blocks draw, for anybody who cannot see them.
+ */
+function marksInWords(day: DayPlan, timezone: string): string[] {
+  const marks: Array<{ at: string; text: string }> = [
+    ...day.blocked.map((block) => ({
+      at: block.start,
+      text: `Busy ${time(block.start, timezone)} to ${time(block.end, timezone)}`,
+    })),
+    ...day.meetings.map((meeting) => ({
+      at: meeting.start,
+      text: `${meeting.who ? `Meeting with ${meeting.who}` : "Meeting"} ${time(meeting.start, timezone)} to ${time(meeting.end, timezone)}`,
+    })),
+    ...day.free.map((start) => ({ at: start, text: `Can be offered at ${time(start, timezone)}` })),
+  ];
+  return marks
+    .sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
+    .map((mark) => mark.text);
 }
 
 /** Fractional hour of an instant, in the rep's zone. */

@@ -1,5 +1,5 @@
 import { revalidatePath } from "next/cache";
-import { PageHeader, Section } from "@/components/page";
+import { Empty, PageHeader, Section } from "@/components/page";
 import { Kpi } from "@/components/charts";
 import { Sequence, sequenceFor } from "@/components/sequence";
 import { notFound, redirect } from "next/navigation";
@@ -25,6 +25,9 @@ import { describeSearch } from "./search-state";
 import { describePacing } from "@/lib/pacing";
 import { INVITE_NOTE_MAX_CHARS, MIN_SENDS_TO_COMPARE, comparisonReady, standings, profileHref } from "@le/shared";
 import { PageNotice, type NoticeParams } from "@/components/page-notice";
+import { ConfirmButton } from "@/components/confirm-button";
+import { formatDate, isoAttr } from "@/lib/format";
+import { label } from "@/lib/labels";
 import { daysToSendAll, launchBlockers } from "@/lib/campaign";
 
 /**
@@ -44,10 +47,16 @@ const FIND_MORE_BATCH = 50;
  * the four messages a campaign sends.
  */
 
-async function saveCampaign(formData: FormData) {
-  "use server";
+/**
+ * Writes the copy form to the campaign: the note, the settings and every step.
+ *
+ * Shared by Save and by Launch, because Launch used to be its own form with
+ * none of these fields in it — so somebody who edited the copy and pressed
+ * Launch launched the version from before their edits, and the edits were
+ * silently thrown away. Launching now saves first.
+ */
+async function applyCampaignEdits(formData: FormData, workspaceId: string): Promise<string> {
   const campaignId = String(formData.get("campaignId"));
-  const session = await requireSession();
   const supabase = await createClient();
 
   const note = String(formData.get("connectionNote") ?? "").trim();
@@ -72,7 +81,7 @@ async function saveCampaign(formData: FormData) {
     );
   }
 
-  await supabase
+  const { error } = await supabase
     .from("campaigns")
     .update({
       connection_note: note,
@@ -86,33 +95,63 @@ async function saveCampaign(formData: FormData) {
         : {}),
     })
     .eq("id", campaignId)
-    .eq("workspace_id", session.workspaceId);
+    .eq("workspace_id", workspaceId);
+  if (error) {
+    console.error(`[campaign] save: ${error.message}`);
+    redirect(errorQuery(`/app/campaigns/${campaignId}`, "Your changes could not be saved. Nothing was sent — try again."));
+  }
 
   // Step messages come back as step-<id> fields so one save covers the whole
   // sequence: editing four messages in four round trips invites a half-edited
   // campaign going live.
   for (const [key, value] of formData.entries()) {
     if (!key.startsWith("step-")) continue;
-    await supabase
+    const { error: stepError } = await supabase
       .from("campaign_steps")
       .update({ message: String(value) })
       .eq("id", key.slice("step-".length))
-      .eq("workspace_id", session.workspaceId);
+      .eq("workspace_id", workspaceId);
+    if (stepError) {
+      console.error(`[campaign] save step: ${stepError.message}`);
+      redirect(
+        errorQuery(
+          `/app/campaigns/${campaignId}`,
+          "Some of the messages could not be saved. Nothing was sent — check them and save again.",
+        ),
+      );
+    }
   }
 
   revalidatePath(`/app/campaigns/${campaignId}`);
+  return campaignId;
+}
+
+async function saveCampaign(formData: FormData) {
+  "use server";
+  const session = await requireSession();
+  const campaignId = await applyCampaignEdits(formData, session.workspaceId);
+  redirect(noticeQuery(`/app/campaigns/${campaignId}`, "Saved."));
+}
+
+/** The copy form's Launch: save what is on screen, then launch exactly that. */
+async function saveAndLaunch(formData: FormData) {
+  "use server";
+  const session = await requireSession();
+  const campaignId = await applyCampaignEdits(formData, session.workspaceId);
+  await launchCampaign(campaignId, session);
 }
 
 async function removeFromCampaign(formData: FormData) {
   "use server";
   const campaignProspectId = String(formData.get("campaignProspectId"));
   const campaignId = String(formData.get("campaignId"));
+  const who = String(formData.get("prospectName") ?? "").trim().slice(0, 120) || "That person";
   const session = await requireSession();
   const supabase = await createClient();
 
   // Closed, not deleted. The row is how we know not to target this person
   // again, and the reason is what a rep reads later.
-  await supabase
+  const { data: removed, error } = await supabase
     .from("campaign_prospects")
     .update({
       status: "closed",
@@ -122,9 +161,21 @@ async function removeFromCampaign(formData: FormData) {
     })
     .eq("id", campaignProspectId)
     .eq("workspace_id", session.workspaceId)
-    .eq("status", "queued");
+    .eq("status", "queued")
+    .select("id");
 
   revalidatePath(`/app/campaigns/${campaignId}`);
+  if (error) {
+    console.error(`[campaign] remove prospect: ${error.message}`);
+    redirect(errorQuery(`/app/campaigns/${campaignId}`, `${who} could not be removed. Try again.`));
+  }
+  // A row that had already been invited is not removed — the update matches
+  // queued rows only — and saying "Removed" over it would be untrue.
+  redirect(
+    removed?.length
+      ? noticeQuery(`/app/campaigns/${campaignId}`, `Removed ${who} from this campaign. They will not be invited.`)
+      : errorQuery(`/app/campaigns/${campaignId}`, `${who} has already been invited, so they stay on the list.`),
+  );
 }
 
 /**
@@ -143,6 +194,7 @@ async function saveInviteNote(formData: FormData) {
   const campaignProspectId = String(formData.get("campaignProspectId"));
   const campaignId = String(formData.get("campaignId"));
   const note = String(formData.get("note") ?? "").trim();
+  const who = String(formData.get("prospectName") ?? "").trim().slice(0, 120) || "this person";
   const session = await requireSession();
   const supabase = await createClient();
 
@@ -157,7 +209,7 @@ async function saveInviteNote(formData: FormData) {
     );
   }
 
-  await supabase
+  const { error } = await supabase
     .from("campaign_prospects")
     .update({
       invite_note: note || null,
@@ -172,6 +224,16 @@ async function saveInviteNote(formData: FormData) {
     .eq("status", "queued");
 
   revalidatePath(`/app/campaigns/${campaignId}`);
+  if (error) {
+    console.error(`[campaign] save note: ${error.message}`);
+    redirect(errorQuery(`/app/campaigns/${campaignId}`, `The note for ${who} could not be saved. Try again.`));
+  }
+  redirect(
+    noticeQuery(
+      `/app/campaigns/${campaignId}`,
+      note ? `Saved the note for ${who}.` : `Cleared the note for ${who} — they get the campaign template.`,
+    ),
+  );
 }
 
 /**
@@ -200,7 +262,10 @@ async function setCampaignCta(formData: FormData) {
     .eq("id", campaignId)
     .eq("workspace_id", session.workspaceId);
 
-  if (error) redirect(errorQuery(`/app/campaigns/${campaignId}`, `That did not save: ${error.message}`));
+  if (error) {
+    console.error(`[campaign] set cta: ${error.message}`);
+    redirect(errorQuery(`/app/campaigns/${campaignId}`, "That did not save. Nothing changed — try again."));
+  }
 
   revalidatePath(`/app/campaigns/${campaignId}`);
   redirect(
@@ -217,30 +282,70 @@ async function setStatus(formData: FormData) {
   "use server";
   const campaignId = String(formData.get("campaignId"));
   const status = String(formData.get("status"));
-  if (status !== "running" && status !== "paused") return;
-
-  const session = await requireSession();
-  const supabase = await createClient();
-
-  // The blockers are re-checked here and not only rendered as a disabled
-  // button: a form can be submitted by anyone who can reach the route, and
-  // launching is the action that reaches strangers.
-  if (status === "running") {
-    const state = await launchState(campaignId, session.workspaceId);
-    if (!state || launchBlockers(state).length > 0) return;
+  if (status !== "running" && status !== "paused") {
+    redirect(errorQuery(`/app/campaigns/${campaignId}`, "That did not change anything. Reload the page and try again."));
   }
 
-  await supabase
+  const session = await requireSession();
+  if (status === "running") {
+    await launchCampaign(campaignId, session);
+    return;
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
     .from("campaigns")
-    .update({
-      status,
-      ...(status === "running" ? { launched_at: new Date().toISOString() } : {}),
-    })
+    .update({ status })
     .eq("id", campaignId)
     .eq("workspace_id", session.workspaceId);
-
   revalidatePath(`/app/campaigns/${campaignId}`);
-  if (status !== "running") return;
+  if (error) {
+    console.error(`[campaign] pause: ${error.message}`);
+    redirect(errorQuery(`/app/campaigns/${campaignId}`, "The campaign could not be paused. Try again."));
+  }
+  // Said, because a paused campaign and a running one that is waiting out its
+  // gap look the same from everywhere else on this page.
+  redirect(
+    noticeQuery(
+      `/app/campaigns/${campaignId}`,
+      "Paused. Nothing more goes out from this campaign until you launch it again.",
+    ),
+  );
+}
+
+/**
+ * Launches a campaign, or says exactly why it did not.
+ *
+ * The blockers are re-checked here and not only rendered as a disabled
+ * button: a form can be submitted by anyone who can reach the route, and
+ * launching is the action that reaches strangers. A refusal used to return
+ * without a word, which from the other side of the glass is a Launch button
+ * that does nothing.
+ */
+async function launchCampaign(
+  campaignId: string,
+  session: Awaited<ReturnType<typeof requireSession>>,
+): Promise<never> {
+  const supabase = await createClient();
+  const state = await launchState(campaignId, session.workspaceId);
+  if (!state) {
+    redirect(errorQuery("/app/campaigns", "That campaign could not be found."));
+  }
+  const blockers = launchBlockers(state);
+  if (blockers.length > 0) {
+    redirect(errorQuery(`/app/campaigns/${campaignId}`, `Not launched yet. ${blockers.join(" ")}`));
+  }
+
+  const { error } = await supabase
+    .from("campaigns")
+    .update({ status: "running", launched_at: new Date().toISOString() })
+    .eq("id", campaignId)
+    .eq("workspace_id", session.workspaceId);
+  revalidatePath(`/app/campaigns/${campaignId}`);
+  if (error) {
+    console.error(`[campaign] launch: ${error.message}`);
+    redirect(errorQuery(`/app/campaigns/${campaignId}`, "The campaign could not be launched. Nothing was sent — try again."));
+  }
 
   // Launching used to touch nothing but this row, and trust a loop somewhere
   // else to notice within five minutes. The one action in this product that
@@ -258,10 +363,13 @@ async function setStatus(formData: FormData) {
   if (!kicked.ok) {
     // Launched, and said so: the campaign really is running and the loop will
     // pick it up if it comes back. What must not happen is this being silent.
+    // The worker's own error text is not appended — it named our plumbing and
+    // ended in a full stop of its own, which is how this read "again..".
+    console.error(`[campaign] campaign-tick not reached: ${kicked.error}`);
     redirect(
       errorQuery(
         `/app/campaigns/${campaignId}`,
-        `Launched, but the sending service did not answer: ${kicked.error}. Nothing will go out until it is back — check the system page.`,
+        "Launched, but sending has not started: the part of the product that sends did not answer. It picks this campaign up on its own when it is back — System check shows where it is up to.",
       ),
     );
   }
@@ -324,7 +432,10 @@ async function findMore(formData: FormData) {
     .maybeSingle();
   if (account?.status !== "active") {
     redirect(
-      errorQuery(`/app/campaigns/${campaignId}`, "Reconnect the LinkedIn account on the Team page first."),
+      errorQuery(
+        `/app/campaigns/${campaignId}`,
+        "Reconnect your LinkedIn account on your profile first — nothing can be searched until it is connected.",
+      ),
     );
   }
 
@@ -441,7 +552,8 @@ async function retryFailed(formData: FormData) {
     .eq("workspace_id", session.workspaceId)
     .eq("status", "failed");
   if (readError) {
-    redirect(errorQuery(`/app/campaigns/${campaignId}`, `Could not requeue those: ${readError.message}`));
+    console.error(`[campaign] retry read: ${readError.message}`);
+    redirect(errorQuery(`/app/campaigns/${campaignId}`, "Could not requeue those. Nothing changed — try again."));
   }
 
   // One write per destination state rather than per row: a campaign's failures
@@ -468,8 +580,9 @@ async function retryFailed(formData: FormData) {
       .eq("status", "failed")
       .select("id");
     if (error) {
+      console.error(`[campaign] retry write: ${error.message}`);
       revalidatePath(`/app/campaigns/${campaignId}`);
-      redirect(errorQuery(`/app/campaigns/${campaignId}`, `Could not requeue those: ${error.message}`));
+      redirect(errorQuery(`/app/campaigns/${campaignId}`, "Could not requeue all of those. Reload the page to see which went back, then try again."));
     }
     if (restored.status === "queued") invitations += data?.length ?? 0;
     else followUps += data?.length ?? 0;
@@ -609,7 +722,7 @@ export default async function CampaignPage({
     .maybeSingle();
   if (!campaign) notFound();
 
-  const [{ data: steps }, { data: members }, { data: account }, { data: lastSearch }, { data: heartbeat }, { data: boot }, { data: owner }, { data: variantRows }, { data: agents }] =
+  const [{ data: steps }, { data: members }, { data: account }, { data: lastSearch }, { data: heartbeat }, { data: boot }, { data: owner }, { data: variantRows }, { data: agents }, { data: viewer }] =
     await Promise.all([
     supabase
       .from("campaign_steps")
@@ -667,7 +780,10 @@ export default async function CampaignPage({
       .eq("workspace_id", session.workspaceId)
       .is("archived_at", null)
       .order("is_default", { ascending: false }),
+    // Dates shown to whoever is reading, in their own timezone.
+    supabase.from("profiles").select("timezone").eq("id", session.userId).maybeSingle(),
   ]);
+  const viewerTimezone = viewer?.timezone ?? null;
 
   const rows = members ?? [];
   /*
@@ -773,13 +889,12 @@ export default async function CampaignPage({
 
   return (
     <>
-      <PageNotice error={notice.error} notice={notice.notice} />
       <PageHeader
         eyebrow="Campaign"
         title={campaign.name}
         lede={
           <>
-            <span className={`pill ${running ? "positive" : ""}`}>{campaign.status}</span>{" "}
+            <span className={`pill ${running ? "positive" : ""}`}>{label(campaign.status)}</span>{" "}
             {queued.length} still to invite of {rows.length}
             {days ? ` · about ${days} working ${days === 1 ? "day" : "days"} at ${perDay} a day` : ""}
             {account?.display_name ? ` · sending as ${account.display_name}` : ""}
@@ -814,16 +929,35 @@ export default async function CampaignPage({
               </SubmitButton>
             </form>
           ) : null}
-          <form action={setStatus}>
-            <input type="hidden" name="campaignId" value={campaign.id} />
-            <input type="hidden" name="status" value={running ? "paused" : "running"} />
-            <SubmitButton pendingLabel={running ? "Pausing…" : "Launching…"} disabled={!running && blockers.length > 0}>
-              {running ? "Pause" : "Launch campaign"}
-            </SubmitButton>
-          </form>
+          {running ? (
+            <form action={setStatus}>
+              <input type="hidden" name="campaignId" value={campaign.id} />
+              <input type="hidden" name="status" value="paused" />
+              <SubmitButton pendingLabel="Pausing…">Pause</SubmitButton>
+            </form>
+          ) : (
+            /*
+              Launch submits the copy form below (`form="campaign-copy"`), so
+              what launches is what is on screen. It used to be a form of its
+              own with none of those fields in it, and edits made before
+              pressing it were silently discarded. `saveAndLaunch` saves them
+              first, then launches.
+            */
+            <button
+              className="btn"
+              type="submit"
+              form="campaign-copy"
+              formAction={saveAndLaunch}
+              disabled={blockers.length > 0}
+              title={blockers.length > 0 ? "Fix what is listed under Not ready to launch first" : undefined}
+            >
+              Launch campaign
+            </button>
+          )}
           </>
         }
       />
+      <PageNotice error={notice.error} notice={notice.notice} />
 
       {/*
         What the sending loop is doing, first on the page and above every other
@@ -945,11 +1079,11 @@ export default async function CampaignPage({
         </section>
       ) : null}
 
-      <form action={saveCampaign}>
+      <Section id="copy" title="What gets sent">
+      <form action={saveCampaign} id="campaign-copy">
         <input type="hidden" name="campaignId" value={campaign.id} />
 
-        <section className="card">
-          <h3>What gets sent</h3>
+        <div className="card">
           <p className="small muted">
             {"Read all of it. {{first_name}}, {{company}}, {{title}} and {{rep_name}} are filled in per person; anything else stays literal."}
             {running ? " Edits apply to everyone who has not been reached yet." : ""}
@@ -1029,16 +1163,18 @@ export default async function CampaignPage({
                 <option value="autopilot">Send clean replies for me</option>
               </select>
             </label>
-            <button className="btn secondary" type="submit">
+            <SubmitButton className="btn secondary" pendingLabel="Saving…">
               Save
-            </button>
+            </SubmitButton>
           </div>
           <p className="small muted">
             Pricing, legal and anything negative always waits for a person, on either setting. The
             ceiling of {LINKEDIN_LIMITS.invitesPerDayMax} a day is a safety limit, not a preference.
+            {running ? "" : " Launch campaign saves anything changed here first."}
           </p>
-        </section>
+        </div>
       </form>
+      </Section>
 
       {/*
         What a prospect actually receives, in order.
@@ -1103,7 +1239,12 @@ export default async function CampaignPage({
                     <tr key={standing.id}>
                       <td>
                         <strong>{standing.name}</strong>
-                        {!variant?.enabled ? <span className="pill"> retired</span> : null}
+                        {!variant?.enabled ? (
+                          <>
+                            {" "}
+                            <span className="pill">retired</span>
+                          </>
+                        ) : null}
                         <span className="tiny subtle block">{variant?.angle}</span>
                       </td>
                       <td className="small muted">{variant?.pain_point ?? "—"}</td>
@@ -1159,8 +1300,8 @@ export default async function CampaignPage({
               the campaign&rsquo;s generic note.
             </strong>
             <p className="small">
-              The writer came back without a note for {onTemplate === 1 ? "them" : "them"}, so they
-              fall back to the template with their first name filled in — which works, and reads
+              The writer came back without a note for{" "}
+              {onTemplate === 1 ? "this person" : "these people"}, so they fall back to the template with their first name filled in — which works, and reads
               like everyone else&rsquo;s. Each one is marked below. You can write{" "}
               {onTemplate === 1 ? "it" : "them"} yourself before launching, or launch as it is.
             </p>
@@ -1194,7 +1335,11 @@ export default async function CampaignPage({
               <strong>Need more people?</strong>
               {campaign.searched_at && !searchNotice ? (
                 <span className="muted">
-                  {" "}Last read {new Date(campaign.searched_at).toLocaleDateString()}.
+                  {" "}Last read{" "}
+                  <time dateTime={isoAttr(campaign.searched_at)}>
+                    {formatDate(campaign.searched_at, viewerTimezone)}
+                  </time>
+                  .
                 </span>
               ) : null}
             </p>
@@ -1243,7 +1388,11 @@ export default async function CampaignPage({
         </form>
 
         {rows.length === 0 ? (
-          <p className="small muted">Nobody yet.</p>
+          <Empty title="Nobody is on this list yet.">
+            {campaign.customer_profile_id && !campaign.search_exhausted
+              ? `Press Find ${FIND_MORE_BATCH} more above to read the next page of the search.`
+              : "People appear here when a search finds them. Nothing is sent until you launch."}
+          </Empty>
         ) : (
           <ul className="prospect-list">
             {rows.map((row) => {
@@ -1278,10 +1427,10 @@ export default async function CampaignPage({
                           <strong>{name}</strong>
                         </a>
                         {prospect.fit_score !== null ? (
-                          <span className="pill plain tiny mono">fit {prospect.fit_score}</span>
+                          <span className="pill plain tiny nums">fit {prospect.fit_score}</span>
                         ) : null}
                         <span className={`pill tiny ${row.status === "meeting_booked" ? "positive" : "plain"}`}>
-                          {row.status.replaceAll("_", " ")}
+                          {label(row.status)}
                         </span>
                       </div>
                       <p className="small muted">
@@ -1294,9 +1443,16 @@ export default async function CampaignPage({
                       <form action={removeFromCampaign}>
                         <input type="hidden" name="campaignProspectId" value={row.id} />
                         <input type="hidden" name="campaignId" value={campaign.id} />
-                        <button className="btn ghost small" type="submit">
-                          Remove
-                        </button>
+                        <input type="hidden" name="prospectName" value={name} />
+                        {/* Two presses: a removed person is closed on this
+                            campaign and is never put back on it. */}
+                        <ConfirmButton
+                          className="btn ghost small"
+                          confirmLabel="Remove for good"
+                          pendingLabel="Removing…"
+                        >
+                          Remove<span className="sr-only"> {name}</span>
+                        </ConfirmButton>
                       </form>
                     ) : null}
                   </div>
@@ -1331,6 +1487,7 @@ export default async function CampaignPage({
                       <form action={saveInviteNote} className="stack-2">
                         <input type="hidden" name="campaignProspectId" value={row.id} />
                         <input type="hidden" name="campaignId" value={campaign.id} />
+                        <input type="hidden" name="prospectName" value={name} />
                         <label className="field">
                           <span className="sr-only">Connection note for {name}</span>
                           <textarea
@@ -1342,14 +1499,15 @@ export default async function CampaignPage({
                           />
                         </label>
                         <div className="between">
+                          {/* A static "120/200" read like a live counter and
+                              never moved as somebody typed; the limit is what
+                              matters, and the field enforces it. */}
                           <p className="tiny subtle">
-                            {row.invite_note
-                              ? `${row.invite_note.length}/${INVITE_NOTE_MAX_CHARS}`
-                              : "Empty sends the campaign template."}
+                            Up to {INVITE_NOTE_MAX_CHARS} characters. Empty sends the campaign template.
                           </p>
-                          <button className="btn secondary small" type="submit">
+                          <SubmitButton className="btn secondary small" pendingLabel="Saving…">
                             Save note
-                          </button>
+                          </SubmitButton>
                         </div>
                       </form>
                     ) : (

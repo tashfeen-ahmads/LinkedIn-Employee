@@ -1,8 +1,10 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { noticeQuery } from "@/lib/worker";
+import { errorQuery, noticeQuery } from "@/lib/worker";
 import { PageNotice } from "@/components/page-notice";
-import { PageHeader, Section } from "@/components/page";
+import { PageHeader, Section, Empty } from "@/components/page";
+import { SubmitButton } from "@/components/submit-button";
+import { ConfirmButton } from "@/components/confirm-button";
 import { KNOWLEDGE_BUDGET_CHARS, selectKnowledge } from "@le/agents";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
@@ -31,21 +33,20 @@ async function saveDocument(formData: FormData) {
   if (!canManage(session.role)) return;
 
   const supabase = await createClient();
-  if (id) {
-    await supabase
-      .from("knowledge_documents")
-      .update({ title, content })
-      .eq("id", id)
-      .eq("workspace_id", session.workspaceId);
-  } else {
-    await supabase.from("knowledge_documents").insert({
-      workspace_id: session.workspaceId,
-      title,
-      content,
-      source: "written here",
-    });
-  }
+  const { error } = id
+    ? await supabase
+        .from("knowledge_documents")
+        .update({ title, content })
+        .eq("id", id)
+        .eq("workspace_id", session.workspaceId)
+    : await supabase.from("knowledge_documents").insert({
+        workspace_id: session.workspaceId,
+        title,
+        content,
+        source: "written here",
+      });
 
+  if (error) redirect(errorQuery("/app/knowledge", `That did not save: ${error.message}`));
   revalidatePath("/app/knowledge");
   // Said out loud. It saved before this too — it just never told anybody, which
   // from the other side of the screen is the same as a button that does nothing.
@@ -59,8 +60,13 @@ async function deleteDocument(formData: FormData) {
   if (!canManage(session.role)) return;
 
   const supabase = await createClient();
-  await supabase.from("knowledge_documents").delete().eq("id", id).eq("workspace_id", session.workspaceId);
+  const { error } = await supabase
+    .from("knowledge_documents")
+    .delete()
+    .eq("id", id)
+    .eq("workspace_id", session.workspaceId);
 
+  if (error) redirect(errorQuery("/app/knowledge", `That did not delete: ${error.message}`));
   revalidatePath("/app/knowledge");
   redirect(noticeQuery("/app/knowledge", "Page deleted."));
 }
@@ -90,12 +96,12 @@ export default async function KnowledgePage({
 
   return (
     <>
-      <PageNotice error={params.error} notice={params.notice} />
       <PageHeader
         eyebrow="Pipeline"
         title="Knowledge base"
         lede="The only things the agent may state. Anything a prospect asks that is not answered here is handed to you rather than guessed at — so this page is the difference between autopilot answering a question and forwarding it."
       />
+      <PageNotice error={params.error} notice={params.notice} />
 
       {omitted.length ? (
         <div className="notice warning">
@@ -107,26 +113,24 @@ export default async function KnowledgePage({
       ) : null}
 
       {manage ? (
-        <section className="card">
-          <h3>Add a page</h3>
-          <p className="small muted">
-            One subject per page: pricing, security, integrations, the objection you hear most. Short
-            and factual beats long and persuasive — the agent quotes it, it does not summarise it.
-          </p>
-          <form action={saveDocument}>
-            <label className="field">
-              <span>Title</span>
-              <input name="title" required placeholder="Pricing" />
-            </label>
-            <label className="field">
-              <span>What the agent may say about it</span>
-              <textarea name="content" rows={6} required placeholder="We charge per seat per month…" />
-            </label>
-            <button className="btn" type="submit">
-              Add
-            </button>
-          </form>
-        </section>
+        <Section
+          title="Add a page"
+          description="One subject per page: pricing, security, integrations, the objection you hear most. Short and factual beats long and persuasive — the agent quotes it, it does not summarise it."
+        >
+          <div className="card">
+            <form action={saveDocument}>
+              <label className="field">
+                <span>Title</span>
+                <input name="title" required placeholder="Pricing" />
+              </label>
+              <label className="field">
+                <span>What the agent may say about it</span>
+                <textarea name="content" rows={6} required placeholder="We charge per seat per month…" />
+              </label>
+              <SubmitButton pendingLabel="Adding…">Add</SubmitButton>
+            </form>
+          </div>
+        </Section>
       ) : null}
 
       {/* Framed, so this list is spaced like every other list in the product
@@ -137,16 +141,16 @@ export default async function KnowledgePage({
       >
 
         {docs.length === 0 ? (
-          <p className="small muted">
-            Nothing here yet, so every product question a prospect asks will come to you. Start with
+          <Empty title="Nothing here yet">
+            Every product question a prospect asks will come to you until there is. Start with
             pricing and the two objections you answer most.
-          </p>
+          </Empty>
         ) : (
           <div className="grid">
             {docs.map((doc) => (
               <article key={doc.id} className="card">
                 {manage ? (
-                  <form action={saveDocument}>
+                  <form action={saveDocument} aria-label={doc.title}>
                     <input type="hidden" name="id" value={doc.id} />
                     <label className="field">
                       <span>Title</span>
@@ -156,9 +160,9 @@ export default async function KnowledgePage({
                       <span>Content</span>
                       <textarea name="content" rows={6} defaultValue={doc.content} required />
                     </label>
-                    <button className="btn secondary small" type="submit">
+                    <SubmitButton className="btn secondary small" pendingLabel="Saving…">
                       Save
-                    </button>
+                    </SubmitButton>
                   </form>
                 ) : (
                   <>
@@ -169,11 +173,11 @@ export default async function KnowledgePage({
                   </>
                 )}
                 {manage ? (
-                  <form action={deleteDocument}>
+                  <form action={deleteDocument} aria-label={`Delete ${doc.title}`}>
                     <input type="hidden" name="id" value={doc.id} />
-                    <button className="btn secondary small" type="submit">
+                    <ConfirmButton confirmLabel="Delete for good" pendingLabel="Deleting…">
                       Delete
-                    </button>
+                    </ConfirmButton>
                   </form>
                 ) : null}
               </article>

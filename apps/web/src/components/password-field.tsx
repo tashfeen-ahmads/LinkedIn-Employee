@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 
 /**
  * A password box you can look at.
@@ -41,32 +41,52 @@ export function PasswordField({
   minLength?: number;
 }) {
   const [shown, setShown] = useState(false);
+  const id = useId();
+  const hintId = `${id}-hint`;
 
+  /*
+   * A `div`, not a wrapping `<label>`.
+   *
+   * Wrapped in the label, the toggle's text and the hint both became part of
+   * the input's accessible name — a screen reader announced "Password Show At
+   * least twelve characters, edit text". The label now names the input alone
+   * through `htmlFor`, the hint is attached as a description, and the toggle
+   * is its own control beside it. The label sits in a `span` so it keeps the
+   * `.field > span` type every other field label has.
+   */
   return (
-    <label className="field">
-      <span>{label}</span>
+    <div className="field">
+      <span>
+        <label htmlFor={id}>{label}</label>
+      </span>
       <span className="password-box">
         <input
+          id={id}
           type={shown ? "text" : "password"}
           name={name}
           required={required}
           minLength={minLength}
           autoComplete={autoComplete}
+          aria-describedby={hint ? hintId : undefined}
         />
         <button
           type="button"
           className="password-peek"
           onClick={() => setShown((was) => !was)}
+          aria-controls={id}
           aria-pressed={shown}
-          // The label says what pressing it does, not what state it is in:
-          // "Hide password" on a hidden password is the sentence that makes
-          // somebody press it twice.
+          // The label says what pressing it does, and matches the word on the
+          // button so voice control can find it by what it shows.
           aria-label={shown ? "Hide password" : "Show password"}
         >
           {shown ? "Hide" : "Show"}
         </button>
       </span>
-      {hint ? <span className="hint">{hint}</span> : null}
-    </label>
+      {hint ? (
+        <span className="hint" id={hintId}>
+          {hint}
+        </span>
+      ) : null}
+    </div>
   );
 }

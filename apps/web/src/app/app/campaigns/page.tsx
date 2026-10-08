@@ -4,11 +4,12 @@ import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { fetchAllRows } from "@/lib/rows";
 import { PageNotice, type NoticeParams } from "@/components/page-notice";
+import { label } from "@/lib/labels";
 
 export default async function CampaignsPage({
   searchParams,
 }: {
-  searchParams: Promise<NoticeParams>;
+  searchParams: NoticeParams;
 }) {
   const notice = await searchParams;
   const session = await requireSession();
@@ -77,7 +78,7 @@ export default async function CampaignsPage({
         <PageNotice error={notice.error} notice={notice.notice} />
         <Empty title="No campaigns yet." action="Open strategies" href="/app/strategy">
           Scout and Quinn build one from an approved strategy — the list, the copy, and a note
-          written for each person. Or press <strong>Start a campaign</strong> above to build one now
+          written for each person. Or press <strong>Set up a campaign</strong> above to build one now
           over everybody you already have. Either way it arrives as a draft.
         </Empty>
       </>
@@ -137,11 +138,24 @@ export default async function CampaignsPage({
         title="Campaigns"
         lede="Grouped by the strategy each came from, in the strategies' own priority order."
         actions={
-          <Link className="btn ghost small" href="/app/analytics">
-            Results
-          </Link>
+          <>
+            {/* Results is a section of the overview; /app/analytics only
+                redirects there, so the link goes straight to it. */}
+            <Link className="btn ghost small" href="/app#results">
+              Results
+            </Link>
+            {/* The way to start another one, once there is one already. It
+                was only offered on the empty screen, so the second campaign
+                had no door. */}
+            <Link className="btn small" href="/app/campaigns/new">
+              New campaign
+            </Link>
+          </>
         }
       />
+      {/* Refusals and confirmations from the campaign screens redirect here,
+          and this branch used to render no banner — so they said nothing. */}
+      <PageNotice error={notice.error} notice={notice.notice} />
       {grouped.map((group) => (
         /*
           `Section`, not a hand-rolled `<section className="stack-4">`.
@@ -199,20 +213,25 @@ function renderCampaigns(
                 <div>
                   <h3>{campaign.name}</h3>
                   <p className="small muted">
-                    {stats.total} prospects, {stats.queued} still queued · {campaign.daily_invite_cap} invites
+                    {stats.total} {stats.total === 1 ? "prospect" : "prospects"}, {stats.queued} still
+                    queued · {campaign.daily_invite_cap} {campaign.daily_invite_cap === 1 ? "invite" : "invites"}{" "}
                     a day ·{" "}
                     {campaign.reply_mode === "autopilot" ? "replies on autopilot" : "replies need approval"}
                   </p>
                 </div>
                 <div className="cluster top">
                   <span className={`pill ${campaign.status === "running" ? "positive" : ""}`}>
-                    {campaign.status}
+                    {label(campaign.status)}
                   </span>
                   {/* Launching happens on the review page and nowhere else: it
                       is the one action that reaches strangers, and it should
                       not be possible without having seen the list and the
                       four messages. */}
-                  <Link className="btn secondary small" href={`/app/campaigns/${campaign.id}`}>
+                  <Link
+                    className="btn secondary small"
+                    href={`/app/campaigns/${campaign.id}`}
+                    aria-label={`${campaign.status === "draft" ? "Review" : "Open"} ${campaign.name}`}
+                  >
                     {campaign.status === "draft" ? "Review" : "Open"}
                   </Link>
                 </div>

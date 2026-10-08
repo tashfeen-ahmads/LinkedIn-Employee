@@ -33,6 +33,9 @@
   --chrome:          #FAFBFD;
   --border:          #E1E4EC;
   --border-strong:   #C3C9D6;
+  /* A field's edge is a boundary somebody has to find (WCAG 1.4.11, 3:1).
+     --border-strong is 1.7:1, which is a hairline, not an input. */
+  --input-border:    #8A93A6;
 
   /*
    * Three ink levels, each of which a person can actually read.
@@ -74,6 +77,15 @@
   --auth-panel-ink:    #EEEDFF;
   --auth-panel-muted:  #A9A5D8;
   --auth-panel-card:   #FFFFFF;
+  /* The cards on the auth panel are white in both themes, so they carry their
+     own ink rather than the page's — dark-mode text on a white card was 1.2:1. */
+  --auth-card-ink:     #0F1117;
+  --auth-card-muted:   #454D5E;
+  --auth-card-subtle:  #61697A;
+  --auth-card-sunken:  #E6E9F1;
+  /* The letter on the logo plate. The plate is the accent, which is light in
+     dark mode, so the stroke follows the inverse ink rather than a literal. */
+  --logo-ink: var(--text-inverse);
   --auth-panel-line:   rgba(255, 255, 255, 0.14);
 
   --accent:          #3730E8;
@@ -185,6 +197,7 @@
     --chrome:         #0D1016;
     --border:         #262C39;
     --border-strong:  #3A4251;
+    --input-border:   #6B7487;
 
     --text:           #ECEEF3;
     --text-muted:     #A3ABBA;
@@ -263,7 +276,9 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 
-html { -webkit-text-size-adjust: 100%; }
+/* Every top bar here is sticky, so an anchor or a focused field would land
+   underneath it; the scroll padding is the bar's height plus a breath. */
+html { -webkit-text-size-adjust: 100%; scroll-padding-top: 5rem; }
 
 body {
   margin: 0;
@@ -281,10 +296,20 @@ a:hover { text-decoration: underline; text-underline-offset: 3px; }
 /* A disclosure is a control, and the pointer is what says so. */
 summary { cursor: pointer; }
 
-:where(a, button, input:not([type="range"]), textarea, select, summary):focus-visible {
+:where(a, button, input:not([type="range"]), textarea, select, summary, [role="button"], [tabindex]:not([tabindex="-1"])):focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-  border-radius: var(--radius-sm);
+}
+/* A tap is a tap: no 300ms wait for a double-tap zoom, and no grey flash
+   painted over a control that already shows its own pressed state. */
+:where(a, button, summary, label, [role="button"], .btn, .chip) {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+/* iOS zooms the whole page into any field set below 16px and does not zoom
+   back out. On a touch screen every field is 16px. */
+@media (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea { font-size: 16px; }
 }
 
 img, svg, video { max-width: 100%; height: auto; display: block; }
@@ -327,7 +352,9 @@ p  { margin: 0; }
  * `padding` is deliberately left alone: a bulleted list needs its indent for
  * the markers, and the classes that want a different one set it themselves.
  */
-ul, ol, dl, dd, blockquote, pre, fieldset, h5, h6 { margin: 0; }
+ul, ol, dl, dd, blockquote, pre, h5, h6 { margin: 0; }
+fieldset { margin: 0; border: 0; padding: 0; min-inline-size: 0; }
+fieldset > legend { padding: 0; margin-bottom: var(--space-2); font-size: 0.875rem; font-weight: 550; color: var(--text); }
 /* Form controls carry their own, and a field's gap should be the only space
    between a label and its input. */
 input, select, textarea, button { margin: 0; }
@@ -424,7 +451,7 @@ input, select, textarea, button { margin: 0; }
 }
 .tour-stage.is-done { border-left-color: var(--positive); }
 .tour-stage.is-current { border-left-color: var(--accent); }
-.tour-stage.is-ahead { opacity: 0.72; }
+.tour-stage.is-ahead { color: var(--text-muted); }
 .tour-mark {
   display: grid;
   place-items: center;
@@ -883,7 +910,7 @@ input, select, textarea, button { margin: 0; }
   height: 1.75rem;
   display: grid;
   place-items: center;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--accent-soft);
   border: 1px solid var(--accent-border);
   color: var(--accent-hover);
@@ -924,7 +951,7 @@ input, select, textarea, button { margin: 0; }
   margin-block-start: 0.3rem;
   width: 8px;
   height: 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--accent);
 }
 .setup-step-body { display: flex; flex-direction: column; gap: 2px; }
@@ -954,7 +981,7 @@ input, select, textarea, button { margin: 0; }
   gap: var(--space-2);
   font-size: 0.8125rem;
   padding: 0.3rem 0.7rem;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   border: 1px solid var(--auth-panel-line);
   background: rgba(255, 255, 255, 0.07);
   color: var(--auth-panel-ink);
@@ -962,6 +989,10 @@ input, select, textarea, button { margin: 0; }
 
 .auth-stack { display: flex; flex-direction: column; gap: var(--space-3); }
 .auth-card {
+  --text: var(--auth-card-ink);
+  --text-muted: var(--auth-card-muted);
+  --text-subtle: var(--auth-card-subtle);
+  --surface-sunken: var(--auth-card-sunken);
   background: var(--auth-panel-card);
   color: var(--text);
   border-radius: var(--radius-lg);
@@ -991,7 +1022,7 @@ input, select, textarea, button { margin: 0; }
  * rule 53's collision — the one that renders a component as a clipped sliver
  * and looks deliberate because it is scoped.
  */
-.auth-gauge { height: 6px; border-radius: 999px; background: var(--surface-sunken); overflow: hidden; }
+.auth-gauge { height: 6px; border-radius: var(--radius-pill); background: var(--surface-sunken); overflow: hidden; }
 .auth-gauge > span { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
 
 .auth-pill {
@@ -1121,7 +1152,7 @@ input, select, textarea, button { margin: 0; }
 input[type="text"], input[type="email"], input[type="url"], input[type="number"], textarea, select {
   width: 100%;
   padding: 0.55rem 0.7rem;
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--input-border);
   border-radius: var(--radius-sm);
   background: var(--surface-raised);
   color: var(--text);
@@ -1133,10 +1164,15 @@ input[type="text"], input[type="email"], input[type="url"], input[type="number"]
 /* One height for a text box and a dropdown, so two fields side by side line
    up: a native select renders shorter than an input at the same padding. */
 .field input:not([type="checkbox"]):not([type="radio"]), .field select { min-height: 2.75rem; }
-.field input:focus, .field textarea:focus, .field select:focus {
-  outline: none;
+/* An outline, not only a soft glow: the glow was 1.2:1 against a white card
+   and vanishes entirely in forced-colours mode. Checkboxes and radios keep the
+   base focus ring rather than a field's. */
+.field input:not([type="checkbox"]):not([type="radio"]):focus-visible,
+.field textarea:focus-visible,
+.field select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 .field input::placeholder, .field textarea::placeholder { color: var(--text-subtle); }
 
@@ -1332,7 +1368,6 @@ form.form-row > button.btn:not(.block) { align-self: flex-end; }
 .table-scroll {
   overflow-x: auto;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
   background:
     linear-gradient(to right, var(--surface-raised) 60%, transparent) left center / 2.5rem 100% no-repeat local,
     linear-gradient(to left, var(--surface-raised) 60%, transparent) right center / 2.5rem 100% no-repeat local,
@@ -1386,9 +1421,6 @@ thead th {
 }
 thead th:first-child { border-top-left-radius: var(--radius); border-bottom-left-radius: var(--radius); }
 thead th:last-child { border-top-right-radius: var(--radius); border-bottom-right-radius: var(--radius); }
-/* A header that stays while the rows scroll. Forty prospects in and the column
-   a number belongs to is off the top of the screen. */
-.table-scroll thead th { position: sticky; top: 0; z-index: 1; }
 th, td { text-align: left; padding: 0.95rem 1rem; vertical-align: middle; }
 /* A cell holding a paragraph rather than a value still aligns to its first
    line, so a two-line description does not push its row's other cells down. */
@@ -1398,11 +1430,12 @@ tbody tr + tr td { border-top: 1px dashed var(--border); }
    devices doing one job. */
 tbody tr:first-child td { padding-top: 1rem; }
 tbody tr { transition: background 110ms ease; }
+/* A scroller clips anything drawn outside it, focus rings included. */
+.table-scroll :focus-visible, .scroll-box :focus-visible { outline-offset: -2px; }
 tbody tr:hover td { background: var(--surface); }
 /* Numbers line up on the right, on their own figures. A column of counts set
    ragged-left is a column nobody can compare down. */
 th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
-td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 
 /* --------------------------------------------------------------- notices */
 
@@ -1443,6 +1476,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   display: grid;
   grid-template-columns: 240px minmax(0, 1fr);
   min-height: 100vh;
+  min-height: 100dvh;
   /*
    * The frame's own colour, so the sidebar's column runs the full height of
    * the page rather than stopping wherever the nav's content ends. A sticky
@@ -1471,6 +1505,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   top: 0;
   align-self: start;
   height: 100vh;
+  height: 100dvh;
   overflow-y: auto;
 }
 .app-main { min-width: 0; display: flex; flex-direction: column; background: var(--bg); }
@@ -1776,7 +1811,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   font: inherit;
   text-align: left;
 }
-.nav-group-toggle:hover { background: var(--surface-raised); }
+.nav-group-toggle:hover { background: var(--surface); }
 /* The chevron is pushed right by the label taking the slack, so the count sits
    beside it rather than floating in the middle of the row. */
 .nav-group-toggle .nav-group-label { flex: 1; min-width: 0; }
@@ -1926,6 +1961,8 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   nav a,
   .btn.small,
   .chip,
+  .app-top-icon,
+  .password-peek,
   .between > a {
     min-height: 2.75rem;
     display: inline-flex;
@@ -1942,6 +1979,13 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   /* The page's own gutter shrinks on a phone; the banners follow it rather
      than keeping a desktop inset the content no longer has. */
   .app-banners { padding-top: var(--space-4); }
+}
+
+/* Tablets and touch laptops are wider than the phone breakpoint and just as
+   imprecise, so the 44px floor follows the pointer, not the width. */
+@media (pointer: coarse) {
+  .btn.small, .chip, .nav a, .app-top-icon, .password-peek { min-height: 2.75rem; }
+  .app-top-icon { min-width: 2.75rem; }
 }
 
 /* --------------------------------------------------------------- motion */
@@ -2053,9 +2097,6 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
  * the container being wider changes nothing about where the text sits.
  */
 .hero-grid > * { width: min(1040px, 100%); min-width: 0; }
-/* The panel is the hero's evidence, so it takes a readable width rather than
-   the whole grid. Beats the rule above on specificity, which is the point. */
-.hero-grid > :last-child { width: min(46rem, 100%); }
 
 /*
  * The strip of rules under the hero.
@@ -2088,19 +2129,6 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 }
 
 
-.hero-panel .thread {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: var(--space-4);
-}
-/* The drafted line is marked as a draft, not styled as a sent message. */
-.hero-panel .draft {
-  border-left: 2px solid var(--accent);
-  padding-left: var(--space-3);
-  color: var(--text);
-}
-
 ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: none; }
 
 
@@ -2118,7 +2146,7 @@ ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: none; }
 }
 .faq summary::-webkit-details-marker { display: none; }
 .faq summary::after {
-  content: "+";
+  content: "+" / "";
   font-family: var(--font-mono);
   color: var(--text-subtle);
   flex: none;
@@ -2203,23 +2231,19 @@ ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: none; }
   filter: blur(10px);
 }
 
-/* The panel's own quiet lift off the wash. */
-.hero-panel { position: relative; border-radius: var(--radius-lg); }
-.hero-panel::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--surface-raised) 60%, #fff 40%);
-  opacity: .5;
-}
 
 /* Cards lift a little under the cursor — enough to read as interactive,
    not enough to make a static grid feel restless. */
 .card.interactive { transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease; }
-.card.interactive:hover {
-  transform: translateY(-2px);
+@media (hover: hover) {
+  .card.interactive:hover {
+    transform: translateY(-2px);
+    border-color: var(--border-strong);
+    box-shadow: var(--shadow);
+  }
+}
+/* A keyboard reaching the card gets the same lift a pointer does. */
+.card.interactive:focus-within {
   border-color: var(--border-strong);
   box-shadow: var(--shadow);
 }
@@ -2247,7 +2271,7 @@ ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: none; }
 
 figure { margin: 0; }
 
-.chart, .gate, .pipeline {
+.chart, .gate {
   background: var(--surface-raised);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
@@ -2303,25 +2327,6 @@ figure { margin: 0; }
   .gate-arrow { display: none; }
 }
 
-/* The pipeline: stages with a gate between each. */
-.pipeline-row {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--space-3);
-  align-items: start;
-}
-.pipeline-stage { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
-.pipeline-card { height: 100%; }
-.pipeline-end { border-color: var(--accent-border); background: var(--accent-soft); }
-.pipeline-gate { display: flex; justify-content: center; }
-.pipeline-gate .pill { border-style: dashed; }
-@media (max-width: 760px) {
-  .pipeline-row { grid-template-columns: minmax(0, 1fr); }
-  .pipeline-gate { justify-content: flex-start; }
-}
 
 /* A scored prospect, with each signal's contribution drawn beside it. */
 .scored { border-radius: var(--radius-lg); }
@@ -2404,28 +2409,28 @@ figure { margin: 0; }
 .forecast-fill { height: 100%; border-radius: var(--radius-pill); background: var(--accent); }
 /* The outcome is the one bar that gets the second hue — it is a different kind
    of thing from the three counts above it. */
-.forecast-fill.is-outcome { background: var(--accent-2); }
+.forecast-fill.is-outcome { background: var(--viz-2); }
 
-.slider-value { font-size: 0.9375rem; color: var(--text); }
+.slider-value { font-size: 0.9375rem; color: var(--text); font-variant-numeric: tabular-nums; }
 
 input[type="range"] {
   width: 100%;
   appearance: none;
-  height: 4px;
+  height: 6px;
   border-radius: var(--radius-pill);
-  background: var(--surface-sunken);
+  background: var(--input-border);
   cursor: pointer;
 }
 input[type="range"]::-webkit-slider-thumb {
   appearance: none;
-  width: 18px; height: 18px;
+  width: 24px; height: 24px;
   border-radius: 50%;
   background: var(--accent);
   border: 3px solid var(--surface-raised);
   box-shadow: var(--shadow-sm);
 }
 input[type="range"]::-moz-range-thumb {
-  width: 18px; height: 18px;
+  width: 24px; height: 24px;
   border-radius: 50%;
   background: var(--accent);
   border: 3px solid var(--surface-raised);
@@ -2461,10 +2466,10 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
    hue — the same story the funnel on the page tells. */
 .logo-mark { flex: none; display: block; }
 .logo-plate { fill: var(--accent); }
-/* The letter, on the plate. A literal white rather than a token: the plate is
-   always the accent, in both themes, so this stroke only ever sits on one
-   ground and a token would imply a choice that does not exist. */
-.logo-stroke { stroke: #fff; }
+/* The letter, on the plate. The plate is the accent, which is light in dark
+   mode, so the letter follows the inverse ink: white on indigo, near-black on
+   lavender. A literal white was 2.3:1 there. */
+.logo-stroke { stroke: var(--logo-ink); }
 /* The line the letter stops short of. The second hue, which is exactly what
    `--accent-2` is reserved for — somewhere the first hue can travel to. */
 .logo-limit { fill: var(--accent-2); }
@@ -2541,45 +2546,15 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
    nothing says where you are. */
 .site-nav-link[aria-current="page"] { color: var(--text); background: var(--surface); font-weight: 550; }
 
-/*
- * The line above the headline: a status dot, a sentence, and the thing to go
- * and read. One pill rather than a bare uppercase eyebrow, because the eyebrow
- * said what the page was about and this says what is new — and a pill with a
- * live dot in it is the one piece of the header that looks like the product
- * rather than like a brochure.
- */
-.announce {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: 0.35rem 0.4rem 0.35rem 0.9rem;
-  border-radius: var(--radius-pill);
-  background: var(--surface-raised);
-  border: 1px solid var(--border);
-  box-shadow: var(--shadow-xs);
-  font-size: 0.875rem;
-  color: var(--text-muted);
-}
-.announce:hover { text-decoration: none; box-shadow: var(--shadow-sm); }
-.announce-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--positive);
-  flex: none;
-  /* A ring rather than a pulse: a dot that throbs on every page load is an
-     alert, and nothing here is alarming. */
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--positive) 18%, transparent);
-}
-.announce-chip {
-  padding: 0.15rem 0.6rem;
-  border-radius: var(--radius-pill);
-  background: var(--accent);
-  color: var(--text-inverse);
-  font-size: 0.8125rem;
-  font-weight: 550;
-  white-space: nowrap;
-}
+/* The phone menu: the same links, folded behind one button below 900px. */
+.site-menu { display: none; position: relative; }
+@media (max-width: 900px) { .site-menu { display: block; } }
+.site-menu-toggle { list-style: none; }
+.site-menu-toggle::-webkit-details-marker { display: none; }
+.site-menu-panel { position: absolute; right: 0; top: calc(100% + var(--space-2)); z-index: 11; min-width: 14rem; display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-2); background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow); }
+.site-menu-link { padding: 0.5rem 0.8rem; border-radius: var(--radius-sm); color: var(--text-muted); font-size: 0.9rem; }
+.site-menu-link:hover, .site-menu-link[aria-current="page"] { color: var(--text); background: var(--surface); text-decoration: none; }
+
 
 /*
  * The half of the headline that carries the promise, in the accent.
@@ -2590,18 +2565,10 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
  * say what the product does.
  */
 .headline-accent {
-  /* The sweep has to be visible or it is just a blue word. It runs from the
-     full accent into a light tint of it, so the phrase lifts away at the end
-     rather than sitting flat. */
-  background: linear-gradient(
-    100deg,
-    var(--accent) 0%,
-    color-mix(in srgb, var(--accent) 88%, #FFFFFF) 45%,
-    color-mix(in srgb, var(--accent) 52%, #FFFFFF) 100%
-  );
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  /* Solid. The sweep it replaced ended in a tint at 2.5:1 on the page and
+     disappeared in forced-colours mode — the phrase that says what the product
+     does was the least readable on the page. */
+  color: var(--accent);
 }
 .site-header-actions { display: flex; align-items: center; gap: var(--space-2); }
 
@@ -2646,7 +2613,6 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
   gap: var(--space-6);
   grid-template-columns: minmax(0, 1.7fr) repeat(2, minmax(0, 1fr));
 }
-@media (max-width: 720px) { .footer-grid { grid-template-columns: minmax(0, 1fr); } }
 .footer-column { display: flex; flex-direction: column; gap: var(--space-2); align-items: flex-start; }
 .footer-link { font-size: 0.9rem; color: var(--text-muted); }
 .footer-link:hover { color: var(--text); }
@@ -2691,9 +2657,12 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
   border: 2px solid var(--border-strong);
   background: var(--surface-raised);
   padding: 0;
+  position: relative;
   cursor: pointer;
   transition: transform 140ms ease, border-color 140ms ease, background 140ms ease;
 }
+/* A 16px dot with a 28px hit area. */
+.timeline-dot::after { content: ""; position: absolute; inset: -6px; border-radius: inherit; }
 .timeline-dot:hover { transform: scale(1.18); border-color: var(--accent); }
 .timeline-dot.is-past { border-color: var(--accent); background: var(--accent); }
 .timeline-dot.is-active { border-color: var(--accent); background: var(--accent); transform: scale(1.25); }
@@ -2767,7 +2736,7 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
   font-size: 11px; line-height: 1;
   margin-top: 2px;
 }
-.checklist-row.is-done .checklist-tick { background: var(--positive); border-color: var(--positive); color: #fff; }
+.checklist-row.is-done .checklist-tick { background: var(--positive); border-color: var(--positive); color: var(--text-inverse); }
 /* The one step being asked for, marked on the row as well as in the meter — the
    meter says how far along you are, not what to do next. */
 .checklist-row.is-next .checklist-tick { border-color: var(--accent); }
@@ -2914,7 +2883,7 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
 .funnel-label { font-size: 0.8125rem; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; color: var(--text-muted); }
 /* The number, set in the UI face on its tabular figures rather than in the
    monospace: a stage total is a headline, not a code listing. */
-.funnel-value { font-family: var(--font-ui); font-size: 1.375rem; font-weight: 650; letter-spacing: -0.02em; }
+.funnel-value { font-family: var(--font-ui); font-size: 1.375rem; font-weight: 650; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .funnel-track {
   height: 12px;
   border-radius: var(--radius-pill);
@@ -3081,7 +3050,12 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
  */
 .bars-col:nth-child(-n + 2) .bars-tip { left: 0; transform: none; }
 .bars-col:nth-last-child(-n + 2) .bars-tip { left: auto; right: 0; transform: none; }
-.bars-col:hover .bars-tip { opacity: 1; }
+.bars-col:hover .bars-tip,
+.bars-col:focus-visible .bars-tip,
+.bars-col:focus-within .bars-tip { opacity: 1; }
+.bars-col:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius-sm); }
+/* The skip link focuses <main> (tabindex -1); no ring for that programmatic focus. */
+.app-body:focus:not(:focus-visible) { outline: none; }
 @media (prefers-reduced-motion: reduce) { .bars-tip { transition: none; } }
 /* Bottom-up, and capped in width so a week of data does not draw seven slabs:
    a bar wider than it is interesting stops being a measurement and becomes a
@@ -3172,6 +3146,7 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
 .film { display: flex; flex-direction: column; gap: var(--space-3); }
 .film-card { display: flex; flex-direction: column; gap: var(--space-3); }
 .film-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
+.film-head .cluster { align-items: center; }
 .film-caption { color: var(--text-muted); margin: 0 0 var(--space-3); }
 
 /* Held by the tallest scene rather than animated, so the page below does not
@@ -3252,10 +3227,10 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
 }
 .film-tab.is-active .film-tab-label::before { color: var(--accent); }
 .film-tab-track { height: 2px; background: var(--border); border-radius: var(--radius-pill); overflow: hidden; }
-.film-tab-fill { display: block; height: 100%; width: 0; background: var(--accent); }
+.film-tab-fill { display: block; height: 100%; width: 100%; transform: scaleX(0); transform-origin: left; background: var(--accent); }
 .film-tab.is-active .film-tab-fill { animation-name: film-progress; animation-timing-function: linear; animation-fill-mode: forwards; }
 
-@keyframes film-progress { from { width: 0; } to { width: 100%; } }
+@keyframes film-progress { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 
 /* Reduced motion gets every scene as a list rather than a frozen first frame:
    hiding four fifths of the argument from the people least able to chase it is
@@ -3616,13 +3591,6 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
    whole row is emphasis and none of it is. */
 .platform-box.is-end { stroke: var(--accent); stroke-width: 2; }
 
-.platform-step {
-  fill: var(--text-subtle);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  font-family: var(--font-mono);
-}
 .platform-title { fill: var(--text); font-size: 16px; font-weight: 640; }
 .platform-line { fill: var(--text-muted); font-size: 12.5px; }
 .platform-sub { fill: var(--text-subtle); font-size: 11.5px; }

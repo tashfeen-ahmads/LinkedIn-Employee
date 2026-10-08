@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { BRAND } from "@le/shared";
 import { SiteFooter, SiteHeader } from "@/components/marketing";
+import { PostButton } from "@/components/post-button";
+import { SITE } from "@/lib/site";
 
 export const dynamic = "force-dynamic";
 
@@ -27,17 +29,19 @@ export default async function UnsubscribePage({
   return (
     <>
       <SiteHeader />
-      <main className="auth-page">
+      <main className="auth-page" id="main" tabIndex={-1}>
         {params.done ? (
           <header>
             <h1>You are unsubscribed</h1>
             <p className="muted">
-              No more product emails from {BRAND.name} — no setup tips and no announcements. Emails about
+              No more product emails from {BRAND.name}: no setup tips and no announcements. Emails about
               your own account, like a paused LinkedIn connection or a teammate&rsquo;s invitation,
               still arrive, because those are things you need to know.
             </p>
+            {/* The site, not the dashboard: whoever clicks an unsubscribe link
+                is often signed out, and /app answered them with a login form. */}
             <p className="muted small">
-              <Link href="/app">Back to {BRAND.name}</Link>
+              <Link href={SITE.url}>Go to the {BRAND.name} website</Link>
             </p>
           </header>
         ) : token ? (
@@ -49,12 +53,21 @@ export default async function UnsubscribePage({
                 about your own account still arrive.
               </p>
             </header>
-            {params.error ? <div className="notice danger">{params.error}</div> : null}
+            {/* Never the worker's own words, which name our plumbing. What to do
+                next is the same whatever went wrong. */}
+            {params.error ? (
+              <div className="notice danger" role="alert">
+                That did not work. Try once more, or reply to any email from us and we will take you
+                off by hand.
+              </div>
+            ) : null}
+            {/* `PostButton`, not `SubmitButton`: this form posts to a URL, and
+                `useFormStatus` only ever reports a server action in flight. */}
             <form method="post" action={`/unsubscribe/confirm?token=${encodeURIComponent(token)}`}>
               <input type="hidden" name="from" value="page" />
-              <button className="btn block" type="submit">
+              <PostButton className="btn block" pendingLabel="Unsubscribing…">
                 Unsubscribe
-              </button>
+              </PostButton>
             </form>
           </>
         ) : (

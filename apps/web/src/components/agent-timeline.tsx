@@ -123,30 +123,43 @@ export function AgentTimeline() {
         </div>
       </div>
 
-      <ol className="timeline-track" role="tablist" aria-label="Campaign timeline">
-        {BEATS.map((item, index) => (
-          <li key={`${item.day}-${item.title}`} className="timeline-node">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={index === active}
-              aria-label={`Day ${item.day}: ${item.title}`}
-              className={`timeline-dot${index === active ? " is-active" : ""}${
-                item.human ? " is-human" : ""
-              }${index < active ? " is-past" : ""}`}
-              onClick={() => setActive(index)}
-            />
-            <span className="timeline-day mono">d{item.day}</span>
-          </li>
-        ))}
-        <div className="timeline-rail" aria-hidden="true">
+      {/*
+        A list of steps, not a tablist. It had `role="tablist"` with none of
+        what that role promises — no arrow keys, no roving focus, no panels
+        named by the tabs — so a screen reader announced a widget that did not
+        behave like one. Plain buttons in an ordered list, with the current one
+        marked `aria-current="step"`, are what this actually is.
+
+        The rail is an `li` hidden from assistive technology rather than a
+        `div`: a `div` is not a valid child of an `ol`, and keeping it inside
+        the list means it still scrolls with the dots on a narrow screen.
+        Absolutely positioned, so it takes no slot in the row.
+      */}
+      <ol className="timeline-track" aria-label="Campaign steps">
+        <li className="timeline-rail" aria-hidden="true">
           <motion.div
             className="timeline-rail-fill"
             initial={false}
             animate={{ width: `${(active / (BEATS.length - 1)) * 100}%` }}
             transition={reduced ? { duration: 0 } : { duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
           />
-        </div>
+        </li>
+        {BEATS.map((item, index) => (
+          <li key={`${item.day}-${item.title}`} className="timeline-node">
+            <button
+              type="button"
+              aria-current={index === active ? "step" : undefined}
+              aria-label={`Day ${item.day}: ${item.title}`}
+              className={`timeline-dot${index === active ? " is-active" : ""}${
+                item.human ? " is-human" : ""
+              }${index < active ? " is-past" : ""}`}
+              onClick={() => setActive(index)}
+            />
+            <span className="timeline-day mono" aria-hidden="true">
+              d{item.day}
+            </span>
+          </li>
+        ))}
       </ol>
 
       <div className="timeline-panel" aria-live="polite">

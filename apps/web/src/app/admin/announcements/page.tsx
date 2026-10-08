@@ -139,7 +139,6 @@ export default async function AdminAnnouncementsPage({
 
   return (
     <>
-      <PageNotice error={params.error} notice={params.notice} />
       <PageHeader
         eyebrow="Operator"
         title="Announcements"
@@ -152,6 +151,7 @@ export default async function AdminAnnouncementsPage({
           ) : null
         }
       />
+      <PageNotice error={params.error} notice={params.notice} />
 
       <Section
         title={draft ? (locked ? "What was sent" : "Edit the draft") : "Write an announcement"}

@@ -5,6 +5,21 @@ import { AuthAside } from "@/components/auth-aside";
 import { SubmitButton } from "@/components/submit-button";
 import { callWorker } from "@/lib/worker";
 
+/*
+ * What `?error=` may say. Printed verbatim it was a banner anybody could
+ * write; now it is a key. Codes come from this page and /reset-password; the
+ * two sentences /auth/confirm sends are matched exactly. Anything else gets a
+ * plain sentence.
+ */
+const ERRORS: Record<string, string> = {
+  identifier: "Enter your email address or username.",
+  expired: "That link has expired. Ask for a new one below.",
+  "That link is not complete. Ask for a new one below.": "That link is not complete. Ask for a new one below.",
+  "That link has expired or was already used. Ask for a new one below.":
+    "That link has expired or was already used. Ask for a new one below.",
+};
+const UNKNOWN_ERROR = "That link did not work. Ask for a new one below.";
+
 /**
  * Locked out: a new password, or which address you signed up with.
  *
@@ -16,7 +31,7 @@ async function recover(formData: FormData) {
   "use server";
   const identifier = String(formData.get("identifier") ?? "").trim();
   const kind = formData.get("kind") === "signin" ? "signin" : "password";
-  if (!identifier) redirect(`/forgot?kind=${kind}&error=${encodeURIComponent("Enter your email address or username.")}`);
+  if (!identifier) redirect(`/forgot?kind=${kind}&error=identifier`);
   // The answer is not passed on: the page says the same thing either way.
   await callWorker("/account/recover", { identifier, kind }, 20_000);
   redirect(`/forgot?kind=${kind}&sent=1`);
@@ -29,12 +44,17 @@ export default async function ForgotPage({
 }) {
   const params = await searchParams;
   const kind = params.kind === "signin" ? "signin" : "password";
+  const error = params.error
+    ? Object.prototype.hasOwnProperty.call(ERRORS, params.error)
+      ? ERRORS[params.error]
+      : UNKNOWN_ERROR
+    : null;
 
   return (
     <>
       <SiteHeader />
       <div className="auth-split">
-        <main className="auth-page">
+        <main className="auth-page" id="main" tabIndex={-1}>
           <header>
             <h1>{kind === "signin" ? "Which email did I use?" : "Reset your password"}</h1>
             <p className="muted">
@@ -46,17 +66,29 @@ export default async function ForgotPage({
 
           {params.sent ? (
             <div className="notice accent" role="status">
-              If that matches an account, the email is on its way. Check your inbox and spam folder — the
-              link works once and expires in an hour.
+              If that matches an account, the email is on its way. Check your inbox and spam folder.
+              The link works once and expires in an hour.
             </div>
           ) : null}
-          {params.error ? <div className="notice danger">{params.error}</div> : null}
+          {error ? (
+            <div className="notice danger" role="alert">
+              {error}
+            </div>
+          ) : null}
 
           <form action={recover} className="card">
             <input type="hidden" name="kind" value={kind} />
             <label className="field">
               <span>Email or username</span>
-              <input name="identifier" required autoComplete="username" placeholder="you@company.com" />
+              <input
+                name="identifier"
+                required
+                autoComplete="username"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                placeholder="you@company.com"
+              />
             </label>
             <SubmitButton className="btn block" pendingLabel="Sending…">
               {kind === "signin" ? "Email me my sign-in" : "Email me a reset link"}

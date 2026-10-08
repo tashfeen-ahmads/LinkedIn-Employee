@@ -12,7 +12,8 @@ import { markFor, type NavMarks } from "@/lib/nav-marks";
 import { loadNeedsYou } from "@/lib/needs-you-data";
 import { entitlementFor, entitlementMessage, trialLimitEnforced } from "@le/billing";
 import { isPlatformAdmin } from "@/lib/admin";
-import { linkedInState } from "./profile/linkedin-state";
+import { linkedInState, type LinkedInState } from "./profile/linkedin-state";
+import { label } from "@/lib/labels";
 import { ClearKept } from "@/components/form-keeper";
 
 /**
@@ -113,6 +114,33 @@ function initials(name: string): string {
 }
 
 /**
+ * What the account banner says, in words the rep can act on.
+ *
+ * It printed `status_detail` as it stood — a string written by the worker from
+ * whatever the provider answered, which is our supply chain on somebody else's
+ * screen (rule 54) and usually a sentence about an API rather than about their
+ * account. The detail still reaches the operator console; this is the
+ * customer's half.
+ */
+function accountSentence(status: string, state: LinkedInState): string {
+  if (state.kind === "unfinished") return "The LinkedIn sign-in was not finished, so nothing can send yet.";
+  if (state.kind === "failed") return "The LinkedIn sign-in did not go through, so no account is connected and nothing can send.";
+  switch (status) {
+    case "restricted":
+      return "LinkedIn has limited this account, so sending is paused. Check LinkedIn for a message from them, then reconnect.";
+    case "reauth_required":
+    case "connecting":
+      return "LinkedIn needs you to sign in again before anything else can send.";
+    case "disconnected":
+      return "This LinkedIn account was disconnected, so nothing can send until it is connected again.";
+    case "warning":
+      return "LinkedIn flagged something on this account, so sending is paused until it is resolved.";
+    default:
+      return "Sending is paused until this is resolved.";
+  }
+}
+
+/**
  * There was no way to sign out of this application at all. On a shared or
  * borrowed machine that is not an inconvenience, it is the session staying open
  * for whoever sits down next — and this one can message a rep's real contacts.
@@ -176,6 +204,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="app">
+      {/* First focusable thing on every screen, so a keyboard does not walk
+          the whole rail and top bar to reach the page. */}
+      <a href="#main" className="skip-link">
+        Skip to content
+      </a>
       <ClearKept storageKey="nora:onboarding-answers" />
       <aside className="app-aside">
         {/*
@@ -308,12 +341,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             {account && account.status !== "active" ? (
               <div className={`notice ${account.status === "restricted" ? "danger" : "warning"}`}>
                 <p>
-                  <strong>LinkedIn account {linkedIn.label}.</strong>{" "}
-                  {linkedIn.kind === "failed"
-                    ? linkedIn.detail
-                    : linkedIn.kind === "unfinished"
-                      ? "The LinkedIn sign-in was not finished, so nothing can send yet."
-                      : (account.status_detail ?? "Sending is paused until this is resolved.")}{" "}
+                  <strong>
+                    LinkedIn account{" "}
+                    {linkedIn.kind === "attached" && account.status !== "connecting"
+                      ? label(account.status).toLowerCase()
+                      : linkedIn.label}
+                    .
+                  </strong>{" "}
+                  {accountSentence(account.status, linkedIn)}{" "}
                   {/*
                     Profile, not Team, and the difference is the whole bug.
                     `connectLinkedIn` lives on `/app/profile` and nowhere else;
@@ -331,7 +366,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </div>
         ) : null}
 
-        <main className="app-body">{children}</main>
+        <main className="app-body" id="main" tabIndex={-1}>
+          {children}
+        </main>
       </div>
     </div>
   );

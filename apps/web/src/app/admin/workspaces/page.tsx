@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase-server";
 import { PageHeader } from "@/components/page";
-import { requirePlatformAdmin, statsByWorkspace, formatUsd, type WorkspaceStats } from "@/lib/admin";
+import { requirePlatformAdmin, statsByWorkspace, formatUsd, when, type WorkspaceStats } from "@/lib/admin";
+import { isoAttr } from "@/lib/format";
 import { MESSAGE_WEBHOOK_BEAT, WEBHOOKS_BEAT, standingWebhookRefusal } from "@le/shared";
 
 export const dynamic = "force-dynamic";
@@ -107,7 +108,7 @@ export default async function AdminWorkspacesPage() {
           </p>
           <p className="small">
             Prospect replies are reaching LinkedIn and not reaching any inbox in the product. Last
-            recorded {webhookAt ? new Date(webhookAt).toLocaleString() : "—"}. Customers are not
+            recorded {when(webhookAt)}. Customers are not
             shown this; it is ours.
           </p>
         </div>
@@ -150,7 +151,9 @@ export default async function AdminWorkspacesPage() {
                     <td className="num">{s?.messages_sent ?? 0}</td>
                     <td className="num">{s?.pending_drafts ?? 0}</td>
                     <td className="num mono">{formatUsd(costs.get(w.id) ?? 0)}</td>
-                    <td className="small subtle">{new Date(w.created_at).toLocaleDateString()}</td>
+                    <td className="small subtle">
+                      <time dateTime={isoAttr(w.created_at)}>{when(w.created_at)}</time>
+                    </td>
                   </tr>
                 );
               })}

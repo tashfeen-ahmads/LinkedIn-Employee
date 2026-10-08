@@ -21,6 +21,7 @@ import { callWorker, errorQuery, noticeQuery } from "@/lib/worker";
 import { PageNotice, type NoticeParams } from "@/components/page-notice";
 import { PageHeader, PageGroup, Section, Empty } from "@/components/page";
 import { SubmitButton } from "@/components/submit-button";
+import { ConfirmButton } from "@/components/confirm-button";
 
 /**
  * One agent, and everything it needs to be worth putting in front of a stranger.
@@ -183,12 +184,13 @@ async function removeCustomField(formData: FormData) {
   if (!agent) notFound();
 
   const kept = parseCustomFields(agent.custom_fields).filter((f) => f.key !== key);
-  await supabase
+  const { error } = await supabase
     .from("agents")
     .update({ custom_fields: kept as never })
     .eq("id", id)
     .eq("workspace_id", session.workspaceId);
 
+  if (error) redirect(errorQuery(here, `That did not save: ${error.message}`));
   revalidatePath(here);
   redirect(noticeQuery(here, `Removed {{${key}}}. Copy still using it will show the placeholder.`));
 }
@@ -356,12 +358,17 @@ async function retireLine(formData: FormData) {
   // Un-approved rather than deleted. The line stays readable beside the
   // campaigns that used it, which is the only way to answer "what did we
   // actually send these people".
-  await supabase
+  //
+  // The error is checked: this used to redirect with "Retired." whatever the
+  // database said, so a refused update read as done while the line kept going
+  // out to people.
+  const { error } = await supabase
     .from(table)
     .update({ approved_at: null, approved_by: null, is_default: false })
     .eq("id", lineId)
     .eq("workspace_id", session.workspaceId);
 
+  if (error) redirect(errorQuery(here, `That did not retire: ${error.message}`));
   revalidatePath(here);
   redirect(noticeQuery(here, "Retired. It stays on record for campaigns that used it."));
 }
@@ -435,7 +442,7 @@ export default async function AgentPage({
       <PageNotice error={notice.error} notice={notice.notice} />
 
       {gaps.length > 0 ? (
-        <div className="notice warn" role="status">
+        <div className="notice warning" role="status">
           <p>
             <strong>Not ready for a campaign yet.</strong> This agent still needs {gaps.join(", ")}.
           </p>
@@ -447,12 +454,12 @@ export default async function AgentPage({
           <input type="hidden" name="id" value={id} />
           <label className="field">
             <span>Agent name</span>
-            <input name="name" defaultValue={agent.name} maxLength={80} required />
+            <input name="name" defaultValue={agent.name} maxLength={80} required autoComplete="off" />
             <span className="small muted">Yours, not the prospect&rsquo;s. It never appears in a message.</span>
           </label>
           <label className="field">
             <span>Writes as</span>
-            <input name="from_name" defaultValue={agent.from_name ?? ""} maxLength={80} />
+            <input name="from_name" defaultValue={agent.from_name ?? ""} maxLength={80} autoComplete="off" />
             <span className="small muted">
               The name in the message. &ldquo;Tashfeen&rdquo; reads like a person; a full legal name reads
               like a signature block.
@@ -750,15 +757,18 @@ export default async function AgentPage({
                       </td>
                       <td>{field.label}</td>
                       <td className="small muted">
-                        {field.fallback || <span className="warn">placeholder stays visible</span>}
+                        {field.fallback || <span className="warning-text">placeholder stays visible</span>}
                       </td>
                       <td className="row-actions">
                         <form action={removeCustomField}>
                           <input type="hidden" name="id" value={id} />
                           <input type="hidden" name="key" value={field.key} />
-                          <SubmitButton className="btn secondary small" pendingLabel="Removing…">
+                          <ConfirmButton
+                            confirmLabel={`Remove {{${field.key}}}`}
+                            pendingLabel="Removing…"
+                          >
                             Remove
-                          </SubmitButton>
+                          </ConfirmButton>
                         </form>
                       </td>
                     </tr>

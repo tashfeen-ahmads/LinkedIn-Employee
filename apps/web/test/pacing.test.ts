@@ -307,7 +307,7 @@ describe("describePacing", () => {
   it("sends nobody from an account that is not connected", () => {
     const state = describePacing({ ...live, account: account({ status: "reauth_required" }) });
     expect(state?.tone).toBe("danger");
-    expect(state?.body).toMatch(/Team page/);
+    expect(state?.body).toMatch(/Profile page/);
   });
 
   it("says nothing at all about a campaign nobody has launched", () => {

@@ -41,7 +41,6 @@ export default async function AdminAccountsPage({ searchParams }: { searchParams
 
   return (
     <>
-      <PageNotice error={params.error} notice={params.notice} />
       <PageHeader
         eyebrow="Operator"
         title="LinkedIn accounts"
@@ -55,6 +54,7 @@ export default async function AdminAccountsPage({ searchParams }: { searchParams
           />
         }
       />
+      <PageNotice error={params.error} notice={params.notice} />
 
       <Section
         title="Accounts"

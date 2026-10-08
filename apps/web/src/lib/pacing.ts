@@ -67,7 +67,7 @@ export function describePacing(input: {
     return {
       tone: "danger",
       title: "Sending is stopped: the LinkedIn account is not connected.",
-      body: "Reconnect it on the Team page. Nothing is sent from an account that is paused, restricted, or needs reauthorising.",
+      body: "Reconnect it on your Profile page. Nothing is sent from an account that is paused, restricted, or needs reauthorising.",
     };
   }
 
@@ -116,7 +116,7 @@ export function describePacing(input: {
         return {
           tone: "muted",
           title: "Waiting for your sending hours.",
-          body: `Invitations only go out between ${hour(usage.workingHours.start)} and ${hour(usage.workingHours.end)} on working days, in ${usage.timezone}. Sending resumes ${inWords(decision.retryAfterMs)}. Change the hours on the Team page.`,
+          body: `Invitations only go out between ${hour(usage.workingHours.start)} and ${hour(usage.workingHours.end)} on working days, in ${usage.timezone}. Sending resumes ${inWords(decision.retryAfterMs)}. Change the hours on your Profile page.`,
         };
       case "daily_invite_cap":
       case "weekly_invite_cap":

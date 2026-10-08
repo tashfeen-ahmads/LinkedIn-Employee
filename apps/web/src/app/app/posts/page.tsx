@@ -8,6 +8,8 @@ import { callWorker, errorQuery, noticeQuery } from "@/lib/worker";
 import { PageNotice, type NoticeParams } from "@/components/page-notice";
 import { PageHeader, Section, Empty } from "@/components/page";
 import { SubmitButton } from "@/components/submit-button";
+import { ConfirmButton } from "@/components/confirm-button";
+import { wallTimeToUtc } from "@/lib/format";
 
 /**
  * Posts on the rep's own profile: written by the agent, approved by a person.
@@ -113,35 +115,58 @@ async function saveEdit(formData: FormData) {
 }
 
 /**
- * The one place a post becomes publishable, and the only place `approved_at` is
- * ever set — exactly as rule 9 holds for customer profiles and rule 40 for
- * pitches.
+ * Save the words in the box, then approve exactly those words.
+ *
+ * Approve used to be a separate form carrying the body as it was rendered, so
+ * an edit typed into the box and never saved was dropped and the *old* text
+ * approved — the one outcome an approval step exists to prevent. Now it is a
+ * second button on the edit form: what is approved is what is on screen.
+ *
+ * This is still the one place a post becomes publishable, and the only place
+ * `approved_at` is ever set — exactly as rule 9 holds for customer profiles and
+ * rule 40 for pitches.
  */
 async function approve(formData: FormData) {
   "use server";
   const session = await requireManager("approve posts");
 
   const id = String(formData.get("id") ?? "");
-  // The exact words being approved travel with the click. Approving by id alone
-  // approves whatever the row holds by the time the update lands, which on a
-  // page somebody left open for an hour is not the text they read.
   const body = String(formData.get("body") ?? "").trim();
   if (!id || !body) redirect(errorQuery("/app/posts", "There is nothing to approve."));
-
-  const when = String(formData.get("scheduled_for") ?? "").trim();
-  let scheduledFor: string | null = null;
-  if (when) {
-    // `datetime-local` has no zone, so the browser's value is read in the
-    // server's — which is UTC here. Said out loud on the field rather than
-    // silently, because a post an hour out is a post nobody notices was wrong.
-    const parsed = new Date(when);
-    if (Number.isNaN(parsed.getTime())) {
-      redirect(errorQuery("/app/posts", "That is not a time we can read."));
-    }
-    scheduledFor = parsed.toISOString();
+  if (body.length > POST_MAX_CHARS) {
+    redirect(
+      errorQuery(
+        "/app/posts",
+        `That is ${body.length} characters, and LinkedIn's ceiling is ${POST_MAX_CHARS}.`,
+      ),
+    );
   }
 
   const supabase = await createClient();
+  const { data: me } = await supabase.from("profiles").select("timezone").eq("id", session.userId).maybeSingle();
+  const timezone = me?.timezone || "UTC";
+
+  const typed = String(formData.get("scheduled_for") ?? "").trim();
+  let scheduledFor: string | null = null;
+  if (typed) {
+    const parsed = wallTimeToUtc(typed, timezone);
+    if (!Number.isFinite(parsed)) {
+      redirect(errorQuery("/app/posts", "That is not a time we can read."));
+    }
+    scheduledFor = new Date(parsed).toISOString();
+  }
+
+  // Only when the words changed, so an untouched draft keeps the grounding the
+  // agent recorded for it. A changed one loses it, as on Save.
+  const { error: saveError } = await supabase
+    .from("linkedin_posts")
+    .update({ body, facts_used: [] as never })
+    .eq("id", id)
+    .eq("workspace_id", session.workspaceId)
+    .in("status", ["draft", "failed"])
+    .neq("body", body);
+  if (saveError) redirect(errorQuery("/app/posts", `That did not save: ${saveError.message}`));
+
   const { error, data } = await supabase
     .from("linkedin_posts")
     .update({
@@ -188,7 +213,9 @@ async function approve(formData: FormData) {
 
   revalidatePath("/app/posts");
   if (scheduledFor) {
-    redirect(noticeQuery("/app/posts", `Approved, and scheduled. It goes out at ${scheduledFor}.`));
+    redirect(
+      noticeQuery("/app/posts", `Approved, and scheduled. It goes out on ${when(scheduledFor, timezone)}.`),
+    );
   }
   redirect(
     noticeQuery(
@@ -291,142 +318,157 @@ function PostCard({
   const facts = Array.isArray(row.facts_used) ? (row.facts_used as string[]) : [];
   const links = extractLinks(row.body);
   const published = row.status === "published";
+  const editable = manage && !published;
 
-  return (
-    <article className="card">
-      <div className="stack-3">
-        {manage && !published ? (
-          <form action={saveEdit} className="stack-3">
-            <input type="hidden" name="id" value={row.id} />
-            <label className="field">
-              <span>The post</span>
-              <textarea name="body" rows={10} defaultValue={row.body} maxLength={POST_MAX_CHARS} required />
-              <span className="hint">
-                {row.body.length} of {POST_MAX_CHARS} characters. LinkedIn shows the first two lines
-                and hides the rest behind “see more”, so the opening is the whole of what most people
-                read. Editing un-approves it.
-              </span>
-            </label>
-            <SubmitButton className="btn secondary small" pendingLabel="Saving…">
-              Save
-            </SubmitButton>
-          </form>
-        ) : (
-          /*
+  const details = (
+    <>
+      <p className="tiny subtle">
+        {/*
+          One sentence about where this row is, and one timestamp in it.
+          `mayPublish`'s reason for a scheduled post carries the raw ISO,
+          which is the right thing for the sweep's log and the wrong thing
+          here — printed beside a formatted one it reads as two different
+          times for the same post.
+        */}
+        {published
+          ? `Published ${when(row.published_at, timezone)}`
+          : !row.approved_at
+            ? "Not approved"
+            : row.scheduled_for
+              ? `Approved — held until ${when(row.scheduled_for, timezone)}`
+              : verdict.send
+                ? "Approved — going out on the next sweep"
+                : `Approved — ${verdict.reason}`}
+      </p>
+
+      {row.error ? (
+        // The provider's own words, verbatim. "422: ..." is the single most
+        // useful sentence in a failure and it used to go to a log on a host
+        // the person reading this screen cannot reach (rule 25).
+        <p className="small warning-text">LinkedIn refused this: {row.error}</p>
+      ) : null}
+
+      {links.length ? (
+        /*
+         * Reported, never stripped. LinkedIn suppresses the reach of a post
+         * carrying an outbound URL, which makes a link the most expensive
+         * sentence in the post — but a rep who deliberately puts one there
+         * has made a decision about their own profile, and a product that
+         * silently edited their words would be the worse failure. So this is
+         * rule 49's posture: it says what it costs and does not refuse.
+         */
+        <p className="small muted">
+          This carries {links.length === 1 ? "a link" : `${links.length} links`}. LinkedIn shows a
+          post with an outbound link to far fewer people — the usual move is to earn the question
+          and put the address in the reply.
+        </p>
+      ) : null}
+
+      {facts.length ? (
+        <ul className="tiny muted stack-2">
+          {facts.map((fact) => (
+            <li key={fact}>{fact}</li>
+          ))}
+        </ul>
+      ) : (
+        /*
+         * Empty grounding is reported rather than hidden — rule 16's habit. A
+         * post citing nothing looks exactly like one citing everything, and
+         * the difference is whether this rep's whole network is about to be
+         * told something nobody can check.
+         */
+        <p className="tiny muted">
+          {row.status === "published"
+            ? "Nothing was recorded about where this one's claims came from."
+            : "The agent named no source for what this says, or you wrote it yourself. Read it before approving."}
+        </p>
+      )}
+    </>
+  );
+
+  if (!editable) {
+    return (
+      <article className="card">
+        <div className="stack-3">
+          {/*
            * The post, and nothing above it.
            *
            * This carried an `<h3>` of the first line, which on a read-only card
            * printed that sentence twice running — the body starts with it. A
            * post has no title; its opening *is* its title, which is exactly why
            * LinkedIn shows two lines and hides the rest.
-           */
+           */}
           <p className="prose post-body">{row.body}</p>
-        )}
+          {details}
+        </div>
+      </article>
+    );
+  }
 
-        <p className="tiny subtle">
-          {/*
-            One sentence about where this row is, and one timestamp in it.
-            `mayPublish`'s reason for a scheduled post carries the raw ISO,
-            which is the right thing for the sweep's log and the wrong thing
-            here — printed beside a formatted one it reads as two different
-            times for the same post.
-          */}
-          {published
-            ? `Published ${when(row.published_at, timezone)}`
-            : !row.approved_at
-              ? "Not approved"
-              : row.scheduled_for
-                ? `Approved — held until ${when(row.scheduled_for, timezone)}`
-                : verdict.send
-                  ? "Approved — going out on the next sweep"
-                  : `Approved — ${verdict.reason}`}
-        </p>
+  /*
+   * One form for everything done to this row.
+   *
+   * Approve used to be its own form carrying the body as rendered, so an edit
+   * typed into the box and not saved was dropped and the old words approved.
+   * Every button here now submits what is in the box: Save keeps it, "Save &
+   * approve" keeps it and approves exactly that, and Throw away discards the
+   * row whatever the box says.
+   */
+  return (
+    <article className="card">
+      <form action={saveEdit} className="stack-3">
+        <input type="hidden" name="id" value={row.id} />
+        <label className="field">
+          <span>The post</span>
+          <textarea name="body" rows={10} defaultValue={row.body} maxLength={POST_MAX_CHARS} required />
+          <span className="hint">
+            Up to {POST_MAX_CHARS} characters. LinkedIn shows the first two lines and hides the rest
+            behind “see more”, so the opening is the whole of what most people read. Editing
+            un-approves it.
+          </span>
+        </label>
 
-        {row.error ? (
-          // The provider's own words, verbatim. "422: ..." is the single most
-          // useful sentence in a failure and it used to go to a log on a host
-          // the person reading this screen cannot reach (rule 25).
-          <p className="small warning-text">LinkedIn refused this: {row.error}</p>
-        ) : null}
+        {details}
 
-        {links.length ? (
-          /*
-           * Reported, never stripped. LinkedIn suppresses the reach of a post
-           * carrying an outbound URL, which makes a link the most expensive
-           * sentence in the post — but a rep who deliberately puts one there
-           * has made a decision about their own profile, and a product that
-           * silently edited their words would be the worse failure. So this is
-           * rule 49's posture: it says what it costs and does not refuse.
-           */
-          <p className="small muted">
-            This carries {links.length === 1 ? "a link" : `${links.length} links`}. LinkedIn shows a
-            post with an outbound link to far fewer people — the usual move is to earn the question
-            and put the address in the reply.
-          </p>
-        ) : null}
-
-        {facts.length ? (
-          <ul className="tiny muted stack-2">
-            {facts.map((fact) => (
-              <li key={fact}>{fact}</li>
-            ))}
-          </ul>
+        {row.approved_at ? (
+          <div className="form-row">
+            <SubmitButton className="btn secondary small" pendingLabel="Saving…">
+              Save
+            </SubmitButton>
+            <SubmitButton className="btn secondary small" pendingLabel="Holding…" formAction={unapprove}>
+              Hold
+            </SubmitButton>
+          </div>
         ) : (
-          /*
-           * Empty grounding is reported rather than hidden — rule 16's habit. A
-           * post citing nothing looks exactly like one citing everything, and
-           * the difference is whether this rep's whole network is about to be
-           * told something nobody can check.
-           */
-          <p className="tiny muted">
-            {row.status === "published"
-              ? "Nothing was recorded about where this one's claims came from."
-              : "The agent named no source for what this says, or you wrote it yourself. Read it before approving."}
-          </p>
-        )}
-
-        {manage && !published ? (
-          row.approved_at ? (
-            <form action={unapprove} className="form-row">
-              <input type="hidden" name="id" value={row.id} />
-              <SubmitButton className="btn secondary small" pendingLabel="Holding…">
-                Hold
+          <>
+            <label className="field compact-wide">
+              <span>Schedule it (optional)</span>
+              <input type="datetime-local" name="scheduled_for" />
+              <span className="hint">
+                Your time, {timezone}. Left empty it goes out in your posting hours, which is usually
+                what you want.
+              </span>
+            </label>
+            <div className="form-row">
+              {/* Save first: Enter in a field submits the first button, and a
+                  keystroke must never publish to somebody's profile. */}
+              <SubmitButton className="btn secondary small" pendingLabel="Saving…">
+                Save
               </SubmitButton>
-            </form>
-          ) : (
-            /*
-             * One form, two buttons, because both act on the same row and the
-             * same hidden fields. As two forms they could not share them, and
-             * the flex rules then wrapped the date box, Approve and Throw away
-             * into a staircase down the right of the card.
-             */
-            <form action={approve} className="stack-3">
-              <input type="hidden" name="id" value={row.id} />
-              <input type="hidden" name="body" value={row.body} />
-              <label className="field compact-wide">
-                <span>Schedule it (optional)</span>
-                <input type="datetime-local" name="scheduled_for" />
-                <span className="hint">
-                  In UTC. Left empty it goes out in your posting hours, which is usually what you
-                  want.
-                </span>
-              </label>
-              <div className="form-row">
-                <SubmitButton className="btn small" pendingLabel="Approving…">
-                  Approve
-                </SubmitButton>
-                <SubmitButton
-                  className="btn secondary small"
-                  pendingLabel="Discarding…"
-                  formAction={discard}
-                >
-                  Throw away
-                </SubmitButton>
-              </div>
-            </form>
-          )
-        ) : null}
-      </div>
+              <SubmitButton className="btn small" pendingLabel="Approving…" formAction={approve}>
+                Save &amp; approve
+              </SubmitButton>
+              <ConfirmButton
+                confirmLabel="Throw it away for good"
+                pendingLabel="Discarding…"
+                formAction={discard}
+              >
+                Throw away
+              </ConfirmButton>
+            </div>
+          </>
+        )}
+      </form>
     </article>
   );
 }

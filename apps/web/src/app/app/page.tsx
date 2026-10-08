@@ -5,7 +5,6 @@ import { SetupChecklist } from "@/components/setup-checklist";
 import { NextStep } from "@/components/next-step";
 import { NeedsYou } from "@/components/needs-you";
 import { loadNeedsYou } from "@/lib/needs-you-data";
-import { Kpi } from "@/components/charts";
 import { PageHeader, PageGroup, Section, Empty } from "@/components/page";
 import { createClient } from "@/lib/supabase-server";
 import { PageNotice, type NoticeParams } from "@/components/page-notice";
@@ -33,7 +32,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
   const session = await requireSession();
   const supabase = await createClient();
 
-  const [{ state: setup, next }, funnel, { data: profiles }, { count: prospectsFound }] = await Promise.all([
+  const [{ state: setup, next }, funnel, { data: profiles }, { count: prospectsFound }, { data: me }] = await Promise.all([
     readSetupState(supabase, session.workspaceId),
     readFunnelData(supabase, session.workspaceId),
     supabase
@@ -47,6 +46,9 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
       .from("prospects")
       .select("id", { count: "exact", head: true })
       .eq("workspace_id", session.workspaceId),
+    // For the greeting: "Morning" at four in the afternoon is a small thing
+    // that tells somebody the product does not know where they are.
+    supabase.from("profiles").select("timezone").eq("id", session.userId).maybeSingle(),
   ]);
 
   // The Strategy Agent's own progress, which is a different question from
@@ -97,16 +99,16 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
 
   return (
     <>
-      <PageNotice error={params.error} notice={params.notice} />
+      {/*
+        No "All results" action: Results is a section further down this page,
+        and /app/analytics only redirects back here — a button that reloads the
+        screen you are on reads as a button that did nothing.
+      */}
       <PageHeader
-        title={session.fullName ? `Morning, ${session.fullName.split(" ")[0]}.` : "Overview"}
+        title={session.fullName ? `${greeting(me?.timezone)}, ${session.fullName.split(" ")[0]}.` : "Overview"}
         lede="What needs you, and whether yesterday's sending worked."
-        actions={
-          <Link className="btn ghost small" href="/app/analytics">
-            All results
-          </Link>
-        }
       />
+      <PageNotice error={params.error} notice={params.notice} />
 
       {/*
         Q1, and nothing above it.
@@ -168,44 +170,13 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
       */}
       <LimitsSection />
 
-      <Section
-        id="results"
-        title="How it is going"
-        description="The whole picture, including what each strategy produced and what it cost, is on Results."
-        action={
-          <Link className="btn ghost small" href="/app/analytics">
-            Open Results
-          </Link>
-        }
-      >
-        <div className="kpi-row">
-          <Kpi
-            label="Invited (7 days)"
-            value={report.momentum.current.toLocaleString()}
-            note={
-              report.momentum.change === null
-                ? "No week before this one to compare."
-                : `${report.momentum.change >= 0 ? "+" : ""}${Math.round(report.momentum.change * 100)}% on the week before`
-            }
-          />
-          <Kpi label="Accepted" value={report.counts.accepted.toLocaleString()} />
-          <Kpi label="Replied" value={report.counts.replied.toLocaleString()} />
-          {/*
-            "Waiting on you" is not a result, and it was the second reading of a
-            question the list at the top of this page already answers — a
-            counter that disagrees with the list above it is worse than none.
-
-            Meetings takes the slot only when a campaign here can actually reach
-            that stage. `report.stages` already knows (rule 29): a workspace
-            whose campaigns all ask for a sign-up would otherwise get a
-            permanent zero, which reports a working campaign as a failed one
-            every day for ever.
-          */}
-          {report.stages.some((stage) => stage.key === "meetings") ? (
-            <Kpi label="Meetings" value={report.counts.meetings.toLocaleString()} />
-          ) : null}
-        </div>
-      </Section>
+      {/*
+        "How it is going" used to sit here: four tiles, three of which repeated
+        "This week" in Results below (the same invited count, and acceptance
+        and reply as counts beside the same figures as rates), with a button to
+        a Results page that redirects back to this one. Results is the one
+        reading of those numbers now.
+      */}
 
       <Section
         id="strategies"
@@ -232,8 +203,8 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
                 {profiles.map((profile) => (
                   <tr key={profile.id}>
                     <td>{profile.name}</td>
-                    <td className="num mono">{profile.priority}</td>
-                    <td className="num mono">
+                    <td className="num">{profile.priority}</td>
+                    <td className="num">
                       {/* What it has actually produced, which is the only way
                           to tell an approved strategy that is working from one
                           that has never been given a campaign. */}
@@ -272,4 +243,26 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
       </PageGroup>
     </>
   );
+}
+
+/**
+ * Good morning, afternoon or evening, in the rep's own timezone.
+ *
+ * It said "Morning" at any hour. Without a timezone we cannot know which part
+ * of their day it is, so it says something true at every hour instead.
+ */
+function greeting(timezone: string | null | undefined): string {
+  if (!timezone) return "Welcome back";
+  let hour: number;
+  try {
+    hour = Number(
+      new Intl.DateTimeFormat("en-GB", { hour: "numeric", hourCycle: "h23", timeZone: timezone }).format(new Date()),
+    );
+  } catch {
+    return "Welcome back";
+  }
+  if (!Number.isFinite(hour)) return "Welcome back";
+  if (hour >= 5 && hour < 12) return "Good morning";
+  if (hour >= 12 && hour < 18) return "Good afternoon";
+  return "Good evening";
 }

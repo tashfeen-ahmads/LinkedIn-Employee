@@ -4,7 +4,7 @@ import { BreadcrumbSchema } from "@/components/schema";
 import { pageMeta } from "@/lib/site";
 
 export const metadata: Metadata = pageMeta({
-  title: "About — why this is built the way it is",
+  title: "About: why it is built this way",
   description:
     "An AI SDR built around the constraint everyone else treats as an afterthought: not losing the LinkedIn account it runs on.",
   path: "/about",
@@ -41,14 +41,14 @@ export default function AboutPage() {
             </p>
             <p>
               So the caps came first and everything else was built to fit inside them. Sending is
-              checked against the limiter twice — once when the day is planned and again in the second
-              before each message leaves — because minutes pass in between and the situation changes.
+              checked against the limiter twice, once when the day is planned and again in the second
+              before each message leaves, because minutes pass in between and the situation changes.
               Account health is polled nightly and read from every response. The list is deduplicated
               across the whole team so two reps never arrive in the same inbox.
             </p>
             <p>
               The second decision was that judgement stays yours and typing does not. Three things
-              need you — the strategy, the words, the launch — and each is a gate in the code rather
+              need you (the strategy, the words, the launch), and each is a gate in the code rather
               than a promise in a paragraph. Everything after them can run unattended.
             </p>
             <p>
@@ -65,14 +65,13 @@ export default function AboutPage() {
             </p>
           </div>
 
-          <div className="cluster">
-            <Link href="/how-it-works" className="btn">
-              See how it works
-            </Link>
+          {/* One link, not a pair: the closing band right under this already
+              offers "See how it works". */}
+          <p>
             <Link href="/linkedin-automation-limits" className="btn secondary">
               Read the limits
             </Link>
-          </div>
+          </p>
         </div>
       </section>
     </>

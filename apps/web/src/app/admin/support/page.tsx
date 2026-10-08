@@ -3,7 +3,8 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { SUPPORT_CATEGORY_LABEL, type SupportCategory } from "@le/shared";
 import { createClient } from "@/lib/supabase-server";
-import { requirePlatformAdmin, ago } from "@/lib/admin";
+import { requirePlatformAdmin, ago, when } from "@/lib/admin";
+import { isoAttr } from "@/lib/format";
 import { errorQuery, noticeQuery } from "@/lib/worker";
 import { PageHeader, Section, Empty } from "@/components/page";
 import { PageNotice, type NoticeParams } from "@/components/page-notice";
@@ -90,13 +91,13 @@ export default async function AdminSupportPage({ searchParams }: { searchParams:
 
   return (
     <>
-      <PageNotice error={params.error} notice={params.notice} />
       <PageHeader
         eyebrow="Operator"
         title="Support"
         lede="The assistant reads every ticket first. What it answered is below; what it was not sure about waits here with its draft."
         actions={<ControlButton op="support-sweep" back="/admin/support" label="Ask the assistant now" pendingLabel="Answering…" />}
       />
+      <PageNotice error={params.error} notice={params.notice} />
 
       <Section title="This week">
         <div className="kpi-row">
@@ -190,6 +191,9 @@ export default async function AdminSupportPage({ searchParams }: { searchParams:
                       label={ticket.drafted_at ? "Draft again" : "Ask the assistant"}
                       pendingLabel="Drafting…"
                       tone="ghost"
+                      // A new draft replaces the one in the box above, and
+                      // whatever was typed into it, when the page comes back.
+                      confirm={ticket.drafted_at ? "Replace your edits with a new draft" : undefined}
                     />
                   </div>
                 </article>
@@ -215,7 +219,9 @@ export default async function AdminSupportPage({ searchParams }: { searchParams:
               <tbody>
                 {closed.map((t) => (
                   <tr key={t.id}>
-                    <td className="small subtle">{new Date(t.created_at).toLocaleDateString()}</td>
+                    <td className="small subtle">
+                      <time dateTime={isoAttr(t.created_at)}>{when(t.created_at)}</time>
+                    </td>
                     <td>
                       <Link href={`/admin/workspaces/${t.workspace_id}`}>{names.get(t.workspace_id) ?? "—"}</Link>
                     </td>

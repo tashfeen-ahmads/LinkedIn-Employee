@@ -85,10 +85,16 @@ async function generate(formData: FormData) {
   );
 }
 
-/** Save an edit. The trigger on the table clears that row's approval for us. */
-async function saveEdit(formData: FormData) {
-  "use server";
-  const session = await requireManager("change the copy");
+/**
+ * Write the name and words from the edit form, and return the words.
+ *
+ * Shared by Save and "Save & approve" so the two can never disagree about what
+ * was saved. The body is only rewritten when it changed: rewriting identical
+ * words would mark a line the agent wrote as written by hand and throw away
+ * the grounding it recorded, for an edit nobody made.
+ */
+async function writeEdit(formData: FormData, action: string) {
+  const session = await requireManager(action);
   const kind = kindOf(formData);
 
   const id = String(formData.get("id") ?? "");
@@ -109,41 +115,55 @@ async function saveEdit(formData: FormData) {
   }
 
   const supabase = await createClient();
+  const { error: nameError } = await supabase
+    .from(kind.table)
+    .update({ name })
+    .eq("id", id)
+    .eq("workspace_id", session.workspaceId);
+  if (nameError) redirect(errorQuery("/app/pitch", `That did not save: ${nameError.message}`));
+
   // Branched rather than given a union payload: `facts_used` exists on one
   // table and not the other, and a shared object would have to lie about that.
   const { error } =
     kind.table === "pitches"
       ? await supabase
           .from("pitches")
-          .update({ name, body, written_by: "human", facts_used: [] as never })
+          .update({ body, written_by: "human", facts_used: [] as never })
           .eq("id", id)
           .eq("workspace_id", session.workspaceId)
+          .neq("body", body)
       : await supabase
           .from("hooks")
-          .update({ name, body, written_by: "human" })
+          .update({ body, written_by: "human" })
           .eq("id", id)
-          .eq("workspace_id", session.workspaceId);
+          .eq("workspace_id", session.workspaceId)
+          .neq("body", body);
 
   if (error) redirect(errorQuery("/app/pitch", `That did not save: ${error.message}`));
+  return { session, supabase, kind, id, body };
+}
 
+/** Save an edit. The trigger on the table clears that row's approval for us. */
+async function saveEdit(formData: FormData) {
+  "use server";
+  await writeEdit(formData, "change the copy");
   revalidatePath("/app/pitch");
   redirect(noticeQuery("/app/pitch", "Saved. Editing clears the approval, so approve it again before it is used."));
 }
 
-/** The one place a pitch becomes sendable. */
+/**
+ * The one place a line becomes sendable: save what is in the box, then
+ * approve exactly those words.
+ *
+ * Approve used to be its own form carrying the body as rendered, so an edit
+ * typed and not yet saved was dropped and the old text approved. The words
+ * approved are now the words on screen, and the update still matches on them
+ * so a concurrent edit between the two writes is refused rather than approved.
+ */
 async function approve(formData: FormData) {
   "use server";
-  const session = await requireManager("approve copy");
-  const kind = kindOf(formData);
+  const { session, supabase, kind, id, body } = await writeEdit(formData, "approve copy");
 
-  const id = String(formData.get("id") ?? "");
-  // The exact words being approved travel with the click. Approving by id
-  // alone approves whatever the row holds by the time the update lands, which
-  // on a page somebody left open for an hour is not the text they read.
-  const body = String(formData.get("body") ?? "").trim();
-  if (!id || !body) redirect(errorQuery("/app/pitch", "There is nothing to approve."));
-
-  const supabase = await createClient();
   const { error, data } = await supabase
     .from(kind.table)
     .update({ approved_at: new Date().toISOString(), approved_by: session.userId })
@@ -158,7 +178,7 @@ async function approve(formData: FormData) {
   }
 
   revalidatePath("/app/pitch");
-  redirect(noticeQuery("/app/pitch", "Approved."));
+  redirect(noticeQuery("/app/pitch", "Saved and approved."));
 }
 
 async function unapprove(formData: FormData) {
@@ -237,107 +257,120 @@ function CopyCard({
   max: number;
 }) {
   const facts = Array.isArray(row.facts_used) ? (row.facts_used as string[]) : [];
+
+  const details = (
+    <>
+      {row.angle ? (
+        // What bet this line places. Unsaid, five lines read as one sentence
+        // written five ways and nobody can tell whether two are the same bet.
+        <p className="small muted">Bet: {row.angle}</p>
+      ) : null}
+
+      <p className="tiny subtle">
+        {row.is_default ? "Default · " : ""}
+        {row.approved_at ? "Approved" : "Not approved"} ·{" "}
+        {row.written_by === "agent" ? "written by the agent" : "written by hand"}
+        {usedBy.length ? ` · used by ${usedBy.join(", ")}` : " · not attached to an angle"}
+      </p>
+
+      {kind === "pitches" ? (
+        facts.length ? (
+          <ul className="tiny muted stack-2">
+            {facts.map((fact) => (
+              <li key={fact}>{fact}</li>
+            ))}
+          </ul>
+        ) : (
+          /*
+           * Empty grounding is reported rather than hidden — rule 16's habit.
+           * A pitch citing nothing looks exactly like one citing everything,
+           * and the difference is whether a prospect is about to be told
+           * something nobody can check. Openers make no claim at all, by
+           * prompt and by rule, so there is nothing here to ground.
+           */
+          <p className="tiny muted">
+            {row.written_by === "human"
+              ? "You wrote this one, so nothing in it is checked against your knowledge base."
+              : "The agent named no source for what this says. Read it before approving."}
+          </p>
+        )
+      ) : null}
+    </>
+  );
+
+  if (!manage) {
+    return (
+      <article className="card">
+        <div className="stack-3">
+          <h3>{row.name}</h3>
+          <p className="prose">{row.body}</p>
+          {details}
+        </div>
+      </article>
+    );
+  }
+
+  /*
+   * One form for everything done to this line, so every button submits what is
+   * in the boxes. Approve used to be a separate form carrying the body as it
+   * was rendered, which dropped an unsaved edit and approved the old words.
+   */
   return (
     <article className="card">
-      <div className="stack-3">
-        {manage ? (
-          <form action={saveEdit} className="stack-3">
-            <input type="hidden" name="kind" value={kind} />
-            <input type="hidden" name="id" value={row.id} />
-            <label className="field">
-              <span>Name</span>
-              <input type="text" name="name" defaultValue={row.name} maxLength={40} required />
-            </label>
-            <label className="field">
-              <span>{kind === "hooks" ? "The opening line" : "The line"}</span>
-              <textarea name="body" rows={2} defaultValue={row.body} maxLength={max} required />
-              <span className="hint">
-                {row.body.length} of {max} characters. No links.
-                {kind === "hooks"
-                  ? " It is the shape of the note, not the whole of it — the writer still says one specific thing about the person."
-                  : " The destination is substituted per campaign at send time."}{" "}
-                Editing un-approves it, because an approval is a statement about particular words.
-              </span>
-            </label>
-            <SubmitButton className="btn secondary small" pendingLabel="Saving…">
-              Save
-            </SubmitButton>
-          </form>
-        ) : (
-          <>
-            <h3>{row.name}</h3>
-            <p className="prose">{row.body}</p>
-          </>
-        )}
+      <form action={saveEdit} className="stack-3">
+        <input type="hidden" name="kind" value={kind} />
+        <input type="hidden" name="id" value={row.id} />
+        <label className="field">
+          <span>Name</span>
+          <input type="text" name="name" defaultValue={row.name} maxLength={40} required autoComplete="off" />
+        </label>
+        <label className="field">
+          <span>{kind === "hooks" ? "The opening line" : "The line"}</span>
+          <textarea name="body" rows={2} defaultValue={row.body} maxLength={max} required />
+          <span className="hint">
+            Up to {max} characters. No links.
+            {kind === "hooks"
+              ? " It is the shape of the note, not the whole of it — the writer still says one specific thing about the person."
+              : " The destination is substituted per campaign at send time."}{" "}
+            Editing un-approves it, because an approval is a statement about particular words.
+          </span>
+        </label>
 
-        {row.angle ? (
-          // What bet this line places. Unsaid, five lines read as one sentence
-          // written five ways and nobody can tell whether two are the same bet.
-          <p className="small muted">Bet: {row.angle}</p>
-        ) : null}
+        {details}
 
-        <p className="tiny subtle">
-          {row.is_default ? "Default · " : ""}
-          {row.approved_at ? "Approved" : "Not approved"} ·{" "}
-          {row.written_by === "agent" ? "written by the agent" : "written by hand"}
-          {usedBy.length ? ` · used by ${usedBy.join(", ")}` : " · not attached to an angle"}
-        </p>
-
-        {kind === "pitches" ? (
-          facts.length ? (
-            <ul className="tiny muted stack-2">
-              {facts.map((fact) => (
-                <li key={fact}>{fact}</li>
-              ))}
-            </ul>
-          ) : (
-            /*
-             * Empty grounding is reported rather than hidden — rule 16's habit.
-             * A pitch citing nothing looks exactly like one citing everything,
-             * and the difference is whether a prospect is about to be told
-             * something nobody can check. Openers make no claim at all, by
-             * prompt and by rule, so there is nothing here to ground.
-             */
-            <p className="tiny muted">
-              {row.written_by === "human"
-                ? "You wrote this one, so nothing in it is checked against your knowledge base."
-                : "The agent named no source for what this says. Read it before approving."}
-            </p>
-          )
-        ) : null}
-
-        {manage ? (
-          <div className="form-row">
-            {row.approved_at ? (
-              <form action={unapprove}>
-                <input type="hidden" name="kind" value={kind} />
-                <input type="hidden" name="id" value={row.id} />
-                <SubmitButton className="btn secondary small" pendingLabel="Pausing…">
-                  Pause
-                </SubmitButton>
-              </form>
-            ) : (
-              <form action={approve}>
-                <input type="hidden" name="kind" value={kind} />
-                <input type="hidden" name="id" value={row.id} />
-                <input type="hidden" name="body" value={row.body} />
-                <SubmitButton className="btn small" pendingLabel="Approving…">
-                  Approve
-                </SubmitButton>
-              </form>
-            )}
-            {row.approved_at && !row.is_default ? (
-              <form action={makeDefault}>
-                <input type="hidden" name="kind" value={kind} />
-                <input type="hidden" name="id" value={row.id} />
-                <SubmitButton className="btn secondary small" pendingLabel="Setting…">
+        <div className="form-row">
+          {row.approved_at ? (
+            <>
+              <SubmitButton className="btn secondary small" pendingLabel="Saving…">
+                Save
+              </SubmitButton>
+              <SubmitButton className="btn secondary small" pendingLabel="Pausing…" formAction={unapprove}>
+                Pause
+              </SubmitButton>
+              {!row.is_default ? (
+                <SubmitButton
+                  className="btn secondary small"
+                  pendingLabel="Setting…"
+                  formAction={makeDefault}
+                >
                   Make default
                 </SubmitButton>
-              </form>
-            ) : null}
-          </div>
-        ) : null}
-      </div>
+              ) : null}
+            </>
+          ) : (
+            <>
+              {/* Save first: Enter in a field submits the first button, and a
+                  keystroke must not approve copy that goes to real people. */}
+              <SubmitButton className="btn secondary small" pendingLabel="Saving…">
+                Save
+              </SubmitButton>
+              <SubmitButton className="btn small" pendingLabel="Approving…" formAction={approve}>
+                Save &amp; approve
+              </SubmitButton>
+            </>
+          )}
+        </div>
+      </form>
     </article>
   );
 }

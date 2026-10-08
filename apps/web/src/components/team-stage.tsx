@@ -8,7 +8,7 @@ import {
   useSpring,
   useTransform,
 } from "framer-motion";
-import type { PointerEvent, ReactNode } from "react";
+import { useRef, type PointerEvent, type ReactNode } from "react";
 import { LEAD, NORA, TEAM } from "@/lib/team";
 import { TeamAvatar } from "./team-avatar";
 
@@ -56,16 +56,25 @@ function TiltCard({
   const gx = useTransform(sx, (v) => `${Math.round(v * 100)}%`);
   const gy = useTransform(sy, (v) => `${Math.round(v * 100)}%`);
   const glare = useMotionTemplate`radial-gradient(22rem circle at ${gx} ${gy}, var(--crew-glare), transparent 62%)`;
+  const box = useRef<DOMRect | null>(null);
 
+  // Measured once as the pointer arrives, not on every move: a layout read per
+  // pointer event is a forced reflow per frame, for a card that does not move
+  // under the pointer while it is there.
+  function enter(event: PointerEvent<HTMLDivElement>) {
+    if (reduced || event.pointerType !== "mouse") return;
+    box.current = event.currentTarget.getBoundingClientRect();
+  }
   function move(event: PointerEvent<HTMLDivElement>) {
     // A mouse only. On a touch screen a tilt follows the finger that is trying
     // to scroll the page, which reads as the page fighting back.
     if (reduced || event.pointerType !== "mouse") return;
-    const box = event.currentTarget.getBoundingClientRect();
-    px.set((event.clientX - box.left) / box.width);
-    py.set((event.clientY - box.top) / box.height);
+    const rect = (box.current ??= event.currentTarget.getBoundingClientRect());
+    px.set((event.clientX - rect.left) / rect.width);
+    py.set((event.clientY - rect.top) / rect.height);
   }
   function leave() {
+    box.current = null;
     px.set(0.5);
     py.set(0.5);
   }
@@ -73,7 +82,12 @@ function TiltCard({
   return (
     <motion.div
       className={`crew-tilt ${className}`}
+      // The style stays bound whatever `reduced` says: it is null on the server
+      // and true on a reduced-motion client, so branching the markup on it is
+      // a hydration mismatch. Under reduced motion the handlers simply never
+      // feed it, so it rests flat.
       style={{ rotateX, rotateY }}
+      onPointerEnter={enter}
       onPointerMove={move}
       onPointerLeave={leave}
     >
@@ -120,14 +134,21 @@ export function TeamStage() {
   const sceneX = useTransform(sy, [-0.5, 0.5], [2.5, -2.5]);
   const orbitX = useTransform(sx, [-0.5, 0.5], [-14, 14]);
   const orbitY = useTransform(sy, [-0.5, 0.5], [-10, 10]);
+  const box = useRef<DOMRect | null>(null);
 
+  // As in `TiltCard`: one layout read when the pointer arrives, none per move.
+  function enterStage(event: PointerEvent<HTMLDivElement>) {
+    if (reduced || event.pointerType !== "mouse") return;
+    box.current = event.currentTarget.getBoundingClientRect();
+  }
   function move(event: PointerEvent<HTMLDivElement>) {
     if (reduced || event.pointerType !== "mouse") return;
-    const box = event.currentTarget.getBoundingClientRect();
-    px.set((event.clientX - box.left) / box.width - 0.5);
-    py.set((event.clientY - box.top) / box.height - 0.5);
+    const rect = (box.current ??= event.currentTarget.getBoundingClientRect());
+    px.set((event.clientX - rect.left) / rect.width - 0.5);
+    py.set((event.clientY - rect.top) / rect.height - 0.5);
   }
   function leave() {
+    box.current = null;
     px.set(0);
     py.set(0);
   }
@@ -136,7 +157,12 @@ export function TeamStage() {
     reduced ? { duration: 0 } : { duration: 0.7, delay, ease: EASE };
 
   return (
-    <div className="crew-stage" onPointerMove={move} onPointerLeave={leave}>
+    <div
+      className="crew-stage"
+      onPointerEnter={enterStage}
+      onPointerMove={move}
+      onPointerLeave={leave}
+    >
       <motion.div className="crew-scene" style={{ rotateX: sceneX, rotateY: sceneY }}>
         <div className="crew-top">
           {/* Entrance on the outside, parallax on the inside: one element

@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { PlatformDiagram } from "./platform-diagram";
-import { SiteNav } from "./site-nav";
+import { SiteMenu, SiteNav, UnlessOn } from "./site-nav";
 import { Sequence, sequenceFor } from "@/components/sequence";
 import { BRAND, LINKEDIN_LIMITS } from "@le/shared";
 import { SITE } from "@/lib/site";
-import { Pipeline, ReplyGate, WarmupRamp } from "./diagrams";
+import { ReplyGate, WarmupRamp } from "./diagrams";
 import { Forecast } from "./forecast";
 import { GateSimulator } from "./gate-simulator";
 import { ProductFilm } from "./product-film";
@@ -57,8 +57,11 @@ export function SiteHeader() {
             Sign in
           </Link>
           <Link href={`${SITE.app}/signup`} className="btn small">
-            Sign up
+            Sign up free
           </Link>
+          {/* Below 900px the nav is hidden and below 640px so is Sign in; the
+              menu carries both, so neither is ever out of reach. */}
+          <SiteMenu links={NAV_LINKS} signInHref={`${SITE.app}/login`} />
         </div>
       </div>
     </header>
@@ -69,60 +72,32 @@ export function Hero() {
   return (
     <section className="section hero-wash">
       {/*
-        Centred, with the product underneath rather than beside.
+        Centred, with the product underneath rather than beside: the sentence
+        that has to do the work is the widest thing on the page, and the
+        diagram under it is the evidence.
 
-        The hero was a two-column grid: copy on the left, one panel on the
-        right. It reads as a brochure — the headline never gets the width to
-        land, and the panel competes with it for the same glance. Centred, the
-        sentence that has to do the work is the widest thing on the page and
-        the product sits under it as the evidence, which is the shape every
-        landing page in this category has converged on because it is the order
-        somebody actually reads in.
+        Three text elements and one picture. The hero used to carry an
+        announcement pill, a seventy-five-word lede, a tagline under the
+        buttons, the diagram *and* a mock inbox panel whose "what does this
+        cost?" exchange the film tells again further down. A first screen that
+        says five things is read as saying none of them.
       */}
       <div className="container hero-grid">
         <Reveal>
           <div className="stack-5 hero-copy">
-            {/* What is new, and where to read it — rather than an uppercase
-                label repeating the headline underneath it. */}
-            <a href="#team" className="announce">
-              <span className="announce-dot" aria-hidden="true" />
-              Meet {NORA} and her team
-              <span className="announce-chip">Say hello &rarr;</span>
-            </a>
             <div className="stack-3">
               {/*
-                The outcome, and nothing but the outcome.
-
-                "Your AI SDR for LinkedIn" is the category rather than the
-                product — every competitor's headline says it, so it tells a
-                visitor nothing about which of them to pick. This one names
-                what they get and when: work that happened without them.
-
-                The safety claim used to be the second half of the headline,
-                and it has moved into the lede on purpose. It is the strongest
-                thing this product can say and the wrong thing to lead with: a
-                headline that mentions risk puts the risk in the reader's head
-                before the reward, and the people most likely to buy are the
-                ones who have not yet been burned and are not shopping for a
-                guarantee. It still appears above the fold, in the sentence
-                that explains how the outcome is produced, which is where a
-                claim like that is believed rather than discounted.
-
-                `headline-accent` stays on the clause that does the work:
-                "while you sleep" is the part a competitor cannot copy without
-                also pacing their sending, which is the same argument the mark
-                draws.
+                The outcome, and nothing but the outcome. The safety claim is
+                in the lede on purpose: a headline that mentions risk puts the
+                risk in the reader's head before the reward.
               */}
               <h1>
                 Meetings and leads created{" "}
                 <span className="headline-accent">while you sleep.</span>
               </h1>
               <p className="lede prose">
-                {NORA} is an AI assistant with a team of four. They find your buyers, write each
-                invitation from that person&rsquo;s own profile, answer the replies and book the
-                meeting — all inside the daily limits LinkedIn actually watches, so the account
-                doing the sending is not what you are gambling with. You approve the strategy,
-                check the words and press launch — three decisions, not an hour a day.
+                {NORA} and a team of four find your buyers, write to each one, answer the replies
+                and book the meeting, inside the daily limits LinkedIn actually watches.
               </p>
             </div>
             <div className="cluster">
@@ -133,69 +108,18 @@ export function Hero() {
                 Meet the team
               </a>
             </div>
-            <p className="small subtle">
-              {FREE_LINE} Every reply is drafted for your approval until you switch on autopilot.
-            </p>
           </div>
         </Reveal>
 
-        {/*
-          The pipeline first, the moment second.
-
-          The panel below is the best *moment* in the product — it wrote the
-          reply and then stopped — and on its own it is not the product.
-          Somebody landing cold cannot tell from one message that a list was
-          built before it, or that the sending is paced, or that anything
-          happens after. The headline claims a pipeline and the only picture
-          under it showed a single inbox.
-
-          So the diagram carries the mechanism and the panel carries the proof,
-          in that order, because that is the order the claim is made in.
-        */}
         <Reveal delay={0.08}>
           <PlatformDiagram />
-        </Reveal>
-
-        <Reveal delay={0.16}>
-          <figure className="card raised hero-panel stack-4">
-            <figcaption className="between">
-              <span className="eyebrow">Your inbox</span>
-              <span className="pill warning">Pricing question</span>
-            </figcaption>
-
-            <div className="thread stack-3">
-              <p className="small">
-                <span className="subtle">Them: </span>
-                Interesting — what does this actually cost for a team of six?
-              </p>
-              <p className="small draft">
-                <span className="subtle">Drafted: </span>
-                Happy to go through it properly — it depends on lanes rather than seats. Can I put
-                fifteen minutes in the diary this week?
-              </p>
-            </div>
-
-            <p className="tiny subtle prose">
-              Held for you. Pricing, legal and anything negative wait for a person until you turn
-              that off — and two holds never lift: a message it is not confident it understood, and
-              a prospect who asks to speak to a human.
-            </p>
-          </figure>
         </Reveal>
       </div>
 
       {/*
-        The four rules, immediately under the hero.
-
-        Two things were wrong with the space this now occupies. It was empty —
-        the left column ran out well above the panel's foot, so the page opened
-        with a headline and then two hundred pixels of nothing before the first
-        section. And the argument this product actually wins on — that it is
-        the careful one — was buried eight screens down under "Account safety",
-        where somebody deciding whether to keep scrolling never reached it.
-
-        Facts the product enforces in code, not claims: each one is a rule in
-        the codebase with a test behind it.
+        The four rules, immediately under the hero: the argument this product
+        wins on, where somebody deciding whether to keep scrolling reaches it.
+        Facts the product enforces in code, not claims.
       */}
       <div className="container">
         <ul className="proof">
@@ -212,12 +136,16 @@ export function Hero() {
 }
 
 /**
- * What the hero's strip says, and every line of it is enforced rather than
- * promised — which is the only kind of claim worth putting under a headline.
+ * What the hero's strip says. Every line of it is enforced rather than
+ * promised, which is the only kind of claim worth putting under a headline,
+ * and the ramp is read from the constants the limiter obeys.
  */
 const PROOF = [
   { value: "Every reply", label: "drafted for you to read before it sends, until you say otherwise" },
-  { value: "Day 1 → 35", label: "a warm-up ramp that starts at your first send, never at signup" },
+  {
+    value: `${LINKEDIN_LIMITS.invitesPerDayStart} → ${LINKEDIN_LIMITS.invitesPerDayMax} a day`,
+    label: "a warm-up ramp that starts at your first send, never at signup",
+  },
   { value: "Spread", label: "a day's invitations paced across your working hours, never in a burst" },
   { value: "Never twice", label: "nobody your workspace has contacted is ever contacted again" },
 ] as const;
@@ -234,22 +162,12 @@ export function Film() {
   return (
     <section className="section">
       <div className="container stack-5">
-        <div className="stack-3">
-          {/*
-            The hero's diagram now makes the "five stages, in this order"
-            claim, and this band made it again two thousand pixels lower with
-            the same five names in a tab strip. A page that says one thing
-            twice has not said it twice as convincingly — the second telling
-            reads as padding, and the reader starts skimming.
-
-            So this is the evidence for that claim rather than a restatement of
-            it: not *that* there are five, but what each one actually hands
-            over. The strip was always the screens; only the sentence above it
-            was competing with the hero.
-          */}
-          <p className="eyebrow section-mark">The five stages, on screen</p>
-          <h2>What each one actually produces.</h2>
-        </div>
+        {/*
+          The hero's diagram makes the "five stages, in this order" claim; this
+          band is the evidence for it rather than a restatement: what each
+          stage actually hands over, on screen.
+        */}
+        <h2>Five stages, and what each one hands over.</h2>
         <ProductFilm />
       </div>
     </section>
@@ -262,30 +180,26 @@ export function HowItWorks() {
       <div className="container stack-6">
         <Reveal>
           <div className="stack-3">
-            <p className="eyebrow section-mark">The team at work</p>
             <h2>Watch one campaign, day by day.</h2>
             <p className="lede prose">
               Each teammate does one job and hands its work to the next. Step through a real one
-              below — every beat names who acted, and the square markers are the moments nothing
+              below: every beat names who acted, and the square markers are the moments nothing
               moves without you.
             </p>
           </div>
         </Reveal>
 
+        {/* The timeline alone. A pipeline diagram used to sit under it, the
+            fifth drawing of the same five stages on this page, and it said
+            "three agents" on a page introducing four. */}
         <Reveal>
           <AgentTimeline />
         </Reveal>
-
-        <Reveal>
-          <Pipeline />
-        </Reveal>
-
       </div>
     </section>
   );
 }
 
-/** The reply gate, given a section of its own because it is the whole argument. */
 /**
  * What a prospect actually receives, on the page that has to sell it.
  *
@@ -313,8 +227,8 @@ export function TheSequence() {
             <p className="eyebrow section-mark">What they receive</p>
             <h2>A conversation, not a blast.</h2>
             <p className="lede prose">
-              Every campaign runs the same shape. You write the words; the timing is a product rule,
-              because the timing is what gets accounts restricted.
+              Every campaign runs the same shape. You write the words. The timing is a product
+              rule, because the timing is what gets accounts restricted.
             </p>
           </div>
         </Reveal>
@@ -329,17 +243,17 @@ export function TheSequence() {
               steps={sequenceFor({
                 warmUp: true,
                 connectionNote:
-                  "Hi Jane — saw you run partnerships at Northwind. Curious how you keep track of who actually sends you work.",
+                  "Hi Priya, saw you run partnerships at Calder & Finch. Curious how you keep track of who actually sends you work.",
                 steps: [
                   {
                     step_number: 1,
                     delay_days: 0,
-                    message: "Thanks for connecting, Jane. Is partner referrals something you own there, or does it sit with marketing?",
+                    message: "Thanks for connecting, Priya. Is partner referrals something you own there, or does it sit with marketing?",
                   },
                   {
                     step_number: 2,
                     delay_days: 4,
-                    message: "No worries if the timing is off — here is the short version if it is ever useful: {{cta_link}}",
+                    message: "No worries if the timing is off. Here is the short version if it is ever useful: {{cta_link}}",
                   },
                 ],
               })}
@@ -357,12 +271,11 @@ export function TheGate() {
       <div className="container stack-6">
         <Reveal>
           <div className="stack-3">
-            <p className="eyebrow section-mark">The part that matters</p>
             <h2>It knows when to stop.</h2>
             <p className="lede prose">
               Anyone can draft a reply. The reason this can be left running is what it refuses to
-              answer. Type something a prospect might send and watch which rule catches it — the
-              opt-out check below is the product&rsquo;s own code, running here in your browser.
+              answer. Type something a prospect might send and watch which rule catches it: the
+              opt-out check below is the product&rsquo;s own code, running in your browser.
             </p>
           </div>
         </Reveal>
@@ -385,7 +298,6 @@ export function Volume() {
       <div className="container stack-6">
         <Reveal>
           <div className="stack-3">
-            <p className="eyebrow section-mark">What a month looks like</p>
             <h2>Move the sliders until it hits the ceiling.</h2>
             <p className="lede prose">
               The daily one stops at {LINKEDIN_LIMITS.invitesPerDayMax} because the product stops
@@ -412,7 +324,7 @@ export function Safety() {
             <p className="eyebrow section-mark">Account safety</p>
             <h2>Slow on purpose, for as long as it takes.</h2>
             <p className="lede prose">
-              The failure that ends a pipeline is not a weak campaign — it is losing the account it
+              The failure that ends a pipeline is not a weak campaign. It is losing the account it
               runs on. So a new account starts at {LINKEDIN_LIMITS.invitesPerDayStart} invitations a
               day and takes {Math.round(LINKEDIN_LIMITS.warmupDays / 7)} weeks to reach{" "}
               {LINKEDIN_LIMITS.invitesPerDayMax}, and never passes {LINKEDIN_LIMITS.invitesPerWeek} in
@@ -449,11 +361,14 @@ export function Safety() {
   );
 }
 
+/** The floor between two actions, from the constant the limiter reads. */
+const MIN_GAP_MINUTES = Math.round(LINKEDIN_LIMITS.minGapMs / 60_000);
+
 const SAFETY_FACTS = [
   {
     label: "Gap between actions",
-    value: "2–9 min",
-    note: "Randomised, so it never looks like a scheduler",
+    value: `${MIN_GAP_MINUTES} min or more`,
+    note: "Randomised and spread across your working hours, so it never looks like a scheduler",
   },
   {
     label: "Checked before every send",
@@ -482,12 +397,11 @@ export function Signals() {
       <div className="container stack-6">
         <Reveal>
           <div className="stack-3">
-            <p className="eyebrow section-mark">Why this lead</p>
             <h2>Every score shows its working.</h2>
             <p className="lede prose">
               Other tools print &ldquo;high intent&rdquo; and move on. A score you cannot interrogate
-              is a score you cannot correct — so each prospect carries the signals that produced it,
-              with the weight each one contributed.
+              is a score you cannot correct, so each prospect carries the signals that produced it
+              and the weight each one contributed.
             </p>
           </div>
         </Reveal>
@@ -518,7 +432,7 @@ export function Signals() {
 
             <p className="tiny subtle prose">
               Fit decides whether to contact at all. Intent decides who first, and decays to nothing
-              over ninety days — a funding round from last spring is not a reason to message anyone
+              over ninety days. A funding round from last spring is not a reason to message anyone
               today.
             </p>
           </div>
@@ -564,7 +478,7 @@ export function Extras() {
 }
 
 /** Said once and reused, so the hero, the band and /pricing cannot drift apart. */
-export const FREE_LINE = "Free for now — for everyone.";
+export const FREE_LINE = "Free for now, for everyone.";
 
 /**
  * Where the plans used to be.
@@ -575,7 +489,10 @@ export const FREE_LINE = "Free for now — for everyone.";
  * and a sale is a promise about a later price nobody has decided.
  *
  * `standalone` decides the heading level, as it did for the plans: one section
- * under the hero's `<h1>` on the home page, the whole of /pricing there.
+ * under the hero's `<h1>` on the home page, the whole of /pricing there. It
+ * also decides the button. On the home page the closing band follows within a
+ * screen with the same ask, and two identical pairs of buttons that close
+ * together read as one page repeating itself.
  */
 export function FreeForNow({ standalone = false }: { standalone?: boolean } = {}) {
   const Heading = standalone ? "h1" : "h2";
@@ -587,21 +504,20 @@ export function FreeForNow({ standalone = false }: { standalone?: boolean } = {}
             <p className="eyebrow section-mark">What it costs</p>
             <Heading>{FREE_LINE}</Heading>
             <p className="lede prose">
-              Sign up and start right away. No plans to compare and no card to enter — {NORA} and
-              the whole team, for every workspace.
+              No plans to compare and no card to enter. {NORA} and the whole team, for every
+              workspace.
             </p>
           </div>
-          <div className="cluster">
-            <Link href={`${SITE.app}/signup`} className="btn large">
-              Sign up free
-            </Link>
-            <Link href="/how-it-works" className="btn secondary large">
-              See how it works
-            </Link>
-          </div>
+          {standalone ? (
+            <div className="cluster">
+              <Link href={`${SITE.app}/signup`} className="btn large">
+                Sign up free
+              </Link>
+            </div>
+          ) : null}
           <p className="small subtle prose">
-            If that ever changes, you will hear it from us well before it does — and nothing you
-            have built here is held back to make the point.
+            If that ever changes, you will hear it from us well before it does, and nothing you have
+            built here is held back to make the point.
           </p>
         </div>
       </div>
@@ -628,7 +544,7 @@ export function MeetTheTeam() {
             <p className="lede prose">
               {NORA} runs your dashboard and leads four AI employees. Sage works out who to go
               after, Scout finds them, Quinn writes to each one, and Reese sends, answers and
-              books — each handing the work to the next, and stopping where a decision is yours.
+              books. Each hands the work to the next and stops where a decision is yours.
             </p>
           </div>
         </Reveal>
@@ -645,19 +561,19 @@ export function MeetTheTeam() {
 export const FAQ_ITEMS = [
   {
     q: "What does it cost?",
-    a: "Nothing, for now — for everyone. Sign up and start right away: no plan to choose and no card to enter. If that changes, you will hear it from us well before it does.",
+    a: "Nothing for now, for everyone. Sign up and start right away: no plan to choose and no card to enter. If that changes, you will hear it from us well before it does.",
   },
   {
     q: "Is this safe for my LinkedIn account?",
-    a: "It is the constraint we designed around. Sending starts at ten connection requests a day and ramps to thirty-five over five weeks, never exceeds one hundred a week, and is spread randomly across your working hours. If LinkedIn shows a warning, a captcha, or an unusual login screen, the account pauses itself and tells you. No tool can promise zero risk — LinkedIn's user agreement prohibits automation — so we tell you that plainly and keep the volume well under the line.",
+    a: `It is the constraint we designed around. Sending starts at ${LINKEDIN_LIMITS.invitesPerDayStart} connection requests a day and ramps to ${LINKEDIN_LIMITS.invitesPerDayMax} over ${Math.round(LINKEDIN_LIMITS.warmupDays / 7)} weeks, never exceeds ${LINKEDIN_LIMITS.invitesPerWeek} a week, and is spread across your working hours. If LinkedIn shows a warning, a captcha or an unusual login screen, the account pauses itself and tells you. No tool can promise zero risk, because LinkedIn's user agreement prohibits automation, so we say that plainly and keep the volume well under the line.`,
   },
   {
     q: "Do I need Sales Navigator?",
-    a: "No. Scout works with any LinkedIn account. Sales Navigator, which LinkedIn sells separately, lets it search more precisely — by seniority and company size — and where a filter cannot be applied, the campaign says so before you launch.",
+    a: "No. Scout works with any LinkedIn account. Sales Navigator, which LinkedIn sells separately, lets it search more precisely by seniority and company size, and where a filter cannot be applied, the campaign says so before you launch.",
   },
   {
     q: "Can I approve every message?",
-    a: "Yes, and that is the default — Reese drafts, you approve with one click. Autopilot is a switch you flip once you trust it, and then it answers and books on its own. Two things always wait for you either way: somebody who asks to speak to a person, and a message the agent did not understand.",
+    a: "Yes, and that is the default: Reese drafts, you approve with one click. Autopilot is a switch you flip once you trust it, and then it answers and books on its own. Two things always wait for you either way: somebody who asks to speak to a person, and a message the agent did not understand.",
   },
   {
     q: "What happens when a prospect asks something hard?",
@@ -683,25 +599,38 @@ export function Faq() {
   );
 }
 
-/** The last thing on every page: one ask, stated plainly. */
-export function ClosingCta() {
+/**
+ * The last thing on every page: one ask, stated plainly.
+ *
+ * `secondary` is the quieter second button. It is hidden on the page it links
+ * to, because the layout renders this band everywhere and a "See how it works"
+ * button at the foot of /how-it-works was a link to the page already open.
+ * Pass `null` to drop it altogether.
+ */
+export function ClosingCta({
+  secondary = { href: "/how-it-works", label: "See how it works" },
+}: { secondary?: { href: string; label: string } | null } = {}) {
   return (
     <section className="closing">
       <div className="container closing-inner">
         <div className="stack-3">
-          <h2>Start with ten invitations a day.</h2>
+          <h2>Start with {LINKEDIN_LIMITS.invitesPerDayStart} invitations a day.</h2>
           <p className="lede prose">
-            {FREE_LINE} Sign up and start right away. Your first campaign runs in approval mode, so
-            nothing reaches anyone until you have read it.
+            {FREE_LINE} Your first campaign runs in approval mode, so nothing reaches anyone until
+            you have read it.
           </p>
         </div>
         <div className="cluster">
           <Link href={`${SITE.app}/signup`} className="btn large">
             Sign up free
           </Link>
-          <Link href="/how-it-works" className="btn secondary large">
-            See how it works
-          </Link>
+          {secondary ? (
+            <UnlessOn path={secondary.href}>
+              <Link href={secondary.href} className="btn secondary large">
+                {secondary.label}
+              </Link>
+            </UnlessOn>
+          ) : null}
         </div>
       </div>
     </section>
@@ -765,7 +694,7 @@ export function SiteFooter() {
           <span className="tiny subtle">© {new Date().getFullYear()} {BRAND.full}</span>
           <span className="tiny subtle">
             Not affiliated with LinkedIn Corporation. LinkedIn is a trademark of its owner, and
-            automated access is against their user agreement — which is why the limits on this site
+            automated access is against their user agreement, which is why the limits on this site
             are what they are.
           </span>
         </div>

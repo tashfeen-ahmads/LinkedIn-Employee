@@ -16,8 +16,9 @@ import {
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { readFunnelData } from "@/lib/funnel-data";
-import { PageHeader, Section, Empty } from "@/components/page";
+import { Section, Empty } from "@/components/page";
 import { FunnelChart, Kpi, RankedBars, TrendChart } from "@/components/charts";
+import { label } from "@/lib/labels";
 
 export const dynamic = "force-dynamic";
 
@@ -108,7 +109,8 @@ export async function ResultsSection() {
       return {
         label: c.name,
         value: counts.invited,
-        note: `${CTA_DEFINITIONS[c.cta_kind].label} · ${c.status}${
+        href: `/app/campaigns/${c.id}`,
+        note: `${CTA_DEFINITIONS[c.cta_kind].label} · ${label(c.status)}${
           counts.accepted ? ` · ${counts.accepted} accepted` : ""
         }`,
       };
@@ -162,6 +164,15 @@ export async function ResultsSection() {
             tone={toneFor(report.reply)}
             note={describeRate(report.reply)}
           />
+          {/*
+            Meetings only where a campaign here can reach that stage (rule 29):
+            a workspace whose campaigns all ask for a sign-up would otherwise
+            get a permanent zero, which reports a working campaign as a failed
+            one every day.
+          */}
+          {report.stages.some((stage) => stage.key === "meetings") ? (
+            <Kpi label="Meetings" value={report.counts.meetings.toLocaleString()} />
+          ) : null}
         </div>
       </Section>
 
@@ -197,7 +208,7 @@ export async function ResultsSection() {
       </Section>
 
       <Section
-        id="strategies"
+        id="by-strategy"
         title="By strategy"
         description="A fit score means nothing without the strategy it was scored against, and neither does a funnel. This is what each one actually produced."
         action={
@@ -257,7 +268,7 @@ export async function ResultsSection() {
                     </td>
                     {report.stages.map((stage) =>
                       reachable.has(stage.key) ? (
-                        <td key={stage.key} className="num mono">
+                        <td key={stage.key} className="num">
                           {counts[stage.key].toLocaleString()}
                         </td>
                       ) : (
@@ -285,7 +296,7 @@ export async function ResultsSection() {
                 </td>
                 <td />
                 {report.stages.map((stage) => (
-                  <td key={stage.key} className="num mono">
+                  <td key={stage.key} className="num">
                     <strong>{countFunnel(visibleRows)[stage.key].toLocaleString()}</strong>
                   </td>
                 ))}
