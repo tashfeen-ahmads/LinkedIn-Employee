@@ -9,6 +9,7 @@ import { LINKEDIN_LIMITS } from "@le/shared";
 import { PageHeader, Section } from "@/components/page";
 import { PageNotice } from "@/components/page-notice";
 import { ControlButton } from "@/components/admin-control";
+import { adminAccountPill } from "@/lib/admin-account";
 
 export const dynamic = "force-dynamic";
 
@@ -48,7 +49,7 @@ export default async function AdminWorkspacePage({
       supabase.from("memberships").select("id, user_id, role, created_at").eq("workspace_id", id),
       supabase
         .from("linkedin_accounts")
-        .select("id, user_id, display_name, status, status_detail, has_sales_navigator, invites_today, invites_this_week, messages_today, connected_at, first_action_at, last_action_at, invites_paused_until")
+        .select("id, user_id, display_name, status, status_detail, provider_account_id, created_at, has_sales_navigator, invites_today, invites_this_week, messages_today, connected_at, first_action_at, last_action_at, invites_paused_until")
         .eq("workspace_id", id),
       supabase.from("campaigns").select("id, name, status, daily_invite_cap, reply_mode, launched_at, created_at").eq("workspace_id", id).order("created_at", { ascending: false }),
       supabase.rpc("platform_workspace_stats"),
@@ -151,9 +152,10 @@ export default async function AdminWorkspacePage({
                           <span className="pill plain tiny">not connected</span>
                         ) : (
                           <>
-                            <span className={`pill tiny ${a.status === "active" ? "positive" : a.status === "restricted" ? "danger" : "warning"}`}>
-                              {statusLabel(a.status)}
-                            </span>
+                            {(() => {
+                              const pill = adminAccountPill(a);
+                              return <span className={`pill tiny ${pill.tone}`}>{pill.text}</span>;
+                            })()}
                             {a.status_detail ? <p className="tiny muted">{a.status_detail}</p> : null}
                             {a.has_sales_navigator ? <p className="tiny subtle">Sales Navigator</p> : null}
                             {a.invites_paused_until && Date.parse(a.invites_paused_until) > Date.now() ? (

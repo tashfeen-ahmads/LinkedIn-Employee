@@ -6,6 +6,7 @@ import { requirePlatformAdmin, ago, when } from "@/lib/admin";
 import { PageHeader, Section, Empty } from "@/components/page";
 import { PageNotice, type NoticeParams } from "@/components/page-notice";
 import { ControlButton } from "@/components/admin-control";
+import { adminAccountPill } from "@/lib/admin-account";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +27,7 @@ export default async function AdminAccountsPage({ searchParams }: { searchParams
     supabase
       .from("linkedin_accounts")
       .select(
-        "id, workspace_id, user_id, display_name, status, status_detail, has_sales_navigator, invites_today, invites_this_week, messages_today, connected_at, first_action_at, last_action_at, invites_paused_until, invites_paused_reason",
+        "id, workspace_id, user_id, display_name, status, status_detail, provider_account_id, created_at, has_sales_navigator, invites_today, invites_this_week, messages_today, connected_at, first_action_at, last_action_at, invites_paused_until, invites_paused_reason",
       )
       .order("connected_at", { ascending: false }),
     supabase.from("workspaces").select("id, name"),
@@ -38,13 +39,14 @@ export default async function AdminAccountsPage({ searchParams }: { searchParams
   const back = "/admin/accounts";
   const now = Date.now();
   const bad = (accounts ?? []).filter((a) => a.status !== "active");
+  const unfinished = bad.filter((a) => !a.provider_account_id && a.status === "connecting").length;
 
   return (
     <>
       <PageHeader
         eyebrow="Operator"
         title="LinkedIn accounts"
-        lede={`${accounts?.length ?? 0} connected · ${bad.length} not active.`}
+        lede={`${(accounts?.length ?? 0) - unfinished} connected · ${bad.length - unfinished} not active · ${unfinished} sign-in${unfinished === 1 ? "" : "s"} never finished.`}
         actions={
           <ControlButton
             op="accounts-recover"
@@ -91,11 +93,10 @@ export default async function AdminAccountsPage({ searchParams }: { searchParams
                         </p>
                       </td>
                       <td>
-                        <span
-                          className={`pill tiny ${a.status === "active" ? "positive" : a.status === "restricted" ? "danger" : "warning"}`}
-                        >
-                          {a.status.replaceAll("_", " ")}
-                        </span>
+                        {(() => {
+                          const pill = adminAccountPill(a);
+                          return <span className={`pill tiny ${pill.tone}`}>{pill.text}</span>;
+                        })()}
                         {a.status_detail ? <p className="tiny muted">{a.status_detail}</p> : null}
                       </td>
                       <td className="num mono">{a.invites_today}</td>

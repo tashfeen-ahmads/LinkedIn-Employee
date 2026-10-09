@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase-server";
 import { requirePlatformAdmin, ago, when } from "@/lib/admin";
 import { isoAttr } from "@/lib/format";
 import { label } from "@/lib/labels";
+import { adminAccountPill } from "@/lib/admin-account";
 import { PageHeader, Section, Empty } from "@/components/page";
 import { PageNotice } from "@/components/page-notice";
 import { ControlButton } from "@/components/admin-control";
@@ -30,7 +31,7 @@ export default async function AdminUsersPage({
     supabase.rpc("platform_users"),
     supabase.from("memberships").select("workspace_id, user_id, role"),
     supabase.from("workspaces").select("id, name"),
-    supabase.from("linkedin_accounts").select("user_id, status, first_action_at"),
+    supabase.from("linkedin_accounts").select("user_id, status, first_action_at, provider_account_id, created_at"),
   ]);
 
   const workspaceName = new Map((workspaces ?? []).map((w) => [w.id, w.name]));
@@ -121,12 +122,10 @@ export default async function AdminUsersPage({
                         {!account ? (
                           <span className="pill tiny plain">not connected</span>
                         ) : (
-                          <span
-                            className={`pill tiny ${account.status === "active" ? "positive" : account.status === "restricted" ? "danger" : "warning"}`}
-                          >
-                            {label(account.status)}
-                            {account.status === "active" && !account.first_action_at ? ", idle" : ""}
-                          </span>
+                          (() => {
+                            const pill = adminAccountPill(account);
+                            return <span className={`pill tiny ${pill.tone}`}>{pill.text}</span>;
+                          })()
                         )}
                       </td>
                       <td className="small subtle">

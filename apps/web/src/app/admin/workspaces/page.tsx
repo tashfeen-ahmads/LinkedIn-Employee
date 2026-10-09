@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/page";
 import { requirePlatformAdmin, statsByWorkspace, formatUsd, when, type WorkspaceStats } from "@/lib/admin";
 import { isoAttr } from "@/lib/format";
 import { MESSAGE_WEBHOOK_BEAT, WEBHOOKS_BEAT, standingWebhookRefusal } from "@le/shared";
+import { adminAccountPill, type AdminAccountRow } from "@/lib/admin-account";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +24,7 @@ export default async function AdminWorkspacesPage() {
     await Promise.all([
       supabase.from("workspaces").select("id, name, slug, plan, seats, trial_ends_at, subscription_status, created_at").order("created_at", { ascending: false }),
       supabase.from("memberships").select("workspace_id, user_id"),
-      supabase.from("linkedin_accounts").select("workspace_id, status, invites_today, first_action_at"),
+      supabase.from("linkedin_accounts").select("workspace_id, status, invites_today, first_action_at, provider_account_id, created_at"),
       supabase.from("campaigns").select("workspace_id, status"),
       supabase.rpc("platform_workspace_stats"),
       // Summed in the database. Read row by row this stopped at PostgREST's
@@ -62,7 +63,7 @@ export default async function AdminWorkspacesPage() {
     costs.set(row.workspace_id, Number(row.spend_usd));
   }
 
-  const accountsByWorkspace = new Map<string, { status: string; invites_today: number; first_action_at: string | null }[]>();
+  const accountsByWorkspace = new Map<string, Array<AdminAccountRow & { invites_today: number }>>();
   for (const a of accounts ?? []) {
     const list = accountsByWorkspace.get(a.workspace_id) ?? [];
     list.push(a);
@@ -171,15 +172,12 @@ export default async function AdminWorkspacesPage() {
 }
 
 /** The health of a workspace's LinkedIn accounts, said in one cell. */
-function AccountCell({ accounts }: { accounts: { status: string; first_action_at: string | null }[] }) {
+function AccountCell({ accounts }: { accounts: AdminAccountRow[] }) {
   if (!accounts.length) return <span className="pill plain tiny">none</span>;
   const bad = accounts.filter((a) => a.status !== "active");
   if (bad.length) {
-    return (
-      <span className={`pill tiny ${bad.some((a) => a.status === "restricted") ? "danger" : "warning"}`}>
-        {bad[0]?.status.replaceAll("_", " ")}
-      </span>
-    );
+    const pill = adminAccountPill(bad.find((a) => a.status === "restricted") ?? bad[0]!);
+    return <span className={`pill tiny ${pill.tone}`}>{pill.text}</span>;
   }
   const idle = accounts.every((a) => !a.first_action_at);
   return <span className={`pill tiny ${idle ? "plain" : "positive"}`}>{idle ? "connected, idle" : "sending"}</span>;
