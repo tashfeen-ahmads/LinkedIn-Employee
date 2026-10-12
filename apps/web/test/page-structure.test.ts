@@ -149,7 +149,7 @@ const relativeAny = (p: string) => p.slice(appDir.length + 1);
 const marketingDir = join(dirname(fileURLToPath(import.meta.url)), "../src/app/(marketing)");
 
 /** Components that render the `<h1>` for the page composing them. */
-const OWNS_AN_H1 = ["<Hero", "<FreeForNow standalone"];
+const OWNS_AN_H1 = ["<Hero", "<FreeForNow standalone", "<ArticleLayout", "<HubLayout"];
 
 describe("marketing page structure", () => {
   const MARKETING = pages(marketingDir);

@@ -1,0 +1,5034 @@
+{
+ "homeKeyword": "ai sdr for linkedin",
+ "generated": "2026-10-12",
+ "clusters": [
+  {
+   "name": "LinkedIn limits and account safety",
+   "pillarPath": "/linkedin-automation-limits",
+   "pages": [
+    "/security",
+    "/guides/is-linkedin-automation-safe",
+    "/guides/linkedin-account-restricted",
+    "/guides/linkedin-weekly-invitation-limit",
+    "/guides/linkedin-warm-up-schedule",
+    "/guides/linkedin-automation-tool-bans",
+    "/guides/is-linkedin-automation-legal",
+    "/guides/withdraw-pending-linkedin-invitations",
+    "/guides/best-time-to-send-linkedin-connection-requests",
+    "/tools/linkedin-limit-calculator"
+   ]
+  },
+  {
+   "name": "Choosing an AI SDR or automation tool",
+   "pillarPath": "/guides/best-ai-sdr-for-linkedin",
+   "pages": [
+    "/pricing",
+    "/alternatives",
+    "/guides/safest-linkedin-automation-tool",
+    "/guides/cloud-vs-browser-extension-linkedin-automation",
+    "/guides/ai-sdr-vs-human-sdr",
+    "/guides/ai-sdr-pricing",
+    "/free-linkedin-automation-tool",
+    "/alternatives/heyreach",
+    "/alternatives/expandi",
+    "/alternatives/waalaxy",
+    "/alternatives/dripify",
+    "/alternatives/phantombuster",
+    "/alternatives/artisan"
+   ]
+  },
+  {
+   "name": "Connection notes and personalisation",
+   "pillarPath": "/guides/linkedin-connection-request-templates",
+   "pages": [
+    "/guides/linkedin-connection-note-character-limit",
+    "/guides/should-you-add-a-note-linkedin",
+    "/guides/ai-personalized-linkedin-messages",
+    "/guides/linkedin-acceptance-rate",
+    "/tools/connection-note-checker"
+   ]
+  },
+  {
+   "name": "Follow-ups, replies and meetings",
+   "pillarPath": "/guides/book-meetings-from-linkedin",
+   "pages": [
+    "/guides/linkedin-follow-up-after-connection",
+    "/guides/linkedin-follow-up-sequence"
+   ]
+  },
+  {
+   "name": "Prospecting and targeting",
+   "pillarPath": "/guides/linkedin-prospecting",
+   "pages": [
+    "/guides/ideal-customer-profile-for-linkedin",
+    "/guides/linkedin-prospecting-without-sales-navigator"
+   ]
+  },
+  {
+   "name": "Nora and who it is for (home as pillar)",
+   "pillarPath": "/",
+   "pages": [
+    "/how-it-works",
+    "/about",
+    "/for/agencies",
+    "/for/consultants",
+    "/for/b2b-saas",
+    "/for/professional-services",
+    "/for/small-business"
+   ]
+  }
+ ],
+ "hubs": [
+  "/guides",
+  "/alternatives",
+  "/tools"
+ ],
+ "pages": [
+  {
+   "path": "/",
+   "status": "existing",
+   "action": "retitle + add Organization, WebSite and SoftwareApplication JSON-LD",
+   "cluster": "audience",
+   "primaryKeyword": "ai sdr for linkedin",
+   "secondaryKeywords": [
+    "linkedin ai sdr",
+    "ai sdr",
+    "ai sales agent for linkedin",
+    "ai linkedin outreach tool",
+    "ai sdr software"
+   ],
+   "intent": "commercial",
+   "beat": [
+    {
+     "url": "salesforge.ai/blog/linkedin-ai-sdr",
+     "strengths": "Covers 7 tools in one page and matches the query word for word.",
+     "misses": "Quotes reply rates with no source and gives no account-safety numbers."
+    },
+    {
+     "url": "11x.ai/guides/ai-sdr-tools-linkedin-outreach",
+     "strengths": "Strong brand authority and a broad buyer's guide.",
+     "misses": "Email-first: LinkedIn is a footnote, and it publishes no caps, ramp or pacing."
+    },
+    {
+     "url": "joinvalley.co/blog/ai-sdrs-on-linkedin",
+     "strengths": "LinkedIn-first, readable beginner guide.",
+     "misses": "Admits a 4-8 week ramp but gives no schedule, and is written to sell Valley."
+    }
+   ],
+   "title": "Nora: AI SDR for LinkedIn that keeps your account safe",
+   "description": "Nora is an AI SDR for LinkedIn. It finds your buyers, writes each one a note, answers replies and books meetings inside safe daily limits. Free, no card.",
+   "h1": "The AI SDR for LinkedIn that books meetings without risking your account",
+   "outline": [
+    {
+     "h2": "What an AI SDR for LinkedIn does, end to end",
+     "h3": [
+      "Builds customer profiles from your website",
+      "Finds real, checkable people on LinkedIn",
+      "Writes one note per person from their own details",
+      "Follows up, answers replies and books the meeting"
+     ]
+    },
+    {
+     "h2": "The three decisions that stay yours",
+     "h3": [
+      "Approve the strategy",
+      "Approve the words",
+      "Press launch"
+     ]
+    },
+    {
+     "h2": "Safety, in numbers the product enforces",
+     "h3": [
+      "10 a day at first, rising to 35 over about five weeks from the first send",
+      "100 invitations a week and 50 messages a day",
+      "Sending spread across your working hours",
+      "Nobody contacted twice, and a shared exclusion list"
+     ]
+    },
+    {
+     "h2": "Meet the team: Sage, Scout, Quinn and Reese",
+     "h3": []
+    },
+    {
+     "h2": "Who it is for",
+     "h3": [
+      "Agencies",
+      "Consultants and coaches",
+      "B2B SaaS founders",
+      "Professional services firms",
+      "Small businesses"
+     ]
+    },
+    {
+     "h2": "What it costs: free while we grow, no card",
+     "h3": []
+    },
+    {
+     "h2": "What Nora does not do",
+     "h3": [
+      "No email channel yet",
+      "No promise of zero risk on LinkedIn"
+     ]
+    },
+    {
+     "h2": "Frequently asked questions",
+     "h3": []
+    }
+   ],
+   "faq": [
+    "What is an AI SDR for LinkedIn?",
+    "Will an AI SDR get my LinkedIn account banned?",
+    "Can AI send LinkedIn connection requests for me?",
+    "How much does Nora cost?",
+    "Do I need Sales Navigator to use Nora?",
+    "Does Nora send email as well as LinkedIn messages?"
+   ],
+   "schema": [
+    "Organization (logo, sameAs)",
+    "WebSite (name Nora, alternateName Nora AI SDR)",
+    "SoftwareApplication (BusinessApplication, Web, offers price 0 USD; no aggregateRating until real reviews exist)",
+    "FAQPage (visible FAQ kept; FAQ rich results retired May 2026, markup harmless)"
+   ],
+   "words": 1200,
+   "linksIn": [
+    "/about",
+    "/for/agencies",
+    "/for/b2b-saas",
+    "/for/consultants",
+    "/for/professional-services",
+    "/for/small-business",
+    "/how-it-works"
+   ],
+   "linksOut": [
+    "/how-it-works",
+    "/linkedin-automation-limits",
+    "/guides/best-ai-sdr-for-linkedin",
+    "/guides/linkedin-prospecting",
+    "/guides/linkedin-connection-request-templates",
+    "/guides/book-meetings-from-linkedin",
+    "/pricing",
+    "/security",
+    "/guides",
+    "/alternatives",
+    "/tools",
+    "/about",
+    "/for/agencies",
+    "/for/consultants",
+    "/for/b2b-saas",
+    "/for/professional-services",
+    "/for/small-business"
+   ],
+   "owner": "Sage the Strategist",
+   "image": "Four teammates hand one connection note down a calm line that ends in a booked calendar slot, with a speed gauge kept in the green.",
+   "priority": 1
+  },
+  {
+   "path": "/security",
+   "status": "existing",
+   "action": "retitle: the current title targets 'is linkedin automation safe' and competes with /guides/is-linkedin-automation-safe",
+   "cluster": "safety",
+   "primaryKeyword": "is ai sdr safe for linkedin",
+   "secondaryKeywords": [
+    "ai sdr linkedin account safety",
+    "does an ai sdr need my linkedin password",
+    "linkedin automation data security",
+    "linkedin outreach tool security"
+   ],
+   "intent": "commercial",
+   "beat": [
+    {
+     "url": "help.aisdr.com (limitations of LinkedIn actions)",
+     "strengths": "An honest vendor help doc.",
+     "misses": "Help-desk format with no data-security detail."
+    },
+    {
+     "url": "devcommx.com/blogs/ai-sdr-linkedin-account-safety",
+     "strengths": "Matches the query exactly in a thin SERP.",
+     "misses": "Generic tips, nothing a product enforces."
+    },
+    {
+     "url": "joinvalley.co/blog/how-ai-tools-prevent-linkedin-account-bans",
+     "strengths": "Product-backed explanation.",
+     "misses": "Self-promotional and gives no concrete caps."
+    }
+   ],
+   "title": "Is an AI SDR safe for LinkedIn? Security at Nora",
+   "description": "Is an AI SDR safe for LinkedIn? Your password never reaches us, tokens are encrypted, tenants are isolated and sending stays inside daily limits.",
+   "h1": "Is an AI SDR safe for your LinkedIn account and your data?",
+   "outline": [
+    {
+     "h2": "The honest answer: what no tool can promise",
+     "h3": []
+    },
+    {
+     "h2": "Account safety",
+     "h3": [
+      "Caps that ramp from the first send",
+      "Pacing across the working day",
+      "Opt-outs checked by rule, not only by the model"
+     ]
+    },
+    {
+     "h2": "Your LinkedIn login",
+     "h3": [
+      "We never see your password",
+      "Tokens encrypted before storage"
+     ]
+    },
+    {
+     "h2": "Your data",
+     "h3": [
+      "Tenant isolation",
+      "What our operators can and cannot see"
+     ]
+    },
+    {
+     "h2": "Human approval as a safety control",
+     "h3": []
+    }
+   ],
+   "faq": [
+    "Does Nora need my LinkedIn password?",
+    "Can Nora's staff read my LinkedIn conversations?",
+    "What happens if LinkedIn restricts my account?",
+    "Where is my data stored?",
+    "Can I disconnect LinkedIn at any time?"
+   ],
+   "schema": [
+    "WebPage",
+    "BreadcrumbList",
+    "FAQPage (visible FAQ kept; FAQ rich results retired May 2026, markup harmless)"
+   ],
+   "words": 1200,
+   "linksIn": [
+    "/",
+    "/about",
+    "/for/professional-services",
+    "/guides/cloud-vs-browser-extension-linkedin-automation",
+    "/guides/is-linkedin-automation-legal",
+    "/guides/is-linkedin-automation-safe",
+    "/guides/safest-linkedin-automation-tool",
+    "/how-it-works",
+    "/linkedin-automation-limits"
+   ],
+   "linksOut": [
+    "/guides/is-linkedin-automation-safe",
+    "/linkedin-automation-limits",
+    "/guides/safest-linkedin-automation-tool",
+    "/how-it-works",
+    "/about"
+   ],
+   "owner": "Reese, Outreach and booking",
+   "image": "A padlock shaped like a LinkedIn profile card, behind which a metered send queue moves at an even pace.",
+   "priority": 2
+  },
+  {
+   "path": "/guides/best-ai-sdr-for-linkedin",
+   "status": "registered",
+   "action": "retitle: primary moves from 'best ai sdr for linkedin' to 'best ai sdr tools' so it stops competing with the homepage",
+   "cluster": "tools",
+   "primaryKeyword": "best ai sdr tools",
+   "secondaryKeywords": [
+    "best ai sdr tools 2026",
+    "ai sdr tools",
+    "ai sdr vs linkedin automation tool",
+    "which ai sdr works on linkedin"
+   ],
+   "intent": "commercial",
+   "beat": [
+    {
+     "url": "snov.io/blog/best-ai-sdr-tools",
+     "strengths": "A large, high-authority listicle.",
+     "misses": "Email-first; LinkedIn safety is not discussed."
+    },
+    {
+     "url": "autobound.ai/blog/ai-sdr-tools-guide",
+     "strengths": "A serious buyer's guide.",
+     "misses": "Unsourced churn and conversion figures."
+    },
+    {
+     "url": "joinvalley.co/blog/ai-sdr-tool-comparison",
+     "strengths": "LinkedIn-first comparison.",
+     "misses": "Openly biased: 'hard to find any' cons for itself."
+    }
+   ],
+   "title": "Best AI SDR tools for LinkedIn in 2026: how to choose",
+   "description": "The best AI SDR tools for LinkedIn compared honestly: what an AI SDR should do, seven safety questions to ask, dated prices, and who each tool suits.",
+   "h1": "Best AI SDR tools for LinkedIn in 2026: how to choose one",
+   "outline": [
+    {
+     "h2": "AI SDR or LinkedIn automation tool? The difference",
+     "h3": []
+    },
+    {
+     "h2": "Seven questions that separate a safe AI SDR from a risky one",
+     "h3": [
+      "Are the caps published?",
+      "When does the ramp start?",
+      "How is a day paced?",
+      "Does a human approve strategy, copy and launch?",
+      "Does it ever contact someone twice?",
+      "How are opt-outs detected?",
+      "Can it invent links or meeting times?"
+     ]
+    },
+    {
+     "h2": "The main approaches compared",
+     "h3": [
+      "Email-first AI SDRs (Artisan, 11x)",
+      "LinkedIn-first AI SDRs (Valley, Nora)",
+      "Sequence tools (Expandi, HeyReach, Waalaxy, Dripify)"
+     ]
+    },
+    {
+     "h2": "Prices as of October 2026, with sources",
+     "h3": []
+    },
+    {
+     "h2": "Who each suits",
+     "h3": []
+    },
+    {
+     "h2": "Where Nora fits, and where it does not (no email channel)",
+     "h3": []
+    }
+   ],
+   "faq": [
+    "What is the best AI SDR for LinkedIn?",
+    "Are AI SDRs fully autonomous?",
+    "Which AI SDR works on LinkedIn?",
+    "Why do teams churn from AI SDRs?",
+    "How much does an AI SDR cost?"
+   ],
+   "schema": [
+    "Article",
+    "BreadcrumbList",
+    "ItemList (tools named, no ratings)",
+    "FAQPage (visible FAQ kept; FAQ rich results retired May 2026, markup harmless)"
+   ],
+   "words": 2500,
+   "linksIn": [
+    "/",
+    "/alternatives",
+    "/alternatives/artisan",
+    "/alternatives/dripify",
+    "/alternatives/expandi",
+    "/alternatives/heyreach",
+    "/alternatives/phantombuster",
+    "/alternatives/waalaxy",
+    "/for/b2b-saas",
+    "/free-linkedin-automation-tool",
+    "/guides",
+    "/guides/ai-sdr-pricing",
+    "/guides/ai-sdr-vs-human-sdr",
+    "/guides/cloud-vs-browser-extension-linkedin-automation",
+    "/guides/safest-linkedin-automation-tool",
+    "/pricing"
+   ],
+   "linksOut": [
+    "/guides/safest-linkedin-automation-tool",
+    "/guides/ai-sdr-pricing",
+    "/guides/ai-sdr-vs-human-sdr",
+    "/guides/cloud-vs-browser-extension-linkedin-automation",
+    "/alternatives",
+    "/free-linkedin-automation-tool",
+    "/how-it-works",
+    "/guides",
+    "/pricing",
+    "/alternatives/heyreach",
+    "/alternatives/expandi",
+    "/alternatives/waalaxy",
+    "/alternatives/dripify",
+    "/alternatives/phantombuster",
+    "/alternatives/artisan"
+   ],
+   "owner": "Sage the Strategist",
+   "image": "Three lanes (email-first, LinkedIn-first, sequence tools) with a seven-item checklist hovering over them.",
+   "priority": 3
+  },
+  {
+   "path": "/linkedin-automation-limits",
+   "status": "existing",
+   "action": "keep as safety pillar; shorten title; add official-vs-observed table and a downloadable cheat sheet",
+   "cluster": "safety",
+   "primaryKeyword": "linkedin connection request limit",
+   "secondaryKeywords": [
+    "linkedin automation limits",
+    "linkedin limits 2026",
+    "how many linkedin connection requests per day",
+    "linkedin message limit per day",
+    "linkedin profile view limit per day",
+    "linkedin limits cheat sheet"
+   ],
+   "intent": "informational",
+   "beat": [
+    {
+     "url": "salesforge.ai/blog/linkedin-connection-request-limit",
+     "strengths": "Ranks for the head term with a tidy daily/weekly breakdown.",
+     "misses": "Numbers are unsourced, and it never separates official from observed."
+    },
+    {
+     "url": "phantombuster.com/blog/social-selling/linkedin-connection-request-limit",
+     "strengths": "Authority plus Sales Navigator coverage.",
+     "misses": "Sells automation volume and does not explain pacing within a day."
+    },
+    {
+     "url": "expandi.io/blog/linkedin-connections-limit",
+     "strengths": "Detailed, often updated, covers the reset question.",
+     "misses": "Contradicts other vendors (80 to 250 a week), with no evidence label."
+    }
+   ],
+   "title": "LinkedIn connection request limit in 2026: every number",
+   "description": "The LinkedIn connection request limit per day and per week, with each number labelled official or observed, plus the caps Nora enforces and why.",
+   "h1": "LinkedIn connection request limit and automation limits in 2026",
+   "outline": [
+    {
+     "h2": "The short answer",
+     "h3": []
+    },
+    {
+     "h2": "Every LinkedIn limit in one table",
+     "h3": [
+      "Invitations per week and per day",
+      "Messages per day",
+      "Profile views per day",
+      "InMail credits (official: LinkedIn Help 57013)",
+      "Pending invitations",
+      "Connection note length",
+      "Commercial use limit"
+     ]
+    },
+    {
+     "h2": "Why LinkedIn does not publish one number",
+     "h3": []
+    },
+    {
+     "h2": "The limits Nora enforces, and the reason for each",
+     "h3": [
+      "A ramp that starts at the first send, not at connection",
+      "The weekly ceiling binds before the daily one",
+      "A day's allowance spread across working hours"
+     ]
+    },
+    {
+     "h2": "Acceptance rate is the real limit",
+     "h3": []
+    },
+    {
+     "h2": "Does Sales Navigator or Premium raise the limit?",
+     "h3": []
+    },
+    {
+     "h2": "The signs two or three days before a restriction",
+     "h3": []
+    },
+    {
+     "h2": "What no tool can promise",
+     "h3": []
+    },
+    {
+     "h2": "Download the one-page limits cheat sheet",
+     "h3": []
+    }
+   ],
+   "faq": [
+    "How many connection requests can I send per day on LinkedIn?",
+    "How many connection requests can I send per week?",
+    "Does Sales Navigator increase the connection limit?",
+    "How many messages can I send per day on LinkedIn?",
+    "How many profiles can I view per day?",
+    "How many InMail credits do you get with Sales Navigator?"
+   ],
+   "schema": [
+    "Article",
+    "BreadcrumbList",
+    "Dataset-free table (visible HTML table with caption)",
+    "FAQPage (visible FAQ kept; FAQ rich results retired May 2026, markup harmless)"
+   ],
+   "words": 3000,
+   "linksIn": [
+    "/",
+    "/about",
+    "/alternatives/heyreach",
+    "/free-linkedin-automation-tool",
+    "/guides/best-time-to-send-linkedin-connection-requests",
+    "/guides/book-meetings-from-linkedin",
+    "/guides/is-linkedin-automation-legal",
+    "/guides/is-linkedin-automation-safe",
+    "/guides/linkedin-acceptance-rate",
+    "/guides/linkedin-account-restricted",
+    "/guides/linkedin-automation-tool-bans",
+    "/guides/linkedin-connection-note-character-limit",
+    "/guides/linkedin-prospecting",
+    "/guides/linkedin-prospecting-without-sales-navigator",
+    "/guides/linkedin-warm-up-schedule",
+    "/guides/linkedin-weekly-invitation-limit",
+    "/guides/safest-linkedin-automation-tool",
+    "/guides/withdraw-pending-linkedin-invitations",
+    "/how-it-works",
+    "/pricing",
+    "/security",
+    "/tools/linkedin-limit-calculator"
+   ],
+   "linksOut": [
+    "/tools/linkedin-limit-calculator",
+    "/guides/linkedin-weekly-invitation-limit",
+    "/guides/linkedin-warm-up-schedule",
+    "/guides/linkedin-account-restricted",
+    "/guides/is-linkedin-automation-safe",
+    "/guides/withdraw-pending-linkedin-invitations",
+    "/guides/best-time-to-send-linkedin-connection-requests",
+    "/guides/linkedin-prospecting-without-sales-navigator",
+    "/how-it-works",
+    "/tools",
+    "/security",
+    "/guides/linkedin-automation-tool-bans",
+    "/guides/is-linkedin-automation-legal"
+   ],
+   "owner": "Reese, Outreach and booking",
+   "image": "A clean dashboard-style table of LinkedIn limits, each row tagged with an 'official' or 'observed' badge, and a gauge needle resting well under the red zone.",
+   "priority": 4
+  },
+  {
+   "path": "/guides/linkedin-account-restricted",
+   "status": "registered",
+   "action": "retitle to lead with the head term; add a decision tree by notice text and a restart plan",
+   "cluster": "safety",
+   "primaryKeyword": "linkedin account restricted",
+   "secondaryKeywords": [
+    "linkedin account restricted how to fix",
+    "linkedin account restricted due to automation",
+    "how long does linkedin restriction last",
+    "linkedin jail",
+    "linkedin temporarily restricted unusual activity",
+    "linkedin permanently restricted account recovery"
+   ],
+   "intent": "informational",
+   "beat": [
+    {
+     "url": "reply.io/blog/linkedin-restricted-my-account",
+     "strengths": "First-person, empathetic, ranks for the panic query.",
+     "misses": "Blends restriction types together; durations unsourced."
+    },
+    {
+     "url": "lilachbullock.com/linkedin-account-restricted-how-to-fix",
+     "strengths": "Clear step list from a known LinkedIn author.",
+     "misses": "No restart plan after recovery."
+    },
+    {
+     "url": "expandi.io/blog/linkedin-jail",
+     "strengths": "Owns the 'LinkedIn jail' slang.",
+     "misses": "Written by a vendor whose product sends at volume; prevention is thin."
+    }
+   ],
+   "title": "LinkedIn account restricted? How to fix it and restart",
+   "description": "Restricted on LinkedIn? Identify the notice you got, what to do in the first 48 hours, how long each type lasts, and how to restart at a safe pace.",
+   "h1": "LinkedIn account restricted: what to do in the first 48 hours",
+   "outline": [
+    {
+     "h2": "Which restriction do you have? Match the exact notice",
+     "h3": [
+      "'You've reached the weekly invitation limit'",
+      "'Your account has been temporarily restricted' (unusual activity)",
+      "ID verification requested",
+      "Permanently restricted"
+     ]
+    },
+    {
+     "h2": "The first 48 hours",
+     "h3": [
+      "Stop every tool and every scheduled action",
+      "Do not withdraw invitations in bulk",
+      "What to send LinkedIn"
+     ]
+    },
+    {
+     "h2": "How long each restriction lasts (and what nobody knows)",
+     "h3": []
+    },
+    {
+     "h2": "'LinkedIn jail': what people mean by it",
+     "h3": []
+    },
+    {
+     "h2": "Why it happened: automation patterns that lead here",
+     "h3": []
+    },
+    {
+     "h2": "Restarting safely",
+     "h3": [
+      "Back to the starting cap",
+      "A two-week return plan"
+     ]
+    },
+    {
+     "h2": "Permanent restriction: appeal, and why a second account makes it worse",
+     "h3": []
+    }
+   ],
+   "faq": [
+    "How long does a LinkedIn restriction last?",
+    "Can a restricted LinkedIn account be recovered?",
+    "Should I create a new LinkedIn account if mine is restricted?",
+    "Will withdrawing pending invitations lift the restriction?",
+    "How do I get out of LinkedIn jail?",
+    "Can LinkedIn tell I used automation?"
+   ],
+   "schema": [
+    "BlogPosting (author = Organization Nora, byline names the teammate)",
+    "BreadcrumbList",
+    "FAQPage (visible FAQ kept; FAQ rich results retired May 2026, markup harmless)"
+   ],
+   "words": 2200,
+   "linksIn": [
+    "/guides",
+    "/guides/is-linkedin-automation-safe",
+    "/guides/linkedin-weekly-invitation-limit",
+    "/guides/withdraw-pending-linkedin-invitations",
+    "/linkedin-automation-limits"
+   ],
+   "linksOut": [
+    "/guides/is-linkedin-automation-safe",
+    "/guides/linkedin-warm-up-schedule",
+    "/guides/linkedin-weekly-invitation-limit",
+    "/guides/withdraw-pending-linkedin-invitations",
+    "/linkedin-automation-limits",
+    "/guides",
+    "/how-it-works"
+   ],
+   "owner": "Reese, Outreach and booking",
+   "image": "A decision tree drawn from four LinkedIn notice banners, each branch ending in a calm next step.",
+   "priority": 5
+  },
+  {
+   "path": "/alternatives",
+   "status": "existing",
+   "action": "retitle and upgrade from a list into a dated comparison table by guardrails and price",
+   "cluster": "tools",
+   "primaryKeyword": "linkedin automation tools",
+   "secondaryKeywords": [
+    "best linkedin automation tools 2026",
+    "linkedin outreach tool",
+    "linkedin automation alternatives",
+    "linkedin automation tools compared"
+   ],
+   "intent": "commercial",
+   "beat": [
+    {
+     "url": "dripify.com/linkedin-automation-tools",
+     "strengths": "24 tools, high authority.",
+     "misses": "Ranks itself first and compares features, not safety."
+    },
+    {
+     "url": "blog.waalaxy.com/en/linkedin-automation",
+     "strengths": "35+ tools, very comprehensive.",
+     "misses": "Self-ranking, and the refresh is mostly the year in the title."
+    },
+    {
+     "url": "mailshake.com/blog/top-linkedin-automation-tools",
+     "strengths": "Neutral-looking roundup.",
+     "misses": "No caps, warm-up or do-not-contact comparison."
+    }
+   ],
+   "title": "LinkedIn automation tools compared on safety and price",
+   "description": "LinkedIn automation tools compared on what they publish about caps, warm-up, pacing and do-not-contact rules, with dated prices. Who each tool suits.",
+   "h1": "LinkedIn automation tools, compared on what keeps an account safe",
+   "outline": [
+    {
+     "h2": "How we compared (and what we could not verify)",
+     "h3": []
+    },
+    {
+     "h2": "The comparison table",
+     "h3": [
+      "Published daily and weekly caps",
+      "Warm-up and pacing",
+      "Do-not-contact and exclusion rules",
+      "Price as of the date shown"
+     ]
+    },
+    {
+     "h2": "Who each tool suits",
+     "h3": []
+    },
+    {
+     "h2": "Alternatives, one page per tool",
+     "h3": []
+    }
+   ],
+   "faq": [
+    "What is the best LinkedIn automation tool?",
+    "Which LinkedIn automation tool is safest?",
+    "What is the cheapest LinkedIn automation tool?",
+    "Is LinkedIn automation legal?"
+   ],
+   "schema": [
+    "CollectionPage",
+    "ItemList",
+    "BreadcrumbList",
+    "FAQPage (visible FAQ kept; FAQ rich results retired May 2026, markup harmless)"
+   ],
+   "words": 1500,
+   "linksIn": [
+    "/",
+    "/alternatives/artisan",
+    "/alternatives/dripify",
+    "/alternatives/expandi",
+    "/alternatives/heyreach",
+    "/alternatives/phantombuster",
+    "/alternatives/waalaxy",
+    "/guides/best-ai-sdr-for-linkedin",
+    "/guides/safest-linkedin-automation-tool"
+   ],
+   "linksOut": [
+    "/alternatives/artisan",
+    "/alternatives/dripify",
+    "/alternatives/expandi",
+    "/alternatives/heyreach",
+    "/alternatives/phantombuster",
+    "/alternatives/waalaxy",
+    "/free-linkedin-automation-tool",
+    "/guides/best-ai-sdr-for-linkedin",
+    "/guides/is-linkedin-automation-legal",
+    "/guides/safest-linkedin-automation-tool"
+   ],
+   "owner": "Sage the Strategist",
+   "image": "A comparison grid of anonymous tool tiles, each with a small safety checklist beside it and nothing shown as a winner.",
+   "priority": 6
+  },
+  {
+   "path": "/guides/book-meetings-from-linkedin",
+   "status": "new",
+   "action": "write (pillar)",
+   "cluster": "meetings",
+   "primaryKeyword": "how to book meetings from linkedin",
+   "secondaryKeywords": [
+    "linkedin message to ask for a meeting",
+    "linkedin calendly link in message",
+    "how to respond to not interested on linkedin",
+    "turn linkedin conversation into meeting"
+   ],
+   "intent": "informational",
+   "beat": [
+    {
+     "url": "calendly.com/integration/linkedin",
+     "strengths": "Brand authority, integration angle.",
+     "misses": "Covers how to paste a link, not when to send one."
+    },
+    {
+     "url": "getfuzzy.ai/blog/linkedin-meetings-playbook",
+     "strengths": "Playbook format.",
+     "misses": "One of many near-duplicate pages; no reply-handling rules."
+    },
+    {
+     "url": "joinvalley.co/blog/sales-email-call-to-action-examples",
+     "strengths": "CTA examples.",
+     "misses": "Email-oriented, not LinkedIn conversation."
+    }
+   ],
+   "title": "How to book meetings from LinkedIn: reply to calendar",
+   "description": "Turn a LinkedIn reply into a booked meeting: when to ask, offering real times instead of 'a quick call', where a booking link belongs, and handling a no.",
+   "h1": "How to book meetings from LinkedIn, from first reply to calendar",
+   "outline": [
+    {
+     "h2": "The path from acceptance to meeting",
+     "h3": []
+    },
+    {
+     "h2": "When to ask: after they reply, not before",
+     "h3": []
+    },
+    {
+     "h2": "Offer real times, not 'a quick call sometime'",
+     "h3": [
+      "Times you can actually keep",
+      "Never inventing a time or a link"
+     ]
+    },
+    {
+     "h2": "Booking links: Calendly, Cal.com or your own page",
+     "h3": [
+      "Never in the connection request",
+      "What you lose in reporting"
+     ]
+    },
+    {
+     "h2": "When the answer is no",
+     "h3": [
+      "'Not now' versus 'remove me'",
+      "Why an opt-out stops everything"
+     ]
+    },
+    {
+     "h2": "Goals other than meetings: sign-ups, demos, replies",
+     "h3": []
+    },
+    {
+     "h2": "How Nora answers replies and books",
+     "h3": []
+    }
+   ],
+   "faq": [
+    "How do you ask for a call on LinkedIn without being pushy?",
+    "Should you send a Calendly link in a LinkedIn message?",
+    "How do you turn a LinkedIn conversation into a meeting?",
+    "How do you respond to 'not interested' on LinkedIn?",
+    "Can an AI book meetings from LinkedIn?"
+   ],
+   "schema": [
+    "BlogPosting (author = Organization Nora, byline names the teammate)",
+    "BreadcrumbList",
+    "FAQPage (visible FAQ kept; FAQ rich results retired May 2026, markup harmless)"
+   ],
+   "words": 2400,
+   "linksIn": [
+    "/",
+    "/for/consultants",
+    "/guides",
+    "/guides/linkedin-follow-up-after-connection",
+    "/guides/linkedin-follow-up-sequence",
+    "/guides/linkedin-prospecting",
+    "/how-it-works"
+   ],
+   "linksOut": [
+    "/guides/linkedin-follow-up-after-connection",
+    "/guides/linkedin-follow-up-sequence",
+    "/how-it-works",
+    "/guides/linkedin-connection-request-templates",
+    "/linkedin-automation-limits",
+    "/guides"
+   ],
+   "owner": "Reese, Outreach and booking",
+   "image": "A LinkedIn chat thread whose last bubble offers three real time slots, one of them dropping into a calendar.",
+   "priority": 7
+  },
+  {
+   "path": "/guides/linkedin-follow-up-after-connection",
+   "status": "new",
+   "action": "write",
+   "cluster": "meetings",
+   "primaryKeyword": "follow up message after linkedin connection accepted",
+   "secondaryKeywords": [
+    "what to say after someone accepts your linkedin connection request",
+    "thanks for connecting linkedin message",
+    "how soon to message after linkedin connection accepted",
+    "linkedin cold message templates"
+   ],
+   "intent": "informational",
+   "beat": [
+    {
+     "url": "skylead.io/blog/linkedin-follow-up-message",
+     "strengths": "Ranks first with templates.",
+     "misses": "Recommends waiting days, by which time the person has forgotten accepting."
+    },
+    {
+     "url": "blog.sendspark.com/linkedin-follow-up-message",
+     "strengths": "Video angle.",
+     "misses": "Generic timing advice."
+    },
+    {
+     "url": "skylead.io/blog/linkedin-thank-you-message",
+     "strengths": "Owns 'thanks for connecting'.",
+     "misses": "Mixes job-seeker and sales advice."
+    }
+   ],
+   "title": "Follow-up message after a LinkedIn connection is accepted",
+   "description": "What to send after someone accepts your LinkedIn request: within the hour, no pitch, continuing the thread your note started. With examples.",
+   "h1": "The first message after a LinkedIn connection is accepted",
+   "outline": [
+    {
+     "h2": "The short answer: soon, short, no pitch",
+     "h3": []
+    },
+    {
+     "h2": "How soon: why three days is too late",
+     "h3": [
+      "Twenty to ninety minutes, inside working hours"
+     ]
+    },
+    {
+     "h2": "What to say: continue the thread the note started",
+     "h3": []
+    },
+    {
+     "h2": "Examples by situation",
+     "h3": [
+      "After a note about their post",
+      "After a blank request",
+      "When they accepted at night"
+     ]
+    },
+    {
+     "h2": "'Thanks for connecting' messages that are not filler",
+     "h3": []
+    },
+    {
+     "h2": "When the pitch comes: after they reply",
+     "h3": []
+    }
+   ],
+   "faq": [
+    "How soon should you message after a LinkedIn connection is accepted?",
+    "What do you say after someone accepts your LinkedIn request?",
+    "Should I say thanks for connecting on LinkedIn?",
+    "Is it okay to pitch in the first message?",
+    "How do I reply to 'thank you for connecting'?"
+   ],
+   "schema": [
+    "BlogPosting (author = Organization Nora, byline names the teammate)",
+    "BreadcrumbList",
+    "FAQPage (visible FAQ kept; FAQ rich results retired May 2026, markup harmless)"
+   ],
+   "words": 1700,
+   "linksIn": [
+    "/guides",
+    "/guides/book-meetings-from-linkedin",
+    "/guides/linkedin-connection-request-templates",
+    "/guides/linkedin-follow-up-sequence"
+   ],
+   "linksOut": [
+    "/guides/book-meetings-from-linkedin",
+    "/guides/linkedin-follow-up-sequence",
+    "/guides/linkedin-connection-request-templates",
+    "/how-it-works",
+    "/guides"
+   ],
+   "owner": "Quinn the Campaign writer",
+   "image": "An 'accepted' notification and, a short clock-hand later, a two-line reply bubble.",
+   "priority": 8
+  },
+  {
+   "path": "/guides/linkedin-prospecting",
+   "status": "new",
+   "action": "write (pillar; hard head term, long-term)",
+   "cluster": "prospecting",
+   "primaryKeyword": "linkedin prospecting",
+   "secondaryKeywords": [
+    "how to prospect on linkedin step by step",
+    "linkedin lead generation strategy",
+    "linkedin outreach strategy b2b",
+    "linkedin prospecting tips"
+   ],
+   "intent": "informational",
+   "beat": [
+    {
+     "url": "close.com/blog/linkedin-prospecting",
+     "strengths": "High authority, 13 strategies.",
+     "misses": "Never covers checking that a found person is real, or contacting each only once."
+    },
+    {
+     "url": "lagrowthmachine.com/linkedin-prospecting",
+     "strengths": "Thorough, with a multichannel workflow.",
+     "misses": "Pushes volume and leaves safety out."
+    },
+    {
+     "url": "expandi.io/blog/linkedin-prospecting",
+     "strengths": "Detailed tool-led guide.",
+     "misses": "A vendor guide that never mentions limits as a constraint."
+    }
+   ],
+   "title": "LinkedIn prospecting in 2026: a safe step-by-step system",
+   "description": "LinkedIn prospecting step by step: define who buys, search on your tier, check every profile, write one note per person, pace sends, never contact twice.",
+   "h1": "LinkedIn prospecting: a step-by-step system that keeps your account safe",
+   "outline": [
+    {
+     "h2": "Step 1: decide who buys (not who resembles you)",
+     "h3": []
+    },
+    {
+     "h2": "Step 2: turn that into a LinkedIn search",
+     "h3": [
+      "Classic search versus Sales Navigator",
+      "LinkedIn's own location and industry names",
+      "OR between titles, not spaces"
+     ]
+    },
+    {
+     "h2": "Step 3: check every profile before it enters a list",
+     "h3": []
+    },
+    {
+     "h2": "Step 4: an exclusion list and a contact-once rule",
+     "h3": []
+    },
+    {
+     "h2": "Step 5: one note per person",
+     "h3": []
+    },
+    {
+     "h2": "Step 6: pace the sending",
+     "h3": []
+    },
+    {
+     "h2": "Step 7: follow up, answer and book",
+     "h3": []
+    },
+    {
+     "h2": "The unsourced statistics you will see quoted, and why we do not repeat them",
+     "h3": []
+    }
+   ],
+   "faq": [
+    "How do you prospect on LinkedIn?",
+    "What is LinkedIn prospecting?",
+    "Do I need Sales Navigator to prospect on LinkedIn?",
+    "How many prospects should I contact per day?",
+    "How do I generate B2B leads on LinkedIn?"
+   ],
+   "schema": [
+    "BlogPosting (author = Organization Nora, byline names the teammate)",
+    "BreadcrumbList",
+    "FAQPage (visible FAQ kept; FAQ rich results retired May 2026, markup harmless)"
+   ],
+   "words": 3000,
+   "linksIn": [
+    "/",
+    "/for/agencies",
+    "/guides",
+    "/guides/ideal-customer-profile-for-linkedin",
+    "/guides/linkedin-prospecting-without-sales-navigator"
+   ],
+   "linksOut": [
+    "/guides/ideal-customer-profile-for-linkedin",
+    "/guides/linkedin-prospecting-without-sales-navigator",
+    "/guides/linkedin-connection-request-templates",
+    "/linkedin-automation-limits",
+    "/guides/book-meetings-from-linkedin",
+    "/how-it-works",
+    "/guides",
+    "/for/agencies",
+    "/for/consultants",
+    "/for/b2b-saas",
+    "/for/professional-services",
+    "/for/small-business"
+   ],
+   "owner": "Scout the Prospector",
+   "image": "A funnel drawn as seven labelled steps from 'who buys' to 'meeting', with a checkpoint gate at 'profile checked'.",
+   "priority": 9
+  },
+  {
+   "path": "/guides/ideal-customer-profile-for-linkedin",
+   "status": "new",
+   "action": "write",
+   "cluster": "prospecting",
+   "primaryKeyword": "ideal customer profile for linkedin outreach",
+   "secondaryKeywords": [
+    "ideal customer profile template",
+    "icp vs buyer persona",
+    "why are my prospects my competitors",
+    "turn an icp into a linkedin search"
+   ],
+   "intent": "informational",
+   "beat": [
+    {
+     "url": "hubspot.com/make-my-persona/ideal-customer-profile-template",
+     "strengths": "Huge authority, interactive tool.",
+     "misses": "Generic and not LinkedIn-aware; no warning about targeting peers."
+    },
+    {
+     "url": "smartlead.ai/blog/how-to-create-an-ideal-customer-profile",
+     "strengths": "Step-by-step.",
+     "misses": "Stops before the search: never maps fields to LinkedIn filters."
+    },
+    {
+     "url": "close.com/blog/ideal-customer-profile-vs-buyer-persona",
+     "strengths": "Owns the ICP vs persona question.",
+     "misses": "No outreach application."
+    }
+   ],
+   "title": "Ideal customer profile for LinkedIn outreach (+ template)",
+   "description": "Build an ideal customer profile for LinkedIn that finds buyers, not competitors: the two fields most templates miss, and how to turn it into a search.",
+   "h1": "An ideal customer profile for LinkedIn outreach that finds buyers, not peers",
+   "outline": [
+    {
+     "h2": "The trap: a profile built from your own website describes your competitors",
+     "h3": []
+    },
+    {
+     "h2": "The fields an ICP needs",
+     "h3": [
+      "Who they are",
+      "What they buy",
+      "What they do instead today",
+      "Pains (where naming competitors is fine)",
+      "Disqualifiers"
+     ]
+    },
+    {
+     "h2": "ICP versus buyer persona, in one table",
+     "h3": []
+    },
+    {
+     "h2": "Turning an ICP into a LinkedIn search",
+     "h3": [
+      "What classic search can and cannot express",
+      "Filters that silently drop"
+     ]
+    },
+    {
+     "h2": "A check before you approve a profile",
+     "h3": []
+    },
+    {
+     "h2": "Free template",
+     "h3": []
+    }
+   ],
+   "faq": [
+    "What should an ICP include?",
+    "Is an ICP the same as a buyer persona?",
+    "Why are my outreach prospects my competitors?",
+    "How do I turn an ICP into a LinkedIn search?",
+    "How many ICPs should a business have?"
+   ],
+   "schema": [
+    "BlogPosting (author = Organization Nora, byline names the teammate)",
+    "BreadcrumbList",
+    "FAQPage (visible FAQ kept; FAQ rich results retired May 2026, markup harmless)"
+   ],
+   "words": 2000,
+   "linksIn": [
+    "/for/b2b-saas",
+    "/guides",
+    "/guides/linkedin-acceptance-rate",
+    "/guides/linkedin-prospecting",
+    "/guides/linkedin-prospecting-without-sales-navigator",
+    "/how-it-works"
+   ],
+   "linksOut": [
+    "/guides/linkedin-prospecting",
+    "/guides/linkedin-prospecting-without-sales-navigator",
+    "/guides/linkedin-acceptance-rate",
+    "/how-it-works",
+    "/guides"
+   ],
+   "owner": "Sage the Strategist",
+   "image": "Two overlapping silhouettes: a 'peer' who looks just like you, set apart from a 'buyer' holding the problem you solve.",
+   "priority": 10
+  },
+  {
+   "path": "/guides/linkedin-prospecting-without-sales-navigator",
+   "status": "new",
+   "action": "write",
+   "cluster": "prospecting",
+   "primaryKeyword": "linkedin prospecting without sales navigator",
+   "secondaryKeywords": [
+    "is sales navigator worth it for small business",
+    "sales navigator boolean search",
+    "linkedin sales navigator limits",
+    "linkedin commercial use limit"
+   ],
+   "intent": "informational",
+   "beat": [
+    {
+     "url": "salesgravy.com/you-dont-need-sales-navigator-to-dominate-linkedin",
+     "strengths": "A strong opinion piece.",
+     "misses": "No list of which filters you lose."
+    },
+    {
+     "url": "getfuzzy.ai/blog/linkedin-prospecting-without-sales-navigator",
+     "strengths": "Direct match.",
+     "misses": "Thin, and never mentions taxonomy matching."
+    },
+    {
+     "url": "emelia.io/hub/boolean-search-linkedin",
+     "strengths": "Boolean cheat sheet.",
+     "misses": "Misses the trap that space-joined terms act as AND and return nobody."
+    }
+   ],
+   "title": "LinkedIn prospecting without Sales Navigator: what you lose",
+   "description": "Free LinkedIn search vs Sales Navigator: the filters you lose, the commercial use limit, boolean traps that return nobody, and when the seat is worth it.",
+   "h1": "LinkedIn prospecting without Sales Navigator: what works and what you lose",
+   "outline": [
+    {
+     "h2": "What classic search can express",
+     "h3": []
+    },
+    {
+     "h2": "What it cannot: seniority, company size, excluded titles",
+     "h3": [
+      "Why a dropped filter is worse than a missing one"
+     ]
+    },
+    {
+     "h2": "Location and industry must match LinkedIn's own names",
+     "h3": []
+    },
+    {
+     "h2": "Boolean search that returns people",
+     "h3": [
+      "OR, not spaces",
+      "Quotes and NOT"
+     ]
+    },
+    {
+     "h2": "The commercial use limit",
+     "h3": []
+    },
+    {
+     "h2": "Is Sales Navigator worth it for a small business?",
+     "h3": [
+      "What the seat adds",
+      "What it does not change (the invitation cap)"
+     ]
+    }
+   ],
+   "faq": [
+    "Do I need Sales Navigator to prospect on LinkedIn?",
+    "What filters does free LinkedIn search lack?",
+    "Does LinkedIn search support OR?",
+    "Does Sales Navigator increase the connection limit?",
+    "When does the commercial use limit reset?"
+   ],
+   "schema": [
+    "BlogPosting (author = Organization Nora, byline names the teammate)",
+    "BreadcrumbList",
+    "FAQPage (visible FAQ kept; FAQ rich results retired May 2026, markup harmless)"
+   ],
+   "words": 1800,
+   "linksIn": [
+    "/for/small-business",
+    "/guides",
+    "/guides/ideal-customer-profile-for-linkedin",
+    "/guides/linkedin-prospecting",
+    "/linkedin-automation-limits"
+   ],
+   "linksOut": [
+    "/guides/linkedin-prospecting",
+    "/guides/ideal-customer-profile-for-linkedin",
+    "/linkedin-automation-limits",
+    "/guides/linkedin-weekly-invitation-limit",
+    "/guides",
+    "/how-it-works"
+   ],
+   "owner": "Scout the Prospector",
+   "image": "Two search panels: the free one with three filters lit and three greyed out, and Sales Navigator with all six lit.",
+   "priority": 11
+  },
+  {
+   "path": "/guides/linkedin-connection-note-character-limit",
+   "status": "new",
+   "action": "write",
+   "cluster": "notes",
+   "primaryKeyword": "linkedin connection note character limit",
+   "secondaryKeywords": [
+    "linkedin connection request character limit 200 or 300",
+    "do spaces count in linkedin connection note",
+    "how many personalized notes free linkedin account",
+    "linkedin invitation note cut off"
+   ],
+   "intent": "informational",
+   "beat": [
+    {
+     "url": "quickmail.com/linkedin-connection-message-character-limit",
+     "strengths": "Dedicated reference article.",
+     "misses": "No first-hand evidence for the number it gives."
+    },
+    {
+     "url": "unilink.us/blog/linkedin-character-limits-2026",
+     "strengths": "Basic-vs-Premium table.",
+     "misses": "Does not say what happens when you go over."
+    },
+    {
+     "url": "promiseclick.com/blog/linkedin-connection-request-examples",
+     "strengths": "Cites LinkedIn Help for 200 on free accounts.",
+     "misses": "Buried inside an examples listicle."
+    }
+   ],
+   "title": "LinkedIn connection note character limit: 200 or 300?",
+   "description": "Is the LinkedIn connection note limit 200 or 300 characters? Why sources disagree, what happens when you go over, and why staying under 200 is safest.",
+   "h1": "LinkedIn connection note character limit: 200 or 300 characters?",
+   "outline": [
+    {
+     "h2": "The short answer",
+     "h3": []
+    },
+    {
+     "h2": "Why sources disagree: free, Premium and Sales Navigator",
+     "h3": []
+    },
+    {
+     "h2": "What actually happens over the limit",
+     "h3": [
+      "A 222-character note: the whole invitation refused, not truncated"
+     ]
+    },
+    {
+     "h2": "What counts: spaces, emojis, line breaks",
+     "h3": []
+    },
+    {
+     "h2": "How many personalised notes a free account gets each month",
+     "h3": []
+    },
+    {
+     "h2": "Writing a full thought in 200 characters",
+     "h3": []
+    }
+   ],
+   "faq": [
+    "Is the LinkedIn connection note limit 200 or 300 characters?",
+    "Do spaces and emojis count toward the limit?",
+    "Does Premium increase the connection note limit?",
+    "Why was my LinkedIn invitation refused or cut off?",
+    "How many personalized notes can a free account send?"
+   ],
+   "schema": [
+    "BlogPosting (author = Organization Nora, byline names the teammate)",
+    "BreadcrumbList",
+    "FAQPage (visible FAQ kept; FAQ rich results retired May 2026, markup harmless)"
+   ],
+   "words": 1200,
+   "linksIn": [
+    "/guides",
+    "/guides/linkedin-connection-request-templates",
+    "/guides/should-you-add-a-note-linkedin",
+    "/tools/connection-note-checker"
+   ],
+   "linksOut": [
+    "/tools/connection-note-checker",
+    "/guides/linkedin-connection-request-templates",
+    "/guides/should-you-add-a-note-linkedin",
+    "/linkedin-automation-limits",
+    "/guides",
+    "/how-it-works"
+   ],
+   "owner": "Quinn the Campaign writer",
+   "image": "A character ruler running under a short note, with a clear stop line at 200 and a faded zone up to 300.",
+   "priority": 12
+  },
+  {
+   "path": "/guides/safest-linkedin-automation-tool",
+   "status": "new",
+   "action": "write",
+   "cluster": "tools",
+   "primaryKeyword": "safest linkedin automation tool",
+   "secondaryKeywords": [
+    "safe linkedin automation",
+    "which linkedin automation tool is safest",
+    "linkedin automation safety features",
+    "do dedicated ips prevent linkedin bans"
+   ],
+   "intent": "commercial",
+   "beat": [
+    {
+     "url": "expandi.io/blog/safest-linkedin-automation-tools",
+     "strengths": "Ranks first for the term.",
+     "misses": "Gives itself 9/10 with no method."
+    },
+    {
+     "url": "joinvalley.co/blog/the-safest-linkedin-automation-tools-in-2026-that-wont-get-your-account-banned",
+     "strengths": "Long and current.",
+     "misses": "Self-ranking, with ban rates like '<1%' and no method."
+    },
+    {
+     "url": "growleads.io/blog/safest-linkedin-automation-tools-2026",
+     "strengths": "Agency view.",
+     "misses": "No published-caps comparison."
+    }
+   ],
+   "title": "Safest LinkedIn automation tool: 8 checks before you pick",
+   "description": "Every 'safest tool' list ranks its author first. Eight checks you can run on any LinkedIn automation tool, and a table of what each one publishes.",
+   "h1": "The safest LinkedIn automation tool is the one that passes these 8 checks",
+   "outline": [
+    {
+     "h2": "Why every 'safest tools' list ranks its author first",
+     "h3": []
+    },
+    {
+     "h2": "Eight checks you can run yourself",
+     "h3": [
+      "1. Published daily and weekly caps",
+      "2. A ramp measured from the first send",
+      "3. Pacing inside the day",
+      "4. A weekly ceiling across campaigns",
+      "5. Never contacting anyone twice, plus an exclusion list",
+      "6. Opt-outs checked by rule",
+      "7. A human approves before launch",
+      "8. Honesty about restrictions"
+     ]
+    },
+    {
+     "h2": "What each tool publishes (as of October 2026)",
+     "h3": []
+    },
+    {
+     "h2": "Do dedicated IPs or cloud hosting make a tool safe?",
+     "h3": []
+    },
+    {
+     "h2": "Where Nora passes, and where it falls short",
+     "h3": []
+    }
+   ],
+   "faq": [
+    "Which LinkedIn automation tool is safest?",
+    "Is LinkedIn automation safe?",
+    "Do dedicated IPs prevent LinkedIn bans?",
+    "Is a cloud tool safer than a Chrome extension?",
+    "Can any tool guarantee my account will not be restricted?"
+   ],
+   "schema": [
+    "Article",
+    "BreadcrumbList",
+    "FAQPage (visible FAQ kept; FAQ rich results retired May 2026, markup harmless)"
+   ],
+   "words": 2000,
+   "linksIn": [
+    "/alternatives",
+    "/guides",
+    "/guides/best-ai-sdr-for-linkedin",
+    "/guides/cloud-vs-browser-extension-linkedin-automation",
+    "/guides/is-linkedin-automation-safe",
+    "/security"
+   ],
+   "linksOut": [
+    "/guides/is-linkedin-automation-safe",
+    "/guides/cloud-vs-browser-extension-linkedin-automation",
+    "/linkedin-automation-limits",
+    "/alternatives",
+    "/security",
+    "/free-linkedin-automation-tool",
+    "/guides",
+    "/guides/best-ai-sdr-for-linkedin"
+   ],
+   "owner": "Sage the Strategist",
+   "image": "An eight-point inspection checklist clipped to a tool card, with ticks and one honest 'not published' mark.",
+   "priority": 13
+  },
+  {
+   "path": "/guides/best-time-to-send-linkedin-connection-requests",
+   "status": "new",
+   "action": "write",
+   "cluster": "safety",
+   "primaryKeyword": "best time to send linkedin connection requests",
+   "secondaryKeywords": [
+    "linkedin automation random delays",
+    "delay between linkedin actions",
+    "should linkedin automation run on weekends",
+    "best day to send linkedin messages"
+   ],
+   "intent": "informational",
+   "beat": [
+    {
+     "url": "bardeen.ai/answers/best-time-to-send-linkedin-connection-request",
+     "strengths": "Snippet-friendly short answer.",
+     "misses": "One 'best time' encourages bursts."
+    },
+    {
+     "url": "phantombuster.com/blog/social-selling/best-time-to-send-linkedin-request",
+     "strengths": "Authority, day-of-week data.",
+     "misses": "Its stats contradict other vendors', and pacing goes unmentioned."
+    },
+    {
+     "url": "salesrobot.co/blogs/best-time-to-send-linkedin-messages",
+     "strengths": "Covers messages as well as invites.",
+     "misses": "Stops at random 30-90 second delays."
+    }
+   ],
+   "title": "Best time to send LinkedIn connection requests, and pace",
+   "description": "The best time to send LinkedIn connection requests is spread across their working day, not one slot. How to pace a day's allowance and set delays.",
+   "h1": "The best time to send LinkedIn connection requests is all day, slowly",
+   "outline": [
+    {
+     "h2": "The short answer",
+     "h3": []
+    },
+    {
+     "h2": "What the day-of-week studies say, and why they disagree",
+     "h3": []
+    },
+    {
+     "h2": "Why one 'best time' becomes a burst",
+     "h3": []
+    },
+    {
+     "h2": "Spreading a day's allowance across working hours",
+     "h3": [
+      "Divide the remaining day by the allowance",
+      "Keep a minimum gap",
+      "Their time zone, not yours"
+     ]
+    },
+    {
+     "h2": "Random delays are not enough on their own",
+     "h3": []
+    },
+    {
+     "h2": "Weekends, holidays and evenings",
+     "h3": []
+    }
+   ],
+   "faq": [
+    "What day is best to send LinkedIn connection requests?",
+    "What delay should I use between LinkedIn actions?",
+    "Should LinkedIn automation run on weekends?",
+    "Should I send in my time zone or theirs?"
+   ],
+   "schema": [
+    "BlogPosting (author = Organization Nora, byline names the teammate)",
+    "BreadcrumbList",
+    "FAQPage (visible FAQ kept; FAQ rich results retired May 2026, markup harmless)"
+   ],
+   "words": 1500,
+   "linksIn": [
+    "/guides",
+    "/guides/is-linkedin-automation-safe",
+    "/guides/linkedin-warm-up-schedule",
+    "/linkedin-automation-limits"
+   ],
+   "linksOut": [
+    "/guides/is-linkedin-automation-safe",
+    "/linkedin-automation-limits",
+    "/guides/linkedin-warm-up-schedule",
+    "/how-it-works",
+    "/guides"
+   ],
+   "owner": "Reese, Outreach and booking",
+   "image": "A 9-to-5 clock face with invitation dots spaced evenly around the working hours, next to a crossed-out cluster of dots at 9:00.",
+   "priority": 14
+  },
+  {
+   "path": "/guides/ai-sdr-pricing",
+   "status": "new",
+   "action": "write",
+   "cluster": "tools",
+   "primaryKeyword": "ai sdr pricing",
+   "secondaryKeywords": [
+    "how much does an sdr cost",
+    "cost of hiring an sdr",
+    "sdr outsourcing cost",
+    "how much does an ai sdr cost",
+    "is an ai sdr cheaper than a human sdr"
+   ],
+   "intent": "commercial",
+   "beat": [
+    {
+     "url": "artisan.co/blog/how-much-does-an-ai-sdr-cost-pricing-compared-to-human-sdrs",
+     "strengths": "Brand authority, human vs AI framing.",
+     "misses": "Written by a vendor that does not publish its own price."
+    },
+    {
+     "url": "joinvalley.co/blog/ai-sdr-pricing-in-2026",
+     "strengths": "Current table.",
+     "misses": "Quoted prices conflict with other sources."
+    },
+    {
+     "url": "stealthagents.com (cost of hiring an SDR 2026)",
+     "strengths": "Ranks for the human-cost question.",
+     "misses": "Single-sourced salary figures with no hidden costs."
+    }
+   ],
+   "title": "AI SDR pricing in 2026 vs the cost of hiring an SDR",
+   "description": "What AI SDRs cost in 2026 with dated sources, what a human or outsourced SDR really costs, the hidden costs both carry, and a free option.",
+   "h1": "AI SDR pricing in 2026, and what a human SDR really costs",
+   "outline": [
+    {
+     "h2": "The short answer",
+     "h3": []
+    },
+    {
+     "h2": "AI SDR prices, with dates and sources",
+     "h3": [
+      "Why quoted prices for Artisan and 11x range so widely",
+      "Per seat, per sender, per contract"
+     ]
+    },
+    {
+     "h2": "What a human SDR costs, fully loaded",
+     "h3": [
+      "Salary, tools and management",
+      "Ramp time and churn"
+     ]
+    },
+    {
+     "h2": "What an outsourced SDR costs",
+     "h3": []
+    },
+    {
+     "h2": "Hidden costs nobody lists",
+     "h3": [
+      "A Sales Navigator seat",
+      "A restricted account"
+     ]
+    },
+    {
+     "h2": "Is a free AI SDR worth it?",
+     "h3": []
+    }
+   ],
+   "faq": [
+    "How much does an AI SDR cost per month?",
+    "How much does it cost to hire an SDR?",
+    "Is an AI SDR cheaper than a human SDR?",
+    "Are there AI SDRs with no annual contract?",
+    "Is there a free AI SDR?"
+   ],
+   "schema": [
+    "BlogPosting (author = Organization Nora, byline names the teammate)",
+    "BreadcrumbList",
+    "FAQPage (visible FAQ kept; FAQ rich results retired May 2026, markup harmless)",
+    "Table with caption (dated prices, each linked to its source)"
+   ],
+   "words": 1800,
+   "linksIn": [
+    "/alternatives/artisan",
+    "/guides",
+    "/guides/ai-sdr-vs-human-sdr",
+    "/guides/best-ai-sdr-for-linkedin",
+    "/pricing"
+   ],
+   "linksOut": [
+    "/pricing",
+    "/guides/ai-sdr-vs-human-sdr",
+    "/alternatives/artisan",
+    "/guides/best-ai-sdr-for-linkedin",
+    "/guides"
+   ],
+   "owner": "Sage the Strategist",
+   "image": "Three receipts of different lengths (human SDR, agency, AI SDR) and a fourth receipt reading 0.",
+   "priority": 15
+  },
+  {
+   "path": "/guides/withdraw-pending-linkedin-invitations",
+   "status": "new",
+   "action": "write",
+   "cluster": "safety",
+   "primaryKeyword": "withdraw pending linkedin invitations",
+   "secondaryKeywords": [
+    "linkedin pending invitations limit",
+    "linkedin withdraw invitation resend 3 weeks",
+    "does withdrawing restore linkedin weekly limit",
+    "does withdrawing a linkedin request notify them"
+   ],
+   "intent": "informational",
+   "beat": [
+    {
+     "url": "bardeen.ai/answers/how-to-withdraw-connection-request-on-linkedin",
+     "strengths": "Short procedural answer.",
+     "misses": "Covers how but not when or why."
+    },
+    {
+     "url": "help.lagrowthmachine.com (how to withdraw a LinkedIn invitation)",
+     "strengths": "Mentions the 3-week resend lockout.",
+     "misses": "Tool help doc, scattered context."
+    },
+    {
+     "url": "overloop.com/blog/linkedin-limits",
+     "strengths": "Covers the pending-invitation cap.",
+     "misses": "Cites 500, 1,500 or 3,000 without evidence."
+    }
+   ],
+   "title": "Withdraw pending LinkedIn invitations: when and why",
+   "description": "When to withdraw pending LinkedIn invitations, what it does not do to your weekly limit, the three-week resend lockout, and a safe housekeeping rule.",
+   "h1": "Withdrawing pending LinkedIn invitations: when, why and what it changes",
+   "outline": [
+    {
+     "h2": "How to withdraw, on desktop and mobile",
+     "h3": []
+    },
+    {
+     "h2": "How many pending invitations is too many? What is known and what is not",
+     "h3": []
+    },
+    {
+     "h2": "What withdrawing does not do",
+     "h3": [
+      "It does not restore your weekly quota",
+      "It does not lift a restriction"
+     ]
+    },
+    {
+     "h2": "The three-week resend lockout, and why you should not resend anyway",
+     "h3": []
+    },
+    {
+     "h2": "A conservative housekeeping rule",
+     "h3": []
+    }
+   ],
+   "faq": [
+    "Should I withdraw old LinkedIn invitations?",
+    "Does withdrawing a LinkedIn request notify the person?",
+    "How long until I can re-invite someone on LinkedIn?",
+    "How many pending invitations can you have on LinkedIn?",
+    "Does withdrawing restore the weekly limit?"
+   ],
+   "schema": [
+    "BlogPosting (author = Organization Nora, byline names the teammate)",
+    "BreadcrumbList",
+    "FAQPage (visible FAQ kept; FAQ rich results retired May 2026, markup harmless)"
+   ],
+   "words": 1300,
+   "linksIn": [
+    "/guides",
+    "/guides/linkedin-account-restricted",
+    "/guides/linkedin-weekly-invitation-limit",
+    "/linkedin-automation-limits"
+   ],
+   "linksOut": [
+    "/guides/linkedin-weekly-invitation-limit",
+    "/linkedin-automation-limits",
+    "/guides/linkedin-account-restricted",
+    "/guides/linkedin-acceptance-rate",
+    "/guides",
+    "/how-it-works"
+   ],
+   "owner": "Reese, Outreach and booking",
+   "image": "A tidy inbox of pending invitation cards, with the oldest few gently sliding into an archive tray.",
+   "priority": 16
+  },
+  {
+   "path": "/guides/should-you-add-a-note-linkedin",
+   "status": "new",
+   "action": "write",
+   "cluster": "notes",
+   "primaryKeyword": "should i add a note to linkedin connection request",
+   "secondaryKeywords": [
+    "linkedin connection request without note",
+    "blank linkedin connection request acceptance rate",
+    "linkedin connection request mistakes",
+    "links in linkedin connection note"
+   ],
+   "intent": "informational",
+   "beat": [
+    {
+     "url": "lagrowthmachine.com/should-i-add-a-note-to-my-linkedin-connection-request",
+     "strengths": "Ranks first, argues mostly no.",
+     "misses": "Never explains why sources disagree."
+    },
+    {
+     "url": "salesrobot.co/blogs/linkedin-connection-request-tips",
+     "strengths": "Conditional advice.",
+     "misses": "No rule for when a note hurts."
+    },
+    {
+     "url": "getfuzzy.ai/blog/linkedin-connection-request-mistakes",
+     "strengths": "Covers mistakes.",
+     "misses": "The link-in-note claim is unverified; it is one of dozens of near-duplicate pages."
+    }
+   ],
+   "title": "Should you add a note to a LinkedIn connection request?",
+   "description": "A specific note beats no note, and no note beats a generic one. When to add a note to a LinkedIn connection request, and mistakes that cost acceptances.",
+   "h1": "Should you add a note to a LinkedIn connection request?",
+   "outline": [
+    {
+     "h2": "The short answer: specific beats blank, blank beats generic",
+     "h3": []
+    },
+    {
+     "h2": "Why the studies disagree (25% vs 30% and '3-5x better')",
+     "h3": []
+    },
+    {
+     "h2": "When a blank request is the right call",
+     "h3": []
+    },
+    {
+     "h2": "When a note earns its place",
+     "h3": []
+    },
+    {
+     "h2": "Mistakes that cost acceptances",
+     "h3": [
+      "A link in the note",
+      "A pitch in the note",
+      "Re-inviting someone you withdrew",
+      "Messaging the same person from a second campaign"
+     ]
+    }
+   ],
+   "faq": [
+    "Is it better to send a LinkedIn request without a note?",
+    "Do blank connection requests get accepted more?",
+    "Can a link in a connection note hurt acceptance?",
+    "Should I personalise every connection request?"
+   ],
+   "schema": [
+    "BlogPosting (author = Organization Nora, byline names the teammate)",
+    "BreadcrumbList",
+    "FAQPage (visible FAQ kept; FAQ rich results retired May 2026, markup harmless)"
+   ],
+   "words": 1400,
+   "linksIn": [
+    "/guides",
+    "/guides/linkedin-connection-note-character-limit",
+    "/guides/linkedin-connection-request-templates"
+   ],
+   "linksOut": [
+    "/guides/linkedin-connection-request-templates",
+    "/guides/linkedin-connection-note-character-limit",
+    "/guides/linkedin-acceptance-rate",
+    "/tools/connection-note-checker",
+    "/guides",
+    "/how-it-works"
+   ],
+   "owner": "Quinn the Campaign writer",
+   "image": "Three invitation cards side by side: a blank one, a generic one crossed out, and a short specific one with a tick.",
+   "priority": 17
+  },
+  {
+   "path": "/guides/ai-personalized-linkedin-messages",
+   "status": "new",
+   "action": "write",
+   "cluster": "notes",
+   "primaryKeyword": "ai personalized linkedin messages",
+   "secondaryKeywords": [
+    "ai personalized linkedin connection requests",
+    "personalize linkedin messages at scale",
+    "can ai write linkedin messages",
+    "is ai personalization detectable on linkedin"
+   ],
+   "intent": "commercial",
+   "beat": [
+    {
+     "url": "joinvalley.co/blog/personalize-linkedin-messages-at-scale-ai",
+     "strengths": "Product-led and current.",
+     "misses": "Claims personalisation without showing what each message used."
+    },
+    {
+     "url": "sales-mind.ai/blog/ai-personalizes-linkedin-connection-requests",
+     "strengths": "Direct match.",
+     "misses": "'+40% acceptance' with no evidence."
+    },
+    {
+     "url": "gracker.ai/blog/ai-linkedin-outreach-transformation-guide",
+     "strengths": "Cites a Belkins study (9.36% vs 5.44%).",
+     "misses": "No method for checking that a message is really personal."
+    }
+   ],
+   "title": "AI personalized LinkedIn messages you can actually check",
+   "description": "How AI can write each LinkedIn note from the person's own profile, how to check it is personal and not a template, and the guardrails that keep it safe.",
+   "h1": "AI personalized LinkedIn messages: personal you can check, not just claim",
+   "outline": [
+    {
+     "h2": "What 'personalised' should mean",
+     "h3": []
+    },
+    {
+     "h2": "Grounding: naming the details a message used",
+     "h3": [
+      "Headline, role, company, about text",
+      "Empty grounding is a warning sign"
+     ]
+    },
+    {
+     "h2": "Why a template with {first_name} is not personalisation",
+     "h3": []
+    },
+    {
+     "h2": "Is AI personalisation detectable?",
+     "h3": []
+    },
+    {
+     "h2": "Guardrails AI writing needs",
+     "h3": [
+      "Under the length limit, checked in code",
+      "No links in the invitation",
+      "A human reads the copy before launch",
+      "A fallback when the writer fails"
+     ]
+    },
+    {
+     "h2": "Angles, not wording: what to test",
+     "h3": []
+    }
+   ],
+   "faq": [
+    "Can AI write personalized LinkedIn connection requests?",
+    "Is AI personalization detectable on LinkedIn?",
+    "Do personalized connection notes get more replies?",
+    "Should a human approve AI LinkedIn messages?",
+    "What happens if the AI cannot find anything to say about someone?"
+   ],
+   "schema": [
+    "BlogPosting (author = Organization Nora, byline names the teammate)",
+    "BreadcrumbList",
+    "FAQPage (visible FAQ kept; FAQ rich results retired May 2026, markup harmless)"
+   ],
+   "words": 1800,
+   "linksIn": [
+    "/alternatives/dripify",
+    "/guides",
+    "/guides/linkedin-connection-request-templates"
+   ],
+   "linksOut": [
+    "/guides/linkedin-connection-request-templates",
+    "/guides/linkedin-acceptance-rate",
+    "/how-it-works",
+    "/tools/connection-note-checker",
+    "/guides"
+   ],
+   "owner": "Quinn the Campaign writer",
+   "image": "A prospect profile card on the left, with highlighted fields (role, company, post) flowing as lines into a short note on the right.",
+   "priority": 18
+  },
+  {
+   "path": "/guides/linkedin-acceptance-rate",
+   "status": "new",
+   "action": "write (a/b testing and outreach metrics merged in)",
+   "cluster": "notes",
+   "primaryKeyword": "linkedin connection acceptance rate",
+   "secondaryKeywords": [
+    "good linkedin connection acceptance rate",
+    "how to increase linkedin acceptance rate",
+    "linkedin acceptance rate benchmark",
+    "a/b test linkedin messages",
+    "linkedin outreach metrics to track"
+   ],
+   "intent": "informational",
+   "beat": [
+    {
+     "url": "expandi.io/blog/linkedin-acceptance-rate",
+     "strengths": "Original data from millions of attempts.",
+     "misses": "Its users are self-selected, and it never explains how to read small numbers."
+    },
+    {
+     "url": "gracker.ai/blog/increase-linkedin-acceptance-rate",
+     "strengths": "'15% to 45%' story.",
+     "misses": "Generic tips."
+    },
+    {
+     "url": "salesforge.ai/blog/linkedin-conection-acceptance-rate",
+     "strengths": "Ranks for 'good rate'.",
+     "misses": "Repeats 30-45% without context."
+    }
+   ],
+   "title": "LinkedIn connection acceptance rate: benchmarks and fixes",
+   "description": "What a good LinkedIn acceptance rate is, how to read yours on small numbers, why a low rate is also a restriction risk, and how to test angles properly.",
+   "h1": "LinkedIn connection acceptance rate: what is good and how to raise it",
+   "outline": [
+    {
+     "h2": "The short answer: benchmarks, and why they are optimistic",
+     "h3": []
+    },
+    {
+     "h2": "Reading your own rate",
+     "h3": [
+      "Eleven invitations is not a result",
+      "Ranges, not single numbers (Wilson intervals in plain words)"
+     ]
+    },
+    {
+     "h2": "Why low acceptance is a safety problem too",
+     "h3": []
+    },
+    {
+     "h2": "Why requests are not being accepted",
+     "h3": [
+      "Targeting peers or competitors by mistake",
+      "Generic notes",
+      "Bursty sending",
+      "A thin profile"
+     ]
+    },
+    {
+     "h2": "How to test what works: angles, not wording",
+     "h3": [
+      "Round-robin assignment",
+      "When it is too early to call a winner"
+     ]
+    },
+    {
+     "h2": "The metrics worth tracking, by campaign goal",
+     "h3": []
+    }
+   ],
+   "faq": [
+    "What is a good LinkedIn acceptance rate?",
+    "Is 30% a good LinkedIn acceptance rate?",
+    "Does a low acceptance rate get you restricted?",
+    "Why are my LinkedIn connection requests not being accepted?",
+    "How many people do you need for a LinkedIn A/B test?"
+   ],
+   "schema": [
+    "BlogPosting (author = Organization Nora, byline names the teammate)",
+    "BreadcrumbList",
+    "FAQPage (visible FAQ kept; FAQ rich results retired May 2026, markup harmless)"
+   ],
+   "words": 2000,
+   "linksIn": [
+    "/guides",
+    "/guides/ai-personalized-linkedin-messages",
+    "/guides/ideal-customer-profile-for-linkedin",
+    "/guides/linkedin-connection-request-templates",
+    "/guides/should-you-add-a-note-linkedin",
+    "/guides/withdraw-pending-linkedin-invitations"
+   ],
+   "linksOut": [
+    "/guides/linkedin-connection-request-templates",
+    "/guides/ideal-customer-profile-for-linkedin",
+    "/linkedin-automation-limits",
+    "/guides/is-linkedin-automation-safe",
+    "/guides",
+    "/how-it-works"
+   ],
+   "owner": "Quinn the Campaign writer",
+   "image": "Two bar ranges with honest error whiskers that overlap, captioned 'too early to call'.",
+   "priority": 19
+  },
+  {
+   "path": "/guides/linkedin-follow-up-sequence",
+   "status": "new",
+   "action": "write (never-contact-twice topic merged in)",
+   "cluster": "meetings",
+   "primaryKeyword": "linkedin follow up sequence",
+   "secondaryKeywords": [
+    "linkedin follow up message no response",
+    "how many follow ups on linkedin",
+    "linkedin breakup message template",
+    "how long to wait to follow up on linkedin"
+   ],
+   "intent": "informational",
+   "beat": [
+    {
+     "url": "phantombuster.com/blog/social-selling/linkedin-follow-up-sequence",
+     "strengths": "Authority and a cadence framework.",
+     "misses": "The same 1/4/9/14 cadence everyone copies, with no stopping rule."
+    },
+    {
+     "url": "salesrobot.co/blogs/linkedin-follow-up-sequence",
+     "strengths": "Templates.",
+     "misses": "Pushes 5-8 follow-ups on an unsourced '80% need 5+' stat."
+    },
+    {
+     "url": "snov.io/blog/linkedin-follow-up-message",
+     "strengths": "No-response templates.",
+     "misses": "No guidance on opt-outs or a second campaign."
+    }
+   ],
+   "title": "LinkedIn follow-up sequence: timing, count, when to stop",
+   "description": "A LinkedIn follow-up sequence that reads as a conversation: how long to wait, how many follow-ups, when to stop, and why a second campaign backfires.",
+   "h1": "A LinkedIn follow-up sequence that reads like a conversation",
+   "outline": [
+    {
+     "h2": "The sequence, step by step",
+     "h3": [
+      "Invitation",
+      "First message after acceptance",
+      "Follow-ups measured from the last real message"
+     ]
+    },
+    {
+     "h2": "How long to wait between follow-ups",
+     "h3": []
+    },
+    {
+     "h2": "How many follow-ups: the myth stat and a stopping rule",
+     "h3": []
+    },
+    {
+     "h2": "The last message (breakup) that keeps the door open",
+     "h3": []
+    },
+    {
+     "h2": "When to stop immediately",
+     "h3": [
+      "Opt-out phrases",
+      "A clear no"
+     ]
+    },
+    {
+     "h2": "Never contact the same person twice, even from another campaign",
+     "h3": []
+    }
+   ],
+   "faq": [
+    "How many follow-ups should you send on LinkedIn?",
+    "How long should you wait to follow up on LinkedIn?",
+    "Is it rude to follow up on LinkedIn?",
+    "Do breakup messages work on LinkedIn?",
+    "How do I avoid contacting the same lead twice?"
+   ],
+   "schema": [
+    "BlogPosting (author = Organization Nora, byline names the teammate)",
+    "BreadcrumbList",
+    "FAQPage (visible FAQ kept; FAQ rich results retired May 2026, markup harmless)"
+   ],
+   "words": 1800,
+   "linksIn": [
+    "/guides",
+    "/guides/book-meetings-from-linkedin",
+    "/guides/is-linkedin-automation-legal",
+    "/guides/linkedin-follow-up-after-connection"
+   ],
+   "linksOut": [
+    "/guides/book-meetings-from-linkedin",
+    "/guides/linkedin-follow-up-after-connection",
+    "/guides/is-linkedin-automation-legal",
+    "/how-it-works",
+    "/guides"
+   ],
+   "owner": "Quinn the Campaign writer",
+   "image": "A drawn sequence of four bubbles with spacing that grows, ending in a calm full stop rather than a fifth message.",
+   "priority": 20
+  },
+  {
+   "path": "/for/small-business",
+   "status": "new",
+   "action": "write",
+   "cluster": "audience",
+   "primaryKeyword": "linkedin lead generation for small business",
+   "secondaryKeywords": [
+    "lead generation without a sales team",
+    "b2b lead generation without hiring sdr",
+    "ai sdr for small business",
+    "how to get b2b clients on linkedin as a small business"
+   ],
+   "intent": "commercial",
+   "beat": [
+    {
+     "url": "lessannoyingcrm.com/blog/8-ways-to-generate-leads-on-linkedin",
+     "strengths": "Readable small-business angle.",
+     "misses": "Outdated statistics, no tooling or limits."
+    },
+    {
+     "url": "funnl.ai (generate qualified B2B leads without hiring a full team)",
+     "strengths": "Matches the 'no team' intent.",
+     "misses": "Thin vendor post."
+    },
+    {
+     "url": "jdrgroup.co.uk (LinkedIn lead generation guide)",
+     "strengths": "Agency guide.",
+     "misses": "Generic, with no safe volumes."
+    }
+   ],
+   "title": "LinkedIn lead generation for small business, no sales team",
+   "description": "LinkedIn lead generation with no sales team: find buyers, send each a personal note and book calls with a free AI SDR that stays inside safe limits.",
+   "h1": "LinkedIn lead generation for small businesses without a sales team",
+   "outline": [
+    {
+     "h2": "Why LinkedIn outreach is different for small businesses",
+     "h3": []
+    },
+    {
+     "h2": "An hour a week instead of a hire",
+     "h3": []
+    },
+    {
+     "h2": "Free versus paid: what a small business actually needs",
+     "h3": []
+    },
+    {
+     "h2": "How it works for you",
+     "h3": [
+      "A strategy from your website",
+      "One note per person, in your voice",
+      "Replies answered, calls booked"
+     ]
+    },
+    {
+     "h2": "The limits that protect your profile",
+     "h3": []
+    },
+    {
+     "h2": "What to expect in the first month",
+     "h3": []
+    }
+   ],
+   "faq": [
+    "Is LinkedIn good for small business lead generation?",
+    "How can I get B2B leads without a sales team?",
+    "Is there an affordable AI SDR for a small business?",
+    "Is Sales Navigator worth it for a small business?"
+   ],
+   "schema": [
+    "WebPage",
+    "BreadcrumbList",
+    "FAQPage (visible FAQ kept; FAQ rich results retired May 2026, markup harmless)"
+   ],
+   "words": 1100,
+   "linksIn": [
+    "/",
+    "/free-linkedin-automation-tool",
+    "/guides/ai-sdr-vs-human-sdr",
+    "/guides/linkedin-prospecting",
+    "/how-it-works"
+   ],
+   "linksOut": [
+    "/free-linkedin-automation-tool",
+    "/how-it-works",
+    "/guides/ai-sdr-vs-human-sdr",
+    "/guides/linkedin-prospecting-without-sales-navigator",
+    "/for/agencies",
+    "/for/consultants",
+    "/"
+   ],
+   "owner": "Scout the Prospector",
+   "image": "A shopfront-sized office with one owner and an AI teammate sharing one desk and one calendar.",
+   "priority": 21
+  },
+  {
+   "path": "/guides/is-linkedin-automation-legal",
+   "status": "new",
+   "action": "write",
+   "cluster": "safety",
+   "primaryKeyword": "is linkedin automation illegal",
+   "secondaryKeywords": [
+    "is linkedin automation against terms of service",
+    "linkedin user agreement 8.2 automation",
+    "linkedin outreach gdpr compliance",
+    "linkedin prohibited software and extensions",
+    "is scraping linkedin legal"
+   ],
+   "intent": "informational",
+   "beat": [
+    {
+     "url": "salesforge.ai/blog/is-linkedin-automation-illegal",
+     "strengths": "Ranks for the exact question.",
+     "misses": "Blurs contract and law, and is written to sell automation."
+    },
+    {
+     "url": "breakcold.com/blog/is-linkedin-prospecting-automation-illegal",
+     "strengths": "Mentions hiQ v LinkedIn.",
+     "misses": "Does not explain what the case decided or left open."
+    },
+    {
+     "url": "linkedin.com/help/linkedin/answer/a1341387",
+     "strengths": "Official prohibited-software page.",
+     "misses": "Says what is banned, not what it means for a sales team."
+    }
+   ],
+   "title": "Is LinkedIn automation illegal? Terms, law and GDPR",
+   "description": "Illegal, or only against the terms? What LinkedIn's section 8.2 says, what hiQ v LinkedIn decided, and how GDPR applies to B2B outreach. Not legal advice.",
+   "h1": "Is LinkedIn automation illegal, or only against the terms?",
+   "outline": [
+    {
+     "h2": "The short answer: contract versus law",
+     "h3": []
+    },
+    {
+     "h2": "What LinkedIn's user agreement says",
+     "h3": [
+      "Section 8.2, quoted",
+      "The prohibited software and extensions page"
+     ]
+    },
+    {
+     "h2": "What hiQ v LinkedIn decided, and what it did not",
+     "h3": []
+    },
+    {
+     "h2": "GDPR and B2B outreach on LinkedIn",
+     "h3": [
+      "Legitimate interest",
+      "Opt-outs and keeping records",
+      "Never contacting someone twice"
+     ]
+    },
+    {
+     "h2": "What this means for any tool, including ours",
+     "h3": []
+    },
+    {
+     "h2": "How to keep the risk as low as it can go",
+     "h3": []
+    }
+   ],
+   "faq": [
+    "Is LinkedIn automation illegal?",
+    "Does LinkedIn ban automation tools?",
+    "Is scraping LinkedIn legal?",
+    "Do I need consent to message someone on LinkedIn under GDPR?",
+    "What is legitimate interest for B2B outreach?"
+   ],
+   "schema": [
+    "BlogPosting (author = Organization Nora, byline names the teammate)",
+    "BreadcrumbList",
+    "FAQPage (visible FAQ kept; FAQ rich results retired May 2026, markup harmless)"
+   ],
+   "words": 2000,
+   "linksIn": [
+    "/alternatives",
+    "/alternatives/phantombuster",
+    "/for/professional-services",
+    "/guides",
+    "/guides/is-linkedin-automation-safe",
+    "/guides/linkedin-follow-up-sequence",
+    "/linkedin-automation-limits"
+   ],
+   "linksOut": [
+    "/guides/is-linkedin-automation-safe",
+    "/security",
+    "/guides/linkedin-follow-up-sequence",
+    "/how-it-works",
+    "/guides",
+    "/linkedin-automation-limits"
+   ],
+   "owner": "Reese, Outreach and booking",
+   "image": "A contract page and a law book on a balance scale, with a LinkedIn-blue bookmark on clause 8.2.",
+   "priority": 22
+  },
+  {
+   "path": "/guides/ai-sdr-vs-human-sdr",
+   "status": "new",
+   "action": "write",
+   "cluster": "tools",
+   "primaryKeyword": "ai sdr vs human sdr",
+   "secondaryKeywords": [
+    "outsourced sdr vs ai sdr",
+    "sdr agency vs in-house sdr",
+    "can ai replace sdrs",
+    "will ai replace sdrs"
+   ],
+   "intent": "commercial",
+   "beat": [
+    {
+     "url": "aisdr.com/blog/ai-sdr-vs-human-sdr",
+     "strengths": "Clear comparison table.",
+     "misses": "An AI vendor arguing one side."
+    },
+    {
+     "url": "callboxinc.com ai-sdr-vs-outsourced-sdr",
+     "strengths": "Covers outsourcing costs.",
+     "misses": "An outsourcer arguing the other side."
+    },
+    {
+     "url": "growleads.io (AI SDR vs outsourced vs in-house 2026)",
+     "strengths": "Three-way, cites Bridge Group data.",
+     "misses": "Leaves out the supervised middle option."
+    }
+   ],
+   "title": "AI SDR vs human SDR vs agency: an honest comparison",
+   "description": "AI SDR, human SDR or outsourced agency? Cost, ramp time, quality and risk compared, and why the best setup keeps a human approving the work.",
+   "h1": "AI SDR vs human SDR vs SDR agency: which should you use?",
+   "outline": [
+    {
+     "h2": "The short answer",
+     "h3": []
+    },
+    {
+     "h2": "What each option actually does day to day",
+     "h3": []
+    },
+    {
+     "h2": "Cost and ramp time, sourced",
+     "h3": [
+      "In-house SDR",
+      "Outsourced SDR or agency",
+      "AI SDR"
+     ]
+    },
+    {
+     "h2": "Where AI is better and where it is worse",
+     "h3": [
+      "Research and drafting at scale",
+      "Judgement, relationships and edge cases"
+     ]
+    },
+    {
+     "h2": "The supervised option: AI does the work, a human approves",
+     "h3": []
+    },
+    {
+     "h2": "Which to choose, by stage of company",
+     "h3": []
+    }
+   ],
+   "faq": [
+    "Will AI replace SDRs?",
+    "Is an AI SDR better than an SDR agency?",
+    "What can an AI SDR not do?",
+    "How long does an outsourced SDR take to ramp?",
+    "Do AI SDRs work?"
+   ],
+   "schema": [
+    "BlogPosting (author = Organization Nora, byline names the teammate)",
+    "BreadcrumbList",
+    "FAQPage (visible FAQ kept; FAQ rich results retired May 2026, markup harmless)"
+   ],
+   "words": 1800,
+   "linksIn": [
+    "/for/b2b-saas",
+    "/for/small-business",
+    "/guides",
+    "/guides/ai-sdr-pricing",
+    "/guides/best-ai-sdr-for-linkedin"
+   ],
+   "linksOut": [
+    "/guides/ai-sdr-pricing",
+    "/guides/best-ai-sdr-for-linkedin",
+    "/how-it-works",
+    "/for/small-business",
+    "/guides"
+   ],
+   "owner": "Sage the Strategist",
+   "image": "Three desks side by side (a person, an agency badge, an AI teammate) with a single approval stamp shared between them.",
+   "priority": 23
+  },
+  {
+   "path": "/alternatives/artisan",
+   "status": "new",
+   "action": "write (11x alternatives merged here as a secondary)",
+   "cluster": "tools",
+   "primaryKeyword": "artisan ai alternatives",
+   "secondaryKeywords": [
+    "artisan ai review",
+    "artisan ava alternative",
+    "does artisan do linkedin outreach",
+    "11x alternatives",
+    "cheaper alternative to artisan"
+   ],
+   "intent": "commercial",
+   "beat": [
+    {
+     "url": "marketbetter.ai/blog/best-artisan-alternatives-2026",
+     "strengths": "Current and on topic.",
+     "misses": "Attacks the price but offers no LinkedIn-specific alternative."
+    },
+    {
+     "url": "tooljunction.io/alternatives/artisan-ai",
+     "strengths": "Ranks.",
+     "misses": "Generic directory."
+    },
+    {
+     "url": "salesrobot.co/blogs/artisan-ai-review",
+     "strengths": "Review format.",
+     "misses": "A competitor's review."
+    }
+   ],
+   "title": "Artisan AI alternatives: a free AI SDR for LinkedIn",
+   "description": "Artisan and 11x are email-first AI SDRs on contracts. If your buyers answer on LinkedIn, here is a free, human-approved alternative and how it compares.",
+   "h1": "Artisan AI alternatives for teams whose buyers live on LinkedIn",
+   "outline": [
+    {
+     "h2": "Why people look for a Artisan alternative",
+     "h3": []
+    },
+    {
+     "h2": "Artisan in brief, fairly",
+     "h3": [
+      "Who it suits",
+      "Pricing as of October 2026 (sourced)",
+      "How it handles limits and warm-up"
+     ]
+    },
+    {
+     "h2": "Nora vs Artisan: side by side",
+     "h3": [
+      "Finding prospects",
+      "Writing notes",
+      "Replies and booking",
+      "Safety guardrails",
+      "Price"
+     ]
+    },
+    {
+     "h2": "If you were also looking at 11x",
+     "h3": []
+    },
+    {
+     "h2": "Other alternatives worth a look",
+     "h3": []
+    },
+    {
+     "h2": "Who should stay with Artisan",
+     "h3": []
+    }
+   ],
+   "faq": [
+    "How much does Artisan Ava cost?",
+    "Does Artisan work on LinkedIn?",
+    "Is there a cheaper alternative to Artisan?",
+    "How much does 11x cost?",
+    "Is Artisan AI worth it?"
+   ],
+   "schema": [
+    "Article",
+    "BreadcrumbList",
+    "FAQPage (visible FAQ kept; FAQ rich results retired May 2026, markup harmless)",
+    "Table with caption (no Review or AggregateRating markup: no first-hand rating exists)"
+   ],
+   "words": 1600,
+   "linksIn": [
+    "/alternatives",
+    "/guides/ai-sdr-pricing",
+    "/guides/best-ai-sdr-for-linkedin"
+   ],
+   "linksOut": [
+    "/alternatives",
+    "/guides/ai-sdr-pricing",
+    "/guides/best-ai-sdr-for-linkedin",
+    "/pricing"
+   ],
+   "owner": "Sage the Strategist",
+   "image": "A large enterprise contract scroll beside a small LinkedIn-blue card labelled 'free, approve each step'.",
+   "priority": 24
+  },
+  {
+   "path": "/alternatives/phantombuster",
+   "status": "new",
+   "action": "write",
+   "cluster": "tools",
+   "primaryKeyword": "phantombuster alternatives",
+   "secondaryKeywords": [
+    "phantombuster alternative for linkedin outreach",
+    "is phantombuster safe for linkedin",
+    "phantombuster linkedin outreach",
+    "phantombuster vs dux-soup"
+   ],
+   "intent": "commercial",
+   "beat": [
+    {
+     "url": "blog.waalaxy.com/en/phantombuster-alternative",
+     "strengths": "Ranks first.",
+     "misses": "A competitor; mixes scraping and outreach needs."
+    },
+    {
+     "url": "joinvalley.co/blog/phantombuster-alternatives-2026",
+     "strengths": "'5 safer tools' angle.",
+     "misses": "Self-ranking."
+    },
+    {
+     "url": "pipeline.zoominfo.com/sales/phantombuster-alternatives",
+     "strengths": "Authority.",
+     "misses": "Data-tool bias; outreach safety thin."
+    }
+   ],
+   "title": "PhantomBuster alternatives for safe LinkedIn outreach",
+   "description": "PhantomBuster is built for scraping and workflows. If you need safe LinkedIn outreach with personal notes and booked meetings, see how Nora compares.",
+   "h1": "PhantomBuster alternatives for LinkedIn outreach, not scraping",
+   "outline": [
+    {
+     "h2": "Why people look for a PhantomBuster alternative",
+     "h3": []
+    },
+    {
+     "h2": "PhantomBuster in brief, fairly",
+     "h3": [
+      "Who it suits",
+      "Pricing as of October 2026 (sourced)",
+      "How it handles limits and warm-up"
+     ]
+    },
+    {
+     "h2": "Nora vs PhantomBuster: side by side",
+     "h3": [
+      "Finding prospects",
+      "Writing notes",
+      "Replies and booking",
+      "Safety guardrails",
+      "Price"
+     ]
+    },
+    {
+     "h2": "Two different jobs: scraping data versus having conversations",
+     "h3": []
+    },
+    {
+     "h2": "Cookie-based sessions and suspension risk",
+     "h3": []
+    },
+    {
+     "h2": "Other alternatives worth a look",
+     "h3": []
+    },
+    {
+     "h2": "Who should stay with PhantomBuster",
+     "h3": []
+    }
+   ],
+   "faq": [
+    "Is PhantomBuster safe for LinkedIn?",
+    "What is the best PhantomBuster alternative for outreach?",
+    "Why did PhantomBuster change its pricing?",
+    "Does Nora scrape LinkedIn?"
+   ],
+   "schema": [
+    "Article",
+    "BreadcrumbList",
+    "FAQPage (visible FAQ kept; FAQ rich results retired May 2026, markup harmless)",
+    "Table with caption (no Review or AggregateRating markup: no first-hand rating exists)"
+   ],
+   "words": 1600,
+   "linksIn": [
+    "/alternatives",
+    "/guides/best-ai-sdr-for-linkedin"
+   ],
+   "linksOut": [
+    "/alternatives",
+    "/guides/is-linkedin-automation-legal",
+    "/guides/cloud-vs-browser-extension-linkedin-automation",
+    "/how-it-works",
+    "/guides/best-ai-sdr-for-linkedin"
+   ],
+   "owner": "Sage the Strategist",
+   "image": "A data-scraping funnel on one side and a one-to-one conversation bubble on the other, with a fork in the road between them.",
+   "priority": 25
+  },
+  {
+   "path": "/guides/is-linkedin-automation-safe",
+   "status": "registered",
+   "action": "keep; add an H2 auditing the restriction-rate statistics (merged keyword) and a downloadable checklist",
+   "cluster": "safety",
+   "primaryKeyword": "is linkedin automation safe",
+   "secondaryKeywords": [
+    "linkedin automation without getting banned",
+    "how does linkedin detect automation",
+    "linkedin automation warning signs",
+    "linkedin ban triggers checklist",
+    "linkedin automation restriction rate statistics"
+   ],
+   "intent": "informational",
+   "beat": [
+    {
+     "url": "zeliq.com/blog/linkedin-automation-2026",
+     "strengths": "Current and broad.",
+     "misses": "Repeats '40% restricted' with no primary source."
+    },
+    {
+     "url": "joinvalley.co/blog/linkedin-automation-safety-2026",
+     "strengths": "Timely, covers the 2026 enforcement news.",
+     "misses": "Written to sell Valley; never says the user agreement prohibits automation."
+    },
+    {
+     "url": "salesflow.io/how-safe-is-linkedin-automation",
+     "strengths": "Long-standing ranking page.",
+     "misses": "Generic tips (randomise delays) that still compress a day's sends into an hour."
+    }
+   ],
+   "title": "Is LinkedIn automation safe? What gets accounts restricted",
+   "description": "No tool is risk-free and LinkedIn's terms prohibit automation. What LinkedIn can see, which patterns get accounts restricted, and what keeps one working.",
+   "h1": "Is LinkedIn automation safe? What actually gets accounts restricted",
+   "outline": [
+    {
+     "h2": "The short answer",
+     "h3": []
+    },
+    {
+     "h2": "What LinkedIn can observe",
+     "h3": [
+      "Timing that is too regular",
+      "Bursts inside a daily cap",
+      "Low acceptance rate",
+      "'I don't know this person' reports",
+      "Messaging the same person again"
+     ]
+    },
+    {
+     "h2": "A daily cap is not a pace: a real incident",
+     "h3": [
+      "Seven invitations in 27 minutes on day one",
+      "What the refusals looked like for five days"
+     ]
+    },
+    {
+     "h2": "Warning signs, in the order they usually arrive",
+     "h3": [
+      "CAPTCHA and re-login prompts",
+      "The weekly invitation notice",
+      "Unusual-activity restriction",
+      "ID verification"
+     ]
+    },
+    {
+     "h2": "The restriction-rate numbers you will see, audited",
+     "h3": [
+      "Where '23%', '40%' and '83%' come from",
+      "Why no independent figure exists"
+     ]
+    },
+    {
+     "h2": "A safety checklist you can use with any tool",
+     "h3": []
+    },
+    {
+     "h2": "How Nora handles each risk",
+     "h3": []
+    }
+   ],
+   "faq": [
+    "Can LinkedIn ban you for using automation?",
+    "How many connection requests per day is safe?",
+    "Can LinkedIn detect automation tools?",
+    "Is a LinkedIn CAPTCHA a warning sign?",
+    "What happens when someone clicks 'I don't know this person'?",
+    "What percentage of automation users get restricted?"
+   ],
+   "schema": [
+    "BlogPosting (author = Organization Nora, byline names the teammate)",
+    "BreadcrumbList",
+    "FAQPage (visible FAQ kept; FAQ rich results retired May 2026, markup harmless)"
+   ],
+   "words": 2200,
+   "linksIn": [
+    "/for/agencies",
+    "/for/professional-services",
+    "/guides",
+    "/guides/best-time-to-send-linkedin-connection-requests",
+    "/guides/cloud-vs-browser-extension-linkedin-automation",
+    "/guides/is-linkedin-automation-legal",
+    "/guides/linkedin-acceptance-rate",
+    "/guides/linkedin-account-restricted",
+    "/guides/linkedin-automation-tool-bans",
+    "/guides/linkedin-warm-up-schedule",
+    "/guides/safest-linkedin-automation-tool",
+    "/linkedin-automation-limits",
+    "/security"
+   ],
+   "linksOut": [
+    "/linkedin-automation-limits",
+    "/guides/linkedin-account-restricted",
+    "/guides/cloud-vs-browser-extension-linkedin-automation",
+    "/guides/is-linkedin-automation-legal",
+    "/guides/best-time-to-send-linkedin-connection-requests",
+    "/guides/safest-linkedin-automation-tool",
+    "/security",
+    "/guides",
+    "/how-it-works"
+   ],
+   "owner": "Reese, Outreach and booking",
+   "image": "A timeline of one sending day: a red burst of seven dots packed into half an hour next to a green row of dots spaced evenly across working hours.",
+   "priority": 26
+  },
+  {
+   "path": "/guides/linkedin-weekly-invitation-limit",
+   "status": "registered",
+   "action": "keep; add a reset worked example, a 'why not bypass' section and an SSI myth check",
+   "cluster": "safety",
+   "primaryKeyword": "linkedin weekly invitation limit",
+   "secondaryKeywords": [
+    "linkedin weekly invitation limit reset time",
+    "you've reached the weekly invitation limit linkedin",
+    "how to bypass linkedin weekly invitation limit",
+    "does sales navigator increase connection limit",
+    "linkedin ssi score connection limit"
+   ],
+   "intent": "informational",
+   "beat": [
+    {
+     "url": "snov.io/blog/linkedin-invitation-limit",
+     "strengths": "Thorough, high authority.",
+     "misses": "Leads with bypass tricks and ignores the risk."
+    },
+    {
+     "url": "salesrobot.co/blogs/top-3-ways-to-bypass-linkedin-weekly-invitation-limit-that-works",
+     "strengths": "Matches the 'bypass' intent exactly.",
+     "misses": "Treats the limit as an obstacle rather than a signal."
+    },
+    {
+     "url": "linkedin.com/help/billing/answer/a550555",
+     "strengths": "Official: withdrawing does not lift it, and it lasts about a week.",
+     "misses": "No plan for what to do next."
+    }
+   ],
+   "title": "LinkedIn weekly invitation limit in 2026: reset and recovery",
+   "description": "How LinkedIn's weekly invitation limit works, when it resets, what to do when you hit it, and why bypass tricks put the account at more risk.",
+   "h1": "LinkedIn weekly invitation limit in 2026, explained",
+   "outline": [
+    {
+     "h2": "What the weekly limit is, and what LinkedIn actually says",
+     "h3": []
+    },
+    {
+     "h2": "When it resets: rolling seven days or a fixed day?",
+     "h3": [
+      "A worked example"
+     ]
+    },
+    {
+     "h2": "'You've reached the weekly invitation limit': what to do now",
+     "h3": []
+    },
+    {
+     "h2": "Why bypass tricks are a bad trade",
+     "h3": [
+      "Email-address invitations",
+      "Event and group invitations",
+      "Swapping invitations for InMail"
+     ]
+    },
+    {
+     "h2": "Does Sales Navigator, Premium or a high SSI raise it?",
+     "h3": []
+    },
+    {
+     "h2": "Planning a week around 100 invitations",
+     "h3": [
+      "Spread over five working days",
+      "Why the week binds before the day"
+     ]
+    }
+   ],
+   "faq": [
+    "How many connection requests can I send per week on LinkedIn?",
+    "When does the LinkedIn weekly limit reset?",
+    "Is the weekly invitation limit a ban?",
+    "Does withdrawing invitations restore my weekly quota?",
+    "Does a higher SSI let you send more invitations?"
+   ],
+   "schema": [
+    "BlogPosting (author = Organization Nora, byline names the teammate)",
+    "BreadcrumbList",
+    "FAQPage (visible FAQ kept; FAQ rich results retired May 2026, markup harmless)"
+   ],
+   "words": 1800,
+   "linksIn": [
+    "/alternatives/expandi",
+    "/guides",
+    "/guides/linkedin-account-restricted",
+    "/guides/linkedin-prospecting-without-sales-navigator",
+    "/guides/linkedin-warm-up-schedule",
+    "/guides/withdraw-pending-linkedin-invitations",
+    "/linkedin-automation-limits",
+    "/tools/linkedin-limit-calculator"
+   ],
+   "linksOut": [
+    "/linkedin-automation-limits",
+    "/tools/linkedin-limit-calculator",
+    "/guides/linkedin-warm-up-schedule",
+    "/guides/withdraw-pending-linkedin-invitations",
+    "/guides/linkedin-account-restricted",
+    "/guides",
+    "/how-it-works"
+   ],
+   "owner": "Reese, Outreach and booking",
+   "image": "A week calendar with 100 small envelopes spread evenly across Monday to Friday, and an empty weekend.",
+   "priority": 27
+  },
+  {
+   "path": "/guides/linkedin-warm-up-schedule",
+   "status": "registered",
+   "action": "keep; publish the week-by-week table and the 'clock starts at first send' rule",
+   "cluster": "safety",
+   "primaryKeyword": "how to warm up linkedin account",
+   "secondaryKeywords": [
+    "linkedin account warm up schedule",
+    "linkedin new account connection limit",
+    "visit profile before connection request linkedin",
+    "linkedin warm up before connection request"
+   ],
+   "intent": "informational",
+   "beat": [
+    {
+     "url": "phantombuster.com/blog/social-selling/linkedin-account-warm-up-guide",
+     "strengths": "Authority and a warm-up formula.",
+     "misses": "Never defines when the ramp starts."
+    },
+    {
+     "url": "konnector.ai (warm up protocol)",
+     "strengths": "Has a schedule table.",
+     "misses": "No reasoning behind the numbers."
+    },
+    {
+     "url": "snov.io/knowledgebase/how-to-enable-automatic-linkedin-account-warm-up",
+     "strengths": "Product how-to.",
+     "misses": "A help-desk page, not a schedule anyone can follow without the tool."
+    }
+   ],
+   "title": "How to warm up a LinkedIn account: week-by-week schedule",
+   "description": "A week-by-week warm-up schedule for a new or quiet LinkedIn account, from 10 invitations a day, and why the ramp starts at your first send.",
+   "h1": "How to warm up a LinkedIn account before outreach",
+   "outline": [
+    {
+     "h2": "When the warm-up clock starts (first send, not the day you connect a tool)",
+     "h3": []
+    },
+    {
+     "h2": "The schedule, week by week",
+     "h3": [
+      "Week 1: 10 a day",
+      "Weeks 2 to 4",
+      "Week 5 onwards: 35 a day inside 100 a week"
+     ]
+    },
+    {
+     "h2": "Profile views as warm-up",
+     "h3": [
+      "View first, invite within a few hours",
+      "Views have their own allowance"
+     ]
+    },
+    {
+     "h2": "What else to do in week one",
+     "h3": [
+      "Profile completeness",
+      "Targeting people likely to accept"
+     ]
+    },
+    {
+     "h2": "Restarting after a pause or a restriction",
+     "h3": []
+    },
+    {
+     "h2": "Signs the ramp is too fast",
+     "h3": []
+    }
+   ],
+   "faq": [
+    "How long should I warm up a LinkedIn account?",
+    "How many connection requests should a new account send?",
+    "Does viewing a profile before connecting help?",
+    "Do I need to warm up an old account that has never automated?",
+    "What is a safe LinkedIn ramp-up schedule?"
+   ],
+   "schema": [
+    "BlogPosting (author = Organization Nora, byline names the teammate)",
+    "BreadcrumbList",
+    "FAQPage (visible FAQ kept; FAQ rich results retired May 2026, markup harmless)"
+   ],
+   "words": 1600,
+   "linksIn": [
+    "/alternatives/expandi",
+    "/guides",
+    "/guides/best-time-to-send-linkedin-connection-requests",
+    "/guides/linkedin-account-restricted",
+    "/guides/linkedin-weekly-invitation-limit",
+    "/linkedin-automation-limits",
+    "/tools/linkedin-limit-calculator"
+   ],
+   "linksOut": [
+    "/tools/linkedin-limit-calculator",
+    "/guides/linkedin-weekly-invitation-limit",
+    "/guides/is-linkedin-automation-safe",
+    "/linkedin-automation-limits",
+    "/guides/best-time-to-send-linkedin-connection-requests",
+    "/guides",
+    "/how-it-works"
+   ],
+   "owner": "Reese, Outreach and booking",
+   "image": "A staircase of five steps labelled week 1 to week 5, rising from 10 to 35, with a ceiling line at 100 a week.",
+   "priority": 28
+  },
+  {
+   "path": "/guides/linkedin-connection-request-templates",
+   "status": "registered",
+   "action": "keep as the notes pillar; add annotated examples that name their grounding",
+   "cluster": "notes",
+   "primaryKeyword": "linkedin connection request templates",
+   "secondaryKeywords": [
+    "linkedin connection request message templates",
+    "linkedin connection request examples",
+    "linkedin connection request message for sales",
+    "how to write a linkedin connection request that doesn't sound salesy"
+   ],
+   "intent": "informational",
+   "beat": [
+    {
+     "url": "overloop.com/blog/linkedin-connection-request-messages",
+     "strengths": "23 templates, ranks well.",
+     "misses": "Fill-in-the-blank {first_name} notes that recipients spot."
+    },
+    {
+     "url": "salesbread.com/60-linkedin-connection-request-message-templates",
+     "strengths": "Volume: 60 templates.",
+     "misses": "No rules on length or links; templates pitch."
+    },
+    {
+     "url": "reply.io/blog/linkedin-connection-message",
+     "strengths": "Authority with a sales focus.",
+     "misses": "Says 'don't pitch', then gives pitch-shaped templates."
+    }
+   ],
+   "title": "LinkedIn connection request templates under 200 characters",
+   "description": "LinkedIn connection request templates by situation, each under 200 characters, annotated with the detail it uses, and the rules that get a note accepted.",
+   "h1": "LinkedIn connection request templates that fit in 200 characters",
+   "outline": [
+    {
+     "h2": "Templates are shapes, not text",
+     "h3": []
+    },
+    {
+     "h2": "Four rules every note follows",
+     "h3": [
+      "One specific observation about them",
+      "No pitch",
+      "No link",
+      "Under 200 characters"
+     ]
+    },
+    {
+     "h2": "Templates by situation",
+     "h3": [
+      "They posted something you read",
+      "They changed role",
+      "Company news",
+      "Shared group or event",
+      "Mutual connection",
+      "Same niche, different side of the table"
+     ]
+    },
+    {
+     "h2": "Before and after: generic notes rewritten",
+     "h3": []
+    },
+    {
+     "h2": "What not to write",
+     "h3": []
+    },
+    {
+     "h2": "Writing one note per person at scale",
+     "h3": []
+    }
+   ],
+   "faq": [
+    "What is a good LinkedIn connection message?",
+    "Should you pitch in a connection request?",
+    "How long can a LinkedIn connection note be?",
+    "Should I add a note to a LinkedIn connection request?",
+    "Can I use the same template for everyone?"
+   ],
+   "schema": [
+    "BlogPosting (author = Organization Nora, byline names the teammate)",
+    "BreadcrumbList",
+    "FAQPage (visible FAQ kept; FAQ rich results retired May 2026, markup harmless)"
+   ],
+   "words": 2600,
+   "linksIn": [
+    "/",
+    "/alternatives/waalaxy",
+    "/for/consultants",
+    "/guides",
+    "/guides/ai-personalized-linkedin-messages",
+    "/guides/book-meetings-from-linkedin",
+    "/guides/linkedin-acceptance-rate",
+    "/guides/linkedin-connection-note-character-limit",
+    "/guides/linkedin-follow-up-after-connection",
+    "/guides/linkedin-prospecting",
+    "/guides/should-you-add-a-note-linkedin",
+    "/how-it-works",
+    "/tools/connection-note-checker"
+   ],
+   "linksOut": [
+    "/tools/connection-note-checker",
+    "/guides/linkedin-connection-note-character-limit",
+    "/guides/should-you-add-a-note-linkedin",
+    "/guides/ai-personalized-linkedin-messages",
+    "/guides/linkedin-acceptance-rate",
+    "/guides/linkedin-follow-up-after-connection",
+    "/how-it-works",
+    "/guides",
+    "/tools"
+   ],
+   "owner": "Quinn the Campaign writer",
+   "image": "Three short notes on index cards, each with a highlighted phrase linked by a thin line to the profile detail it came from.",
+   "priority": 29
+  },
+  {
+   "path": "/guides/cloud-vs-browser-extension-linkedin-automation",
+   "status": "registered",
+   "action": "shorten the title (now over 60 characters); keep the 'behaviour beats architecture' argument",
+   "cluster": "tools",
+   "primaryKeyword": "cloud vs chrome extension linkedin automation",
+   "secondaryKeywords": [
+    "linkedin automation cloud vs chrome extension",
+    "linkedin automation detection",
+    "are chrome extensions safe for linkedin automation",
+    "cloud based linkedin automation"
+   ],
+   "intent": "commercial",
+   "beat": [
+    {
+     "url": "konnector.ai/chrome-extension-vs-cloud-based-linkedin-automation",
+     "strengths": "Direct match for the query.",
+     "misses": "Vendor argues for its own architecture."
+    },
+    {
+     "url": "instantly.ai/blog/safe-linkedin-automation-alternatives",
+     "strengths": "Authority domain.",
+     "misses": "Contradicts other vendors on detectability."
+    },
+    {
+     "url": "ligosocial.com/blog/linkedin-ai-agent-vs-chrome-extension-bots-safe-2026",
+     "strengths": "Current, AI-agent angle.",
+     "misses": "Never says pacing matters more than architecture."
+    }
+   ],
+   "title": "Cloud vs Chrome extension LinkedIn automation: safer?",
+   "description": "How cloud and Chrome-extension LinkedIn tools differ in detection risk, reliability and control, and why pacing and caps matter more than either.",
+   "h1": "Cloud vs browser extension LinkedIn automation: which is safer?",
+   "outline": [
+    {
+     "h2": "The two architectures in plain words",
+     "h3": []
+    },
+    {
+     "h2": "What LinkedIn can see from each",
+     "h3": [
+      "Extensions in the page",
+      "Cloud sessions and IPs",
+      "The 2026 extension-scanning reports"
+     ]
+    },
+    {
+     "h2": "Reliability and control",
+     "h3": []
+    },
+    {
+     "h2": "Why behaviour beats architecture",
+     "h3": []
+    },
+    {
+     "h2": "A short decision guide",
+     "h3": []
+    }
+   ],
+   "faq": [
+    "Are Chrome extensions safe for LinkedIn automation?",
+    "Can LinkedIn detect cloud-based automation?",
+    "Does LinkedIn scan browser extensions?",
+    "Which is better for a team of one?"
+   ],
+   "schema": [
+    "BlogPosting (author = Organization Nora, byline names the teammate)",
+    "BreadcrumbList",
+    "FAQPage (visible FAQ kept; FAQ rich results retired May 2026, markup harmless)"
+   ],
+   "words": 1600,
+   "linksIn": [
+    "/alternatives/phantombuster",
+    "/alternatives/waalaxy",
+    "/guides",
+    "/guides/best-ai-sdr-for-linkedin",
+    "/guides/is-linkedin-automation-safe",
+    "/guides/linkedin-automation-tool-bans",
+    "/guides/safest-linkedin-automation-tool"
+   ],
+   "linksOut": [
+    "/guides/is-linkedin-automation-safe",
+    "/guides/safest-linkedin-automation-tool",
+    "/guides/best-ai-sdr-for-linkedin",
+    "/security",
+    "/guides",
+    "/how-it-works"
+   ],
+   "owner": "Sage the Strategist",
+   "image": "A split frame: a browser window with a puzzle-piece extension on one side and a cloud with a server on the other, joined by the same metered send queue.",
+   "priority": 30
+  },
+  {
+   "path": "/guides/linkedin-automation-tool-bans",
+   "status": "registered",
+   "action": "retitle (the current title is over 60 characters); news interest is fading, so refresh only when there is a verified new event",
+   "cluster": "safety",
+   "primaryKeyword": "heyreach ban",
+   "secondaryKeywords": [
+    "linkedin automation crackdown 2026",
+    "heyreach banned linkedin",
+    "did linkedin ban heyreach",
+    "linkedin banned apollo seamless"
+   ],
+   "intent": "informational",
+   "beat": [
+    {
+     "url": "heyreach.io/blog/heyreach-ban",
+     "strengths": "The vendor's own statement.",
+     "misses": "One-sided by definition."
+    },
+    {
+     "url": "joinvalley.co/blog/linkedin-automation-safety-2026",
+     "strengths": "Covers the timeline.",
+     "misses": "A competitor using the event to sell; its claims conflict with others."
+    },
+    {
+     "url": "northlight.ai/blog/what-happens-when-linkedin-bans-your-tool",
+     "strengths": "Explains the consequences for users.",
+     "misses": "Unsourced figures (30,000 users, 40% restricted)."
+    }
+   ],
+   "title": "HeyReach ban and LinkedIn's 2026 automation crackdown",
+   "description": "What is verified about LinkedIn's March 2026 action against HeyReach, what is not, the Apollo and Seamless precedent, and what it means for your account.",
+   "h1": "When LinkedIn acts against an automation tool: what happened in 2026",
+   "outline": [
+    {
+     "h2": "What is verified, with dates",
+     "h3": [
+      "Apollo and Seamless pages (March 2025)",
+      "HeyReach company page and executives (March 2026)"
+     ]
+    },
+    {
+     "h2": "What is claimed but not verified",
+     "h3": []
+    },
+    {
+     "h2": "Platform-level enforcement versus account-level restriction",
+     "h3": []
+    },
+    {
+     "h2": "If your tool was affected: what to do this week",
+     "h3": []
+    },
+    {
+     "h2": "The lesson: behaviour matters more than which vendor you use",
+     "h3": []
+    }
+   ],
+   "faq": [
+    "Why did LinkedIn ban HeyReach?",
+    "Are HeyReach users affected?",
+    "Is LinkedIn cracking down on automation?",
+    "Did LinkedIn ban Apollo?"
+   ],
+   "schema": [
+    "BlogPosting (author = Organization Nora, byline names the teammate)",
+    "BreadcrumbList",
+    "FAQPage (visible FAQ kept; FAQ rich results retired May 2026, markup harmless)"
+   ],
+   "words": 1400,
+   "linksIn": [
+    "/alternatives/heyreach",
+    "/guides",
+    "/linkedin-automation-limits"
+   ],
+   "linksOut": [
+    "/guides/is-linkedin-automation-safe",
+    "/alternatives/heyreach",
+    "/guides/cloud-vs-browser-extension-linkedin-automation",
+    "/linkedin-automation-limits",
+    "/guides",
+    "/how-it-works"
+   ],
+   "owner": "Reese, Outreach and booking",
+   "image": "A plain dated timeline with three markers (2025, March 2026, today) and a magnifying glass over the 'verified' label.",
+   "priority": 31
+  },
+  {
+   "path": "/alternatives/heyreach",
+   "status": "registered",
+   "action": "retitle to the plural query 'heyreach alternatives'",
+   "cluster": "tools",
+   "primaryKeyword": "heyreach alternatives",
+   "secondaryKeywords": [
+    "heyreach alternative",
+    "heyreach pricing",
+    "is heyreach safe",
+    "heyreach vs expandi"
+   ],
+   "intent": "commercial",
+   "beat": [
+    {
+     "url": "expandi.io/blog/heyreach-alternatives",
+     "strengths": "Ranks first.",
+     "misses": "A competitor selling itself, with post-ban claims unsourced."
+    },
+    {
+     "url": "salesforge.ai/blog/heyreach-alternatives",
+     "strengths": "Broad list.",
+     "misses": "Recycled listicle with no safety comparison."
+    },
+    {
+     "url": "lagrowthmachine.com/best-heyreach-alternatives",
+     "strengths": "Detailed.",
+     "misses": "Multichannel bias; single-rep needs ignored."
+    }
+   ],
+   "title": "HeyReach alternatives: a safer pick for a single rep",
+   "description": "HeyReach suits agencies running many senders. If you are one rep who wants personal notes, human approval and published caps, here is how Nora compares.",
+   "h1": "HeyReach alternatives for safe, personal LinkedIn outreach",
+   "outline": [
+    {
+     "h2": "Why people look for a HeyReach alternative",
+     "h3": []
+    },
+    {
+     "h2": "HeyReach in brief, fairly",
+     "h3": [
+      "Who it suits",
+      "Pricing as of October 2026 (sourced)",
+      "How it handles limits and warm-up"
+     ]
+    },
+    {
+     "h2": "Nora vs HeyReach: side by side",
+     "h3": [
+      "Finding prospects",
+      "Writing notes",
+      "Replies and booking",
+      "Safety guardrails",
+      "Price"
+     ]
+    },
+    {
+     "h2": "What the March 2026 enforcement means for HeyReach users",
+     "h3": []
+    },
+    {
+     "h2": "Other alternatives worth a look",
+     "h3": []
+    },
+    {
+     "h2": "Who should stay with HeyReach",
+     "h3": []
+    }
+   ],
+   "faq": [
+    "Is HeyReach still safe to use?",
+    "How much does HeyReach cost per sender?",
+    "What is the best HeyReach alternative?",
+    "Is HeyReach good for agencies?",
+    "Does Nora support multiple senders?"
+   ],
+   "schema": [
+    "Article",
+    "BreadcrumbList",
+    "FAQPage (visible FAQ kept; FAQ rich results retired May 2026, markup harmless)",
+    "Table with caption (no Review or AggregateRating markup: no first-hand rating exists)"
+   ],
+   "words": 1600,
+   "linksIn": [
+    "/alternatives",
+    "/for/agencies",
+    "/guides/best-ai-sdr-for-linkedin",
+    "/guides/linkedin-automation-tool-bans"
+   ],
+   "linksOut": [
+    "/guides/linkedin-automation-tool-bans",
+    "/alternatives",
+    "/linkedin-automation-limits",
+    "/for/agencies",
+    "/guides/best-ai-sdr-for-linkedin",
+    "/how-it-works"
+   ],
+   "owner": "Sage the Strategist",
+   "image": "Two route maps from the same start: a multi-lane agency highway and a single, metered personal road.",
+   "priority": 32
+  },
+  {
+   "path": "/alternatives/waalaxy",
+   "status": "registered",
+   "action": "retitle to the plural query",
+   "cluster": "tools",
+   "primaryKeyword": "waalaxy alternatives",
+   "secondaryKeywords": [
+    "waalaxy alternative",
+    "waalaxy pricing",
+    "is waalaxy free",
+    "is waalaxy safe",
+    "expandi vs waalaxy"
+   ],
+   "intent": "commercial",
+   "beat": [
+    {
+     "url": "emelia.io/software/waalaxy/alternatives",
+     "strengths": "The only on-topic page.",
+     "misses": "Thin directory format."
+    },
+    {
+     "url": "tooljunction.io/alternatives/waalaxy",
+     "strengths": "Ranks.",
+     "misses": "Lists unrelated tools with empty pricing."
+    },
+    {
+     "url": "lagrowthmachine.com/waalaxy-pricing",
+     "strengths": "Covers the price question.",
+     "misses": "A competitor's page, with prices that conflict across sources."
+    }
+   ],
+   "title": "Waalaxy alternatives: free, with a note for every person",
+   "description": "Nora vs Waalaxy: free use, a note written for each person instead of a template, reply handling and meeting booking, and how each tool paces sending.",
+   "h1": "Waalaxy alternatives with a free plan that runs real campaigns",
+   "outline": [
+    {
+     "h2": "Why people look for a Waalaxy alternative",
+     "h3": []
+    },
+    {
+     "h2": "Waalaxy in brief, fairly",
+     "h3": [
+      "Who it suits",
+      "Pricing as of October 2026 (sourced)",
+      "How it handles limits and warm-up"
+     ]
+    },
+    {
+     "h2": "Nora vs Waalaxy: side by side",
+     "h3": [
+      "Finding prospects",
+      "Writing notes",
+      "Replies and booking",
+      "Safety guardrails",
+      "Price"
+     ]
+    },
+    {
+     "h2": "Waalaxy's free plan in 2026: what the sources say",
+     "h3": []
+    },
+    {
+     "h2": "Other alternatives worth a look",
+     "h3": []
+    },
+    {
+     "h2": "Who should stay with Waalaxy",
+     "h3": []
+    }
+   ],
+   "faq": [
+    "Is Waalaxy free?",
+    "Is Waalaxy safe?",
+    "How much is Waalaxy per month?",
+    "Does Waalaxy need Chrome open?",
+    "What is better than Waalaxy?"
+   ],
+   "schema": [
+    "Article",
+    "BreadcrumbList",
+    "FAQPage (visible FAQ kept; FAQ rich results retired May 2026, markup harmless)",
+    "Table with caption (no Review or AggregateRating markup: no first-hand rating exists)"
+   ],
+   "words": 1600,
+   "linksIn": [
+    "/alternatives",
+    "/free-linkedin-automation-tool",
+    "/guides/best-ai-sdr-for-linkedin"
+   ],
+   "linksOut": [
+    "/free-linkedin-automation-tool",
+    "/alternatives",
+    "/guides/linkedin-connection-request-templates",
+    "/guides/cloud-vs-browser-extension-linkedin-automation",
+    "/guides/best-ai-sdr-for-linkedin"
+   ],
+   "owner": "Sage the Strategist",
+   "image": "A browser tab with a ticking quota counter beside a steady, metered delivery van carrying individually addressed notes.",
+   "priority": 33
+  },
+  {
+   "path": "/alternatives/expandi",
+   "status": "registered",
+   "action": "retitle to the plural query",
+   "cluster": "tools",
+   "primaryKeyword": "expandi alternatives",
+   "secondaryKeywords": [
+    "expandi alternative",
+    "expandi pricing",
+    "expandi review",
+    "is expandi safe",
+    "expandi vs dripify"
+   ],
+   "intent": "commercial",
+   "beat": [
+    {
+     "url": "meetergo.com/en/magazine/expandi-alternatives",
+     "strengths": "Ranks first.",
+     "misses": "Argues on price only."
+    },
+    {
+     "url": "salesforge.ai/blog/expandi-alternatives",
+     "strengths": "Broad list.",
+     "misses": "Recycled; no warm-up comparison."
+    },
+    {
+     "url": "emelia.io/software/expandi/alternatives",
+     "strengths": "Directory with pricing.",
+     "misses": "Thin, with no first-hand detail."
+    }
+   ],
+   "title": "Expandi alternatives: an AI SDR that writes and books",
+   "description": "Comparing Nora with Expandi: who each suits, how limits and warm-up work, and where an AI SDR that answers replies and books meetings changes the job.",
+   "h1": "Expandi alternatives: an AI SDR that writes each note and books the meeting",
+   "outline": [
+    {
+     "h2": "Why people look for a Expandi alternative",
+     "h3": []
+    },
+    {
+     "h2": "Expandi in brief, fairly",
+     "h3": [
+      "Who it suits",
+      "Pricing as of October 2026 (sourced)",
+      "How it handles limits and warm-up"
+     ]
+    },
+    {
+     "h2": "Nora vs Expandi: side by side",
+     "h3": [
+      "Finding prospects",
+      "Writing notes",
+      "Replies and booking",
+      "Safety guardrails",
+      "Price"
+     ]
+    },
+    {
+     "h2": "A weekly cap is a feature, not a weakness",
+     "h3": []
+    },
+    {
+     "h2": "Other alternatives worth a look",
+     "h3": []
+    },
+    {
+     "h2": "Who should stay with Expandi",
+     "h3": []
+    }
+   ],
+   "faq": [
+    "Is Expandi safe?",
+    "Is Expandi worth $99 a month?",
+    "What is cheaper than Expandi?",
+    "Does Expandi have a free trial?",
+    "Expandi or Dripify: which is safer?"
+   ],
+   "schema": [
+    "Article",
+    "BreadcrumbList",
+    "FAQPage (visible FAQ kept; FAQ rich results retired May 2026, markup harmless)",
+    "Table with caption (no Review or AggregateRating markup: no first-hand rating exists)"
+   ],
+   "words": 1600,
+   "linksIn": [
+    "/alternatives",
+    "/guides/best-ai-sdr-for-linkedin"
+   ],
+   "linksOut": [
+    "/alternatives",
+    "/guides/linkedin-warm-up-schedule",
+    "/how-it-works",
+    "/guides/linkedin-weekly-invitation-limit",
+    "/guides/best-ai-sdr-for-linkedin"
+   ],
+   "owner": "Sage the Strategist",
+   "image": "A sequence flowchart on the left turning into a conversation thread with a calendar slot on the right.",
+   "priority": 34
+  },
+  {
+   "path": "/alternatives/dripify",
+   "status": "registered",
+   "action": "retitle to the plural query",
+   "cluster": "tools",
+   "primaryKeyword": "dripify alternatives",
+   "secondaryKeywords": [
+    "dripify alternative",
+    "dripify review",
+    "is dripify safe",
+    "free dripify alternative",
+    "waalaxy vs dripify"
+   ],
+   "intent": "commercial",
+   "beat": [
+    {
+     "url": "salesforge.ai/blog/dripify-alternatives",
+     "strengths": "Ranks first.",
+     "misses": "Includes unverified claims (Zopto shut down)."
+    },
+    {
+     "url": "apollo.io/insights/dripify-alternatives",
+     "strengths": "Domain authority.",
+     "misses": "Data-company bias, LinkedIn safety ignored."
+    },
+    {
+     "url": "expandi.io (Dripify alternatives guide)",
+     "strengths": "Detailed.",
+     "misses": "A competitor ranking itself."
+    }
+   ],
+   "title": "Dripify alternatives: personal notes and human approval",
+   "description": "Comparing Nora with Dripify: template sequences versus an AI SDR, how each handles limits, and what you approve before anything reaches a real person.",
+   "h1": "Dripify alternatives: personal notes, human approval, no per-seat bill",
+   "outline": [
+    {
+     "h2": "Why people look for a Dripify alternative",
+     "h3": []
+    },
+    {
+     "h2": "Dripify in brief, fairly",
+     "h3": [
+      "Who it suits",
+      "Pricing as of October 2026 (sourced)",
+      "How it handles limits and warm-up"
+     ]
+    },
+    {
+     "h2": "Nora vs Dripify: side by side",
+     "h3": [
+      "Finding prospects",
+      "Writing notes",
+      "Replies and booking",
+      "Safety guardrails",
+      "Price"
+     ]
+    },
+    {
+     "h2": "Templates versus a note written for each person",
+     "h3": []
+    },
+    {
+     "h2": "Other alternatives worth a look",
+     "h3": []
+    },
+    {
+     "h2": "Who should stay with Dripify",
+     "h3": []
+    }
+   ],
+   "faq": [
+    "Is Dripify safe?",
+    "Is there a free Dripify alternative?",
+    "Is Dripify legit?",
+    "Is Dripify better than Waalaxy?",
+    "Can Dripify get you banned?"
+   ],
+   "schema": [
+    "Article",
+    "BreadcrumbList",
+    "FAQPage (visible FAQ kept; FAQ rich results retired May 2026, markup harmless)",
+    "Table with caption (no Review or AggregateRating markup: no first-hand rating exists)"
+   ],
+   "words": 1600,
+   "linksIn": [
+    "/alternatives",
+    "/guides/best-ai-sdr-for-linkedin"
+   ],
+   "linksOut": [
+    "/alternatives",
+    "/guides/best-ai-sdr-for-linkedin",
+    "/pricing",
+    "/guides/ai-personalized-linkedin-messages"
+   ],
+   "owner": "Sage the Strategist",
+   "image": "A drip pipe of identical letters next to a hand-addressed stack, each envelope with a different name.",
+   "priority": 35
+  },
+  {
+   "path": "/how-it-works",
+   "status": "existing",
+   "action": "retitle; make H1 name the topic",
+   "cluster": "audience",
+   "primaryKeyword": "linkedin automation with human approval",
+   "secondaryKeywords": [
+    "how does an ai sdr work",
+    "linkedin automation human in the loop",
+    "approve ai linkedin messages before sending",
+    "ai sdr workflow"
+   ],
+   "intent": "commercial",
+   "beat": [
+    {
+     "url": "phantombuster.com/blog/linkedin-automation/human-in-the-loop-linkedin-automation",
+     "strengths": "High-authority domain and a clear argument for human review.",
+     "misses": "Opinion only: no product that actually enforces approval gates."
+    },
+    {
+     "url": "workclaw.com/blog/the-right-way-to-automate-linkedin-outreach-with-ai-agents-in-2026",
+     "strengths": "Current and agent-focused.",
+     "misses": "Never names where approval happens or what limits apply."
+    },
+    {
+     "url": "gfunnel.videotoblog.ai (n8n human review tutorial)",
+     "strengths": "Concrete step-by-step build.",
+     "misses": "DIY: you have to build it yourself, with no caps or reply handling."
+    }
+   ],
+   "title": "How an AI SDR works: LinkedIn automation with your approval",
+   "description": "How an AI SDR for LinkedIn works, step by step: you approve the strategy, the words and the launch, and Nora's team does the rest inside safe limits.",
+   "h1": "How an AI SDR for LinkedIn works, with your approval at three points",
+   "outline": [
+    {
+     "h2": "What actually needs you",
+     "h3": [
+      "Approving a strategy",
+      "Approving the copy",
+      "Launching"
+     ]
+    },
+    {
+     "h2": "Five stages, and what each one hands over",
+     "h3": [
+      "Strategy",
+      "Search and profile checks",
+      "Notes",
+      "Sending and pacing",
+      "Replies and booking"
+     ]
+    },
+    {
+     "h2": "Who does what: Sage, Scout, Quinn, Reese",
+     "h3": []
+    },
+    {
+     "h2": "Watch one campaign, day by day",
+     "h3": []
+    },
+    {
+     "h2": "A conversation, not a blast",
+     "h3": [
+      "The first message after an acceptance",
+      "The offer is sent when they reply"
+     ]
+    },
+    {
+     "h2": "It knows when to stop",
+     "h3": [
+      "Opt-outs",
+      "Never contacting anyone twice",
+      "Holds for a person"
+     ]
+    },
+    {
+     "h2": "Step by step, including the parts we cannot do",
+     "h3": []
+    }
+   ],
+   "faq": [
+    "Can I approve AI LinkedIn messages before they send?",
+    "What is human-in-the-loop sales automation?",
+    "How long does it take to launch a first campaign?",
+    "What happens when a prospect replies?",
+    "Can I edit a note before it is sent?"
+   ],
+   "schema": [
+    "WebPage",
+    "HowTo-style visible steps only (no HowTo rich result since 2023)",
+    "BreadcrumbList",
+    "FAQPage (visible FAQ kept; FAQ rich results retired May 2026, markup harmless)"
+   ],
+   "words": 1800,
+   "linksIn": [
+    "/",
+    "/about",
+    "/alternatives/expandi",
+    "/alternatives/heyreach",
+    "/alternatives/phantombuster",
+    "/for/agencies",
+    "/for/b2b-saas",
+    "/for/consultants",
+    "/for/professional-services",
+    "/for/small-business",
+    "/free-linkedin-automation-tool",
+    "/guides/ai-personalized-linkedin-messages",
+    "/guides/ai-sdr-vs-human-sdr",
+    "/guides/best-ai-sdr-for-linkedin",
+    "/guides/best-time-to-send-linkedin-connection-requests",
+    "/guides/book-meetings-from-linkedin",
+    "/guides/cloud-vs-browser-extension-linkedin-automation",
+    "/guides/ideal-customer-profile-for-linkedin",
+    "/guides/is-linkedin-automation-legal",
+    "/guides/is-linkedin-automation-safe",
+    "/guides/linkedin-acceptance-rate",
+    "/guides/linkedin-account-restricted",
+    "/guides/linkedin-automation-tool-bans",
+    "/guides/linkedin-connection-note-character-limit",
+    "/guides/linkedin-connection-request-templates",
+    "/guides/linkedin-follow-up-after-connection",
+    "/guides/linkedin-follow-up-sequence",
+    "/guides/linkedin-prospecting",
+    "/guides/linkedin-prospecting-without-sales-navigator",
+    "/guides/linkedin-warm-up-schedule",
+    "/guides/linkedin-weekly-invitation-limit",
+    "/guides/should-you-add-a-note-linkedin",
+    "/guides/withdraw-pending-linkedin-invitations",
+    "/linkedin-automation-limits",
+    "/pricing",
+    "/security",
+    "/tools/connection-note-checker",
+    "/tools/linkedin-limit-calculator"
+   ],
+   "linksOut": [
+    "/",
+    "/linkedin-automation-limits",
+    "/guides/linkedin-connection-request-templates",
+    "/guides/book-meetings-from-linkedin",
+    "/guides/ideal-customer-profile-for-linkedin",
+    "/security",
+    "/pricing",
+    "/for/agencies",
+    "/for/consultants",
+    "/for/b2b-saas",
+    "/for/professional-services",
+    "/for/small-business",
+    "/about"
+   ],
+   "owner": "Sage the Strategist",
+   "image": "Three large approval checkmarks (strategy, words, launch) on a timeline, with the four teammates' colours running between them.",
+   "priority": 36
+  },
+  {
+   "path": "/pricing",
+   "status": "existing",
+   "action": "keep; tighten title so it does not compete with /free-linkedin-automation-tool",
+   "cluster": "tools",
+   "primaryKeyword": "free ai sdr for linkedin",
+   "secondaryKeywords": [
+    "free ai sdr",
+    "nora pricing",
+    "ai sdr with no credit card",
+    "ai sdr free trial"
+   ],
+   "intent": "transactional",
+   "beat": [
+    {
+     "url": "sbl.so (free until first meeting)",
+     "strengths": "A clear free hook.",
+     "misses": "Free with conditions, and no published safety limits."
+    },
+    {
+     "url": "linkedgrow.ai/ai-sdr-software",
+     "strengths": "A product page with a trial.",
+     "misses": "Only a 7-day trial, not free use."
+    },
+    {
+     "url": "chromewebstore.google.com (SDR.io extension)",
+     "strengths": "One-click install.",
+     "misses": "Browser extension with thin information and no safety story."
+    }
+   ],
+   "title": "Free AI SDR for LinkedIn: Nora pricing, no card needed",
+   "description": "Nora is a free AI SDR for LinkedIn while it grows: no plans, no card, and the same safety limits for every workspace. What free covers and what may change.",
+   "h1": "Free for everyone while we grow",
+   "outline": [
+    {
+     "h2": "What free includes",
+     "h3": [
+      "Strategy, search, notes, follow-ups, replies and booking",
+      "The same caps for every workspace"
+     ]
+    },
+    {
+     "h2": "What you still pay for elsewhere",
+     "h3": [
+      "A LinkedIn account, and Sales Navigator only if you want it"
+     ]
+    },
+    {
+     "h2": "If that ever changes",
+     "h3": [
+      "Notice before any price",
+      "No card on file to charge"
+     ]
+    },
+    {
+     "h2": "How this compares with paid AI SDRs",
+     "h3": []
+    }
+   ],
+   "faq": [
+    "Is Nora really free?",
+    "Do I need a credit card to sign up?",
+    "Is there a limit on campaigns or prospects?",
+    "Will Nora start charging later?",
+    "Do I need LinkedIn Premium or Sales Navigator?"
+   ],
+   "schema": [
+    "WebPage",
+    "SoftwareApplication offers (price 0, priceCurrency USD)",
+    "BreadcrumbList",
+    "FAQPage (visible FAQ kept; FAQ rich results retired May 2026, markup harmless)"
+   ],
+   "words": 700,
+   "linksIn": [
+    "/",
+    "/alternatives/artisan",
+    "/alternatives/dripify",
+    "/free-linkedin-automation-tool",
+    "/guides/ai-sdr-pricing",
+    "/guides/best-ai-sdr-for-linkedin",
+    "/how-it-works"
+   ],
+   "linksOut": [
+    "/free-linkedin-automation-tool",
+    "/guides/ai-sdr-pricing",
+    "/how-it-works",
+    "/linkedin-automation-limits",
+    "/about",
+    "/guides/best-ai-sdr-for-linkedin"
+   ],
+   "owner": "Sage the Strategist",
+   "image": "A price tag reading 0 attached to a LinkedIn-blue envelope, with no credit card in sight.",
+   "priority": 37
+  },
+  {
+   "path": "/free-linkedin-automation-tool",
+   "status": "registered",
+   "action": "keep; distinct from /pricing (this page targets the tool category, /pricing the AI SDR)",
+   "cluster": "tools",
+   "primaryKeyword": "free linkedin automation tool",
+   "secondaryKeywords": [
+    "is there a free linkedin automation tool",
+    "free linkedin outreach tool",
+    "best linkedin automation tool for small business",
+    "are free linkedin automation tools safe"
+   ],
+   "intent": "transactional",
+   "beat": [
+    {
+     "url": "bardeen.ai/best/linkedin-automation-tools",
+     "strengths": "Listicle with authority.",
+     "misses": "Includes trials passed off as free."
+    },
+    {
+     "url": "chrome.google.com extensions (Sphaxx, Linked Automate)",
+     "strengths": "Instant install.",
+     "misses": "Outdated (one last updated in 2021), with no safety caps."
+    },
+    {
+     "url": "uplead.com (free LinkedIn tools)",
+     "strengths": "Authority domain.",
+     "misses": "Data tools, not outreach."
+    }
+   ],
+   "title": "Free LinkedIn automation tool: an AI SDR, free for now",
+   "description": "Nora is free while it grows: it finds buyers, writes each a personal note, follows up and books meetings on LinkedIn inside safe limits. No card needed.",
+   "h1": "A free LinkedIn automation tool that runs real campaigns",
+   "outline": [
+    {
+     "h2": "What you get for free",
+     "h3": []
+    },
+    {
+     "h2": "Why most 'free' LinkedIn tools are trials",
+     "h3": []
+    },
+    {
+     "h2": "Free and safe: the same caps for everyone",
+     "h3": []
+    },
+    {
+     "h2": "How it compares with free tiers elsewhere",
+     "h3": []
+    },
+    {
+     "h2": "Who it suits: founders and small teams",
+     "h3": []
+    }
+   ],
+   "faq": [
+    "Is there a free LinkedIn automation tool?",
+    "Are free LinkedIn automation tools safe?",
+    "Is Waalaxy free?",
+    "What is the cheapest safe LinkedIn automation?",
+    "Do I need a credit card?"
+   ],
+   "schema": [
+    "WebPage",
+    "SoftwareApplication (offers price 0)",
+    "BreadcrumbList",
+    "FAQPage (visible FAQ kept; FAQ rich results retired May 2026, markup harmless)"
+   ],
+   "words": 1200,
+   "linksIn": [
+    "/alternatives",
+    "/alternatives/waalaxy",
+    "/for/consultants",
+    "/for/small-business",
+    "/guides/best-ai-sdr-for-linkedin",
+    "/guides/safest-linkedin-automation-tool",
+    "/pricing"
+   ],
+   "linksOut": [
+    "/pricing",
+    "/alternatives/waalaxy",
+    "/how-it-works",
+    "/linkedin-automation-limits",
+    "/for/small-business",
+    "/guides/best-ai-sdr-for-linkedin"
+   ],
+   "owner": "Sage the Strategist",
+   "image": "An open toolbox in Nora colours with a 'free' tag and a small speed limiter fitted inside.",
+   "priority": 38
+  },
+  {
+   "path": "/for/agencies",
+   "status": "registered",
+   "action": "retitle to lead with the primary keyword; recruitment-agency business development merged in",
+   "cluster": "audience",
+   "primaryKeyword": "linkedin lead generation for agencies",
+   "secondaryKeywords": [
+    "linkedin outreach for agencies",
+    "ai sdr for agencies",
+    "best linkedin automation tool for agencies",
+    "linkedin business development for recruitment agencies"
+   ],
+   "intent": "commercial",
+   "beat": [
+    {
+     "url": "agorapulse.com/blog/agencies/linkedin-for-lead-generation",
+     "strengths": "Authority; three URLs rank.",
+     "misses": "Unsourced stats and no account-safety guidance."
+    },
+    {
+     "url": "copilotai.com/blog/how-to-use-linkedin-to-get-leads-for-your-marketing-agency",
+     "strengths": "Sales Navigator how-to.",
+     "misses": "No caps, no per-prospect notes."
+    },
+    {
+     "url": "salesbread.com/agency-lead-generation",
+     "strengths": "Done-for-you long form.",
+     "misses": "Pitches its own service."
+    }
+   ],
+   "title": "LinkedIn lead generation for agencies, without the risk",
+   "description": "How agencies win clients on LinkedIn with an AI SDR: personal notes, human approval, and caps that protect the founder's account doing the sending.",
+   "h1": "LinkedIn lead generation for agencies, without risking the founder's account",
+   "outline": [
+    {
+     "h2": "Why LinkedIn outreach is different for agencies",
+     "h3": []
+    },
+    {
+     "h2": "Your best seller's profile is the account at risk",
+     "h3": []
+    },
+    {
+     "h2": "Recruitment agencies: winning clients, not sourcing candidates",
+     "h3": []
+    },
+    {
+     "h2": "How it works for you",
+     "h3": [
+      "A strategy from your website",
+      "One note per person, in your voice",
+      "Replies answered, calls booked"
+     ]
+    },
+    {
+     "h2": "The limits that protect your profile",
+     "h3": []
+    },
+    {
+     "h2": "What to expect in the first month",
+     "h3": []
+    }
+   ],
+   "faq": [
+    "How do agencies get clients on LinkedIn?",
+    "Is LinkedIn automation safe for agency accounts?",
+    "Can I run outreach for several team members?",
+    "What is a good connection acceptance rate for agencies?"
+   ],
+   "schema": [
+    "WebPage",
+    "BreadcrumbList",
+    "FAQPage (visible FAQ kept; FAQ rich results retired May 2026, markup harmless)"
+   ],
+   "words": 1100,
+   "linksIn": [
+    "/",
+    "/alternatives/heyreach",
+    "/for/b2b-saas",
+    "/for/consultants",
+    "/for/professional-services",
+    "/for/small-business",
+    "/guides/linkedin-prospecting",
+    "/how-it-works"
+   ],
+   "linksOut": [
+    "/how-it-works",
+    "/guides/is-linkedin-automation-safe",
+    "/alternatives/heyreach",
+    "/guides/linkedin-prospecting",
+    "/for/consultants",
+    "/for/b2b-saas",
+    "/"
+   ],
+   "owner": "Scout the Prospector",
+   "image": "An agency founder's profile card shielded by a metered gauge, with personal notes flowing out to client logos (generic shapes).",
+   "priority": 39
+  },
+  {
+   "path": "/for/consultants",
+   "status": "registered",
+   "action": "keep (coaches merged in)",
+   "cluster": "audience",
+   "primaryKeyword": "linkedin lead generation for consultants",
+   "secondaryKeywords": [
+    "linkedin lead generation for coaches",
+    "how to get clients on linkedin as a consultant",
+    "how to get coaching clients on linkedin",
+    "ai sdr for consultants"
+   ],
+   "intent": "commercial",
+   "beat": [
+    {
+     "url": "searchlab.nl/en/guides/linkedin-for-consultants-coaches",
+     "strengths": "Current 18-minute guide.",
+     "misses": "Content-focused, with no outreach mechanics or safe volumes."
+    },
+    {
+     "url": "overloop.com/blog/lead-generation-for-consultants",
+     "strengths": "Playbook.",
+     "misses": "Tool-led, with templates that would hurt a consultant's brand."
+    },
+    {
+     "url": "ligosocial.com/blog/linkedin-for-consultants-building-a-pipeline-of-qualified-leads",
+     "strengths": "Pipeline angle.",
+     "misses": "No per-person writing or approval."
+    }
+   ],
+   "title": "LinkedIn lead generation for consultants and coaches",
+   "description": "Find the clients who have the problem you solve, write each a note in your voice, and book calls from LinkedIn at a pace that keeps your profile safe.",
+   "h1": "LinkedIn lead generation for consultants and coaches",
+   "outline": [
+    {
+     "h2": "Why LinkedIn outreach is different for consultants and coaches",
+     "h3": []
+    },
+    {
+     "h2": "Your name is the brand: why mass templates cost more than they earn",
+     "h3": []
+    },
+    {
+     "h2": "Coaches: getting clients without sounding salesy",
+     "h3": []
+    },
+    {
+     "h2": "How it works for you",
+     "h3": [
+      "A strategy from your website",
+      "One note per person, in your voice",
+      "Replies answered, calls booked"
+     ]
+    },
+    {
+     "h2": "The limits that protect your profile",
+     "h3": []
+    },
+    {
+     "h2": "What to expect in the first month",
+     "h3": []
+    }
+   ],
+   "faq": [
+    "How do consultants find clients on LinkedIn?",
+    "Can I automate LinkedIn outreach as a coach?",
+    "What should a coach say in a connection request?",
+    "How many connection requests per day is safe?"
+   ],
+   "schema": [
+    "WebPage",
+    "BreadcrumbList",
+    "FAQPage (visible FAQ kept; FAQ rich results retired May 2026, markup harmless)"
+   ],
+   "words": 1100,
+   "linksIn": [
+    "/",
+    "/for/agencies",
+    "/for/b2b-saas",
+    "/for/professional-services",
+    "/for/small-business",
+    "/guides/linkedin-prospecting",
+    "/how-it-works"
+   ],
+   "linksOut": [
+    "/how-it-works",
+    "/guides/linkedin-connection-request-templates",
+    "/free-linkedin-automation-tool",
+    "/guides/book-meetings-from-linkedin",
+    "/for/agencies",
+    "/for/b2b-saas",
+    "/"
+   ],
+   "owner": "Scout the Prospector",
+   "image": "A single consultant at a desk with a short stack of hand-addressed notes and three booked calls on a calendar.",
+   "priority": 40
+  },
+  {
+   "path": "/for/b2b-saas",
+   "status": "registered",
+   "action": "retitle to lead with the primary keyword",
+   "cluster": "audience",
+   "primaryKeyword": "linkedin outreach for saas founders",
+   "secondaryKeywords": [
+    "founder-led sales linkedin",
+    "founder-led outbound linkedin",
+    "linkedin outbound without a sales hire",
+    "founder-led sales"
+   ],
+   "intent": "commercial",
+   "beat": [
+    {
+     "url": "supersend.io (programmatic founder outreach page)",
+     "strengths": "Ranks via programmatic SEO.",
+     "misses": "Template page with no depth."
+    },
+    {
+     "url": "twine.net/blog/linkedin-outreach-for-saas",
+     "strengths": "On topic.",
+     "misses": "Generic and hire-focused."
+    },
+    {
+     "url": "box.beehiiv.com (how to build founder-led sales on LinkedIn)",
+     "strengths": "Founder voice.",
+     "misses": "Content and posting only; no outbound mechanics."
+    }
+   ],
+   "title": "LinkedIn outreach for SaaS founders: founder-led outbound",
+   "description": "Founder-led outbound on LinkedIn without a sales hire: customer profiles from your website, one note per buyer, replies answered and demos booked.",
+   "h1": "LinkedIn outbound for B2B SaaS founders",
+   "outline": [
+    {
+     "h2": "Why LinkedIn outreach is different for SaaS founders",
+     "h3": []
+    },
+    {
+     "h2": "Founder-led sales without spending the day in LinkedIn",
+     "h3": []
+    },
+    {
+     "h2": "When to hire your first SDR, and what to hand over",
+     "h3": []
+    },
+    {
+     "h2": "How it works for you",
+     "h3": [
+      "A strategy from your website",
+      "One note per person, in your voice",
+      "Replies answered, calls booked"
+     ]
+    },
+    {
+     "h2": "The limits that protect your profile",
+     "h3": []
+    },
+    {
+     "h2": "What to expect in the first month",
+     "h3": []
+    }
+   ],
+   "faq": [
+    "How should a founder do outbound on LinkedIn?",
+    "When should a founder hire the first SDR?",
+    "Does LinkedIn automation get founder accounts restricted?",
+    "Can I keep my own voice in automated messages?"
+   ],
+   "schema": [
+    "WebPage",
+    "BreadcrumbList",
+    "FAQPage (visible FAQ kept; FAQ rich results retired May 2026, markup harmless)"
+   ],
+   "words": 1100,
+   "linksIn": [
+    "/",
+    "/for/agencies",
+    "/for/consultants",
+    "/guides/linkedin-prospecting",
+    "/how-it-works"
+   ],
+   "linksOut": [
+    "/guides/best-ai-sdr-for-linkedin",
+    "/how-it-works",
+    "/guides/ideal-customer-profile-for-linkedin",
+    "/guides/ai-sdr-vs-human-sdr",
+    "/for/agencies",
+    "/for/consultants",
+    "/"
+   ],
+   "owner": "Scout the Prospector",
+   "image": "A founder's laptop with a product dashboard closed and a LinkedIn conversation open, showing a demo slot booked.",
+   "priority": 41
+  },
+  {
+   "path": "/for/professional-services",
+   "status": "registered",
+   "action": "change primary to a keyword with observed demand; accountants, advisers and MSP sections on one page (no per-industry doorway pages)",
+   "cluster": "audience",
+   "primaryKeyword": "linkedin lead generation for professional services",
+   "secondaryKeywords": [
+    "linkedin lead generation for accountants",
+    "linkedin prospecting for financial advisors",
+    "msp lead generation linkedin",
+    "lead generation for cpa firms"
+   ],
+   "intent": "commercial",
+   "beat": [
+    {
+     "url": "abstraktmg.com (LinkedIn lead generation for accountants)",
+     "strengths": "On topic.",
+     "misses": "Agency service page, thin."
+    },
+    {
+     "url": "advisorperspectives.com (five-step LinkedIn process, 2021)",
+     "strengths": "Trade-press authority.",
+     "misses": "Dated, and raises compliance without answering it."
+    },
+    {
+     "url": "thatagency.com (MSP lead generation on LinkedIn, 2019-2020)",
+     "strengths": "MSP-specific.",
+     "misses": "Dated, with a gated pitch."
+    }
+   ],
+   "title": "LinkedIn lead generation for professional services firms",
+   "description": "For accountants, financial advisers and IT providers: reach decision makers on LinkedIn personally, with approval before send and no repeat contact.",
+   "h1": "LinkedIn client acquisition for professional services firms",
+   "outline": [
+    {
+     "h2": "Why LinkedIn outreach is different for professional services",
+     "h3": []
+    },
+    {
+     "h2": "Accountants and CPA firms",
+     "h3": []
+    },
+    {
+     "h2": "Financial advisers: approval before send and a record of what went out (not compliance advice)",
+     "h3": []
+    },
+    {
+     "h2": "IT and managed service providers",
+     "h3": []
+    },
+    {
+     "h2": "How it works for you",
+     "h3": [
+      "A strategy from your website",
+      "One note per person, in your voice",
+      "Replies answered, calls booked"
+     ]
+    },
+    {
+     "h2": "The limits that protect your profile",
+     "h3": []
+    },
+    {
+     "h2": "What to expect in the first month",
+     "h3": []
+    }
+   ],
+   "faq": [
+    "How do accounting firms get clients on LinkedIn?",
+    "Is LinkedIn automation compliant for financial advisers?",
+    "Who should an MSP target on LinkedIn?",
+    "Is Sales Navigator worth it for a professional firm?"
+   ],
+   "schema": [
+    "WebPage",
+    "BreadcrumbList",
+    "FAQPage (visible FAQ kept; FAQ rich results retired May 2026, markup harmless)"
+   ],
+   "words": 1100,
+   "linksIn": [
+    "/",
+    "/guides/linkedin-prospecting",
+    "/how-it-works"
+   ],
+   "linksOut": [
+    "/how-it-works",
+    "/security",
+    "/guides/is-linkedin-automation-safe",
+    "/guides/is-linkedin-automation-legal",
+    "/for/agencies",
+    "/for/consultants",
+    "/"
+   ],
+   "owner": "Scout the Prospector",
+   "image": "Three discreet office doors (ledger, chart, server icon) on one corridor, each receiving one personal note.",
+   "priority": 42
+  },
+  {
+   "path": "/tools/connection-note-checker",
+   "status": "registered",
+   "action": "keep; add 300-500 words of method text; a generator tool is deferred",
+   "cluster": "notes",
+   "primaryKeyword": "linkedin connection note checker",
+   "secondaryKeywords": [
+    "linkedin connection request character counter",
+    "check linkedin connection message",
+    "linkedin invitation note length checker"
+   ],
+   "intent": "transactional",
+   "beat": [
+    {
+     "url": "resumeworded.com/linkedin-connection-message-generator",
+     "strengths": "Strong domain, interactive.",
+     "misses": "Aimed at job seekers; no link or pitch checks."
+    },
+    {
+     "url": "reepl.io/free-tools/linkedin-connection-request-writer",
+     "strengths": "Free tool.",
+     "misses": "Generates templated text and ignores the 200-character risk."
+    },
+    {
+     "url": "marketingmonk.so/tools/linkedin-connection-request-generator",
+     "strengths": "Interactive.",
+     "misses": "No check for links or pitch patterns."
+    }
+   ],
+   "title": "LinkedIn connection note checker: length, links and pitch",
+   "description": "Paste a LinkedIn connection note and check it against the character limit, links and the pitch patterns that get invitations ignored. Free, nothing stored.",
+   "h1": "LinkedIn connection note checker",
+   "outline": [
+    {
+     "h2": "The checker",
+     "h3": []
+    },
+    {
+     "h2": "What it checks and why",
+     "h3": [
+      "Length",
+      "Links",
+      "Pitch patterns"
+     ]
+    },
+    {
+     "h2": "Fixing a note that fails",
+     "h3": []
+    }
+   ],
+   "faq": [
+    "How many characters is a LinkedIn connection note?",
+    "Why should a connection note have no link?",
+    "Is what I paste stored?"
+   ],
+   "schema": [
+    "WebApplication (free, offers price 0)",
+    "BreadcrumbList",
+    "FAQPage (visible FAQ kept; FAQ rich results retired May 2026, markup harmless)"
+   ],
+   "words": 700,
+   "linksIn": [
+    "/guides/ai-personalized-linkedin-messages",
+    "/guides/linkedin-connection-note-character-limit",
+    "/guides/linkedin-connection-request-templates",
+    "/guides/should-you-add-a-note-linkedin",
+    "/tools"
+   ],
+   "linksOut": [
+    "/guides/linkedin-connection-request-templates",
+    "/guides/linkedin-connection-note-character-limit",
+    "/tools/linkedin-limit-calculator",
+    "/tools",
+    "/how-it-works"
+   ],
+   "owner": "Quinn the Campaign writer",
+   "image": "A text box with a green character counter, a link icon struck through and a small 'no pitch' badge.",
+   "priority": 43
+  },
+  {
+   "path": "/tools/linkedin-limit-calculator",
+   "status": "registered",
+   "action": "keep; add 300-500 words of method text so the page is not thin",
+   "cluster": "safety",
+   "primaryKeyword": "linkedin connection limit calculator",
+   "secondaryKeywords": [
+    "safe linkedin invites per day calculator",
+    "linkedin warm-up calculator",
+    "linkedin weekly limit planner"
+   ],
+   "intent": "transactional",
+   "beat": [
+    {
+     "url": "konnector.ai/linkedin-weekly-connection-request-limit-2026",
+     "strengths": "Has a static table.",
+     "misses": "Not interactive, with no ramp tied to the first send."
+    },
+    {
+     "url": "getfuzzy.ai/blog/linkedin-connection-request-limits",
+     "strengths": "Ranks for the per-day question.",
+     "misses": "Gives 5-25 a day with no reasoning."
+    },
+    {
+     "url": "bardeen.ai/answers/how-many-linkedin-connections-can-you-send-per-day",
+     "strengths": "Quick answer.",
+     "misses": "No personal calculation."
+    }
+   ],
+   "title": "LinkedIn connection limit calculator: safe daily and weekly",
+   "description": "Work out how many connection requests your LinkedIn account can safely send today and this week, from how long it has been sending. Free, nothing stored.",
+   "h1": "LinkedIn connection request limit calculator",
+   "outline": [
+    {
+     "h2": "The calculator",
+     "h3": []
+    },
+    {
+     "h2": "How the numbers are worked out",
+     "h3": [
+      "Ramp from the first send",
+      "Weekly ceiling"
+     ]
+    },
+    {
+     "h2": "What to do with the result",
+     "h3": []
+    }
+   ],
+   "faq": [
+    "How many connection requests can I send today?",
+    "Why does a three-week-old account still sit at the starting cap?",
+    "Does the calculator store anything?"
+   ],
+   "schema": [
+    "WebApplication (free, offers price 0)",
+    "BreadcrumbList",
+    "FAQPage (visible FAQ kept; FAQ rich results retired May 2026, markup harmless)"
+   ],
+   "words": 700,
+   "linksIn": [
+    "/guides/linkedin-warm-up-schedule",
+    "/guides/linkedin-weekly-invitation-limit",
+    "/linkedin-automation-limits",
+    "/tools",
+    "/tools/connection-note-checker"
+   ],
+   "linksOut": [
+    "/guides/linkedin-weekly-invitation-limit",
+    "/guides/linkedin-warm-up-schedule",
+    "/linkedin-automation-limits",
+    "/tools",
+    "/how-it-works"
+   ],
+   "owner": "Reese, Outreach and booking",
+   "image": "A slider set to 'week 3' feeding a gauge that reads a safe daily number, in Reese's colour.",
+   "priority": 44
+  },
+  {
+   "path": "/guides",
+   "status": "existing",
+   "action": "keep; group cards by cluster with a 2-3 sentence intro per cluster so the hub is not thin",
+   "cluster": "hub",
+   "primaryKeyword": "linkedin outreach guides",
+   "secondaryKeywords": [
+    "linkedin outreach guide",
+    "linkedin automation guide",
+    "linkedin prospecting guides"
+   ],
+   "intent": "informational",
+   "beat": [
+    {
+     "url": "getfuzzy.ai/blog/linkedin-outreach-guide",
+     "strengths": "Long guide.",
+     "misses": "One of dozens of near-duplicates; no structure."
+    },
+    {
+     "url": "salesbread.com/linkedin-outreach-strategy",
+     "strengths": "Strategic long form.",
+     "misses": "Agency pitch with no safety limits."
+    },
+    {
+     "url": "leadhaste.com/blog/b2b-linkedin-outreach-guide-2026",
+     "strengths": "Current and step-based.",
+     "misses": "Unsourced numbers and no hub of supporting pages."
+    }
+   ],
+   "title": "LinkedIn outreach guides: limits, notes and prospecting",
+   "description": "Guides to LinkedIn outreach, from the rules Nora enforces: limits and safety, connection notes, follow-ups, prospecting and choosing a tool.",
+   "h1": "LinkedIn outreach guides",
+   "outline": [
+    {
+     "h2": "Limits and account safety",
+     "h3": []
+    },
+    {
+     "h2": "Connection notes and personalisation",
+     "h3": []
+    },
+    {
+     "h2": "Follow-ups, replies and meetings",
+     "h3": []
+    },
+    {
+     "h2": "Prospecting and targeting",
+     "h3": []
+    },
+    {
+     "h2": "Choosing a tool",
+     "h3": []
+    }
+   ],
+   "faq": [],
+   "schema": [
+    "CollectionPage",
+    "ItemList",
+    "BreadcrumbList"
+   ],
+   "words": 500,
+   "linksIn": [
+    "/",
+    "/guides/ai-personalized-linkedin-messages",
+    "/guides/ai-sdr-pricing",
+    "/guides/ai-sdr-vs-human-sdr",
+    "/guides/best-ai-sdr-for-linkedin",
+    "/guides/best-time-to-send-linkedin-connection-requests",
+    "/guides/book-meetings-from-linkedin",
+    "/guides/cloud-vs-browser-extension-linkedin-automation",
+    "/guides/ideal-customer-profile-for-linkedin",
+    "/guides/is-linkedin-automation-legal",
+    "/guides/is-linkedin-automation-safe",
+    "/guides/linkedin-acceptance-rate",
+    "/guides/linkedin-account-restricted",
+    "/guides/linkedin-automation-tool-bans",
+    "/guides/linkedin-connection-note-character-limit",
+    "/guides/linkedin-connection-request-templates",
+    "/guides/linkedin-follow-up-after-connection",
+    "/guides/linkedin-follow-up-sequence",
+    "/guides/linkedin-prospecting",
+    "/guides/linkedin-prospecting-without-sales-navigator",
+    "/guides/linkedin-warm-up-schedule",
+    "/guides/linkedin-weekly-invitation-limit",
+    "/guides/safest-linkedin-automation-tool",
+    "/guides/should-you-add-a-note-linkedin",
+    "/guides/withdraw-pending-linkedin-invitations"
+   ],
+   "linksOut": [
+    "/guides/ai-personalized-linkedin-messages",
+    "/guides/ai-sdr-pricing",
+    "/guides/ai-sdr-vs-human-sdr",
+    "/guides/best-ai-sdr-for-linkedin",
+    "/guides/best-time-to-send-linkedin-connection-requests",
+    "/guides/book-meetings-from-linkedin",
+    "/guides/cloud-vs-browser-extension-linkedin-automation",
+    "/guides/ideal-customer-profile-for-linkedin",
+    "/guides/is-linkedin-automation-legal",
+    "/guides/is-linkedin-automation-safe",
+    "/guides/linkedin-acceptance-rate",
+    "/guides/linkedin-account-restricted",
+    "/guides/linkedin-automation-tool-bans",
+    "/guides/linkedin-connection-note-character-limit",
+    "/guides/linkedin-connection-request-templates",
+    "/guides/linkedin-follow-up-after-connection",
+    "/guides/linkedin-follow-up-sequence",
+    "/guides/linkedin-prospecting",
+    "/guides/linkedin-prospecting-without-sales-navigator",
+    "/guides/linkedin-warm-up-schedule",
+    "/guides/linkedin-weekly-invitation-limit",
+    "/guides/safest-linkedin-automation-tool",
+    "/guides/should-you-add-a-note-linkedin",
+    "/guides/withdraw-pending-linkedin-invitations"
+   ],
+   "owner": "Sage the Strategist",
+   "image": "Five labelled shelves, one per cluster, each holding a few guide cards in a teammate's colour.",
+   "priority": 45
+  },
+  {
+   "path": "/tools",
+   "status": "existing",
+   "action": "keep",
+   "cluster": "hub",
+   "primaryKeyword": "free linkedin outreach tools",
+   "secondaryKeywords": [
+    "free linkedin tools",
+    "linkedin outreach calculator",
+    "linkedin note checker"
+   ],
+   "intent": "transactional",
+   "beat": [
+    {
+     "url": "reepl.io/free-tools",
+     "strengths": "A set of free tools.",
+     "misses": "No limits calculator, and nothing grounded in enforced rules."
+    },
+    {
+     "url": "marketingmonk.so/tools/linkedin-connection-request-generator",
+     "strengths": "Interactive.",
+     "misses": "Generates template text and ignores length and link rules."
+    },
+    {
+     "url": "resumeworded.com/linkedin-connection-message-generator",
+     "strengths": "Strong domain.",
+     "misses": "Aimed at job seekers, not sales."
+    }
+   ],
+   "title": "Free LinkedIn outreach tools: limits and note checker",
+   "description": "Free calculators and checkers built on the same rules Nora runs: a safe connection-limit calculator and a connection note checker. Nothing stored.",
+   "h1": "Free LinkedIn outreach tools",
+   "outline": [
+    {
+     "h2": "LinkedIn connection limit calculator",
+     "h3": []
+    },
+    {
+     "h2": "Connection note checker",
+     "h3": []
+    },
+    {
+     "h2": "How these tools work",
+     "h3": []
+    }
+   ],
+   "faq": [],
+   "schema": [
+    "CollectionPage",
+    "ItemList",
+    "BreadcrumbList"
+   ],
+   "words": 400,
+   "linksIn": [
+    "/",
+    "/guides/linkedin-connection-request-templates",
+    "/linkedin-automation-limits",
+    "/tools/connection-note-checker",
+    "/tools/linkedin-limit-calculator"
+   ],
+   "linksOut": [
+    "/tools/connection-note-checker",
+    "/tools/linkedin-limit-calculator"
+   ],
+   "owner": "Reese, Outreach and booking",
+   "image": "Two tool cards, a slider-calculator and a character counter, set on a workbench in Nora colours.",
+   "priority": 46
+  },
+  {
+   "path": "/about",
+   "status": "existing",
+   "action": "keep; use it to establish the brand entity (Nora AI SDR) apart from the many other products named Nora",
+   "cluster": "audience",
+   "primaryKeyword": "nora ai sdr",
+   "secondaryKeywords": [
+    "nora sdr",
+    "nora ai sdr linkedin",
+    "nora linkedin",
+    "who makes nora ai sdr"
+   ],
+   "intent": "navigational",
+   "beat": [
+    {
+     "url": "wikipedia.org Software-defined radio",
+     "strengths": "Owns the 'SDR' meaning.",
+     "misses": "Unrelated product; the page needs clear entity signals to separate Nora from it."
+    },
+    {
+     "url": "callin.io CleeAI NORA",
+     "strengths": "An existing 'Nora' sales assistant.",
+     "misses": "A Shopify assistant, not B2B LinkedIn; disambiguate with qualifiers."
+    },
+    {
+     "url": "peerpush.com NoraAI",
+     "strengths": "Directory listing for another Nora.",
+     "misses": "Different product; Nora needs its own directory listings and sameAs links."
+    }
+   ],
+   "title": "About Nora AI SDR: built to protect your LinkedIn account",
+   "description": "Nora AI SDR is built around the constraint others treat as an afterthought: not losing the LinkedIn account it sends from. Who we are and why.",
+   "h1": "Built around the thing that actually goes wrong",
+   "outline": [
+    {
+     "h2": "Why Nora exists",
+     "h3": []
+    },
+    {
+     "h2": "What we will not build",
+     "h3": [
+      "Bypass tricks",
+      "Rented accounts"
+     ]
+    },
+    {
+     "h2": "How the product is made",
+     "h3": [
+      "Rules enforced in code, not in prompts"
+     ]
+    },
+    {
+     "h2": "The team and contact",
+     "h3": []
+    }
+   ],
+   "faq": [
+    "Who makes Nora?",
+    "Is Nora related to other products called Nora?",
+    "How do I contact the Nora team?",
+    "Where is Nora based?"
+   ],
+   "schema": [
+    "AboutPage",
+    "Organization (name, alternateName 'Nora AI SDR', logo, sameAs: LinkedIn page, X, directory listings)",
+    "BreadcrumbList"
+   ],
+   "words": 700,
+   "linksIn": [
+    "/",
+    "/how-it-works",
+    "/pricing",
+    "/security"
+   ],
+   "linksOut": [
+    "/",
+    "/how-it-works",
+    "/security",
+    "/linkedin-automation-limits"
+   ],
+   "owner": "Sage the Strategist",
+   "image": "The Nora wordmark beside a small, steady LinkedIn send gauge, giving a clear brand identity with no radio hardware in sight.",
+   "priority": 47
+  }
+ ],
+ "dropOrMerge": [
+  {
+   "keyword": "linkedin jail / how long does linkedin restriction last / permanently restricted",
+   "decision": "merge",
+   "into": "/guides/linkedin-account-restricted"
+  },
+  {
+   "keyword": "linkedin inmail limits / sales navigator inmail credits / open profile inmail limit",
+   "decision": "merge",
+   "into": "/linkedin-automation-limits (table row + FAQ)"
+  },
+  {
+   "keyword": "linkedin inmail vs connection request",
+   "decision": "merge",
+   "into": "/linkedin-automation-limits (FAQ); revisit if InMail becomes a product feature"
+  },
+  {
+   "keyword": "a/b test linkedin messages, outreach metrics to track, reply rate benchmark",
+   "decision": "merge",
+   "into": "/guides/linkedin-acceptance-rate"
+  },
+  {
+   "keyword": "linkedin automation restriction rate statistics, ban triggers checklist, warning signs",
+   "decision": "merge",
+   "into": "/guides/is-linkedin-automation-safe"
+  },
+  {
+   "keyword": "never message the same prospect twice across campaigns",
+   "decision": "merge",
+   "into": "/guides/linkedin-follow-up-sequence and /how-it-works"
+  },
+  {
+   "keyword": "11x alternatives / 11x ai review",
+   "decision": "merge",
+   "into": "/alternatives/artisan"
+  },
+  {
+   "keyword": "heyreach/waalaxy/expandi/la growth machine pricing, dripify/expandi reviews",
+   "decision": "merge",
+   "into": "the matching /alternatives/* page (pricing and review are secondaries there)"
+  },
+  {
+   "keyword": "recruiters: business development for recruitment agencies",
+   "decision": "merge",
+   "into": "/for/agencies"
+  },
+  {
+   "keyword": "accountants, CPA firms, financial advisors, MSP/IT services",
+   "decision": "merge",
+   "into": "/for/professional-services (one page; no per-industry doorway pages)"
+  },
+  {
+   "keyword": "linkedin lead generation for coaches",
+   "decision": "merge",
+   "into": "/for/consultants"
+  },
+  {
+   "keyword": "linkedin cold message templates / sales message templates",
+   "decision": "merge",
+   "into": "/guides/linkedin-follow-up-after-connection (secondary); a standalone page only after the notes cluster earns authority"
+  },
+  {
+   "keyword": "expandi vs waalaxy, heyreach vs expandi, waalaxy vs dripify, expandi vs dripify, expandi vs salesflow",
+   "decision": "defer",
+   "into": "secondaries on the alternatives pages; standalone /compare pages need first-hand testing we cannot do yet"
+  },
+  {
+   "keyword": "meetalfred alternatives, zopto alternatives, aimfox/linked helper/octopus/salesrobot reviews, valley review",
+   "decision": "defer",
+   "into": "low demand; add only with verified, dated facts"
+  },
+  {
+   "keyword": "linkedin connection request generator",
+   "decision": "defer",
+   "into": "needs a model-backed free tool; build later as /tools/connection-note-writer"
+  },
+  {
+   "keyword": "linkedin outreach benchmarks 2026",
+   "decision": "defer",
+   "into": "needs Nora's own aggregate data"
+  },
+  {
+   "keyword": "linkedin dm vs cold email, lemlist alternatives, lemlist vs la growth machine",
+   "decision": "drop",
+   "into": "Nora has no email channel"
+  },
+  {
+   "keyword": "apollo alternatives, kaspr vs lusha",
+   "decision": "drop",
+   "into": "data/enrichment intent Nora does not serve"
+  },
+  {
+   "keyword": "social selling on linkedin, linkedin social selling index",
+   "decision": "drop",
+   "into": "low product fit; the SSI myth is a FAQ in the weekly-limit guide"
+  },
+  {
+   "keyword": "linkedin automation for recruiters (candidate sourcing), white label outreach, residential real estate, buying signals",
+   "decision": "drop",
+   "into": "not what the product does"
+  },
+  {
+   "keyword": "ai sales agent, ai sdr, founder-led sales (head terms)",
+   "decision": "secondary only",
+   "into": "homepage and /for/b2b-saas; not winnable head-on yet"
+  }
+ ],
+ "retitles": {
+  "/": {
+   "from": "AI SDR for LinkedIn that books meetings at a careful pace",
+   "to": "Nora: AI SDR for LinkedIn that keeps your account safe"
+  },
+  "/security": {
+   "from": "Is LinkedIn automation safe? Security, data and account safety at Nora",
+   "to": "Is an AI SDR safe for LinkedIn? Security at Nora"
+  },
+  "/guides/best-ai-sdr-for-linkedin": {
+   "from": "Best AI SDR for LinkedIn in 2026: how to choose one",
+   "to": "Best AI SDR tools for LinkedIn in 2026: how to choose"
+  },
+  "/linkedin-automation-limits": {
+   "from": "LinkedIn connection request limit and automation limits in 2026",
+   "to": "LinkedIn connection request limit in 2026: every number"
+  },
+  "/guides/linkedin-account-restricted": {
+   "from": "LinkedIn account restricted after automation: what to do in the first 48 hours",
+   "to": "LinkedIn account restricted? How to fix it and restart"
+  },
+  "/guides/linkedin-automation-tool-bans": {
+   "from": "When LinkedIn acts against an automation tool: ...",
+   "to": "HeyReach ban and LinkedIn's 2026 automation crackdown"
+  },
+  "/guides/cloud-vs-browser-extension-linkedin-automation": {
+   "from": "Cloud vs browser extension LinkedIn automation: which is safer?",
+   "to": "Cloud vs Chrome extension LinkedIn automation: safer?"
+  },
+  "/alternatives": {
+   "from": "LinkedIn automation alternatives",
+   "to": "LinkedIn automation tools compared on safety and price"
+  },
+  "/alternatives/heyreach": {
+   "from": "HeyReach alternative for safe, personal LinkedIn outreach",
+   "to": "HeyReach alternatives: a safer pick for a single rep"
+  },
+  "/alternatives/expandi": {
+   "from": "Expandi alternative: an AI SDR that writes each note and books the meeting",
+   "to": "Expandi alternatives: an AI SDR that writes and books"
+  },
+  "/alternatives/waalaxy": {
+   "from": "Waalaxy alternative with a free plan that runs real campaigns",
+   "to": "Waalaxy alternatives: free, with a note for every person"
+  },
+  "/alternatives/dripify": {
+   "from": "Dripify alternative: personal notes, human approval, no per-seat bill",
+   "to": "Dripify alternatives: personal notes and human approval"
+  },
+  "/for/agencies": {
+   "from": "LinkedIn outreach for agencies, without risking the founder's account",
+   "to": "LinkedIn lead generation for agencies, without the risk"
+  },
+  "/for/b2b-saas": {
+   "from": "LinkedIn outbound for B2B SaaS founders",
+   "to": "LinkedIn outreach for SaaS founders: founder-led outbound"
+  },
+  "/for/professional-services": {
+   "from": "LinkedIn client acquisition for professional services firms",
+   "to": "LinkedIn lead generation for professional services firms"
+  },
+  "/how-it-works": {
+   "from": "How an AI SDR for LinkedIn works: three decisions, then Nora's team",
+   "to": "How an AI SDR works: LinkedIn automation with your approval"
+  }
+ },
+ "registryChanges": [
+  "seo-content.ts: change `title` for the retitled registered pages above (best-ai-sdr-for-linkedin, linkedin-account-restricted, linkedin-automation-tool-bans, cloud-vs-browser-extension, the four /alternatives/*, /for/agencies, /for/b2b-saas, /for/professional-services) and their `query` to the primaryKeyword in this plan.",
+  "seo-content.ts: add the 19 new pages with kind guide/alternative/audience and the owner in this plan.",
+  "HUBS: /alternatives title -> 'LinkedIn automation tools compared on safety and price'.",
+  "site.ts linkCard core map: '/linkedin-automation-limits' title should match the page's new title.",
+  "Change the live <title> on '/', '/security' and '/how-it-works' (pageMeta calls in their page.tsx).",
+  "lib/team.ts byline stays; add a real reviewer field to ContentPage when one is named."
+ ],
+ "technical": {
+  "rendering": "All marketing and article pages statically generated; content, title, canonical and links in server HTML. Check rendered HTML with URL Inspection after launch.",
+  "canonical": "Self-referencing canonical on one https host (norasdr.com); 301 www and app-host variants; sitemap URLs identical to canonicals (canonical() in lib/site.ts already does this).",
+  "robots": "robots.ts: allow all public paths for Googlebot, Bingbot, OAI-SearchBot and PerplexityBot; disallow /app, /admin, /api, /book, /invite, /unsubscribe; one Sitemap: line. Check the Netlify/CDN layer does not block those bots. GPTBot, ClaudeBot and CCBot are a policy choice, not a ranking one.",
+  "sitemap": "sitemap.ts from PAGES + CONTENT + HUBS only; lastmod = hand-written `updated` as full ISO 8601 with time (Bing reads it for AI indexing); never the build time; no changefreq or priority reliance (Google ignores both). Add image:image entries for each featured image.",
+  "feed": "feed.xml (exists): every CONTENT page with canonical URL, summary, updated timestamp and enclosure for the featured image; <link rel=alternate type=application/rss+xml> in the marketing <head>.",
+  "indexnow": "Host /<key>.txt at the root; on publish or update, POST the changed URLs to api.indexnow.org from the deploy step. Reaches Bing, Yandex and others; Google does not use it.",
+  "llms_txt": "llms.txt (exists): keep it generated from CONTENT. Harmless, and not a ranking lever.",
+  "structured_data": "Home: Organization (logo 112px+, sameAs LinkedIn page, X, directory listings), WebSite (name Nora, alternateName Nora AI SDR), SoftwareApplication (offers price 0, no ratings until real visible reviews exist). Articles: BlogPosting with headline, image (16:9, 4:3, 1:1, each 1200px+), datePublished, dateModified, author. Every page: BreadcrumbList. Tools: WebApplication. Hubs: CollectionPage + ItemList. FAQPage markup is optional and earns no rich result since May 2026; visible FAQs stay because AI answers use them.",
+  "authorship": "The teammate byline (Sage, Scout, Quinn, Reese) names a part of the product, not a person, so schema author stays Organization. Do not mark teammates up as Person/ProfilePage. To meet Google's 'who wrote this' and AI-content fact-check guidance, add a real named human reviewer per article ('Reviewed by <name>, <role>' with a ProfilePage at /about/<name>) once the user supplies one. Do not invent one.",
+  "images": "One featured image per article at /images/<kind>/<slug>.webp (1600x900 hero, plus 1200x630 OG, 1200x900 and 1200x1200 crops for Article image). Hero is never lazy-loaded, has fetchpriority=high and explicit width/height. Alt text describes the picture without stuffing keywords. Add <meta name=robots content=max-image-preview:large>. Use one illustration style in Nora's tokens, with the owning teammate's colour as the accent. No text baked into images, no fake dashboards with invented numbers, no competitor logos.",
+  "performance": "CWV p75 targets: LCP <= 2.5s, INP <= 200ms, CLS <= 0.1. Fonts preloaded with font-display: swap; tools are small client leaf components; no third-party scripts on articles.",
+  "on_page": "One H1 per page (ArticleLayout renders it), then H2/H3 with no skipped levels; answer-first: a 1-2 sentence direct answer under every question-style H2; visible published and updated dates that match the schema; title <= 60 chars with the keyword first (brand first on the homepage only); unique meta description <= 155 chars.",
+  "linking": "Real <a href> links with descriptive anchors; pillar -> every spoke, spoke -> pillar + 2-4 siblings + one money page; homepage -> every pillar and hub; footer Resources column from CONTENT; no orphans (every page has 2+ inbound links in this plan).",
+  "quality_gates": "Every page passes the people-first self-assessment and adds something the top 3 lack (first-hand Nora rules and incidents, sourced dated tables). Every Nora number is imported from code (PUBLIC_LIMITS, INVITE_NOTE_MAX_CHARS), never retyped. Every claim about LinkedIn or a competitor is sourced and dated, and a person checks all AI-written text, titles, metas, schema and alt text before publishing. Never change a date without a real change.",
+  "measurement": "Verify Google Search Console and Bing Webmaster Tools; submit the sitemap in both; watch the Bing AI Performance report for Copilot citations."
+ }
+}

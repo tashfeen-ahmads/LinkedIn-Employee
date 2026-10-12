@@ -220,7 +220,7 @@ function renderCampaigns(
                   </p>
                 </div>
                 <div className="cluster top">
-                  <span className={`pill ${campaign.status === "running" ? "positive" : ""}`}>
+                  <span className={`pill ${campaign.status === "running" ? "positive" : campaign.status === "paused" ? "warning" : ""}`}>
                     {label(campaign.status)}
                   </span>
                   {/* Launching happens on the review page and nowhere else: it
@@ -251,7 +251,7 @@ function renderCampaigns(
                 <p className="small panel">{campaign.connection_note}</p>
               ) : (
                 <p className="small subtle">
-                  No opening line yet — it is written for each person when the list is built.
+                  No opening line yet. It is written for each person when the list is built.
                 </p>
               )}
             </article>

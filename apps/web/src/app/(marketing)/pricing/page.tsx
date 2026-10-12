@@ -1,18 +1,21 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { FREE_LINE, FreeForNow } from "@/components/marketing";
+import { FREE_LINE, Faq, PageHero } from "@/components/marketing";
 import { BreadcrumbSchema, SoftwareSchema } from "@/components/schema";
-import { pageMeta } from "@/lib/site";
-import { NORA } from "@/lib/team";
+import { PUBLIC_LIMITS, SITE, pageMeta } from "@/lib/site";
+import { BRAND } from "@le/shared";
 
 /*
  * The route stays, because every link, bookmark and search result that ever
  * pointed at /pricing should land on the answer rather than a 404 or a hop to
  * a page that does not mention it. The answer is short, so the page is.
+ *
+ * A crossed-out price reads as a sale, and a sale is a promise about a later
+ * price nobody has decided, so there are no plans here, greyed out or not.
  */
 export const metadata: Metadata = pageMeta({
-  title: "Free for everyone, for now",
-  description: `${FREE_LINE} Sign up and start right away: no plans and no card.`,
+  title: "Free AI SDR for LinkedIn: Nora pricing, no card needed",
+  description: `A free AI SDR for LinkedIn. ${FREE_LINE} Sign up and start right away: no plans, no card, and the same safety limits for every workspace.`,
   path: "/pricing",
 });
 
@@ -31,6 +34,17 @@ const QA = [
   },
 ];
 
+/** What every workspace gets, said as facts the product enforces. */
+const INCLUDED = [
+  { label: "The whole team", value: "Sage, Scout, Quinn and Reese" },
+  {
+    label: "The same limits",
+    value: `${PUBLIC_LIMITS.invitesPerDayStart} to ${PUBLIC_LIMITS.invitesPerDayMax} invitations a day, ${PUBLIC_LIMITS.invitesPerWeek} a week`,
+  },
+  { label: "Your data", value: "Exportable by an owner or admin at any time" },
+  { label: "To start", value: "No card and no plan to choose" },
+];
+
 export default function PricingPage() {
   return (
     <>
@@ -41,24 +55,49 @@ export default function PricingPage() {
           { name: "Free for now", path: "/pricing" },
         ]}
       />
-      <FreeForNow standalone />
-      <section className="section band">
-        <div className="narrow stack-5">
-          <h2>Before you ask</h2>
-          <div className="faq">
-            {QA.map((item) => (
-              <details key={item.q}>
-                <summary>{item.q}</summary>
-                <p className="muted small">{item.a}</p>
-              </details>
-            ))}
-          </div>
-          <p className="small subtle">
-            Still deciding? <Link href="/#team">Meet {NORA} and the team</Link>, or{" "}
-            <Link href="/how-it-works">see what each of them actually does</Link>.
+
+      <PageHero
+        crumb="Pricing"
+        lede={
+          <p>
+            No plans to compare and no card to enter. {BRAND.name} and the whole team, for every
+            workspace, with the same safety limits.
           </p>
+        }
+        actions={
+          <Link href={`${SITE.app}/signup`} className="btn large">
+            Sign up free
+          </Link>
+        }
+      >
+        <h1>A free AI SDR for LinkedIn, for everyone while we grow</h1>
+      </PageHero>
+
+      <section className="mk-section mk-section-tight">
+        <div className="container mk-split">
+          <dl className="mk-ledger">
+            {INCLUDED.map((item) => (
+              <div key={item.label}>
+                <dt>{item.label}</dt>
+                <dd>{item.value}</dd>
+              </div>
+            ))}
+          </dl>
+          <div className="mk-head">
+            <h2 className="mk-h2-sm">If that ever changes</h2>
+            <p className="mk-lede">
+              You will hear it from us well before it does, and nothing you have built here is held
+              back to make the point.
+            </p>
+            <p className="mk-caption">
+              Still deciding? <Link href="/how-it-works">See what each of them actually does</Link>,
+              or <Link href="/linkedin-automation-limits">read the limits</Link>.
+            </p>
+          </div>
         </div>
       </section>
+
+      <Faq items={QA} title="Before you ask" />
     </>
   );
 }

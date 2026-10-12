@@ -1,7 +1,9 @@
 import { revalidatePath } from "next/cache";
 import { Empty, PageHeader, Section } from "@/components/page";
-import { Kpi } from "@/components/charts";
-import { Sequence, sequenceFor } from "@/components/sequence";
+import { FunnelChart } from "@/components/charts";
+import { NavIcon } from "@/components/icons";
+import { sequenceFor } from "@/components/sequence";
+import { SequencePath } from "@/components/sequence-path";
 import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import {
@@ -98,7 +100,7 @@ async function applyCampaignEdits(formData: FormData, workspaceId: string): Prom
     .eq("workspace_id", workspaceId);
   if (error) {
     console.error(`[campaign] save: ${error.message}`);
-    redirect(errorQuery(`/app/campaigns/${campaignId}`, "Your changes could not be saved. Nothing was sent — try again."));
+    redirect(errorQuery(`/app/campaigns/${campaignId}`, "Your changes could not be saved. Nothing was sent. Try again."));
   }
 
   // Step messages come back as step-<id> fields so one save covers the whole
@@ -116,7 +118,7 @@ async function applyCampaignEdits(formData: FormData, workspaceId: string): Prom
       redirect(
         errorQuery(
           `/app/campaigns/${campaignId}`,
-          "Some of the messages could not be saved. Nothing was sent — check them and save again.",
+          "Some of the messages could not be saved. Nothing was sent. Check them and save again.",
         ),
       );
     }
@@ -231,7 +233,7 @@ async function saveInviteNote(formData: FormData) {
   redirect(
     noticeQuery(
       `/app/campaigns/${campaignId}`,
-      note ? `Saved the note for ${who}.` : `Cleared the note for ${who} — they get the campaign template.`,
+      note ? `Saved the note for ${who}.` : `Cleared the note for ${who}. They get the campaign template.`,
     ),
   );
 }
@@ -264,7 +266,7 @@ async function setCampaignCta(formData: FormData) {
 
   if (error) {
     console.error(`[campaign] set cta: ${error.message}`);
-    redirect(errorQuery(`/app/campaigns/${campaignId}`, "That did not save. Nothing changed — try again."));
+    redirect(errorQuery(`/app/campaigns/${campaignId}`, "That did not save. Nothing changed. Try again."));
   }
 
   revalidatePath(`/app/campaigns/${campaignId}`);
@@ -344,7 +346,7 @@ async function launchCampaign(
   revalidatePath(`/app/campaigns/${campaignId}`);
   if (error) {
     console.error(`[campaign] launch: ${error.message}`);
-    redirect(errorQuery(`/app/campaigns/${campaignId}`, "The campaign could not be launched. Nothing was sent — try again."));
+    redirect(errorQuery(`/app/campaigns/${campaignId}`, "The campaign could not be launched. Nothing was sent. Try again."));
   }
 
   // Launching used to touch nothing but this row, and trust a loop somewhere
@@ -369,7 +371,7 @@ async function launchCampaign(
     redirect(
       errorQuery(
         `/app/campaigns/${campaignId}`,
-        "Launched, but sending has not started: the part of the product that sends did not answer. It picks this campaign up on its own when it is back — System check shows where it is up to.",
+        "Launched, but sending has not started: the part of the product that sends did not answer. It picks this campaign up on its own when it is back. System check shows where it is up to.",
       ),
     );
   }
@@ -377,7 +379,7 @@ async function launchCampaign(
   redirect(
     noticeQuery(
       `/app/campaigns/${campaignId}`,
-      "Launched. Invitations are paced a few minutes apart, so the first one takes a little while to appear on LinkedIn — this page says where it is up to.",
+      "Launched. Invitations are paced a few minutes apart, so the first one takes a little while to appear on LinkedIn. This page says where it is up to.",
     ),
   );
 }
@@ -434,7 +436,7 @@ async function findMore(formData: FormData) {
     redirect(
       errorQuery(
         `/app/campaigns/${campaignId}`,
-        "Reconnect your LinkedIn account on your profile first — nothing can be searched until it is connected.",
+        "Reconnect your LinkedIn account on your profile first. Nothing can be searched until it is connected.",
       ),
     );
   }
@@ -457,7 +459,7 @@ async function findMore(formData: FormData) {
       `/app/campaigns/${campaignId}`,
       startedNotice(
         queued.data,
-        "Reading the next page of the same search. It takes about a minute — reload this page and the new names appear at the bottom of the list.",
+        "Reading the next page of the same search. It takes about a minute. Reload this page and the new names appear at the bottom of the list.",
       ),
     ),
   );
@@ -501,7 +503,7 @@ async function rewriteNotes(formData: FormData) {
       here,
       `Rewrote ${result.data?.rewritten ?? 0} notes.` +
         (unanswered > 0
-          ? ` ${unanswered} kept the note they had — the writer did not answer for them.`
+          ? ` ${unanswered} kept the note they had, because the writer did not answer for them.`
           : "") +
         " Read them before you launch.",
     ),
@@ -553,7 +555,7 @@ async function retryFailed(formData: FormData) {
     .eq("status", "failed");
   if (readError) {
     console.error(`[campaign] retry read: ${readError.message}`);
-    redirect(errorQuery(`/app/campaigns/${campaignId}`, "Could not requeue those. Nothing changed — try again."));
+    redirect(errorQuery(`/app/campaigns/${campaignId}`, "Could not requeue those. Nothing changed. Try again."));
   }
 
   // One write per destination state rather than per row: a campaign's failures
@@ -597,7 +599,7 @@ async function retryFailed(formData: FormData) {
     noticeQuery(
       `/app/campaigns/${campaignId}`,
       count === 0
-        ? "Nothing to retry — no prospect on this campaign is in a failed state."
+        ? "Nothing to retry: no prospect on this campaign is in a failed state."
         : `${parts.join(", ")}. ${
             count === 1 ? "It goes" : "They go"
           } out at the campaign's normal pace${invitations ? "; press Send one now to watch the first invitation" : ""}.`,
@@ -849,7 +851,6 @@ export default async function CampaignPage({
     url: campaign.cta_url,
   });
 
-  const reached = stagesFor(cta.kind).filter((stage) => counts[stage.key] > 0);
   const searchNotice = describeSearch(lastSearch);
   // How each angle is doing, and whether anything can yet be said about it.
   //
@@ -887,14 +888,43 @@ export default async function CampaignPage({
     dailyCap: campaign.daily_invite_cap,
   });
 
+  /*
+   * The ten people touched most recently, for the glance table. Last touch is
+   * the latest thing that happened to them on this campaign; somebody still
+   * waiting to be invited has none, and sorts after everyone who has.
+   */
+  const recent = rows
+    .map((row) => {
+      const prospect = row.prospects as unknown as {
+        first_name: string | null;
+        last_name: string | null;
+        company: string | null;
+      } | null;
+      const touched =
+        [row.replied_at, row.accepted_at, row.invited_at]
+          .filter((at): at is string => Boolean(at))
+          .sort()
+          .pop() ?? null;
+      return { row, prospect, touched };
+    })
+    .filter((entry): entry is typeof entry & { prospect: NonNullable<typeof entry.prospect> } =>
+      Boolean(entry.prospect),
+    )
+    .sort((a, b) => (b.touched ?? "").localeCompare(a.touched ?? ""))
+    .slice(0, 10);
+
   return (
     <>
       <PageHeader
-        eyebrow="Campaign"
+        crumbs={[{ href: "/app/campaigns", label: "Campaigns" }]}
         title={campaign.name}
+        status={
+          <span className={`pill ${running ? "positive" : campaign.status === "paused" ? "warning" : ""}`}>
+            {label(campaign.status)}
+          </span>
+        }
         lede={
           <>
-            <span className={`pill ${running ? "positive" : ""}`}>{label(campaign.status)}</span>{" "}
             {queued.length} still to invite of {rows.length}
             {days ? ` · about ${days} working ${days === 1 ? "day" : "days"} at ${perDay} a day` : ""}
             {account?.display_name ? ` · sending as ${account.display_name}` : ""}
@@ -902,19 +932,6 @@ export default async function CampaignPage({
         }
         actions={
           <>
-          {/*
-            Proof, on demand. A campaign that has sent nothing is otherwise
-            indistinguishable from one that cannot, and the difference took
-            eight days to establish once.
-          */}
-          {running && queued.length > 0 ? (
-            <form action={sendOneNow}>
-              <input type="hidden" name="campaignId" value={campaign.id} />
-              <SubmitButton className="btn secondary" pendingLabel="Sending…">
-                Send one now
-              </SubmitButton>
-            </form>
-          ) : null}
           {/*
             A failed row is not waiting for anything — the loop reads `queued`
             and nothing else — so without this the only way back is rebuilding
@@ -933,7 +950,9 @@ export default async function CampaignPage({
             <form action={setStatus}>
               <input type="hidden" name="campaignId" value={campaign.id} />
               <input type="hidden" name="status" value="paused" />
-              <SubmitButton pendingLabel="Pausing…">Pause</SubmitButton>
+              <SubmitButton className="btn secondary" pendingLabel="Pausing…">
+                Pause
+              </SubmitButton>
             </form>
           ) : (
             /*
@@ -954,6 +973,20 @@ export default async function CampaignPage({
               Launch campaign
             </button>
           )}
+          {/*
+            Proof, on demand. A campaign that has sent nothing is otherwise
+            indistinguishable from one that cannot, and the difference took
+            eight days to establish once.
+          */}
+          {running && queued.length > 0 ? (
+            <form action={sendOneNow}>
+              <input type="hidden" name="campaignId" value={campaign.id} />
+              <SubmitButton className="btn" pendingLabel="Sending…">
+                <NavIcon name="campaigns" className="btn-icon" />
+                Send one now
+              </SubmitButton>
+            </form>
+          ) : null}
           </>
         }
       />
@@ -966,11 +999,25 @@ export default async function CampaignPage({
         against a worker that is not there — and a rep watching a launch reads
         the top of this page, not the bottom.
       */}
+      {/*
+        The pacing strip: the limits colour, because what it reports is the
+        guardrails at work. A danger reading keeps the danger notice, since a
+        loop that is not sending is not the guardrails, it is a fault.
+      */}
       {pacing ? (
-        <div className={pacing.tone === "danger" ? "notice danger" : "notice"}>
-          <strong>{pacing.title}</strong>
-          <p className="small">{pacing.body}</p>
-        </div>
+        pacing.tone === "danger" ? (
+          <div className="notice danger" role="status">
+            <strong>{pacing.title}</strong>
+            <p className="small">{pacing.body}</p>
+          </div>
+        ) : (
+          <div className="pacing-strip" role="status">
+            <NavIcon name="clock" className="pacing-strip-icon" />
+            <p className="small">
+              <strong>{pacing.title}</strong> {pacing.body}
+            </p>
+          </div>
+        )
       ) : null}
 
       {dropped.length > 0 ? (
@@ -980,7 +1027,7 @@ export default async function CampaignPage({
             Classic LinkedIn search cannot filter on {listInWords(dropped)}, so{" "}
             {dropped.length === 1 ? "that part" : "those parts"} of your customer profile
             {dropped.length === 1 ? " was" : " were"} not applied. Everyone below still matched on
-            title, industry and location, and each was scored against the full profile — read the
+            title, industry and location, and each was scored against the full profile. Read the
             names before launching, and expect more of them to be wrong than usual.
           </p>
         </div>
@@ -991,7 +1038,7 @@ export default async function CampaignPage({
           <strong>How your customer profile was searched</strong>
           <p className="small">
             LinkedIn searches locations and industries by its own identifiers, not by name, so each
-            one had to be looked up first. Read these before the names below — a term that was left
+            one had to be looked up first. Read these before the names below: a term that was left
             out is a filter this list does not have.
           </p>
           <ul className="bullets">
@@ -1013,10 +1060,121 @@ export default async function CampaignPage({
         </div>
       ) : null}
 
+      {/*
+        The campaign at a glance: where people have got to and the path they
+        are on, beside who is on it. The detail for each of these is further
+        down the page, where it is edited.
+      */}
+      <div className="campaign-grid">
+        <div className="campaign-grid-main">
+          <Section framed id="funnel" title="Campaign funnel">
+            {counts.invited === 0 ? (
+              <p className="small muted">
+                Nothing has been sent yet. Each stage fills in once invitations go out, and only the
+                stages this campaign can reach are shown.
+              </p>
+            ) : (
+              <FunnelChart
+                steps={stagesFor(cta.kind).map((stage) => ({
+                  label: stage.label,
+                  value: counts[stage.key],
+                  hint: stage.label,
+                }))}
+              />
+            )}
+          </Section>
+
+          {/*
+            What a prospect actually receives, in order. Drawn rather than
+            dragged: most arrangements a canvas offers are ones this product
+            refuses to send, and a refusal that arrives after the work is worse
+            than never offering it (rule 52). The words are edited in the copy
+            form below; the timings the product owns say so.
+          */}
+          <Section
+            framed
+            id="sequence"
+            title="Sequence"
+            description="Edit the words under What gets sent. The locked timings are product rules."
+          >
+            <SequencePath
+              steps={sequenceFor({
+                warmUp: Boolean(campaign.warm_up),
+                connectionNote: campaign.connection_note,
+                steps: (steps ?? []).map((step) => ({
+                  step_number: step.step_number,
+                  delay_days: step.delay_days,
+                  message: step.message,
+                })),
+              })}
+            />
+          </Section>
+        </div>
+
+        <Section
+          framed
+          id="people"
+          title="Prospects"
+          action={
+            rows.length > 0 ? (
+              <a className="btn ghost small" href="#list">
+                Review all {rows.length}
+              </a>
+            ) : null
+          }
+        >
+          {recent.length === 0 ? (
+            <p className="small muted">Nobody is on this list yet. Nothing is sent until you launch.</p>
+          ) : (
+            <div className="table-scroll table-flush">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Prospect</th>
+                    <th>Company</th>
+                    <th>Stage</th>
+                    <th>Last touch</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recent.map(({ row, prospect, touched }) => {
+                    const name =
+                      [prospect.first_name, prospect.last_name].filter(Boolean).join(" ") || "Unnamed";
+                    return (
+                      <tr key={row.id}>
+                        <td>
+                          <span className="prospect-who">
+                            <span className="prospect-initials" aria-hidden="true">
+                              {initialsOf(name)}
+                            </span>
+                            <span className="strongish">{name}</span>
+                          </span>
+                        </td>
+                        <td className="muted prospect-company">{prospect.company ?? ""}</td>
+                        <td>
+                          <span className={`pill plain tiny ${stageTone(row.status)}`}>{label(row.status)}</span>
+                        </td>
+                        <td className="muted nums">
+                          {touched ? (
+                            <time dateTime={isoAttr(touched)}>{formatDate(touched, viewerTimezone)}</time>
+                          ) : (
+                            "Not yet"
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </Section>
+      </div>
+
       <section className="card">
         <p className="small">
           <strong>This campaign asks for: {CTA_DEFINITIONS[cta.kind].label}</strong>
-          {cta.label ? ` — “${cta.label}”` : ""}
+          {cta.label ? `: “${cta.label}”` : ""}
         </p>
         <p className="tiny subtle">
           Judged on {CTA_DEFINITIONS[cta.kind].conversion}.
@@ -1045,7 +1203,7 @@ export default async function CampaignPage({
                 <option value="">This campaign&rsquo;s own destination</option>
                 {ctaLibrary.map((option) => (
                   <option key={option.id} value={option.id}>
-                    {option.name} — {CTA_DEFINITIONS[option.kind].label}
+                    {option.name} ({CTA_DEFINITIONS[option.kind].label})
                   </option>
                 ))}
               </select>
@@ -1061,23 +1219,6 @@ export default async function CampaignPage({
           </p>
         )}
       </section>
-
-      {reached.length > 0 ? (
-        <section className="card">
-          {/*
-            The same tile the overview uses. These were bare divs in a
-            `.meter-group` — a flex row meant for meters — so two figures sat
-            crammed against the left edge of a full-width card with a void
-            beside them, set in the monospace, at a size nothing else on the
-            product uses. `kpi-row` lays them out and `Kpi` draws them.
-          */}
-          <div className="kpi-row">
-            {reached.map((stage) => (
-              <Kpi key={stage.key} label={stage.label} value={String(counts[stage.key])} />
-            ))}
-          </div>
-        </section>
-      ) : null}
 
       <Section id="copy" title="What gets sent">
       <form action={saveCampaign} id="campaign-copy">
@@ -1095,7 +1236,7 @@ export default async function CampaignPage({
           </label>
           <p className="tiny subtle">
             LinkedIn tells them who viewed their profile, so the request reaches a name they have
-            already seen. Its own daily allowance, never taken from your invitations — and it keeps
+            already seen. Its own daily allowance, never taken from your invitations, and it keeps
             running while LinkedIn is holding invitations back.
           </p>
 
@@ -1103,7 +1244,7 @@ export default async function CampaignPage({
             <label className="field">
               <span>Written by</span>
               <select name="agentId" defaultValue={campaign.agent_id ?? ""}>
-                <option value="">No agent — the workspace&rsquo;s own copy</option>
+                <option value="">No agent, the workspace&rsquo;s own copy</option>
                 {(agents ?? []).map((agent) => (
                   <option key={agent.id} value={agent.id}>
                     {agent.name}
@@ -1113,7 +1254,7 @@ export default async function CampaignPage({
               </select>
               <span className="small muted">
                 The agent carries the openers, the offer and the voice. Changing it here does not
-                rewrite the notes below — press Rewrite notes for that.
+                rewrite the notes below. Press Rewrite notes for that.
               </span>
             </label>
           ) : null}
@@ -1176,34 +1317,6 @@ export default async function CampaignPage({
       </form>
       </Section>
 
-      {/*
-        What a prospect actually receives, in order.
-
-        Every competitor ships a drag-and-drop canvas, and the canvas is the
-        demo — it is the one screen that makes "an automated sequence" something
-        a person can picture. This had the same sequence as a table of rows with
-        a delay column, which reads as configuration rather than as a
-        conversation. Drawn rather than dragged: most arrangements a canvas
-        offers are ones this product refuses to send, and a refusal that arrives
-        after the work is worse than never offering it.
-      */}
-      <Section
-        title="What they receive"
-        action={<p className="tiny subtle">Edit the words above; the timing is a product rule.</p>}
-      >
-        <Sequence
-          steps={sequenceFor({
-            warmUp: Boolean(campaign.warm_up),
-            connectionNote: campaign.connection_note,
-            steps: (steps ?? []).map((step) => ({
-              step_number: step.step_number,
-              delay_days: step.delay_days,
-              message: step.message,
-            })),
-          })}
-        />
-      </Section>
-
       {variantStandings.length > 0 ? (
         <Section
           title="Angles being tested"
@@ -1211,7 +1324,7 @@ export default async function CampaignPage({
             <p className="tiny subtle">
               {readyToCompare
                 ? "Enough sent to compare."
-                : `Too early to compare — each angle needs ${MIN_SENDS_TO_COMPARE} invitations.`}
+                : `Too early to compare. Each angle needs ${MIN_SENDS_TO_COMPARE} invitations.`}
             </p>
           }
         >
@@ -1247,7 +1360,7 @@ export default async function CampaignPage({
                         ) : null}
                         <span className="tiny subtle block">{variant?.angle}</span>
                       </td>
-                      <td className="small muted">{variant?.pain_point ?? "—"}</td>
+                      <td className="small muted">{variant?.pain_point ?? "Not named"}</td>
                       <td className="num">{standing.sent}</td>
                       <td className="num">
                         {standing.accepted}
@@ -1260,7 +1373,7 @@ export default async function CampaignPage({
                         */}
                         {standing.sent >= MIN_SENDS_TO_COMPARE && standing.acceptanceRate !== null ? (
                           <span className="tiny subtle block">
-                            {Math.round(standing.acceptanceRate * 100)}% ({Math.round(standing.low * 100)}–
+                            {Math.round(standing.acceptanceRate * 100)}% ({Math.round(standing.low * 100)} to 
                             {Math.round(standing.high * 100)}%)
                           </span>
                         ) : (
@@ -1286,6 +1399,7 @@ export default async function CampaignPage({
       ) : null}
 
       <Section
+        id="list"
         title="Who is on the list"
         action={
           <p className="tiny subtle">
@@ -1301,7 +1415,7 @@ export default async function CampaignPage({
             </strong>
             <p className="small">
               The writer came back without a note for{" "}
-              {onTemplate === 1 ? "this person" : "these people"}, so they fall back to the template with their first name filled in — which works, and reads
+              {onTemplate === 1 ? "this person" : "these people"}, so they fall back to the template with their first name filled in, which works and reads
               like everyone else&rsquo;s. Each one is marked below. You can write{" "}
               {onTemplate === 1 ? "it" : "them"} yourself before launching, or launch as it is.
             </p>
@@ -1410,7 +1524,7 @@ export default async function CampaignPage({
               } | null;
               if (!prospect) return null;
 
-              const name = [prospect.first_name, prospect.last_name].filter(Boolean).join(" ") || "—";
+              const name = [prospect.first_name, prospect.last_name].filter(Boolean).join(" ") || "Unnamed";
               const grounding = (row.invite_note_grounding ?? []) as string[];
               const queued = row.status === "queued";
 
@@ -1434,7 +1548,7 @@ export default async function CampaignPage({
                         </span>
                       </div>
                       <p className="small muted">
-                        {prospect.title ?? prospect.headline ?? "—"}
+                        {prospect.title ?? prospect.headline ?? "No title given"}
                         {prospect.company ? ` · ${prospect.company}` : ""}
                         {prospect.location ? ` · ${prospect.location}` : ""}
                       </p>
@@ -1520,7 +1634,7 @@ export default async function CampaignPage({
                       </p>
                     ) : row.invite_note && !row.invite_note_edited ? (
                       <p className="tiny warning-text">
-                        Nothing specific to this person — this note could have gone to anybody.
+                        Nothing specific to this person. This note could have gone to anybody.
                       </p>
                     ) : null}
                   </div>
@@ -1534,4 +1648,21 @@ export default async function CampaignPage({
       </Section>
     </>
   );
+}
+
+/** Two letters for a prospect's mark, never an empty circle. */
+function initialsOf(name: string): string {
+  const parts = name.split(/\s+/).filter(Boolean);
+  return (parts.slice(0, 2).map((part) => part[0]!).join("") || "?").toUpperCase();
+}
+
+/**
+ * The chip's tint for a stage. A state, never decoration, and always beside
+ * the stage's own word, so it never rests on colour alone.
+ */
+function stageTone(status: string): string {
+  if (status === "accepted" || status === "positive" || status === "meeting_booked") return "positive";
+  if (status === "replied" || status.startsWith("messaged")) return "accent";
+  if (status === "failed" || status === "opted_out") return "danger";
+  return "";
 }

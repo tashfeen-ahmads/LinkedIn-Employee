@@ -10,7 +10,7 @@ import {
   type AccountRecord,
 } from "@le/linkedin";
 import { AllowanceMeter, StackedDays } from "@/components/charts";
-import { Panel, Section } from "@/components/page";
+import { Section } from "@/components/page";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { readFunnelData } from "@/lib/funnel-data";
@@ -69,62 +69,74 @@ export async function LimitsSection() {
     ? Math.floor((now.getTime() - usage.firstActionAt.getTime()) / 86_400_000)
     : null;
   const rampNote =
-    day === null
-      ? "Day one until this account sends something. The ramp starts at your first invitation, not at connection."
-      : day >= LINKEDIN_LIMITS.warmupDays
-        ? "Fully warmed up."
-        : `Day ${day + 1} of the ${LINKEDIN_LIMITS.warmupDays}-day warm-up. It rises on its own.`;
+    day === null ? (
+      <>
+        <strong className="ramp-day">Day 1</strong> until this account sends something. The ramp
+        starts at your first invitation, not at connection.
+      </>
+    ) : day >= LINKEDIN_LIMITS.warmupDays ? (
+      <>Fully warmed up.</>
+    ) : (
+      <>
+        <strong className="ramp-day">Day {day + 1}</strong> of the {LINKEDIN_LIMITS.warmupDays}-day
+        warm-up. It rises on its own.
+      </>
+    );
 
   const funnel = await readFunnelData(supabase, session.workspaceId);
-  const days = stackDays(funnel.rows, now.getTime());
+  const days = stackDays(funnel.rows, now.getTime(), 14);
 
+  /*
+   * Two panels side by side: how close today is to the line, and what went out
+   * on each of the last fourteen days. They answer one question from two ends,
+   * so they share a row; on a narrow screen they stack.
+   */
   return (
-    <Section
-      id="limits"
-      title="Inside your limits"
-      description="Your account's allowances, and what went out each day. These caps are product rules rather than settings — they only ever move down."
-    >
-      {/*
-        One panel, not two. The allowances and the day chart answer the same
-        question — how much of the line is left, and what actually went out —
-        and split across two surfaces they read as two unrelated widgets.
-      */}
-      <Panel>
-        <div className="allowance-row">
+    <div className="overview-pair" id="limits">
+      <Section
+        framed
+        id="allowance"
+        title="Today’s allowance"
+        description="Product rules rather than settings. They only ever move down."
+      >
+        <div className="allowance-stack">
+          <AllowanceMeter label="Invitations today" used={usage.invitesToday} cap={cap} />
           <AllowanceMeter
-            label="Invitations today"
-            used={usage.invitesToday}
-            cap={cap}
-            note={rampNote}
+            label="Messages today"
+            used={usage.messagesToday}
+            cap={LINKEDIN_LIMITS.messagesPerDay}
+          />
+          <AllowanceMeter
+            label="Profile views today"
+            used={usage.profileViewsToday}
+            cap={LINKEDIN_LIMITS.profileViewsPerDay}
+            note="Warm-ups have their own allowance and never cost an invitation."
           />
           <AllowanceMeter
             label="Invitations this week"
             used={usage.invitesThisWeek}
             cap={LINKEDIN_LIMITS.invitesPerWeek}
           />
-          <AllowanceMeter
-            label="Profile views today"
-            used={usage.profileViewsToday}
-            cap={LINKEDIN_LIMITS.profileViewsPerDay}
-            note="Warm-ups have their own allowance; they never cost an invitation."
-          />
-          <AllowanceMeter
-            label="Messages today"
-            used={usage.messagesToday}
-            cap={LINKEDIN_LIMITS.messagesPerDay}
-          />
         </div>
+        <p className="small muted ramp-note">{rampNote}</p>
+      </Section>
 
+      <Section
+        framed
+        id="days"
+        title="Last 14 days"
+        description="What went out each day, and what came back."
+      >
         {days.length ? (
-          <StackedDays days={days} series={["Invited", "Accepted", "Replied"]} />
+          <StackedDays days={days} series={["Invited", "Accepted", "Replied"]} height={220} />
         ) : null}
-      </Panel>
-    </Section>
+      </Section>
+    </div>
   );
 }
 
 /**
- * Thirty days of work, including the days nothing happened.
+ * Recent days of work, including the days nothing happened.
  *
  * The zero days are the point: dropping them joins Friday to Monday with a
  * straight line and draws a weekend that looks like steady sending, when the
@@ -132,8 +144,8 @@ export async function LimitsSection() {
  * `dailySends` already does that walk for invitations, so the other two series
  * are counted the same way rather than a second time in a second shape.
  */
-function stackDays(rows: readonly DatedFunnelRow[], now: number) {
-  const invited = dailySends(rows, now);
+function stackDays(rows: readonly DatedFunnelRow[], now: number, span: number) {
+  const invited = dailySends(rows, now, span);
   const byDate = new Map<string, number[]>(invited.map((d) => [d.date, [d.value, 0, 0]]));
 
   const bump = (iso: string | null | undefined, slot: 1 | 2) => {

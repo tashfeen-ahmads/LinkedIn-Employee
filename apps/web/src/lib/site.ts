@@ -26,7 +26,7 @@ export const SITE = {
   app: appOrigin(process.env.APP_URL),
   tagline: BRAND.tagline,
   description:
-    "An AI SDR that finds your buyers on LinkedIn, writes the outreach, answers the replies and books the meeting — inside daily limits that keep your account safe.",
+    "Nora is an AI SDR for LinkedIn. It finds your buyers, writes each one a note, answers the replies and books the meeting, inside daily limits built around your account's safety.",
   locale: "en_GB",
 } as const;
 
@@ -50,7 +50,9 @@ export function pageMeta(input: {
   const ogImage = `${SITE.url}/og?title=${encodeURIComponent(input.title)}`;
 
   return {
-    title: input.title,
+    // Absolute: every page's title is written to stand alone in 60 characters,
+    // and a site suffix would push the keyword-first ones past it.
+    title: { absolute: input.title },
     description: input.description,
     alternates: { canonical: url },
     robots: input.noIndex ? { index: false, follow: true } : undefined,
@@ -72,15 +74,22 @@ export function pageMeta(input: {
   };
 }
 
-/** Every page that should be indexed, in the order a reader would meet them. */
+/**
+ * Every page that should be indexed, in the order a reader would meet them.
+ *
+ * `updated` is the day the page's content last changed, written by hand when
+ * it does. The sitemap used to stamp every page with the build time, so every
+ * deploy claimed every page had changed, and a crawler that sees that learns
+ * to ignore the field altogether.
+ */
 export const PAGES = [
-  { path: "/", changeFrequency: "weekly", priority: 1.0 },
-  { path: "/how-it-works", changeFrequency: "monthly", priority: 0.9 },
-  { path: "/linkedin-automation-limits", changeFrequency: "monthly", priority: 0.9 },
+  { path: "/", changeFrequency: "weekly", priority: 1.0, updated: "2026-10-12" },
+  { path: "/how-it-works", changeFrequency: "monthly", priority: 0.9, updated: "2026-10-12" },
+  { path: "/linkedin-automation-limits", changeFrequency: "monthly", priority: 0.9, updated: "2026-10-12" },
   // Kept, and kept indexed: it answers "what does it cost" with "nothing, for now".
-  { path: "/pricing", changeFrequency: "monthly", priority: 0.5 },
-  { path: "/security", changeFrequency: "monthly", priority: 0.6 },
-  { path: "/about", changeFrequency: "yearly", priority: 0.4 },
+  { path: "/pricing", changeFrequency: "monthly", priority: 0.5, updated: "2026-10-12" },
+  { path: "/security", changeFrequency: "monthly", priority: 0.6, updated: "2026-10-12" },
+  { path: "/about", changeFrequency: "yearly", priority: 0.4, updated: "2026-10-12" },
 ] as const;
 
 /**

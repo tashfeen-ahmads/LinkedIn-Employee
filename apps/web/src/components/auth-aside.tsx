@@ -1,5 +1,5 @@
 import { PUBLIC_LIMITS } from "@/lib/site";
-import { NORA } from "@/lib/team";
+import { BRAND } from "@le/shared";
 
 /**
  * What the form is for, beside the form.
@@ -43,8 +43,8 @@ export function AuthAside({ variant = "signin" }: { variant?: "signin" | "signup
         <p className="eyebrow">An AI SDR that works inside the limits</p>
         <p className="lede prose">
           {variant === "signup"
-            ? `Give ${NORA} your website and her team writes who to go after. You approve a strategy, approve the words and press launch. They find the people, write to each one by name and answer what comes back.`
-            : `${NORA}'s team finds the people, writes to each one by name, answers what comes back and books the call, at a pace that keeps a LinkedIn account alive.`}
+            ? `Give ${BRAND.name} your website and its team writes who to go after. You approve a strategy, approve the words and press launch. They find the people, write to each one by name and answer what comes back.`
+            : `${BRAND.name}'s team finds the people, writes to each one by name, answers what comes back and books the call, at a pace that keeps a LinkedIn account alive.`}
         </p>
       </div>
 
@@ -77,8 +77,8 @@ export function AuthAside({ variant = "signin" }: { variant?: "signin" | "signup
             <span className="auth-card-value">Dana R.</span>
           </div>
           <span className="auth-card-note">
-            Your opener goes out within the hour. Not three days later, and not while she is
-            asleep.
+            Your opener goes out within the hour. Not three days later, and not in the
+            middle of the night.
           </span>
         </div>
 

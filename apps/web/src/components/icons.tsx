@@ -163,6 +163,39 @@ const PATHS: Record<string, React.ReactNode> = {
       <path d="M8 13h8M8 17h5" />
     </>
   ),
+  /*
+   * The sequence's own four, drawn on the same grid as the rest so a campaign's
+   * steps and the sidebar read as one set. Named by what the step does.
+   */
+  /* A profile view: an eye. */
+  view: (
+    <>
+      <path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12Z" />
+      <circle cx="12" cy="12" r="3" />
+    </>
+  ),
+  /* A connection request: a person with a plus beside them. */
+  invite: (
+    <>
+      <circle cx="9" cy="8" r="3.5" />
+      <path d="M2.5 20a6.5 6.5 0 0 1 13 0" />
+      <path d="M19 8v6M16 11h6" />
+    </>
+  ),
+  /* Time: when something goes out. */
+  clock: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3 2" />
+    </>
+  ),
+  /* A timing the product sets rather than the person. */
+  lock: (
+    <>
+      <rect x="5" y="11" width="14" height="10" rx="2" />
+      <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+    </>
+  ),
   dot: <circle cx="12" cy="12" r="3.2" />,
 };
 

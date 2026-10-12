@@ -149,15 +149,57 @@ describe("nothing public quotes a price", () => {
     ];
     const offenders: string[] = [];
     for (const file of PUBLIC) {
+      if (isComparison(file)) continue;
       // Comments may discuss what was removed; only rendered text counts.
-      const source = readFileSync(file, "utf8")
-        .replace(/\{\s*\/\*[\s\S]*?\*\/\s*\}/g, "")
-        .replace(/\/\*[\s\S]*?\*\//g, "")
-        .replace(/^\s*\/\/.*$/gm, "");
+      const source = rendered(file);
       for (const pattern of BANNED) {
         if (pattern.test(source)) offenders.push(`${file.split("/src/")[1]}: ${pattern}`);
       }
     }
     expect(offenders).toEqual([]);
   });
+
+  /*
+   * A comparison page has to say what the alternatives cost, or it is not a
+   * comparison: somebody choosing between Nora and a $99-a-month tool needs the
+   * $99. So these pages may quote other companies' prices and trials, and two
+   * things keep that from becoming the thing this test exists to stop. Every
+   * one is dated, because a competitor's price is a fact about one month. And
+   * no sentence puts a price next to Nora's name, because a price beside the
+   * product's name reads as the product's price, to a person skimming and to a
+   * model summarising the page alike.
+   */
+  it("lets comparison pages quote other tools' prices, dated, and never beside Nora's name", () => {
+    const comparisons = PUBLIC.filter(isComparison);
+    expect(comparisons.length, "no comparison pages found, so this test would pass vacuously").toBeGreaterThan(3);
+    const offenders: string[] = [];
+    for (const file of comparisons) {
+      const source = rendered(file);
+      const quotesPrice = /\$\d/.test(source);
+      if (quotesPrice && !/as of (January|February|March|April|May|June|July|August|September|October|November|December) 20\d\d/i.test(source)) {
+        offenders.push(`${file.split("/src/")[1]}: quotes a price with no "as of <month> <year>"`);
+      }
+      // A dollar figure inside the same clause as the name, either way round:
+      // "Nora costs $49", "$49 gets you Nora". Clause ends at punctuation or
+      // markup, so "$99 a month. Nora is free" is two clauses and fine.
+      const beside = source.match(/\bNora\b[^.;:!?<>{}]{0,60}\$\d|\$\d[^.;:!?<>{}]{0,40}\bNora\b/g) ?? [];
+      for (const hit of beside) offenders.push(`${file.split("/src/")[1]}: a price beside Nora's name: "${hit}"`);
+    }
+    expect(offenders).toEqual([]);
+  });
 });
+
+/** Pages whose job is comparing Nora with priced tools. */
+function isComparison(file: string): boolean {
+  return /\(marketing\)\/(alternatives\/|guides\/(ai-sdr-pricing|ai-sdr-vs-human-sdr|best-ai-sdr-for-linkedin|safest-linkedin-automation-tool)\/|free-linkedin-automation-tool\/)/.test(
+    file,
+  );
+}
+
+/** A file's source with comments removed, so only rendered text is checked. */
+function rendered(file: string): string {
+  return readFileSync(file, "utf8")
+    .replace(/\{\s*\/\*[\s\S]*?\*\/\s*\}/g, "")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/^\s*\/\/.*$/gm, "");
+}

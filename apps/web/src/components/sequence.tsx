@@ -23,6 +23,8 @@ import { FIRST_STEP_DELAY_DAYS, LINKEDIN_LIMITS } from "@le/shared";
  */
 
 export interface SequenceStep {
+  /** What kind of act this is, which decides its glyph in the drawn sequence. */
+  kind?: "view" | "invite" | "message";
   /** "Profile view", "Connection request", "Follow-up 1". */
   label: string;
   /** The message, as a prospect would read it. Null for an action with no text. */
@@ -44,6 +46,7 @@ export function sequenceFor(input: {
 
   if (input.warmUp) {
     out.push({
+      kind: "view",
       label: "Profile view",
       when: `${Math.round(LINKEDIN_LIMITS.warmUpToInviteMinMs / 60_000)} minutes to ${Math.round(
         LINKEDIN_LIMITS.warmUpToInviteMaxMs / 3_600_000,
@@ -53,15 +56,17 @@ export function sequenceFor(input: {
   }
 
   out.push({
+    kind: "invite",
     label: "Connection request",
     body: input.connectionNote,
     when: "Paced across your sending hours",
-    fixed: "Written for each person from their own profile, and never carrying a link — LinkedIn penalises them in invitations.",
+    fixed: "Written for each person from their own profile, and never carrying a link, because LinkedIn penalises them in invitations.",
   });
 
   for (const step of [...input.steps].sort((a, b) => a.step_number - b.step_number)) {
     const first = step.step_number === 1;
     out.push({
+      kind: "message",
       label: `Follow-up ${step.step_number}`,
       body: step.message,
       variant: step.variant ?? null,
@@ -81,7 +86,7 @@ export function sequenceFor(input: {
        * of a rule, and the screen's is the one somebody believes.
        */
       fixed: first
-        ? `Sent while they still remember accepting. This one is not on a schedule — ${FIRST_STEP_DELAY_DAYS === 0 ? "it goes out the same day" : "it follows the acceptance"}, whatever a step number suggests.`
+        ? `Sent while they still remember accepting. This one is not on a schedule: ${FIRST_STEP_DELAY_DAYS === 0 ? "it goes out the same day" : "it follows the acceptance"}, whatever a step number suggests.`
         : undefined,
     });
   }

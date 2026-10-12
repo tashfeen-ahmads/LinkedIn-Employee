@@ -17,13 +17,23 @@ import type { ReactNode } from "react";
  */
 export function PageHeader({
   eyebrow,
+  crumbs,
   title,
+  status,
   lede,
   actions,
 }: {
   /** The section this page belongs to. Optional, and never the page's name. */
   eyebrow?: string;
+  /**
+   * The way back up, for a page that lives inside a list: "Campaigns / this
+   * campaign". Replaces the eyebrow when given, because both say where the page
+   * belongs and one of them is a link.
+   */
+  crumbs?: { href: string; label: string }[];
   title: string;
+  /** A status chip beside the title, for a page that is one thing with a state. */
+  status?: ReactNode;
   /** One sentence on what the screen is for. Not a paragraph. */
   lede?: ReactNode;
   /** The one or two things you can do to the whole page. */
@@ -32,8 +42,28 @@ export function PageHeader({
   return (
     <header className="page-header">
       <div className="page-header-text">
-        {eyebrow ? <p className="page-eyebrow">{eyebrow}</p> : null}
-        <h1>{title}</h1>
+        {crumbs?.length ? (
+          <nav className="crumbs" aria-label="Breadcrumb">
+            <ol>
+              {crumbs.map((crumb) => (
+                <li key={crumb.href}>
+                  <Link href={crumb.href}>{crumb.label}</Link>
+                </li>
+              ))}
+              <li aria-current="page">{title}</li>
+            </ol>
+          </nav>
+        ) : eyebrow ? (
+          <p className="page-eyebrow">{eyebrow}</p>
+        ) : null}
+        {status ? (
+          <div className="page-title-row">
+            <h1>{title}</h1>
+            {status}
+          </div>
+        ) : (
+          <h1>{title}</h1>
+        )}
         {lede ? <p className="muted prose">{lede}</p> : null}
       </div>
       {actions ? <div className="page-header-actions">{actions}</div> : null}
@@ -89,16 +119,24 @@ export function Section({
   action,
   children,
   id,
+  framed = false,
 }: {
   title?: string;
   description?: ReactNode;
   action?: ReactNode;
   children: ReactNode;
   id?: string;
+  /**
+   * The section is its own panel: the title sits inside the surface, at a
+   * panel's size rather than a page section's. For dashboards, where two or
+   * three titled panels share a row and a heading above each would float
+   * between them.
+   */
+  framed?: boolean;
 }) {
   const headingId = id ? `${id}-heading` : undefined;
   return (
-    <section className="section" aria-labelledby={headingId}>
+    <section className={framed ? "section card is-framed" : "section"} aria-labelledby={headingId}>
       {title ? (
         <div className="section-header">
           <div className="section-header-text">

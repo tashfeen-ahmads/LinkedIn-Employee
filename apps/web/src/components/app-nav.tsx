@@ -41,6 +41,13 @@ export interface NavGroup {
    * Inbox.
    */
   alwaysOpen?: boolean;
+  /**
+   * Sits at the foot of the rail rather than in the list: the account and the
+   * way to ask for help, which every application a rep already uses keeps at
+   * the bottom. Never collapsible, and its heading is for screen readers only,
+   * because two links under a divider need no title to be found.
+   */
+  footer?: boolean;
 }
 
 const STORAGE_KEY = "le.nav.collapsed";
@@ -135,65 +142,76 @@ export function AppNav({ groups }: { groups: NavGroup[] }) {
         <p className="small muted nav-empty">Nothing matches “{query.trim()}”.</p>
       ) : null}
 
-      {shown.map((group) => {
-        const holdsCurrentPage = group.items.some((item) => isCurrent(pathname, item.href));
-        const wants = group.items.some((item) => item.state);
-        const open =
-          // A filtered group is always open: finding a match and then hiding
-          // it behind a fold somebody collapsed last week is worse than no
-          // search at all.
-          Boolean(needle) ||
-          group.alwaysOpen ||
-          holdsCurrentPage ||
-          wants ||
-          !collapsed.includes(group.label);
-        // A group folded away still has to report what is waiting inside it,
-        // or collapsing the sidebar is how somebody stops seeing their inbox.
-        const hidden = group.items.reduce((sum, item) => sum + (item.count ?? 0), 0);
+      {shown.filter((group) => !group.footer).map((group) => renderGroup(group))}
 
-        return (
-          <div className="nav-group" key={group.label}>
-            {group.alwaysOpen ? (
-              <p className="nav-group-label">{group.label}</p>
-            ) : (
-              <button
-                type="button"
-                className="nav-group-toggle"
-                aria-expanded={open}
-                onClick={() => toggle(group.label)}
-              >
-                <span className="nav-group-label">{group.label}</span>
-                {!open && hidden > 0 ? <span className="nav-count">{hidden}</span> : null}
-                <Chevron open={open} />
-              </button>
-            )}
-
-            {open ? (
-              <div className="nav-items">
-                {group.items.map((item) => (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    aria-current={isCurrent(pathname, item.href) ? "page" : undefined}
-                  >
-                    <NavIcon name={item.icon ?? "dot"} className="nav-icon" />
-                    <span className="nav-label">{item.label}</span>
-                    {item.state ? (
-                      <span className={`nav-dot ${item.state}`} aria-hidden="true" />
-                    ) : null}
-                    {item.state ? (
-                      <span className="sr-only">{item.stateLabel ?? item.state}</span>
-                    ) : null}
-                    {item.count ? <span className="nav-count">{item.count}</span> : null}
-                  </Link>
-                ))}
-              </div>
-            ) : null}
-          </div>
-        );
-      })}
+      {shown.some((group) => group.footer) ? (
+        <div className="nav-foot">
+          {shown.filter((group) => group.footer).map((group) => renderGroup(group))}
+        </div>
+      ) : null}
     </nav>
   );
+
+  function renderGroup(group: NavGroup) {
+    const holdsCurrentPage = group.items.some((item) => isCurrent(pathname, item.href));
+    const wants = group.items.some((item) => item.state);
+    const open =
+      // A filtered group is always open: finding a match and then hiding
+      // it behind a fold somebody collapsed last week is worse than no
+      // search at all.
+      Boolean(needle) ||
+      group.alwaysOpen ||
+      group.footer ||
+      holdsCurrentPage ||
+      wants ||
+      !collapsed.includes(group.label);
+    // A group folded away still has to report what is waiting inside it,
+    // or collapsing the sidebar is how somebody stops seeing their inbox.
+    const hidden = group.items.reduce((sum, item) => sum + (item.count ?? 0), 0);
+
+    return (
+      <div className="nav-group" key={group.label}>
+        {group.footer ? (
+          <p className="nav-group-label sr-only">{group.label}</p>
+        ) : group.alwaysOpen ? (
+          <p className="nav-group-label">{group.label}</p>
+        ) : (
+          <button
+            type="button"
+            className="nav-group-toggle"
+            aria-expanded={open}
+            onClick={() => toggle(group.label)}
+          >
+            <span className="nav-group-label">{group.label}</span>
+            {!open && hidden > 0 ? <span className="nav-count">{hidden}</span> : null}
+            <Chevron open={open} />
+          </button>
+        )}
+
+        {open ? (
+          <div className="nav-items">
+            {group.items.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                aria-current={isCurrent(pathname, item.href) ? "page" : undefined}
+              >
+                <NavIcon name={item.icon ?? "dot"} className="nav-icon" />
+                <span className="nav-label">{item.label}</span>
+                {item.state ? (
+                  <span className={`nav-dot ${item.state}`} aria-hidden="true" />
+                ) : null}
+                {item.state ? (
+                  <span className="sr-only">{item.stateLabel ?? item.state}</span>
+                ) : null}
+                {item.count ? <span className="nav-count">{item.count}</span> : null}
+              </Link>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
 }
 
 /** Rotates rather than swapping glyphs, so the state reads as one control. */

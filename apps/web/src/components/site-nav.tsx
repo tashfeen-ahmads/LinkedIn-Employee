@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef } from "react";
 
 type NavLink = { href: string; label: string };
 
@@ -37,7 +37,7 @@ export function SiteNav({ links }: { links: ReadonlyArray<NavLink> }) {
  * The same links, behind a Menu button, for the widths where the bar has no
  * room for them.
  *
- * Below 900px the inline nav is hidden and below 640px so is Sign in, and for
+ * Below 900px the inline nav is hidden and below 480px so is Sign in, and for
  * a while nothing replaced either: a phone visitor could reach Sign up and the
  * home page and nothing else, and somebody with an account had no way in from
  * the site at all. So the menu carries Sign in too, whatever the header has
@@ -97,16 +97,4 @@ export function SiteMenu({ links, signInHref }: { links: ReadonlyArray<NavLink>;
       </nav>
     </details>
   );
-}
-
-/**
- * Renders its children everywhere except on the page they would link to.
- *
- * The closing band sits in the marketing layout, which cannot see the path,
- * and its "See how it works" button on /how-it-works was a link to the page
- * already open. Asking here keeps the layout a server component.
- */
-export function UnlessOn({ path, children }: { path: string; children: ReactNode }) {
-  const pathname = usePathname();
-  return pathname === path ? null : <>{children}</>;
 }

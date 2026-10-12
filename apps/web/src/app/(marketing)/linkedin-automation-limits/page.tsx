@@ -1,16 +1,20 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { ArticleSchema, BreadcrumbSchema, FaqSchema } from "@/components/schema";
 import { PUBLIC_LIMITS, pageMeta } from "@/lib/site";
-import { Reveal } from "@/components/reveal";
+import { Faq, PageHero } from "@/components/marketing";
+import { WarmupRamp } from "@/components/diagrams";
+import { Forecast } from "@/components/forecast";
 
-const TITLE = "LinkedIn automation limits in 2026: the numbers that keep an account safe";
+const TITLE = "LinkedIn connection request limit and automation limits in 2026";
 const DESCRIPTION =
-  "How many connection requests you can send a day, what the weekly ceiling is, why acceptance rate matters more than volume, and the warning signs that come before a restriction.";
+  "The LinkedIn connection request limit per day and per week, why acceptance rate matters more than volume, and the warning signs that come before a restriction.";
 const PATH = "/linkedin-automation-limits";
 const PUBLISHED = "2026-09-10";
 
-export const metadata: Metadata = pageMeta({ title: TITLE, description: DESCRIPTION, path: PATH });
+/** The <title>: keyword first and under 60 characters; the H1 keeps the longer TITLE. */
+const SEO_TITLE = "LinkedIn connection request limit in 2026: every number";
+
+export const metadata: Metadata = pageMeta({ title: SEO_TITLE, description: DESCRIPTION, path: PATH });
 
 /**
  * What the weekly ceiling works out to across a five-day working week.
@@ -76,27 +80,28 @@ export default function LimitsPage() {
       />
       <FaqSchema items={FAQ} />
 
-      <article className="section">
-        <div className="narrow stack-7">
-          <Reveal>
-            <header className="stack-4">
-              <nav className="eyebrow" aria-label="Breadcrumb">
-                <Link href="/">Home</Link> / Limits
-              </nav>
-              <h1>LinkedIn automation limits in 2026</h1>
-              <p className="lede prose">
-                The safe numbers, where they come from, and the warning signs that arrive two or three
-                days before a restriction does. These are also the limits this product enforces, so
-                every figure below is one our own code refuses to exceed.
-              </p>
-              <p className="tiny subtle">
-                Published {new Date(PUBLISHED).toLocaleDateString("en-GB", { dateStyle: "long" })}
-              </p>
-            </header>
-          </Reveal>
+      <PageHero
+        crumb="LinkedIn limits"
+        lede={
+          <>
+            <p>
+              The safe numbers, where they come from, and the warning signs that arrive two or three
+              days before a restriction does. These are also the limits this product enforces, so
+              every figure below is one our own code refuses to exceed.
+            </p>
+            <p className="mk-caption">
+              Published {new Date(PUBLISHED).toLocaleDateString("en-GB", { dateStyle: "long" })}
+            </p>
+          </>
+        }
+      >
+        <h1>LinkedIn automation limits in 2026</h1>
+      </PageHero>
 
-          <section className="stack-4">
-            <h2>The numbers</h2>
+      <article className="mk-section mk-article">
+        <div className="container mk-article-grid">
+          <section className="mk-article-block">
+            <h2 className="mk-h2-sm">The LinkedIn connection request limit, and the other numbers</h2>
             <div className="table-scroll">
               <table>
                 <thead>
@@ -109,132 +114,129 @@ export default function LimitsPage() {
                 <tbody>
                   <tr>
                     <td>Connection requests a day</td>
-                    <td className="num mono">20 to 25</td>
-                    <td className="num mono">
-                      {PUBLIC_LIMITS.invitesPerDayStart} → {PUBLIC_LIMITS.invitesPerDayMax}
+                    <td className="num">20 to 25</td>
+                    <td className="num">
+                      {PUBLIC_LIMITS.invitesPerDayStart} rising to {PUBLIC_LIMITS.invitesPerDayMax}
                     </td>
                   </tr>
                   <tr>
                     <td>Connection requests a week</td>
-                    <td className="num mono">100 to 200</td>
-                    <td className="num mono">{PUBLIC_LIMITS.invitesPerWeek}</td>
+                    <td className="num">100 to 200</td>
+                    <td className="num">{PUBLIC_LIMITS.invitesPerWeek}</td>
                   </tr>
                   <tr>
                     <td>Messages a day</td>
-                    <td className="num mono">50 to 100</td>
-                    <td className="num mono">{PUBLIC_LIMITS.messagesPerDay}</td>
+                    <td className="num">50 to 100</td>
+                    <td className="num">{PUBLIC_LIMITS.messagesPerDay}</td>
                   </tr>
                   <tr>
                     <td>Warm-up before full volume</td>
-                    <td className="num mono">2 to 4 weeks</td>
-                    <td className="num mono">{PUBLIC_LIMITS.warmupWeeks} weeks</td>
+                    <td className="num">2 to 4 weeks</td>
+                    <td className="num">{PUBLIC_LIMITS.warmupWeeks} weeks</td>
                   </tr>
                   <tr>
                     <td>Healthy acceptance rate</td>
-                    <td className="num mono">above 30%</td>
-                    <td className="num mono">{PUBLIC_LIMITS.healthyAcceptance}%</td>
+                    <td className="num">above 30%</td>
+                    <td className="num">{PUBLIC_LIMITS.healthyAcceptance}%</td>
                   </tr>
                 </tbody>
               </table>
             </div>
-            <p className="small subtle">
+            <p className="mk-caption">
               One figure is above the usual guidance on purpose: a fully warmed account may send up
               to {PUBLIC_LIMITS.invitesPerDayMax} invitations on a single day. It cannot keep that
               up, because the weekly ceiling of {PUBLIC_LIMITS.invitesPerWeek} averages{" "}
               {WEEKDAY_AVERAGE} a day across a five-day week, and no account reaches that daily
-              maximum until it has been sending for {PUBLIC_LIMITS.warmupWeeks} weeks. Everything else sits at or below the
-              commonly cited figures. That is a deliberate trade: a campaign that runs for a year at
-              twenty a day reaches far more people than one that runs for six weeks at fifty and then
-              loses the account.
+              maximum until it has been sending for {PUBLIC_LIMITS.warmupWeeks} weeks. Everything
+              else sits at or below the commonly cited figures. That is a deliberate trade: a
+              campaign that runs for a year at twenty a day reaches far more people than one that
+              runs for six weeks at fifty and then loses the account.
             </p>
           </section>
 
-          <section className="stack-4">
-            <h2>Acceptance rate is the real limit</h2>
-            <p className="prose">
+          <section className="mk-article-block">
+            <WarmupRamp />
+          </section>
+
+          <section className="mk-article-block">
+            <h2 className="mk-h2-sm">Acceptance rate is the real limit</h2>
+            <p>
               Volume is what operators watch. Acceptance is what LinkedIn watches. An account sending
               fifteen invitations a day at 12% acceptance is in more danger than one sending thirty at
               40%, because the first is demonstrably contacting people who do not want to hear from it
               and the second is demonstrably not.
             </p>
-            <p className="prose">
+            <p>
               This is why targeting and copy are safety features rather than performance features. A
               vague ideal customer profile produces a list of near-misses, a list of near-misses
               produces a low acceptance rate, and a low acceptance rate produces a restriction. The
               chain runs in that order every time.
             </p>
-            <div className="notice accent">
-              <p>
-                <strong>What we do about it.</strong> Acceptance is checked nightly per account. Below{" "}
-                {PUBLIC_LIMITS.healthyAcceptance}% you get told, with the campaign named, while there
-                is still time to fix the targeting rather than after the account is gone.
-              </p>
-            </div>
+            <p className="mk-callout">
+              <strong>What we do about it.</strong> Acceptance is checked nightly per account. Below{" "}
+              {PUBLIC_LIMITS.healthyAcceptance}% you get told, with the campaign named, while there
+              is still time to fix the targeting rather than after the account is gone.
+            </p>
           </section>
 
-          <section className="stack-4">
-            <h2>The two or three days before a restriction</h2>
-            <p className="prose">
+          <section className="mk-article-block is-wide">
+            <h2 className="mk-h2-sm">Move the sliders until it hits the ceiling</h2>
+            <p>
+              The daily slider stops at {PUBLIC_LIMITS.invitesPerDayMax} because the product stops
+              there, and the weekly ceiling clamps the total underneath it.
+            </p>
+            <Forecast />
+          </section>
+
+          <section className="mk-article-block">
+            <h2 className="mk-h2-sm">The two or three days before a restriction</h2>
+            <p>
               LinkedIn rarely restricts an account with no signal beforehand. There is almost always a
               window where things behave oddly first, and it is a window most tools sail straight
               through, because they are counting sends rather than watching outcomes.
             </p>
-            <div className="grid grid-2">
-              {SIGNS.map((item) => (
-                <div key={item.sign} className="card">
-                  <h3>{item.sign}</h3>
-                  <p className="small muted">{item.why}</p>
-                </div>
-              ))}
-            </div>
-            <div className="notice accent">
-              <p>
-                <strong>What we do about it.</strong> Account health is polled every night and checked
-                on the response to every single send. Anything other than a clean result pauses the
-                account immediately and emails the rep. Sending resumes by itself once the platform
-                reports the account healthy again.
-              </p>
-            </div>
+          </section>
+          <ol className="mk-signs is-wide">
+            {SIGNS.map((item) => (
+              <li key={item.sign}>
+                <h3>{item.sign}</h3>
+                <p>{item.why}</p>
+              </li>
+            ))}
+          </ol>
+          <section className="mk-article-block">
+            <p className="mk-callout">
+              <strong>What we do about it.</strong> Account health is polled every night and checked
+              on the response to every single send. Anything other than a clean result pauses the
+              account immediately and emails the rep. Sending resumes by itself once the platform
+              reports the account healthy again.
+            </p>
           </section>
 
-          <section className="stack-4">
-            <h2>What no tool can promise</h2>
-            <p className="prose">
+          <section className="mk-article-block">
+            <h2 className="mk-h2-sm">What no tool can promise</h2>
+            <p>
               LinkedIn&rsquo;s user agreement prohibits automated access. That is a fact about the
               platform, not a detail a vendor can engineer away, and any tool claiming unlimited safe
               sending is selling you a restriction with extra steps.
             </p>
-            <p className="prose">
+            <p>
               What a tool can honestly offer is this: stay far enough under the thresholds that the
               pattern is indistinguishable from a person working their own network, randomise the
               timing so it never looks like a scheduler, keep the acceptance rate high enough that
               nobody is reporting the messages, and stop the moment the platform pushes back. That is
               the whole safety model, and everything above is how it is enforced.
             </p>
-          </section>
-
-          <section className="stack-4">
-            <h2>Common questions</h2>
-            <div className="faq">
-              {FAQ.map((item) => (
-                <details key={item.q}>
-                  <summary>{item.q}</summary>
-                  <p className="muted small">{item.a}</p>
-                </details>
-              ))}
-            </div>
-          </section>
-
-          <aside className="card raised stack-4">
-            <h2>These limits are the product</h2>
-            <p className="muted">
-              Every number on this page is read from one constants file that the sending code checks
-              before each action. They are not settings a campaign can raise; an account override may
-              only make them stricter.
+            <p className="mk-callout">
+              <strong>These limits are the product.</strong> Every number on this page is read from
+              one constants file that the sending code checks before each action. They are not
+              settings a campaign can raise; an account override may only make them stricter.
             </p>
-          </aside>
+          </section>
         </div>
       </article>
+
+      <Faq items={FAQ} title="Common questions about LinkedIn limits" />
     </>
   );
 }

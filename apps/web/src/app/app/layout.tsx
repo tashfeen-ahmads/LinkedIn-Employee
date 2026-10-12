@@ -73,7 +73,6 @@ function navGroups(waiting: number, marks: NavMarks): NavGroup[] {
         { href: "/app/agents", label: "Agents", icon: "agents", ...next("/app/agents", "Agents") },
         { href: "/app/cta", label: "Calls to action", icon: "cta" },
         { href: "/app/exclusions", label: "Do not contact", icon: "exclusions" },
-        { href: "/app/profile", label: "Profile & team", icon: "profile", ...next("/app/profile", "Profile & team") },
       ],
     },
     /*
@@ -93,6 +92,19 @@ function navGroups(waiting: number, marks: NavMarks): NavGroup[] {
         { href: "/app/posts", label: "Profile posts", icon: "posts" },
         { href: "/app/tutorial", label: "How it works", icon: "tutorial" },
         { href: "/app/system", label: "System check", icon: "system" },
+      ],
+    },
+    /*
+     * The account and the way to ask for help, at the foot of the rail where
+     * every application a rep already uses keeps them. Same links, same mark
+     * rule: Profile & team still carries the next-step dot when the workspace
+     * is on that step.
+     */
+    {
+      label: "Account",
+      footer: true,
+      items: [
+        { href: "/app/profile", label: "Profile & team", icon: "profile", ...next("/app/profile", "Profile & team") },
         { href: "/app/support", label: "Support", icon: "support" },
       ],
     },
@@ -235,8 +247,21 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               {BRAND_QUALIFIER ? <span className="wordmark-thin">&nbsp;{BRAND_QUALIFIER}</span> : null}
             </span>
           </Link>
-          <p className="tiny subtle">{session.workspaceName}</p>
         </div>
+
+        {/*
+          Which workspace this is, as a row of its own under the wordmark. It
+          links to the profile, where the workspace and its team are managed;
+          there is one workspace per account, so it is a place to go rather
+          than a menu that pretends to switch.
+        */}
+        <Link className="app-workspace" href="/app/profile">
+          <span className="app-workspace-mark" aria-hidden="true">
+            {initials(session.workspaceName)}
+          </span>
+          <span className="app-workspace-name">{session.workspaceName}</span>
+          <span className="sr-only">, workspace settings</span>
+        </Link>
 
         <AppNav
           groups={navGroups(waiting, {

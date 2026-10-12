@@ -128,7 +128,7 @@ export function Forecast() {
 
         {result.cappedByWeek ? (
           <p className="tiny warn-text">
-            Held at {LINKEDIN_LIMITS.invitesPerWeek} a week per rep — the weekly ceiling caught this
+            Held at {LINKEDIN_LIMITS.invitesPerWeek} a week per rep: the weekly ceiling caught this
             before the daily one did.
           </p>
         ) : null}

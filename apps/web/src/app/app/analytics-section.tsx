@@ -11,13 +11,14 @@ import {
   stagesForGoals,
   type CtaKind,
   type DatedFunnelRow,
+  type FunnelReport,
   type Rate,
 } from "@le/shared";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { readFunnelData } from "@/lib/funnel-data";
 import { Section, Empty } from "@/components/page";
-import { FunnelChart, Kpi, RankedBars, TrendChart } from "@/components/charts";
+import { FunnelChart, RankedBars, TrendChart } from "@/components/charts";
 import { label } from "@/lib/labels";
 
 export const dynamic = "force-dynamic";
@@ -79,7 +80,7 @@ export async function ResultsSection() {
     const entry = byStrategy.get(key) ?? {
       rows: [],
       goals: new Set<CtaKind>(),
-      name: key === "none" ? "No strategy" : profileName.get(key) ?? "—",
+      name: key === "none" ? "No strategy" : profileName.get(key) ?? "Unnamed strategy",
     };
     entry.rows.push(...(funnel.rowsByCampaign.get(campaign.id) ?? []));
     entry.goals.add(campaign.cta_kind);
@@ -138,43 +139,11 @@ export async function ResultsSection() {
         </div>
       ) : null}
 
-      <Section id="headline" title="This week">
-        <div className="kpi-row">
-          <Kpi
-            label="Invited (7 days)"
-            value={report.momentum.current.toLocaleString()}
-            trend={trend.slice(-14)}
-            note={
-              report.momentum.change === null
-                ? "First week of sending — no week before it to compare."
-                : `${report.momentum.change >= 0 ? "+" : ""}${Math.round(
-                    report.momentum.change * 100,
-                  )}% on the week before`
-            }
-          />
-          <Kpi
-            label="Acceptance"
-            value={rateValue(report.acceptance)}
-            tone={toneFor(report.acceptance)}
-            note={describeRate(report.acceptance)}
-          />
-          <Kpi
-            label="Reply"
-            value={rateValue(report.reply)}
-            tone={toneFor(report.reply)}
-            note={describeRate(report.reply)}
-          />
-          {/*
-            Meetings only where a campaign here can reach that stage (rule 29):
-            a workspace whose campaigns all ask for a sign-up would otherwise
-            get a permanent zero, which reports a working campaign as a failed
-            one every day.
-          */}
-          {report.stages.some((stage) => stage.key === "meetings") ? (
-            <Kpi label="Meetings" value={report.counts.meetings.toLocaleString()} />
-          ) : null}
-        </div>
-      </Section>
+      {/*
+        "This week" moved to the top of the overview as its stat row
+        (`HeadlineStats` below), so the four figures are read once, in the
+        place somebody looks first, rather than twice on one screen.
+      */}
 
       <Section
         id="sending"
@@ -325,7 +294,74 @@ export async function ResultsSection() {
 }
 
 function rateValue(r: Rate): string {
-  return r.value === null ? "—" : `${(r.value * 100).toFixed(1)}%`;
+  return r.value === null ? "Not yet" : `${(r.value * 100).toFixed(1)}%`;
+}
+
+/**
+ * The overview's stat row: the four figures that answer "is it working".
+ *
+ * Plain numbers on the page's ground, divided by hairlines rather than boxed:
+ * four tiles of equal weight under a list of work read as four more things to
+ * do, and these are a reading, not a task. Computed from the same
+ * `funnelReport` Results uses, so the two can never disagree, and Meetings
+ * only appears where a campaign here can reach that stage (rule 29).
+ */
+export function HeadlineStats({ report }: { report: FunnelReport }) {
+  return (
+    <section className="headline-stats" aria-label="This week">
+      <HeadlineStat
+        label="Invited, last 7 days"
+        value={report.momentum.current.toLocaleString()}
+        note={
+          report.momentum.change === null
+            ? "First week of sending, so there is no week before it to compare."
+            : `${report.momentum.change >= 0 ? "+" : ""}${Math.round(
+                report.momentum.change * 100,
+              )}% on the week before`
+        }
+      />
+      <HeadlineStat
+        label="Acceptance"
+        value={rateValue(report.acceptance)}
+        tone={toneFor(report.acceptance)}
+        note={describeRate(report.acceptance)}
+      />
+      <HeadlineStat
+        label="Reply"
+        value={rateValue(report.reply)}
+        tone={toneFor(report.reply)}
+        note={describeRate(report.reply)}
+      />
+      {report.stages.some((stage) => stage.key === "meetings") ? (
+        <HeadlineStat
+          label="Meetings"
+          value={report.counts.meetings.toLocaleString()}
+          note="Booked, across every campaign."
+        />
+      ) : null}
+    </section>
+  );
+}
+
+/** One figure in the row. The tone is a state, and the note always says it in words. */
+function HeadlineStat({
+  label,
+  value,
+  note,
+  tone = "neutral",
+}: {
+  label: string;
+  value: string;
+  note: string;
+  tone?: "positive" | "warning" | "neutral";
+}) {
+  return (
+    <div className="headline-stat">
+      <span className="headline-label">{label}</span>
+      <span className={`headline-value${tone === "neutral" ? "" : ` is-${tone}`}`}>{value}</span>
+      <span className="headline-note">{note}</span>
+    </div>
+  );
 }
 
 function toneFor(r: Rate): "positive" | "warning" | "neutral" {
@@ -336,7 +372,7 @@ function toneFor(r: Rate): "positive" | "warning" | "neutral" {
 /** Why there is no rate, or how this one sits against its target. */
 function describeRate(r: Rate): string {
   if (r.verdict === "too-early") {
-    return `${r.denominator.toLocaleString()} so far — a rate appears at ${MIN_FOR_RATE}.`;
+    return `${r.denominator.toLocaleString()} so far. A rate appears at ${MIN_FOR_RATE}.`;
   }
   return `${r.numerator.toLocaleString()} of ${r.denominator.toLocaleString()} · ${
     r.verdict === "on-target" ? "on target" : "below"
@@ -348,7 +384,7 @@ function RatePill({ rate }: { rate: Rate }) {
   if (rate.verdict === "too-early") {
     return (
       <span className="small subtle" title={`${rate.denominator} so far; a rate appears at ${MIN_FOR_RATE}`}>
-        —
+        Not yet
       </span>
     );
   }

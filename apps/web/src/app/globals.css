@@ -88,6 +88,12 @@
   --logo-ink: var(--text-inverse);
   --auth-panel-line:   rgba(255, 255, 255, 0.14);
 
+  /* The one dark band on the marketing site: the closing call to action. One
+     world in both themes, like the auth panel, so its white button holds. */
+  --ink-band:        #0E1222;
+  --ink-band-text:   #F4F5F9;
+  --ink-band-muted:  #A7ADBF;
+
   --accent:          #3730E8;
   --accent-hover:    #2A24C4;
   --accent-soft:     #ECEBFE;
@@ -153,8 +159,10 @@
   --space-7: 3rem;
   --space-8: 4.5rem;
 
-  --radius-sm: 6px;
-  --radius:    10px;
+  /* Shape lock: controls 8px, app panels 12px, marketing cards 16px, and the
+     pill only for a status chip. */
+  --radius-sm: 8px;
+  --radius:    12px;
   --radius-lg: 16px;
   --radius-pill: 999px;
 
@@ -173,9 +181,17 @@
   --shadow:    0 1px 2px rgba(16, 19, 33, .05), 0 10px 24px -10px rgba(16, 19, 33, .18);
   --shadow-lg: 0 2px 4px rgba(16, 19, 33, .05), 0 20px 48px -16px rgba(16, 19, 33, .22);
 
-  /* The marketing site's voice. Character, read once. */
-  --font-sans:    var(--font-instrument, ui-sans-serif), system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-display: var(--font-bricolage, var(--font-instrument, ui-sans-serif)), system-ui, sans-serif;
+  /*
+   * One family for the product and the site that sells it.
+   *
+   * The site used to wear Bricolage and Instrument Sans for "character" while
+   * the app wore Geist, so the first screen after signing up looked like a
+   * different company. Geist at weight 600 with tight tracking carries a
+   * headline on its own, and its tabular figures matter on the marketing
+   * pages too: every number there is a real limit the product enforces.
+   */
+  --font-sans:    var(--font-geist, ui-sans-serif), system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-display: var(--font-geist, ui-sans-serif), system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   /* The application's. A tool face, worked in daily, meant to disappear — with
      real tabular figures so a column of numbers lines up without being set in
      a monospace, which is what made the tables look like code. */
@@ -381,9 +397,6 @@ input, select, textarea, button { margin: 0; }
 /* A measure, and no single word left alone on the last line. Every section
    description on the overview ended `...is on` / `Results.` */
 .prose { max-width: 65ch; text-wrap: pretty; }
-/* A shorter measure for a caption or a stat's note, where 65ch would run wider
-   than the tile it sits in. */
-.measure-short { max-width: 32ch; }
 
 /* Text that keeps the line breaks it was typed with — a stored document, a
    message body. Wraps rather than scrolling, so a long line stays inside the
@@ -482,7 +495,6 @@ input, select, textarea, button { margin: 0; }
  * viewport and stops at both ends.
  */
 .section { padding-block: clamp(var(--space-7), 7vw, 6rem); }
-.divider { border: 0; border-top: 1px solid var(--border); margin: 0; }
 
 /* Every bulleted list in the app was setting its own indent inline, and they
    did not agree. The marker sits in the padding; the list itself carries no
@@ -544,10 +556,9 @@ input, select, textarea, button { margin: 0; }
   justify-content: space-between;
   gap: var(--space-4);
   flex-wrap: wrap;
-  /* The page title carries a rule beneath it, so where the heading ends and
-     the work begins is a line rather than a guess about spacing. */
-  padding-bottom: var(--space-4);
-  border-bottom: 1px solid var(--border);
+  /* No rule beneath it any more: every section under the title now sits on a
+     surface of its own, so the panels say where the work begins, and a line
+     above the first of them was a second device doing one job. */
 }
 /*
  * The one word above a page title, and its own word rather than a scoped
@@ -713,7 +724,7 @@ input, select, textarea, button { margin: 0; }
   gap: var(--space-2);
   padding: var(--space-7) var(--space-5);
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius);
   background: var(--surface-raised);
   box-shadow: var(--shadow-xs);
 }
@@ -732,7 +743,8 @@ input, select, textarea, button { margin: 0; }
   justify-content: center;
   gap: var(--space-2);
   padding: 0.625rem 1.1rem;
-  border-radius: var(--radius);
+  /* Shape lock: controls take the small radius, cards the large one. */
+  border-radius: var(--radius-sm);
   border: 1px solid transparent;
   background: var(--accent);
   color: var(--text-inverse);
@@ -1347,7 +1359,20 @@ form.form-row > button.btn:not(.block) { align-self: flex-end; }
 /* A row of links that filter what is below them. Pills rather than a control
    bar: the count belongs in the label, because "Contacted (0)" answers the
    question without anybody having to click it. */
-.tabs { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+/* One control holding the views, the current one raised out of it (the links'
+   own look is in the App v2 block, where the frame outranks `.pill`). Only the
+   application uses this class. */
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 3px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
 .tabs a { text-decoration: none; }
 .tabs a:hover { border-color: var(--accent-border); color: var(--text); }
 .tabs a[aria-current="page"] { font-weight: 650; }
@@ -1518,7 +1543,9 @@ th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
  */
 .app-top {
   border-bottom: 1px solid var(--border);
-  background: var(--surface-raised);
+  /* The page's own ground rather than a white slab: the bar is about the
+     person, not the page, and it should be the quietest thing on screen. */
+  background: var(--bg);
   position: sticky;
   top: 0;
   z-index: 15;
@@ -1556,14 +1583,14 @@ th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
   width: 100%;
   padding: 0.5rem 0.9rem 0.5rem 2.35rem;
   border: 1px solid var(--border);
-  border-radius: var(--radius-pill);
-  background: var(--surface);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
   color: var(--text);
   font: inherit;
   font-size: 0.875rem;
 }
 .app-search input::placeholder { color: var(--text-subtle); }
-.app-search input:focus { background: var(--surface-raised); }
+.app-search input:focus { border-color: var(--accent-border); }
 
 /* A circular control, sized as a target rather than as a glyph. */
 .app-top-icon {
@@ -1573,7 +1600,7 @@ th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
   justify-content: center;
   width: 2.25rem;
   height: 2.25rem;
-  border-radius: 50%;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   background: var(--surface-raised);
   color: var(--text-muted);
@@ -1590,7 +1617,7 @@ th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
   height: 1.05rem;
   padding: 0 0.25rem;
   border-radius: var(--radius-pill);
-  background: var(--danger);
+  background: var(--accent);
   color: var(--text-inverse);
   font-size: 0.625rem;
   font-weight: 650;
@@ -1603,7 +1630,7 @@ th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
   align-items: center;
   gap: var(--space-2);
   padding: 0.25rem 0.6rem 0.25rem 0.25rem;
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-sm);
   border: 1px solid transparent;
   min-width: 0;
 }
@@ -1639,7 +1666,7 @@ th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
 
 /* Sign-out sits last. `margin-top: auto` on it only reaches the bottom when
    nothing above it already claimed the slack. */
-.app-signout { margin-top: auto; padding-top: var(--space-3); border-top: 1px solid var(--border); }
+.app-signout { padding-inline: var(--space-1); }
 .app-body {
   display: flex;
   flex-direction: column;
@@ -1654,7 +1681,10 @@ th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
      the two are close, a heading is as far from its own table as from the
      section above it — and the page reads as one undivided column, which is
      what "the blocks merge into each other" describes. */
-  --app-gap: clamp(var(--space-6), 3.5vw, var(--space-7));
+  /* Revised down for the dashboard: at 3rem a page of panels read as islands,
+     and the overview's three answers no longer sat close enough to be read as
+     one screen. Still clearly larger than a section's own `--space-4`. */
+  --app-gap: clamp(var(--space-5), 2.4vw, var(--space-6));
   gap: var(--app-gap);
   padding: clamp(var(--space-4), 3vw, var(--space-6))
            clamp(var(--space-3), 4vw, var(--space-5))
@@ -1688,8 +1718,8 @@ th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
 }
 /* The page. One per screen. */
 :where(.app) h1 {
-  font-size: 1.5rem;
-  letter-spacing: -0.02em;
+  font-size: 1.75rem;
+  letter-spacing: -0.025em;
   /* Never the landing page's 18ch measure: a page title here is a label above
      a table, and that measure wraps it for no reason anybody can see. */
   max-width: none;
@@ -1709,14 +1739,15 @@ th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
 :where(.app) h4 { font-size: 0.8125rem; font-weight: 600; letter-spacing: 0.01em; text-transform: none; }
 
 
-.nav { display: flex; flex-direction: column; gap: 2px; }
+.nav { display: flex; flex-direction: column; gap: 2px; flex: 1 0 auto; }
 .nav a {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  padding: 0.45rem 0.6rem;
+  gap: 0.65rem;
+  padding: 0.5rem 0.65rem;
   border-radius: var(--radius-sm);
   font-size: 0.875rem;
+  font-weight: 500;
   color: var(--text-muted);
   transition: background 120ms ease, color 120ms ease;
 }
@@ -1732,7 +1763,7 @@ th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
  * anchor at the left edge, which is what lets somebody find Inbox without
  * reading the word.
  */
-.nav-icon { flex: none; width: 16px; height: 16px; color: var(--text-subtle); transition: color 120ms ease; }
+.nav-icon { flex: none; width: 18px; height: 18px; color: var(--text-subtle); transition: color 120ms ease; }
 .nav a:hover { background: var(--surface); color: var(--text); text-decoration: none; }
 .nav a:hover .nav-icon { color: var(--text-muted); }
 /*
@@ -1749,26 +1780,39 @@ th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
  * nav marker is for. It also gives the rail the one piece of saturated colour
  * it has, so the eye has somewhere to start.
  */
+/*
+ * Revised: a soft wash of the accent with the accent's own ink. The solid pill
+ * was the loudest object on every screen, louder than the page's own primary
+ * button, and the one saturated block in the rail pulled the eye away from the
+ * work. The wash still reads from across the screen because it is the only
+ * tinted row in the rail, and the text and glyph carry the accent as well, so
+ * the current page never rests on the fill alone.
+ */
 .nav a[aria-current="page"] {
-  background: var(--accent);
-  color: var(--text-inverse);
-  font-weight: 550;
-  box-shadow: 0 6px 16px -8px color-mix(in srgb, var(--accent) 70%, transparent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
 }
-.nav a[aria-current="page"] .nav-icon { color: var(--text-inverse); }
-.nav a[aria-current="page"]:hover { background: var(--accent-hover); color: var(--text-inverse); }
-.nav a[aria-current="page"] .nav-count { background: var(--surface-raised); color: var(--accent); }
+.nav a[aria-current="page"] .nav-icon { color: var(--accent); }
+.nav a[aria-current="page"]:hover { background: var(--accent-soft); color: var(--accent); }
+.nav a[aria-current="page"] .nav-count { background: var(--surface-raised); }
+/* A count is a number somebody acts on, set on its own tabular figures in a
+   soft chip, so it reads beside the label rather than shouting over it. */
 .nav-count {
-  font-family: var(--font-mono);
-  font-size: 0.6875rem;
-  padding: 0.1rem 0.35rem;
+  font-family: var(--font-ui);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.75rem;
+  font-weight: 600;
+  min-width: 1.4rem;
+  padding: 0.1rem 0.4rem;
+  text-align: center;
   border-radius: var(--radius-pill);
-  background: var(--accent);
-  color: var(--text-inverse);
+  background: var(--accent-soft);
+  color: var(--accent);
 }
 
-.app-brand { display: flex; flex-direction: column; gap: 0.1rem; padding: 0 var(--space-2) var(--space-1); }
-.app-brand a { font-weight: 650; font-size: 0.9375rem; letter-spacing: -0.015em; }
+.app-brand { display: flex; flex-direction: column; gap: 0.1rem; padding: 0 var(--space-2); }
+.app-brand a { font-weight: 650; font-size: 1.0625rem; letter-spacing: -0.02em; }
 /* The mark sits on the wordmark's optical centre rather than its box centre:
    the plate is a square with a radius and the text has a descender, so aligning
    the boxes leaves the logo reading a pixel high. */
@@ -1776,8 +1820,51 @@ th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
 .app-brand-name .logo-mark { flex: none; }
 .app-brand a:hover { text-decoration: none; color: var(--accent); }
 
+/* Which workspace this is: a row under the wordmark, on the rail's own ground
+   with a hairline, the way a workspace switcher sits in every tool a rep
+   already uses. It links to the profile, where the workspace is managed. */
+.app-workspace {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  font-size: 0.875rem;
+  font-weight: 550;
+  color: var(--text);
+  min-width: 0;
+  transition: border-color 120ms ease;
+}
+.app-workspace:hover { border-color: var(--border-strong); text-decoration: none; }
+.app-workspace-mark {
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  flex: none;
+  border-radius: 6px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 0.6875rem;
+  font-weight: 650;
+}
+.app-workspace-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* The account links sit at the foot of the rail, under a hairline, with the
+   slack of the column above them. */
+.nav-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: auto;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+
 .nav-group { display: flex; flex-direction: column; gap: 2px; }
-.nav-group + .nav-group { margin-top: var(--space-3); }
+.nav-group + .nav-group { margin-top: var(--space-4); }
 .nav-items { display: flex; flex-direction: column; gap: 2px; }
 
 /*
@@ -1791,17 +1878,20 @@ th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
  */
 .nav-group-label {
   font-size: 0.6875rem;
-  font-weight: 650;
-  letter-spacing: 0.08em;
+  font-weight: 600;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-subtle);
 }
+/* The always-open group's heading is a plain paragraph rather than the toggle,
+   so it takes the toggle's inset or it starts 10px left of every other one. */
+.nav-group > p.nav-group-label { padding: 0.35rem 0.65rem; margin-bottom: var(--space-1); }
 .nav-group-toggle {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   width: 100%;
-  padding: 0.35rem 0.6rem;
+  padding: 0.35rem 0.65rem;
   margin-bottom: var(--space-1);
   background: none;
   border: 0;
@@ -1921,6 +2011,10 @@ th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
      labels one group out of five labels nothing. */
   .nav-group-label { display: none; }
   .nav-items { flex-direction: row; gap: var(--space-1); }
+  /* The account links join the scrolling row; the workspace row is a desktop
+     convenience the bar has no room for, and Profile is one swipe away. */
+  .nav-foot { flex-direction: row; gap: var(--space-1); margin-top: 0; padding-top: 0; border-top: 0; }
+  .app-workspace { display: none; }
   /* Each link becomes its own tappable chip. On one scrolling line the
      desktop's accent *rail* has nothing to sit against, so the current page is
      marked by the fill alone — and the fill has to be the whole chip. */
@@ -1929,7 +2023,6 @@ th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
     padding: 0.5rem 0.75rem;
     border-radius: var(--radius-pill);
   }
-  .nav a[aria-current="page"] { box-shadow: none; }
 
   /*
    * A tap target, not a mouse target. 44px is the floor every platform's
@@ -1999,161 +2092,6 @@ th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
   }
 }
 
-/* ------------------------------------------------------------- marketing */
-
-/*
- * The header floats as a card rather than sitting as a bar.
- *
- * A full-width bar with a rule under it is the shape of a document; a rounded
- * panel with air around it reads as an application, and it lets the hero's
- * wash run underneath so the top of the page is one surface instead of two
- * stacked bands. The sticky wrapper is transparent — only the panel inside it
- * is painted.
- */
-.site-header {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  padding-top: var(--space-3);
-  padding-bottom: var(--space-2);
-}
-@media (max-width: 640px) {
-  .site-nav-link { display: none; }
-}
-
-
-/*
- * A band of alternate ground, so sections read as separate without borders.
- *
- * It carried a 1px rule top and bottom as well as the fill, which is two
- * devices doing one job: the rule reads as a divider somebody drew and the
- * fill reads as a section, and together they look like a table. The step
- * between the two grounds is now visible on its own, which is what a band is
- * for — and a soft seam at each edge lets one section become the next rather
- * than being cut from it.
- */
-.band {
-  background: var(--surface);
-  border-block: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
-}
-
-/*
- * The label above a section's headline, and the mark that anchors it.
- *
- * Eleven sections in a row, each opening with a grey uppercase line at the
- * left margin, is eleven identical blocks — which is what reads as a page with
- * no design in it. A short accent rule before the words gives every section
- * one fixed, coloured anchor down the left edge of the page: the eye finds the
- * next section without reading it.
- */
-.section-mark {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  color: var(--accent);
-}
-.section-mark::before {
-  content: "";
-  flex: none;
-  width: 1.75rem;
-  height: 2px;
-  border-radius: 1px;
-  background: currentColor;
-}
-
-/* Hero: copy leads, the product panel sits beside it and stacks under on a
-   narrow screen rather than being hidden. */
-/*
- * One column, centred, with the product beneath the promise.
- *
- * Two columns gave the headline half the page — at which point the sentence
- * that has to do all the work wraps at 18 characters and the panel beside it
- * competes for the same glance. Centred, the headline is the widest thing on
- * the page and the panel below it reads as the evidence for what it just
- * said.
- */
-.hero-grid {
-  display: grid;
-  gap: var(--space-6);
-  justify-items: center;
-  padding-bottom: var(--space-6);
-}
-.hero-copy { align-items: center; text-align: center; }
-/* Centred text needs its own measure: the lede's 65ch is a paragraph, and a
-   centred paragraph that wide is read as a block rather than as a sentence. */
-.hero-copy .lede { max-width: 46ch; }
-.hero-copy .cluster { justify-content: center; }
-/*
- * Every hero child takes a real measure of its own.
- *
- * `justify-items: center` makes a grid item shrink to its content, which is
- * what centred copy wants and exactly wrong for anything that draws itself.
- * The platform diagram's wrapper had no width rule, so its SVG — sized
- * `width: 100%` — resolved against a shrink-to-fit box and rendered at about a
- * third of the hero's measure: five-pixel labels under a headline three inches
- * tall, on the one picture that is supposed to show what the product is.
- *
- * The copy is unaffected: its h1 is capped at 20ch and its lede at 46ch, so
- * the container being wider changes nothing about where the text sits.
- */
-.hero-grid > * { width: min(1040px, 100%); min-width: 0; }
-
-/*
- * The strip of rules under the hero.
- *
- * Four facts on one line, divided rather than boxed: a row of cards here would
- * be a fifth kind of card before the visitor has seen the first section, and
- * the point of the strip is that it reads as one statement in four parts.
- */
-.proof {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
-  gap: var(--space-5);
-  border-top: 1px solid var(--border);
-  padding-top: var(--space-5);
-}
-.proof > li { display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; }
-.proof-value {
-  font-family: var(--font-display);
-  font-size: 1.125rem;
-  font-weight: 600;
-  letter-spacing: -0.015em;
-  color: var(--text);
-}
-.proof-label { font-size: 0.8125rem; line-height: 1.5; color: var(--text-muted); }
-@media (max-width: 900px) {
-  .hero-grid { gap: var(--space-5); }
-}
-
-
-ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: none; }
-
-
-.faq { display: flex; flex-direction: column; }
-.faq details { border-top: 1px solid var(--border); padding-block: var(--space-4); }
-.faq details:last-child { border-bottom: 1px solid var(--border); }
-.faq summary {
-  cursor: pointer;
-  font-weight: 550;
-  list-style: none;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-}
-.faq summary::-webkit-details-marker { display: none; }
-.faq summary::after {
-  content: "+" / "";
-  font-family: var(--font-mono);
-  color: var(--text-subtle);
-  flex: none;
-}
-.faq details[open] summary::after { content: "–"; }
-.faq details > p { margin-top: var(--space-3); }
-
 /* ------------------------------------------------- marketing, continued */
 
 /* Keyboard users get past the nav without tabbing every link. */
@@ -2171,97 +2109,12 @@ ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: none; }
 }
 .skip-link:focus { top: var(--space-3); text-decoration: none; }
 
-.wordmark-dot {
-  width: 10px; height: 10px; border-radius: 3px; flex: none;
-  background: linear-gradient(140deg, var(--accent), var(--accent-2));
-}
-
-
-/* The four-agent list on /how-it-works: a numbered rail down the left so the
-   sequence is visible without reading the numbers. */
-.agents { list-style: none; margin: 0; padding: 0; }
-.agent-row { display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: var(--space-4); align-items: start; }
-/* The teammate's mark with its number under it, so the rail reads as people in
-   an order rather than as a list of bare numerals. */
-.agent-mark {
-  display: flex; flex-direction: column; align-items: center; gap: var(--space-2);
-  width: 48px;
-  padding-top: 2px;
-}
-.agent-mark .eyebrow { color: var(--accent); }
-@media (max-width: 620px) { .agent-row { grid-template-columns: minmax(0, 1fr); } }
-
-/* One atmospheric wash behind the hero. Painted with a pseudo-element on the
-   section rather than a div in the markup, so it cannot be tabbed to, read by
-   a screen reader, or accidentally sit above the content. */
-.hero-wash {
-  position: relative;
-  isolation: isolate;
-  /* The strip of rules closes the hero, so the section does not also need a
-     full band of padding under it — that was two hundred pixels of empty page
-     between the headline and the first thing the headline promised. */
-  padding-bottom: clamp(var(--space-6), 3.5vw, var(--space-7));
-}
-.hero-wash::before {
-  content: "";
-  position: absolute;
-  /* Vertically it may bleed; horizontally it may not.
-     This was `-10%` on each side, which is a decorative gradient hanging 128px
-     past the right edge of a 1280px window — and an absolutely positioned box
-     outside the viewport is horizontal page scroll, so every page on the site
-     that opens with a hero scrolled sideways. On a phone it was 39px of drift
-     on the most important screen we have. The blobs inside are radial
-     gradients that fade to transparent well before their own edges, so
-     pulling the sides in costs nothing visible. */
-  inset: -30% 0 auto 0;
-  height: 860px;
-  z-index: -1;
-  pointer-events: none;
-  /*
-   * Three washes rather than two, and they run past the hero rather than
-   * stopping under it — the header floats on this now, so a gradient that ends
-   * at the fold draws a horizontal seam across the top of the page. The third
-   * is a warm one at the top centre, which is what keeps the cool pair from
-   * reading as a grey haze.
-   */
-  background:
-    radial-gradient(42% 52% at 12% 6%, color-mix(in srgb, var(--accent) 20%, transparent) 0%, transparent 72%),
-    radial-gradient(40% 50% at 88% 2%, color-mix(in srgb, var(--accent-2) 16%, transparent) 0%, transparent 72%),
-    radial-gradient(55% 45% at 52% 0%, color-mix(in srgb, #E9A2D9 26%, transparent) 0%, transparent 70%);
-  filter: blur(10px);
-}
-
-
-/* Cards lift a little under the cursor — enough to read as interactive,
-   not enough to make a static grid feel restless. */
-.card.interactive { transition: transform 160ms ease, border-color 160ms ease, box-shadow 160ms ease; }
-@media (hover: hover) {
-  .card.interactive:hover {
-    transform: translateY(-2px);
-    border-color: var(--border-strong);
-    box-shadow: var(--shadow);
-  }
-}
-/* A keyboard reaching the card gets the same lift a pointer does. */
-.card.interactive:focus-within {
-  border-color: var(--border-strong);
-  box-shadow: var(--shadow);
-}
-
 /* A heading needs more air beneath it than the stack's own gap gives, because
    its own line-height already crowds the text below. The extra belongs to the
    heading rather than to every gap in the stack. */
 :is(.stack, .stack-3, .stack-4, .stack-5, .stack-6, .stack-7) > :is(h1, h2) + * {
   margin-top: var(--space-2);
 }
-
-/* A display headline is capped in its own right — capping the header block
-   caps the paragraph too, and a 40-character measure turns a three-word line
-   into four. */
-.section h1 { max-width: 18ch; }
-/* Centred, the headline sets its own measure and centres it. The 18ch cap is
-   for a headline in a column beside something else. */
-.hero-copy h1 { max-width: 20ch; margin-inline: auto; }
 .narrow h1, .prose h1 { max-width: none; }
 
 
@@ -2325,33 +2178,6 @@ figure { margin: 0; }
 @media (max-width: 560px) {
   .gate-row { grid-template-columns: minmax(0, 1fr); gap: var(--space-2); }
   .gate-arrow { display: none; }
-}
-
-
-/* A scored prospect, with each signal's contribution drawn beside it. */
-.scored { border-radius: var(--radius-lg); }
-.signal-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
-.signal-list li {
-  display: grid;
-  grid-template-columns: 4px minmax(0, 12rem) minmax(0, 1fr) auto;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-2) 0;
-}
-.signal-list li + li { border-top: 1px solid var(--border); }
-/* The bar is the mark; the number beside it is the label. Height encodes the
-   weight, so the column reads as a ranking without a second axis. */
-.signal-bar {
-  width: 4px;
-  height: var(--weight);
-  min-height: 10px;
-  max-height: 22px;
-  border-radius: 2px;
-  background: var(--accent);
-}
-@media (max-width: 640px) {
-  .signal-list li { grid-template-columns: 4px minmax(0, 1fr) auto; }
-  .signal-list li > .tiny.subtle { display: none; }
 }
 
 /* --------------------------------------------------------- live widgets */
@@ -2494,58 +2320,6 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
    word carry the identity and the whole thing still reads at a glance. */
 .wordmark-thin { font-weight: 500; color: var(--text-muted); }
 
-.site-header-inner {
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  align-items: center;
-  gap: var(--space-5);
-  height: 64px;
-  /*
-   * Symmetric, and that is the whole fix for "the button is merging with the
-   * border".
-   *
-   * The right inset was `--space-2` against the left's `--space-4`: 8px
-   * against 16px. On a 64px bar with a pill radius the corner is a 32px
-   * quarter-circle, so at the top and bottom of a 34px button the edge has
-   * already curved inward by about 5px — which left the trial button roughly
-   * four pixels from a border that is visibly bending towards it. Measured, it
-   * sat 9px from the right and 17px from the left, and it read as an overflow
-   * rather than as a deliberate asymmetry.
-   */
-  padding-inline: var(--space-4);
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--surface-raised) 92%, transparent);
-  border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
-  box-shadow: var(--shadow);
-  backdrop-filter: saturate(140%) blur(12px);
-}
-/*
- * The home link is a flex box, so the wordmark sits on the bar's own centre.
- *
- * It was a bare `<a>`, which is `display: block` and therefore builds a line
- * box: 35px tall around a 28px lockup, with the extra seven pixels of leading
- * and descender space sitting *below* the glyphs. The grid centred the 35px
- * anchor faithfully and the visible mark came out three pixels high — measured
- * at centre 41 while the nav, the sign-in link and the trial button were all
- * at 44. That is the "logo and nav not in line with each other", and no amount
- * of nudging the wordmark fixes it, because the slack is in the box around it.
- */
-.site-home { display: flex; align-items: center; }
-
-.site-nav { display: flex; justify-content: center; gap: var(--space-1); }
-.site-nav-link {
-  font-size: 0.9rem;
-  color: var(--text-muted);
-  padding: 0.4rem 0.8rem;
-  border-radius: var(--radius-pill);
-  transition: color 130ms ease, background 130ms ease;
-}
-.site-nav-link:hover { color: var(--text); background: var(--surface); text-decoration: none; }
-/* The page you are on wears a soft pill, the way the application's sidebar
-   marks its current row. Without it the nav is five links of one weight and
-   nothing says where you are. */
-.site-nav-link[aria-current="page"] { color: var(--text); background: var(--surface); font-weight: 550; }
-
 /* The phone menu: the same links, folded behind one button below 900px. */
 .site-menu { display: none; position: relative; }
 @media (max-width: 900px) { .site-menu { display: block; } }
@@ -2554,74 +2328,6 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
 .site-menu-panel { position: absolute; right: 0; top: calc(100% + var(--space-2)); z-index: 11; min-width: 14rem; display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-2); background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: var(--shadow); }
 .site-menu-link { padding: 0.5rem 0.8rem; border-radius: var(--radius-sm); color: var(--text-muted); font-size: 0.9rem; }
 .site-menu-link:hover, .site-menu-link[aria-current="page"] { color: var(--text); background: var(--surface); text-decoration: none; }
-
-
-/*
- * The half of the headline that carries the promise, in the accent.
- *
- * A single flat colour across a two-line headline gives the eye nowhere to
- * land. The gradient runs through the accent rather than away from it, so it
- * reads as emphasis rather than as decoration, and it falls on the words that
- * say what the product does.
- */
-.headline-accent {
-  /* Solid. The sweep it replaced ended in a tint at 2.5:1 on the page and
-     disappeared in forced-colours mode — the phrase that says what the product
-     does was the least readable on the page. */
-  color: var(--accent);
-}
-.site-header-actions { display: flex; align-items: center; gap: var(--space-2); }
-
-@media (max-width: 900px) {
-  .site-header-inner { grid-template-columns: auto auto; }
-  .site-nav { display: none; }
-}
-@media (max-width: 480px) {
-  .site-signin { display: none; }
-  /*
-   * Scoped to the header, which is the only place the space runs out.
-   *
-   * Unscoped, this hid the second half of the product's name everywhere the
-   * wordmark appears — including the footer, which on a phone has a column to
-   * itself and no constraint at all. What was left there read "LinkedIn",
-   * four lines above "Not affiliated with LinkedIn Corporation": our own
-   * footer claiming somebody else's name and then disclaiming it. A rule
-   * written for one cramped bar had been applied to the whole site.
-   */
-  .site-header .wordmark-thin { display: none; }
-}
-
-/* The closing band: one ask, on a ground of its own so it reads as the end of
-   the page rather than another section of it. */
-.closing {
-  background: var(--accent-soft);
-  border-top: 1px solid var(--accent-border);
-  padding-block: var(--space-8);
-}
-.closing-inner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-6);
-  flex-wrap: wrap;
-}
-.closing h2 { max-width: 22ch; }
-
-.site-footer { border-top: 1px solid var(--border); padding-block: var(--space-7) var(--space-6); background: var(--surface); }
-.footer-grid {
-  display: grid;
-  gap: var(--space-6);
-  grid-template-columns: minmax(0, 1.7fr) repeat(2, minmax(0, 1fr));
-}
-.footer-column { display: flex; flex-direction: column; gap: var(--space-2); align-items: flex-start; }
-.footer-link { font-size: 0.9rem; color: var(--text-muted); }
-.footer-link:hover { color: var(--text); }
-.footer-base { display: flex; justify-content: space-between; gap: var(--space-4); flex-wrap: wrap; align-items: baseline; }
-.footer-base > :last-child { max-width: 62ch; text-align: right; }
-@media (max-width: 720px) {
-  .footer-grid { grid-template-columns: minmax(0, 1fr); }
-  .footer-base > :last-child { text-align: left; }
-}
 
 /* ---------------------------------------------------------- the timeline */
 
@@ -2834,14 +2540,16 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
    above four fifths: one that is amber at 40% teaches somebody to ignore amber. */
 .app .allowance { display: flex; flex-direction: column; gap: 0.35rem; }
 .app .allowance-head { display: flex; justify-content: space-between; align-items: baseline; gap: var(--space-3); }
-.app .allowance-value { font-size: 0.9375rem; font-weight: 500; }
+.app .allowance-value { font-size: 0.9375rem; font-weight: 600; }
 .app .allowance-track {
-  height: 6px;
-  border-radius: 3px;
+  height: 8px;
+  border-radius: var(--radius-pill);
   background: var(--surface-sunken);
   overflow: hidden;
 }
-.app .allowance-fill { height: 100%; background: var(--viz-1); border-radius: 3px; }
+/* Teal, the limits colour and nothing else's: a meter here is the guardrails
+   being shown, and the accent is kept for things somebody presses. */
+.app .allowance-fill { height: 100%; background: var(--accent-2); border-radius: var(--radius-pill); }
 .app .allowance[data-tone="close"] .allowance-fill { background: var(--warning); }
 .app .allowance[data-tone="spent"] .allowance-fill { background: var(--danger); }
 .app .allowance-note { margin: 0; }
@@ -2877,14 +2585,27 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
    geometry the code describes. */
 .app .viz-bars { height: 140px; }
 
-.funnel-chart { display: flex; flex-direction: column; gap: var(--space-5); }
-.funnel-row { display: flex; flex-direction: column; gap: 0.4rem; }
-.funnel-row-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
-.funnel-label { font-size: 0.8125rem; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; color: var(--text-muted); }
+/* One line per stage: its name, its bar and its number, so the five bars sit
+   on one shared scale down a single column and each value is written beside
+   its own mark (rule 35). The conversion from the stage above sits under the
+   bar it describes. */
+.funnel-chart { display: flex; flex-direction: column; gap: var(--space-3); }
+.funnel-row {
+  display: grid;
+  grid-template-columns: minmax(4.5rem, 7rem) minmax(0, 1fr) minmax(2.5rem, auto);
+  grid-template-areas: "label track value" ". rate rate";
+  align-items: center;
+  column-gap: var(--space-3);
+  row-gap: 0.15rem;
+}
+/* The head's two children join the row's grid directly. */
+.funnel-row-head { display: contents; }
+.funnel-label { grid-area: label; font-size: 0.875rem; font-weight: 500; color: var(--text-muted); }
 /* The number, set in the UI face on its tabular figures rather than in the
-   monospace: a stage total is a headline, not a code listing. */
-.funnel-value { font-family: var(--font-ui); font-size: 1.375rem; font-weight: 650; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+   monospace: a stage total is a figure, not a code listing. */
+.funnel-value { grid-area: value; text-align: right; font-family: var(--font-ui); font-size: 0.9375rem; font-weight: 600; font-variant-numeric: tabular-nums; }
 .funnel-track {
+  grid-area: track;
   height: 12px;
   border-radius: var(--radius-pill);
   background: var(--surface-sunken);
@@ -2901,7 +2622,7 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
 .funnel-row:nth-child(2) .funnel-bar { opacity: 0.85; }
 .funnel-row:nth-child(3) .funnel-bar { opacity: 0.7; }
 .funnel-row:nth-child(4) .funnel-bar { opacity: 0.55; }
-.funnel-rate { align-self: flex-start; }
+.funnel-rate { grid-area: rate; }
 
 .ranked { display: flex; flex-direction: column; gap: var(--space-3); }
 .ranked-row { display: flex; flex-direction: column; gap: 0.2rem; }
@@ -3341,8 +3062,32 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
    of the frame (rule 38) — the marketing site has no such list, and an
    unscoped name is one collision away from mattering. */
 
-.app .needs-you { display: flex; flex-direction: column; gap: var(--space-3); }
-.app .needs-you-heading { margin: 0; }
+/*
+ * One panel, the rows inside it divided by hairlines.
+ *
+ * Revised from a card per row: six separate cards read as six separate
+ * features rather than one queue, and the rail of colour down each one made a
+ * list of ordinary work look like a column of alerts. The tone now lives in
+ * the row's glyph and, for a blocker, its title and its solid button: the
+ * surface stays a surface and the list still reads as a list.
+ */
+.app .needs-you {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-4) var(--space-5) var(--space-2);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-xs);
+}
+.app .needs-you-heading {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-1);
+  font-size: 1.0625rem;
+}
+.app .needs-you-count { font-size: 0.8125rem; font-weight: 500; color: var(--text-subtle); letter-spacing: 0; }
 
 .app .needs-you-list {
   list-style: none;
@@ -3350,44 +3095,44 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
 }
 
-/*
- * One row per job, and the tone is carried by a rail rather than by a fill.
- *
- * A whole card tinted red for a blocker turns the most important row on the
- * screen into the one hardest to read — and beside two untinted rows it looks
- * like an error message rather than like the first item on a list. The rail
- * says which kind it is, the surface stays a surface, and the row keeps the
- * same shape as its neighbours so the list still reads as a list.
- */
 .app .needs-you-item {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  /* The button drops under the text on a phone rather than squeezing it. */
-  flex-wrap: wrap;
-  gap: var(--space-3);
-  padding: var(--space-4) var(--space-5);
-  background: var(--surface-raised);
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--border-strong);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow-xs);
-  transition: box-shadow 140ms ease, border-color 140ms ease;
+  gap: var(--space-3) var(--space-4);
+  padding: var(--space-3) 0;
 }
-.app .needs-you-item:hover { box-shadow: var(--shadow-sm); }
+/* On a phone the button drops under the text rather than squeezing it, and
+   stays in the text's column so the glyph keeps its own. */
+@media (max-width: 640px) {
+  .app .needs-you-item { grid-template-columns: auto minmax(0, 1fr); align-items: start; }
+  .app .needs-you-item > .btn { grid-column: 2; justify-self: start; }
+}
+.app .needs-you-item + .needs-you-item { border-top: 1px solid var(--border); }
+/* A glyph on a soft disc: the same picture the sidebar uses for the screen
+   that clears this row, so the eye can match the two. */
+.app .needs-you-icon {
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  flex: none;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.app .needs-you-icon svg { width: 18px; height: 18px; }
 /* The text takes the slack so the button keeps its own width. */
-.app .needs-you-text { flex: 1 1 18rem; display: flex; flex-direction: column; gap: 0.2rem; }
-.app .needs-you-title { margin: 0; font-weight: 600; font-size: 0.9375rem; letter-spacing: -0.004em; }
+.app .needs-you-text { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
+.app .needs-you-title { margin: 0; font-weight: 550; font-size: 0.9375rem; letter-spacing: -0.004em; }
 .app .needs-you-text p:last-child { margin: 0; }
+.app .needs-you-item > .btn { min-width: 8rem; }
 
-/* Severity as a left rail rather than a filled row: a wash of colour behind
-   running text costs contrast, and the rail reads at a glance without it. */
-.app .needs-you-item.warning { border-left-color: var(--warning); }
-.app .needs-you-item.blocker { border-left-color: var(--danger); }
-/* The one row nothing can proceed past says so in its title, not by shouting
-   in its background. */
+/* The one row nothing can proceed past says so in its glyph and its title,
+   not by shouting in its background. */
+.app .needs-you-item.blocker .needs-you-icon { background: var(--danger-soft); color: var(--danger); }
 .app .needs-you-item.blocker .needs-you-title { color: var(--danger); }
 
 /* Nothing waiting is a result, not an empty state. Bordered like the
@@ -3570,57 +3315,6 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
 
 .app .cal-note { color: var(--text-muted); text-align: center; margin: 0; }
 
-/* ------------------------------------------------- the platform diagram
- *
- * The hero's picture. Every colour is a token so it reads in both themes,
- * and the type sizes are the SVG's own because a `font-size` in user units
- * scales with the drawing rather than fighting it.
- */
-.platform { margin: 0; width: 100%; }
-.platform-svg { overflow: visible; }
-
-.platform-spine { stroke: var(--border-strong); stroke-width: 2; }
-.platform-arrow { fill: var(--border-strong); }
-
-.platform-box {
-  fill: var(--surface-raised);
-  stroke: var(--border);
-  stroke-width: 1.5;
-}
-/* The end of the line earns the accent; the stages before it do not, or the
-   whole row is emphasis and none of it is. */
-.platform-box.is-end { stroke: var(--accent); stroke-width: 2; }
-
-.platform-title { fill: var(--text); font-size: 16px; font-weight: 640; }
-.platform-line { fill: var(--text-muted); font-size: 12.5px; }
-.platform-sub { fill: var(--text-subtle); font-size: 11.5px; }
-
-/* The two stops. Same shape as each other because they are the same kind of
-   thing — the product declining to continue — and different from a stage. */
-.platform-gate line,
-.platform-cap line { stroke: var(--border-strong); stroke-width: 1.5; stroke-dasharray: 3 3; }
-.platform-gate rect { fill: var(--accent-soft); stroke: var(--accent-border); stroke-width: 1; }
-.platform-cap rect { fill: var(--surface-sunken); stroke: var(--border-strong); stroke-width: 1; }
-.platform-gate text,
-.platform-cap text { font-size: 11.5px; font-weight: 560; text-anchor: middle; }
-.platform-gate text { fill: var(--accent); }
-.platform-cap text { fill: var(--text-muted); }
-
-@media (max-width: 720px) {
-  /*
-   * Five stages across a phone is 60px each, which is a diagram nobody can
-   * read. It scrolls sideways in its own box instead — the page does not.
-   *
-   * `min-width: 0` on the hero's children is what makes that second half
-   * true. A grid item's default `min-width: auto` is its content's minimum, so
-   * the 40rem floor below pushed the wrapper to 640px inside a 390px phone and
-   * the whole landing page scrolled sideways — which is not a diagram in a
-   * scrolling box, it is a broken page.
-   */
-  .platform { overflow-x: auto; }
-  .platform-svg { min-width: 40rem; }
-}
-
 /* ------------------------------------------------------------- the team */
 
 /*
@@ -3660,305 +3354,6 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
 .crew-scout { --crew-c: var(--crew-scout); }
 .crew-quinn { --crew-c: var(--crew-quinn); }
 .crew-reese { --crew-c: var(--crew-reese); }
-
-/*
- * The stage.
- *
- * Three small 3D spaces rather than one large one. A single perspective on the
- * whole stage puts the vanishing point a third of the way down it — which on a
- * phone, where the stage is two and a half thousand pixels tall, is two
- * thousand pixels below the orbit, so the ring was seen edge-on and drew as a
- * line. So the scene leans as a whole, and the orbit, NORA's card and the row
- * of four each carry their own perspective about their own centre. Inside the
- * orbit, `preserve-3d` runs down to the marks so they really pass in front of
- * and behind the core. Nothing in that chain may set `overflow` or `opacity`,
- * either of which flattens it; the horizontal clip lives on the section.
- */
-.crew-section {
-  overflow-x: clip;
-  background:
-    radial-gradient(60rem 26rem at 30% 18rem, color-mix(in srgb, var(--accent) 7%, transparent), transparent 70%);
-}
-.crew-stage { position: relative; perspective: 2000px; }
-.crew-scene { position: relative; display: flex; flex-direction: column; transform-style: preserve-3d; }
-
-.crew-top {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--space-4);
-  align-items: center;
-}
-.crew-orbit-wrap { position: relative; }
-.crew-lead-wrap { position: relative; perspective: 1400px; }
-
-.crew-orbit {
-  position: relative;
-  width: min(100%, 34rem);
-  /* Wide on its own row: the tilted ring is about a third as tall as it is
-     wide, and a squarer box is a band of empty page above and below it. */
-  aspect-ratio: 2;
-  margin-inline: auto;
-  perspective: 1100px;
-  transform-style: preserve-3d;
-}
-.crew-orbit-plane {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 92%;
-  aspect-ratio: 1;
-  translate: -50% -50%;
-  transform: rotateX(68deg);
-  transform-style: preserve-3d;
-}
-.crew-orbit-ring {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  border: 1.5px solid var(--crew-ring);
-  background: radial-gradient(closest-side, transparent 62%, color-mix(in srgb, var(--accent) 9%, transparent));
-}
-.crew-orbit-ring.is-inner {
-  inset: 20%;
-  border-style: dashed;
-  border-color: color-mix(in srgb, var(--accent-2) 50%, transparent);
-  background: none;
-}
-.crew-orbit-spin {
-  position: absolute;
-  inset: 0;
-  transform-style: preserve-3d;
-  animation: crew-spin 42s linear infinite;
-}
-.crew-orbit-anchor { position: absolute; width: 0; height: 0; transform-style: preserve-3d; }
-.crew-orbit-anchor.at-0 { left: 50%; top: 0; }
-.crew-orbit-anchor.at-1 { left: 100%; top: 50%; }
-.crew-orbit-anchor.at-2 { left: 50%; top: 100%; }
-.crew-orbit-anchor.at-3 { left: 0; top: 50%; }
-/*
- * Each mark undoes the spin and the tilt it is riding on, in that order, so it
- * always faces the reader while it travels round: the plane is
- * rotateX(68°)·rotateZ(θ), and this is rotateZ(−θ)·rotateX(−68°). The two
- * animations share a duration and a timing function so θ is the same number
- * in both at every frame.
- */
-.crew-orbit-dot {
-  position: absolute;
-  left: -1.3rem;
-  top: -1.3rem;
-  width: 2.6rem;
-  height: 2.6rem;
-  display: grid;
-  place-items: center;
-  border-radius: 0.8rem;
-  font-family: var(--font-display);
-  font-weight: 650;
-  font-size: 1.05rem;
-  color: var(--crew-c);
-  background: color-mix(in srgb, var(--crew-c) 14%, var(--surface-raised));
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--crew-c) 38%, transparent), var(--shadow-sm);
-  transform: rotateZ(0deg) rotateX(-68deg);
-  animation: crew-counter 42s linear infinite;
-}
-/*
- * The core stands in front of the ring's plane rather than in it. At z = 0 the
- * tilted disc slices straight through it, and the lower half renders behind
- * the near side of the ring — a hard-edged box across the logo. Brought
- * forward, it sits clear of the disc while the marks on the near side of the
- * orbit, further forward still, pass in front of it as an orbit should.
- */
-.crew-core {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  translate: -50% -50%;
-  display: grid;
-  place-items: center;
-  transform: translateZ(90px);
-  animation: crew-float 6s ease-in-out infinite;
-}
-.crew-core .crew-avatar { position: relative; }
-/* The glow lies on the ring's own floor, so it is part of the plane rather
-   than a second flat thing cutting through it. */
-.crew-core-halo {
-  position: absolute;
-  inset: 22%;
-  border-radius: 50%;
-  background: radial-gradient(closest-side, color-mix(in srgb, var(--accent) 34%, transparent), transparent);
-  animation: crew-breathe 5s ease-in-out infinite;
-}
-
-@keyframes crew-spin { to { transform: rotateZ(360deg); } }
-@keyframes crew-counter {
-  from { transform: rotateZ(0deg) rotateX(-68deg); }
-  to   { transform: rotateZ(-360deg) rotateX(-68deg); }
-}
-@keyframes crew-float { 0%, 100% { transform: translateZ(90px) translateY(0); } 50% { transform: translateZ(90px) translateY(-7px); } }
-@keyframes crew-breathe { 0%, 100% { scale: 1; } 50% { scale: 1.14; } }
-
-/* A card that tilts toward the pointer. The light that follows it sits under
-   the content, so it tints the surface and never the words. */
-.crew-tilt { position: relative; will-change: transform; }
-.crew-tilt > :not(.crew-glare) { position: relative; }
-.crew-glare {
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 240ms ease;
-}
-.crew-tilt:hover .crew-glare { opacity: 1; }
-
-.crew-head { display: flex; align-items: center; gap: var(--space-3); }
-.crew-who { display: flex; flex-direction: column; gap: 0.1rem; flex: 1; min-width: 0; }
-.crew-n { align-self: flex-start; font-size: 0.75rem; color: var(--text-subtle); }
-.crew-line-text { font-weight: 560; line-height: 1.45; }
-.crew-does { margin: 0; padding-left: 1.1rem; display: flex; flex-direction: column; gap: var(--space-2); }
-.crew-does li::marker { color: var(--crew-c, var(--accent)); }
-.crew-handoff {
-  margin-top: auto;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  color: var(--crew-c);
-  font-weight: 650;
-}
-
-.crew-lead-card {
-  border-color: var(--accent-border);
-  background:
-    radial-gradient(28rem 14rem at 100% 0%, color-mix(in srgb, var(--accent-2) 9%, transparent), transparent 70%),
-    linear-gradient(180deg, color-mix(in srgb, var(--accent) 6%, var(--surface-raised)), var(--surface-raised));
-}
-.crew-card { height: 100%; border-top: 3px solid var(--crew-c); }
-
-/* The four, and the line work passes along. One column on a phone, with a
-   short connector in each gap; two on a tablet; one row with the org chart's
-   trunk and bar once they fit side by side. */
-.crew-trunk { display: none; }
-.crew-bar { display: none; }
-.crew-team-wrap { position: relative; margin-top: var(--space-6); }
-.crew-team {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--space-6);
-  perspective: 1400px;
-}
-.crew-step { position: relative; transform-style: preserve-3d; }
-.crew-step + .crew-step::before {
-  content: "";
-  position: absolute;
-  left: 50%;
-  top: calc(-1 * var(--space-6));
-  width: 2px;
-  height: var(--space-6);
-  background: var(--crew-ring);
-}
-
-@media (min-width: 640px) {
-  .crew-team { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-5); }
-  .crew-step + .crew-step::before { display: none; }
-}
-
-@media (min-width: 900px) {
-  .crew-top { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: var(--space-6); }
-  .crew-orbit { aspect-ratio: 1.4; }
-}
-
-@media (min-width: 1080px) {
-  .crew-team { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-6); }
-  /* Four across, the order is drawn by the bar and the arrows; the numeral
-     only costs the role line its width. */
-  .crew-n { display: none; }
-  .crew-trunk {
-    display: block;
-    width: 2px;
-    height: var(--space-6);
-    margin: var(--space-4) auto 0;
-    background: linear-gradient(to bottom, transparent, var(--crew-ring));
-  }
-  .crew-team-wrap { margin-top: 0; padding-top: var(--space-6); }
-  /* From the first card's centre to the last one's. */
-  .crew-bar {
-    display: block;
-    position: absolute;
-    top: 0;
-    left: calc((100% - 3 * var(--space-6)) / 8);
-    right: calc((100% - 3 * var(--space-6)) / 8);
-    height: 2px;
-    border-radius: 1px;
-    background: var(--crew-ring);
-  }
-  .crew-step::after {
-    content: "";
-    position: absolute;
-    left: 50%;
-    top: calc(-1 * var(--space-6));
-    width: 2px;
-    height: var(--space-6);
-    background: var(--crew-ring);
-  }
-  /* The arrow between two cards, in the gap that separates them. */
-  .crew-step + .crew-step::before {
-    display: grid;
-    place-items: center;
-    content: "\2192";
-    left: calc(-1 * var(--space-6) / 2);
-    top: 50%;
-    translate: -50% -50%;
-    width: 1.6rem;
-    height: 1.6rem;
-    border-radius: 50%;
-    font-size: 0.8rem;
-    color: var(--accent);
-    background: var(--surface-raised);
-    box-shadow: inset 0 0 0 1px var(--accent-border), var(--shadow-xs);
-  }
-}
-
-/* The hand-off itself: a mark travelling the bar, pausing above each card. */
-.crew-packet {
-  position: absolute;
-  top: -4px;
-  left: 0;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent), 0 0 18px var(--accent);
-  animation: crew-packet 7s cubic-bezier(0.65, 0, 0.35, 1) infinite;
-}
-@keyframes crew-packet {
-  0%, 10%   { left: -5px; }
-  25%, 35%  { left: calc(33.333% - 5px); }
-  50%, 60%  { left: calc(66.666% - 5px); }
-  75%, 100% { left: calc(100% - 5px); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .crew-orbit-spin,
-  .crew-orbit-dot,
-  .crew-core,
-  .crew-core-halo,
-  .crew-packet { animation: none; }
-  .crew-packet { left: calc(100% - 5px); }
-}
-
-/* Where the price cards were. One card, one sentence, one button. */
-.free-card {
-  align-items: flex-start;
-  gap: var(--space-5);
-  padding: clamp(var(--space-5), 5vw, var(--space-7));
-  border-color: var(--accent-border);
-  background:
-    radial-gradient(36rem 18rem at 100% 0%, color-mix(in srgb, var(--accent-2) 11%, transparent), transparent 65%),
-    radial-gradient(30rem 16rem at 0% 100%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 65%),
-    var(--surface-raised);
-}
 
 /*
  * The dashboard's team panel.
@@ -4014,3 +3409,1468 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
    row of controls into a staircase. */
 .control-form { display: inline-flex; flex-direction: row; align-items: center; gap: var(--space-2); }
 .control-form > .btn { align-self: center; }
+
+/* ==== App v2 ==== */
+/*
+ * The signed-in application, second pass: one shape lock, quieter tables, and
+ * the overview and campaign screens laid out as a dashboard rather than as a
+ * column of equal sections. Everything here is scoped under `.app`, and every
+ * name is either new or one of the frame's deliberate redefinitions, so
+ * nothing on the marketing site can change because of it (rules 38 and 53).
+ */
+
+/* ---- shape lock: controls 8px, app panels 12px, pills only for status */
+
+/*
+ * The app's panels share one radius. A grouped rule because these are the
+ * same object at one size, a surface with a hairline, and each keeps
+ * everything else its own rule says; only the corner is the app's.
+ */
+.app .card,
+.app .table-scroll,
+.app .kpi,
+.app .panel { border-radius: var(--radius); }
+.app .btn { border-radius: var(--radius-sm); }
+/* A glyph inside a button, sized to the label rather than to the icon set. */
+.app .btn-icon { width: 16px; height: 16px; flex: none; }
+
+/* ---- tables: a quiet header and solid hairlines
+
+   The tinted, uppercase header band made every table read as an export. In a
+   dashboard the column names are a caption on the list, so they are set in
+   sentence case on the panel's own ground with one hairline under them, and
+   the rows are divided by solid hairlines rather than dashes. `:where(.app)`
+   so the frame contributes no specificity (see the frame test). */
+:where(.app) thead th {
+  background: none;
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-subtle);
+  padding-block: 0.65rem;
+  border-bottom: 1px solid var(--border);
+}
+:where(.app) th,
+:where(.app) td { padding-inline: 0.85rem; }
+:where(.app) td { padding-block: 0.8rem; }
+:where(.app) tbody tr:first-child td { padding-top: 0.8rem; }
+:where(.app) tbody tr + tr td { border-top-style: solid; }
+
+/* A table that sits straight in a panel, edge to edge with its title, rather
+   than in a second bordered box inside it. It still scrolls sideways on a
+   phone, and it still needs a width to scroll to. */
+/* Worn with `.table-scroll`, which keeps its scroll shadows; this takes away
+   the box, because the panel around it is already one. */
+.app .table-flush {
+  margin-inline: calc(var(--space-2) * -1);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.app .table-flush table { min-width: 30rem; }
+
+/* ---- panels with their own titles */
+
+/*
+ * A framed section is a panel whose title sits inside it, at a panel's size.
+ * The specificity is the point: `.app .section` zeroes the block padding for
+ * the frame's plain sections, and a framed one is a card that needs it back.
+ */
+.app .section.is-framed {
+  gap: var(--space-4);
+  padding: clamp(var(--space-4), 2.5vw, var(--space-5));
+}
+.app .is-framed > .section-header h2 { font-size: 1rem; letter-spacing: -0.01em; }
+
+/* ---- page header: breadcrumb and a status beside the title */
+
+.app .crumbs ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+.app .crumbs li { min-width: 0; }
+.app .crumbs li + li::before { content: "/"; margin-right: var(--space-2); color: var(--text-subtle); }
+.app .crumbs a { color: var(--text-muted); }
+.app .crumbs a:hover { color: var(--text); }
+.app .crumbs li[aria-current] { max-width: 40ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app .page-title-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); min-width: 0; }
+
+/* ---- overview */
+
+/*
+ * The four figures, plain on the page's ground and divided by hairlines.
+ * Boxed one by one they were four more cards under a list of work, and read as
+ * four more things to do; these are a reading, not a task.
+ */
+.app .headline-stats {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  padding-block: var(--space-1);
+}
+.app .headline-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+  padding-inline: var(--space-5);
+}
+.app .headline-stat:first-child { padding-left: var(--space-1); }
+.app .headline-stat + .headline-stat { border-left: 1px solid var(--border); }
+.app .headline-label { font-size: 0.875rem; color: var(--text-muted); }
+.app .headline-value {
+  font-size: 2rem;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+.app .headline-value.is-positive { color: var(--positive); }
+.app .headline-value.is-warning { color: var(--warning); }
+.app .headline-note { font-size: 0.8125rem; line-height: 1.4; color: var(--text-subtle); }
+/* Two by two on a narrow screen, and the divider moves to the row it splits. */
+@media (max-width: 767px) {
+  .app .headline-stats { grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: var(--space-5); }
+  .app .headline-stat { padding-inline: var(--space-3) 0; }
+  .app .headline-stat:nth-child(odd) { padding-left: 0; border-left: 0; }
+}
+
+/* Today's allowance beside the last fourteen days: the narrow column holds the
+   meters, the wide one the chart. One column under 860px. */
+.app .overview-pair {
+  display: grid;
+  grid-template-columns: minmax(16rem, 21rem) minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: stretch;
+}
+@media (max-width: 860px) {
+  .app .overview-pair { grid-template-columns: minmax(0, 1fr); }
+}
+.app .allowance-stack { display: flex; flex-direction: column; gap: var(--space-4); }
+.app .ramp-note { margin-top: auto; padding-top: var(--space-3); border-top: 1px solid var(--border); }
+.app .ramp-day { color: var(--text); font-weight: 650; }
+
+/* ---- campaign */
+
+/*
+ * What the sending loop is doing, in the limits colour, because what it
+ * reports is the guardrails at work. A tint of the token rather than a new
+ * one, so it follows the theme on its own.
+ */
+.app .pacing-strip {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid color-mix(in srgb, var(--accent-2) 38%, var(--border));
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--accent-2) 9%, var(--surface-raised));
+  color: var(--text);
+}
+.app .pacing-strip-icon { width: 18px; height: 18px; flex: none; margin-top: 0.1rem; color: var(--accent-2); }
+.app .pacing-strip p { margin: 0; }
+
+/* The campaign at a glance: funnel and sequence on the left, the people on the
+   right. One column under 960px, funnel first. */
+.app .campaign-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+.app .campaign-grid-main { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+@media (max-width: 960px) {
+  .app .campaign-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* A person in a table: their initials on a soft disc, then their name. */
+.app .prospect-who { display: inline-flex; align-items: center; gap: var(--space-2); min-width: 0; white-space: nowrap; }
+.app .prospect-initials {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  flex: none;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: 0.6875rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+/*
+ * The drawn sequence: a numbered path, a glyph per act, and the timing on the
+ * right with a lock beside every timing the product owns (rule 52). The rail
+ * runs from one number to the next so the steps read as one thread.
+ */
+.app .seq { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.app .seq-step {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1.5rem 2.25rem minmax(7.5rem, 1fr) minmax(0, 11rem);
+  column-gap: var(--space-3);
+  row-gap: var(--space-1);
+  align-items: start;
+  padding-block: var(--space-3);
+}
+.app .seq-step + .seq-step { border-top: 1px solid var(--border); }
+.app .seq-step:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: calc(0.75rem - 1px);
+  top: calc(var(--space-3) + 2.15rem);
+  bottom: calc(-1 * var(--space-3) - 0.35rem);
+  width: 2px;
+  background: var(--accent-border);
+}
+.app .seq-num {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  margin-top: 0.375rem;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--text-inverse);
+  font-size: 0.75rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+.app .seq-icon {
+  display: grid;
+  place-items: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.app .seq-icon svg { width: 18px; height: 18px; }
+.app .seq-body { display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; padding-top: 0.45rem; }
+.app .seq-label { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); margin: 0; font-size: 0.9375rem; font-weight: 550; }
+.app .seq-when {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.2rem;
+  max-width: 13rem;
+  padding-top: 0.45rem;
+  text-align: right;
+}
+.app .seq-fixed { display: inline-flex; align-items: center; gap: 0.3rem; }
+/* Why the product owns this timing, under the step and across the timing
+   column, so the reason reads as a sentence rather than a narrow ribbon. */
+.app .seq-why { grid-column: 3 / -1; margin: 0; }
+.app .seq-lock { width: 12px; height: 12px; flex: none; }
+/* On a phone the timing drops under the step's name rather than squeezing it. */
+@media (max-width: 640px) {
+  .app .seq-step { grid-template-columns: 1.5rem 2.25rem minmax(0, 1fr); }
+  .app .seq-when { grid-column: 3; align-items: flex-start; max-width: none; padding-top: 0; text-align: left; }
+  .app .seq-why { grid-column: 3; }
+}
+
+/* ---- filters: a segmented control, not a row of status chips
+
+   The filter links above a list were drawn as status pills, dot and all, so a
+   control that changes the view looked exactly like a label reporting a state.
+   Pills are kept for status; a set of views is one control with the current
+   one raised out of it. The container is `.tabs` itself; `a` is the key here,
+   so the frame wins over `.pill` without redefining the word. */
+.app .tabs a {
+  padding: 0.35rem 0.75rem;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
+  font-weight: 500;
+}
+.app .tabs a::before { display: none; }
+.app .tabs a:hover { background: var(--surface-raised); color: var(--text); }
+.app .tabs a[aria-current="page"] {
+  background: var(--surface-raised);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: var(--shadow-xs);
+}
+
+/* ==== Marketing v2 ==== */
+
+/*
+ * The public site, rebuilt from the reference frames (DESIGN-SPEC v2).
+ *
+ * Unscoped, and every new name carries `mk-` so nothing here can meet an
+ * `.app` rule of the same name (rule 53). Colour only through tokens; the one
+ * dark ground is `--ink-band`, spent on the closing band and the "never
+ * twice" tile. Teal (`--accent-2`) is the limits colour and appears only where
+ * a limit is being drawn: meters, the ramp, the day's spread.
+ */
+
+/* ------------------------------------------------------------ the header */
+
+/* A full-width bar on the page's own ground, one line on a laptop and 68px
+   tall. Sticky, so it carries its own surface and a hairline beneath it. */
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: color-mix(in srgb, var(--surface-raised) 90%, transparent);
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: saturate(140%) blur(12px);
+}
+.site-header-inner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-5);
+  height: 68px;
+}
+/* A flex box, so the wordmark sits on the bar's own centre rather than on a
+   line box with descender space under it. */
+.site-home { display: flex; align-items: center; justify-self: start; }
+.site-home:hover { text-decoration: none; }
+.site-nav { display: flex; align-items: center; gap: var(--space-1); }
+.site-nav-link {
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--text);
+  padding: 0.45rem 0.85rem;
+  border-radius: var(--radius-sm);
+  transition: background-color 130ms ease, color 130ms ease;
+}
+.site-nav-link:hover { background: var(--surface); text-decoration: none; }
+/* The page you are on, said in the accent rather than a second weight. */
+.site-nav-link[aria-current="page"] { color: var(--accent); }
+.site-header-actions { display: flex; align-items: center; gap: var(--space-2); justify-self: end; }
+
+@media (max-width: 900px) {
+  .site-header-inner { grid-template-columns: auto auto; justify-content: space-between; }
+  .site-nav { display: none; }
+}
+@media (max-width: 480px) {
+  .site-signin { display: none; }
+  /* Scoped to the header: the footer has room for the whole name. */
+  .site-header .wordmark-thin { display: none; }
+}
+
+/* --------------------------------------------------------- type and rhythm */
+
+.mk-display {
+  font-size: clamp(2.375rem, 1.6rem + 2.5vw, 3.5rem);
+  line-height: 1.04;
+  letter-spacing: -0.035em;
+  font-weight: 600;
+}
+/* A headline written as two sentences keeps them on two lines where there is
+   room, and wraps inside each where there is not. */
+.mk-line { display: block; }
+.mk-h2 {
+  font-size: clamp(2rem, 1.45rem + 1.9vw, 3rem);
+  line-height: 1.08;
+  letter-spacing: -0.025em;
+}
+.mk-h2-sm {
+  font-size: clamp(1.375rem, 1.2rem + 0.6vw, 1.75rem);
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+.mk-lede {
+  font-size: clamp(1.0625rem, 1rem + 0.3vw, 1.1875rem);
+  line-height: 1.55;
+  color: var(--text-muted);
+  max-width: 60ch;
+  text-wrap: pretty;
+}
+.mk-muted { color: var(--text-muted); }
+.mk-num { font-variant-numeric: tabular-nums; }
+.mk-caption { font-size: 0.875rem; line-height: 1.55; color: var(--text-subtle); max-width: 70ch; }
+.mk-caption a { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+.mk-measure { max-width: 70ch; }
+.mk-icon { width: 1.125rem; height: 1.125rem; flex: none; }
+
+/* The one small label on the home page, as a tag rather than a tracked caps
+   line, so it reads as a name for the section and not as a template. */
+.mk-eyebrow {
+  align-self: flex-start;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-soft);
+  padding: 0.2rem 0.55rem;
+  border-radius: var(--radius-sm);
+}
+
+.mk-textlink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--accent);
+  font-weight: 550;
+  font-size: 1.0625rem;
+}
+.mk-textlink.small { font-size: 0.9375rem; align-self: flex-start; }
+.mk-textlink > span { transition: transform 160ms ease; }
+.mk-textlink:hover { text-decoration: none; }
+.mk-textlink:hover > span { transform: translateX(3px); }
+
+.mk-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4) var(--space-6); }
+
+.mk-section { padding-block: clamp(3rem, 6vw, 5rem); }
+.mk-section-tight { padding-block: clamp(2.5rem, 5vw, 4rem); }
+/* A lighter band, for an inner page's alternate sections. */
+.mk-tint { background: color-mix(in srgb, var(--surface-raised) 55%, var(--bg)); }
+.mk-stack { display: flex; flex-direction: column; gap: clamp(var(--space-6), 4vw, 3.5rem); }
+.mk-head { display: flex; flex-direction: column; gap: var(--space-4); max-width: 46rem; }
+
+/* One quiet wash behind an opening, top right, where the reference has it.
+   Vertically it may bleed; horizontally it may not (landing-regressions). */
+.hero-wash { position: relative; isolation: isolate; }
+.hero-wash::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 100%;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(42% 60% at 86% 8%, color-mix(in srgb, var(--accent) 9%, transparent) 0%, transparent 70%),
+    radial-gradient(36% 50% at 4% 0%, color-mix(in srgb, var(--accent-2) 6%, transparent) 0%, transparent 70%);
+}
+
+/* --------------------------------------------------------------- the hero */
+
+.mk-hero { padding-block: clamp(2.5rem, 6vw, 4.5rem) clamp(2.5rem, 5vw, 4rem); }
+.mk-hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.9fr);
+  gap: clamp(2rem, 5vw, 5rem);
+  align-items: center;
+}
+.mk-hero-copy { display: flex; flex-direction: column; gap: var(--space-5); }
+.mk-hero-sub {
+  font-size: clamp(1.0625rem, 1rem + 0.35vw, 1.25rem);
+  line-height: 1.55;
+  color: var(--text-muted);
+  max-width: 46ch;
+}
+.mk-hero-copy .mk-actions { margin-top: var(--space-2); }
+@media (max-width: 960px) {
+  .mk-hero-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* The "Today" panel: a real component on example data. */
+.mk-today {
+  margin: 0;
+  justify-self: end;
+  width: 100%;
+  max-width: 30rem;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: clamp(1.25rem, 2.5vw, 1.75rem);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+.mk-today-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-1) var(--space-3); }
+.mk-today-title { font-size: 1.625rem; font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; }
+.mk-today-tag { font-size: 0.8125rem; color: var(--text-subtle); }
+.mk-meters { display: flex; flex-direction: column; gap: var(--space-4); }
+.mk-meter { display: flex; flex-direction: column; gap: var(--space-2); }
+.mk-meter-row { display: flex; justify-content: space-between; gap: var(--space-3); font-size: 0.9375rem; }
+.mk-meter-row > :last-child { color: var(--text-muted); }
+.mk-meter-track {
+  display: block;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+.mk-meter-track.is-tall { height: 10px; }
+/* Drawn in from the left once, by CSS alone: the resting state is the full
+   value, so a page whose scripts never run still shows it. */
+.mk-meter-fill {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent-2);
+  transform-origin: left center;
+  transform: scaleX(var(--fill, 0));
+  animation: mk-fill 1.1s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both;
+}
+@keyframes mk-fill { from { transform: scaleX(0); } }
+
+.mk-today-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--border); }
+.mk-today-row {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: center;
+  padding-block: var(--space-3);
+}
+.mk-today-row + .mk-today-row { border-top: 1px solid var(--border); }
+.mk-avatar { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; flex: none; }
+.mk-today-who { min-width: 0; display: flex; flex-direction: column; gap: 0.15rem; font-size: 0.9375rem; line-height: 1.4; }
+.mk-today-note {
+  font-size: 0.8125rem;
+  color: var(--text-subtle);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mk-today-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+.mk-today-foot .mk-icon { color: var(--accent-2); }
+.mk-today-foot strong { color: var(--text); font-weight: 600; }
+@media (max-width: 960px) {
+  .mk-today { justify-self: stretch; max-width: none; }
+}
+
+/* ----------------------------------------------------- three decisions */
+
+.mk-decide {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: clamp(2rem, 4vw, 3rem);
+}
+.mk-decide-steps {
+  list-style: none;
+  margin: 0;
+  padding: 1rem 0 0;
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-5);
+}
+/* The line that joins the three, showing only in the gaps between cards. */
+.mk-decide-steps::before {
+  content: "";
+  position: absolute;
+  top: 2.25rem;
+  left: 12%;
+  right: 12%;
+  height: 1px;
+  background: var(--border-strong);
+}
+.mk-decide-card {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  text-align: center;
+  padding: 2.25rem var(--space-4) var(--space-5);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+.mk-decide-card h3 { font-size: 1.1875rem; line-height: 1.25; max-width: 12ch; }
+.mk-step-n {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: grid;
+  place-items: center;
+  width: 2.125rem;
+  height: 2.125rem;
+  border-radius: 50%;
+  background: var(--surface-raised);
+  border: 1px solid var(--accent-border);
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 0.9375rem;
+  box-shadow: var(--shadow-xs);
+}
+.mk-decide-visual { width: 100%; flex: 1; display: flex; flex-direction: column; justify-content: center; gap: var(--space-3); }
+.mk-strategy {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  text-align: left;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.mk-strategy-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+/* A drawing of a button, not a control: the card around it is aria-hidden. */
+.mk-fakebtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.6rem 1rem;
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--text-inverse);
+  font-weight: 550;
+  font-size: 0.9375rem;
+}
+.mk-fakebtn.is-wide { padding-block: 0.8rem; }
+.mk-note-sample {
+  padding: var(--space-3);
+  text-align: left;
+  font-size: 0.8125rem;
+  line-height: 1.65;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.mk-note-sample mark {
+  background: var(--accent-soft);
+  color: var(--accent);
+  padding: 0.05rem 0.3rem;
+  border-radius: 4px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+.mk-decide-note { font-size: 0.8125rem; line-height: 1.5; color: var(--text-muted); max-width: 24ch; }
+
+/* What runs after launch: five glyphs joined by a hairline. */
+.mk-rail {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+.mk-rail li {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  text-align: center;
+  font-size: 0.875rem;
+  line-height: 1.35;
+  color: var(--text-muted);
+}
+.mk-rail li + li::before {
+  content: "";
+  position: absolute;
+  top: 1.125rem;
+  right: calc(50% + 1.6rem);
+  width: calc(100% - 3.2rem + var(--space-2));
+  height: 1px;
+  background: var(--border-strong);
+}
+.mk-rail-icon { width: 2.25rem; height: 2.25rem; color: var(--text); stroke-width: 1.5; }
+@media (max-width: 1080px) {
+  .mk-decide { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 720px) {
+  .mk-decide-steps { grid-template-columns: minmax(0, 1fr); gap: var(--space-7); }
+  .mk-decide-steps::before { display: none; }
+}
+@media (max-width: 560px) {
+  .mk-rail { grid-template-columns: repeat(3, minmax(0, 1fr)); row-gap: var(--space-5); }
+  .mk-rail li + li::before { display: none; }
+}
+
+/* ------------------------------------------------- one note per person */
+
+.mk-notes { padding-block: clamp(3rem, 6vw, 5rem); }
+.mk-notes-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  gap: clamp(2rem, 5vw, 4.5rem);
+  align-items: start;
+}
+.mk-notes-copy { display: flex; flex-direction: column; gap: var(--space-4); position: sticky; top: 6rem; padding-top: var(--space-6); }
+.mk-notes-copy .mk-h2 { margin-bottom: var(--space-2); }
+.mk-deck-wrap { display: flex; flex-direction: column; gap: var(--space-5); }
+.mk-deck { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+/* A cascade: each card a degree or two off true, overlapping the one above,
+   the way a stack of printed notes would sit. */
+.mk-note {
+  position: relative;
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: var(--space-4) var(--space-5);
+  padding: var(--space-5);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  transition: transform 320ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.mk-note:nth-child(1) { transform: translateX(1.5rem) rotate(-2deg); }
+.mk-note:nth-child(2) { margin-top: -0.75rem; transform: rotate(1deg); }
+.mk-note:nth-child(3) { margin-top: -0.75rem; transform: translateX(0.75rem) rotate(-1deg); }
+/* Pointing at a card squares it up and brings it forward, so it can be read. */
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .mk-note:hover { z-index: 2; transform: none; }
+}
+.mk-note-photo { width: 112px; height: 112px; border-radius: var(--radius); object-fit: cover; }
+.mk-note-body { display: flex; flex-direction: column; gap: var(--space-3); min-width: 0; }
+.mk-note-name { font-size: 1.125rem; font-weight: 600; letter-spacing: -0.01em; }
+.mk-note-role { font-size: 0.9375rem; line-height: 1.4; color: var(--text-muted); }
+.mk-note-text { font-size: 0.9375rem; line-height: 1.55; }
+.mk-note-ground {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-1) var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+.mk-ground {
+  color: var(--accent);
+  text-decoration: underline dotted;
+  text-underline-offset: 4px;
+}
+@media (max-width: 960px) {
+  .mk-notes-grid { grid-template-columns: minmax(0, 1fr); }
+  .mk-notes-copy { position: static; padding-top: 0; }
+}
+@media (max-width: 640px) {
+  .mk-note { grid-template-columns: 64px minmax(0, 1fr); gap: var(--space-3) var(--space-4); padding: var(--space-4); }
+  .mk-note-photo { width: 64px; height: 64px; }
+  .mk-note:nth-child(n) { transform: none; margin-top: 0; }
+  .mk-note + .mk-note { margin-top: var(--space-3); }
+}
+
+/* ----------------------------------------------------------- the safety */
+
+.mk-bento {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) minmax(0, 0.85fr);
+  grid-template-areas:
+    "ramp ramp day"
+    "never week day";
+  gap: var(--space-4);
+}
+.mk-tile {
+  margin: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: clamp(1.25rem, 2.5vw, 1.75rem);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
+}
+.mk-tile-ramp { grid-area: ramp; }
+.mk-tile-day { grid-area: day; }
+.mk-tile-head { display: flex; align-items: flex-start; gap: var(--space-3); }
+.mk-tile-icon { width: 2rem; height: 2rem; flex: none; color: var(--accent-2); stroke-width: 1.75; }
+.mk-tile-icon.is-accent { color: var(--accent); }
+.mk-tile-title { font-size: 1.125rem; line-height: 1.3; letter-spacing: -0.012em; }
+.mk-tile-sub { margin-top: 0.15rem; font-size: 0.875rem; line-height: 1.5; color: var(--text-muted); }
+
+.mk-ramp { width: 100%; height: auto; overflow: visible; }
+.mk-ramp-grid { stroke: var(--border); stroke-dasharray: 3 4; }
+.mk-ramp-axis { fill: var(--text-subtle); font-size: 12px; font-family: var(--font-sans); font-variant-numeric: tabular-nums; }
+.mk-ramp-line { fill: none; stroke: var(--accent-2); stroke-width: 2.5; stroke-linejoin: round; }
+.mk-ramp-dot { fill: var(--accent-2); stroke: var(--surface-raised); stroke-width: 2; }
+/* The chart scales down with its box, and so does text set in its units: at a
+   phone's width 12 units is about 6px. Doubling them keeps the axis at a
+   readable 12px or so. */
+@media (max-width: 640px) {
+  .mk-ramp-axis { font-size: 22px; }
+  .mk-ramp-axis.is-minor { display: none; }
+}
+
+.mk-day {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 0.35rem;
+}
+/* The rail the times hang from: the day, drawn as a line. */
+.mk-day::before {
+  content: "";
+  position: absolute;
+  top: 0.6rem;
+  bottom: 0.6rem;
+  left: calc(3.25rem + var(--space-3) + 0.5rem - 1px);
+  width: 2px;
+  background: color-mix(in srgb, var(--accent-2) 35%, transparent);
+}
+.mk-day li {
+  display: grid;
+  grid-template-columns: 3.25rem 1rem minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-3);
+  font-size: 0.875rem;
+}
+.mk-day-dot {
+  position: relative;
+  justify-self: center;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--accent-2);
+}
+
+.mk-tile-never {
+  grid-area: never;
+  flex-direction: row;
+  align-items: flex-start;
+  background: var(--ink-band);
+  border-color: var(--ink-band);
+  color: var(--ink-band-text);
+}
+.mk-tile-never .mk-tile-icon { width: 3rem; height: 3rem; }
+.mk-tile-never .mk-tile-title { font-size: 1.375rem; }
+.mk-tile-never p { margin-top: var(--space-2); color: var(--ink-band-muted); }
+
+.mk-tile-week { grid-area: week; background: color-mix(in srgb, var(--accent-2) 7%, var(--surface-raised)); }
+.mk-big { font-size: clamp(3rem, 2.4rem + 2vw, 4rem); font-weight: 600; line-height: 1; letter-spacing: -0.04em; }
+
+@media (max-width: 960px) {
+  .mk-bento {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-areas:
+      "ramp ramp"
+      "never day"
+      "week day";
+  }
+}
+@media (max-width: 640px) {
+  .mk-bento { grid-template-columns: minmax(0, 1fr); grid-template-areas: "ramp" "never" "week" "day"; }
+}
+
+/* --------------------------------------------------- replies and meetings */
+
+.mk-convo {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(1rem, 3vw, 2.5rem);
+  padding: clamp(1.25rem, 3vw, 2.25rem);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+}
+.mk-thread { display: flex; flex-direction: column; gap: var(--space-5); min-width: 0; }
+.mk-msg { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: var(--space-3); align-items: start; }
+.mk-msg-body { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); min-width: 0; }
+.mk-msg-who { font-size: 0.9375rem; font-weight: 600; }
+.mk-msg-who .mk-muted { margin-left: 0.4rem; font-size: 0.8125rem; font-weight: 400; }
+.mk-bubble {
+  max-width: 38ch;
+  padding: 0.65rem 0.9rem;
+  font-size: 0.9375rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.mk-avatar-mark { display: grid; place-items: center; background: var(--accent-soft); }
+.mk-draft {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  font-size: 0.9375rem;
+  border: 1.5px solid var(--accent);
+  border-radius: var(--radius);
+}
+.mk-draft-label { font-size: 0.8125rem; font-weight: 550; color: var(--accent); }
+.mk-slots { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.mk-slots li {
+  padding: 0.4rem 0.75rem;
+  font-size: 0.875rem;
+  color: var(--accent);
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius-sm);
+}
+.mk-slots li.is-picked { background: var(--accent-soft); border-color: var(--accent); }
+.mk-convo-arrow {
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  color: var(--text-muted);
+}
+.mk-meeting {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+.mk-meeting-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+.mk-meeting-head .pill { margin-left: auto; }
+.mk-meeting-title { font-size: 1.0625rem; font-weight: 600; }
+.mk-meeting-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-3); font-size: 0.9375rem; color: var(--text-muted); }
+.mk-meeting-rows li { display: flex; align-items: center; gap: var(--space-3); }
+@media (max-width: 960px) {
+  .mk-convo { grid-template-columns: minmax(0, 1fr); }
+  .mk-convo-arrow { justify-self: center; transform: rotate(90deg); }
+}
+
+.mk-facts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-5) clamp(1.5rem, 3vw, 3rem);
+}
+.mk-facts li { display: grid; grid-template-columns: 2.75rem minmax(0, 1fr); gap: var(--space-4); align-items: start; }
+.mk-facts h3 { font-size: 1.0625rem; line-height: 1.35; }
+.mk-facts p { margin-top: var(--space-2); font-size: 0.9375rem; color: var(--text-muted); }
+.mk-fact-icon {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+@media (max-width: 860px) {
+  .mk-facts { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ------------------------------------------------------------------ FAQ */
+
+.mk-faq {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: clamp(2rem, 5vw, 6rem);
+  align-items: start;
+}
+.mk-faq-head { position: sticky; top: 6rem; display: flex; flex-direction: column; gap: var(--space-4); }
+.mk-faq-list details { padding-block: var(--space-5); border-bottom: 1px solid var(--border); }
+.mk-faq-list details:first-child { padding-top: 0; }
+.mk-faq-list summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  font-size: 1.0625rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.mk-faq-list summary::-webkit-details-marker { display: none; }
+/* A plus drawn with two bars, so the open state can drop one and be a minus. */
+.mk-faq-list summary::after {
+  content: "";
+  flex: none;
+  width: 14px;
+  height: 14px;
+  background:
+    linear-gradient(var(--accent), var(--accent)) center / 14px 2px no-repeat,
+    linear-gradient(var(--accent), var(--accent)) center / 2px 14px no-repeat;
+}
+.mk-faq-list details[open] summary::after {
+  background: linear-gradient(var(--accent), var(--accent)) center / 14px 2px no-repeat;
+}
+.mk-faq-list details > p { margin-top: var(--space-3); max-width: 62ch; color: var(--text-muted); }
+@media (max-width: 860px) {
+  .mk-faq { grid-template-columns: minmax(0, 1fr); }
+  .mk-faq-head { position: static; }
+}
+
+/* ------------------------------------------------- the closing band */
+
+.mk-cta { padding-block: 0 clamp(2rem, 4vw, 3rem); }
+.mk-cta-band {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  padding: clamp(2.5rem, 6vw, 4rem) clamp(1.5rem, 4vw, 3rem);
+  text-align: center;
+  background: var(--ink-band);
+  color: var(--ink-band-text);
+  border-radius: var(--radius-lg);
+}
+.mk-cta-band h2 { max-width: 22ch; font-size: clamp(1.75rem, 1.3rem + 1.6vw, 2.5rem); letter-spacing: -0.025em; }
+.mk-cta-band p { max-width: 50ch; font-size: 1.0625rem; color: var(--ink-band-muted); }
+.mk-cta-band :focus-visible { outline-color: var(--ink-band-text); }
+.btn.mk-btn-invert { margin-top: var(--space-2); background: var(--ink-band-text); color: var(--ink-band); }
+.btn.mk-btn-invert:hover { background: color-mix(in srgb, var(--ink-band-text) 86%, var(--ink-band)); }
+
+/* ------------------------------------------------------------- the footer */
+
+.site-footer { padding-block: clamp(2rem, 4vw, 3rem) var(--space-6); }
+.footer-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) repeat(4, minmax(0, 1fr));
+  gap: var(--space-6);
+}
+.footer-brand { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-3); }
+.footer-brand p { max-width: 32ch; font-size: 0.875rem; color: var(--text-muted); }
+.footer-column { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); }
+.footer-title { margin-bottom: var(--space-1); font-size: 0.875rem; font-weight: 600; }
+.footer-link { font-size: 0.875rem; color: var(--text-muted); }
+.footer-link:hover { color: var(--text); }
+.footer-base {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-top: var(--space-6);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--border);
+  font-size: 0.8125rem;
+  color: var(--text-subtle);
+}
+.footer-base > :last-child { max-width: 62ch; text-align: right; }
+@media (max-width: 1080px) {
+  .footer-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .footer-brand { grid-column: 1 / -1; }
+}
+@media (max-width: 760px) {
+  .footer-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .footer-brand { grid-column: 1 / -1; }
+  .footer-base > :last-child { text-align: left; }
+}
+
+/* --------------------------------------------------- inner pages: frame */
+
+.mk-page-hero { padding-block: clamp(3rem, 6vw, 4.5rem) clamp(2rem, 4vw, 3rem); }
+.mk-page-hero-inner { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-4); }
+.mk-page-hero h1 {
+  max-width: 22ch;
+  font-size: clamp(2.25rem, 1.6rem + 2.2vw, 3.25rem);
+  line-height: 1.06;
+  letter-spacing: -0.03em;
+}
+.mk-page-lede {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-width: 62ch;
+  font-size: clamp(1.0625rem, 1rem + 0.3vw, 1.1875rem);
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+.mk-page-hero .mk-actions { margin-top: var(--space-2); }
+.mk-crumb { display: flex; align-items: center; gap: var(--space-2); font-size: 0.875rem; color: var(--text-subtle); }
+.mk-crumb [aria-current="page"] { color: var(--text-muted); }
+
+.mk-callout {
+  max-width: 70ch;
+  padding: var(--space-4) var(--space-5);
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  background: var(--accent-soft);
+  border-left: 3px solid var(--accent);
+  border-radius: var(--radius-sm);
+}
+.mk-callout a,
+.mk-prose a { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+
+/* Heading on one side, held still while the content beside it scrolls. */
+.mk-split {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  gap: clamp(2rem, 5vw, 5rem);
+  align-items: start;
+}
+.mk-split-aside { position: sticky; top: 6rem; }
+.mk-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-5); align-items: start; }
+.mk-prose { display: flex; flex-direction: column; gap: var(--space-4); max-width: 60ch; font-size: 1.0625rem; line-height: 1.65; }
+@media (max-width: 960px) {
+  .mk-split, .mk-pair { grid-template-columns: minmax(0, 1fr); }
+  .mk-split-aside { position: static; }
+}
+
+/* How it works: the three decisions as an index, numbers hung in the margin. */
+.mk-index { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--border); }
+.mk-index li {
+  display: grid;
+  grid-template-columns: 4.5rem minmax(0, 1fr) minmax(0, 1.1fr);
+  gap: var(--space-3) clamp(1.5rem, 3vw, 3rem);
+  align-items: start;
+  padding-block: var(--space-6);
+  border-bottom: 1px solid var(--border);
+}
+.mk-index-n { font-size: 3rem; font-weight: 600; line-height: 1; letter-spacing: -0.04em; color: var(--accent); }
+.mk-index-main { display: flex; flex-direction: column; gap: var(--space-2); }
+.mk-index-main h3 { font-size: 1.375rem; letter-spacing: -0.018em; }
+.mk-index-main p,
+.mk-index-why { color: var(--text-muted); }
+.mk-index-why { font-size: 0.9375rem; }
+.mk-index-why strong,
+.mk-team-out strong,
+.mk-stage-caveat strong { color: var(--text); font-weight: 600; }
+@media (max-width: 860px) {
+  .mk-index li { grid-template-columns: 3rem minmax(0, 1fr); }
+  .mk-index-why { grid-column: 2; }
+}
+
+/* How it works: who does what, two to a row and "You" across the foot. */
+.mk-team { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
+.mk-team-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: clamp(1.25rem, 2.5vw, 1.75rem);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
+}
+.mk-team-card > p { font-size: 0.9375rem; color: var(--text-muted); }
+.mk-team-card.is-you { grid-column: 1 / -1; background: var(--accent-soft); border-color: var(--accent-border); }
+.mk-team-head { display: flex; align-items: center; gap: var(--space-3); }
+.mk-team-head h3 { font-size: 1.1875rem; }
+.mk-team-head p { font-size: 0.9375rem; }
+.mk-team-card > .mk-team-out { font-size: 0.875rem; }
+@media (max-width: 760px) {
+  .mk-team { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* How it works: every stage on one rail, a ring where each one sits. */
+.mk-stages {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 var(--space-6);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+.mk-stages::before {
+  content: "";
+  position: absolute;
+  top: 0.5rem;
+  bottom: 0.5rem;
+  left: 0.5rem;
+  width: 2px;
+  background: var(--border);
+}
+.mk-stage { position: relative; display: flex; flex-direction: column; gap: var(--space-2); max-width: 48rem; font-size: 0.9375rem; }
+.mk-stage::before {
+  content: "";
+  position: absolute;
+  top: 0.4rem;
+  left: calc(0.5rem + 1px - var(--space-6) - 6px);
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--bg);
+  border: 2px solid var(--accent);
+}
+.mk-stage-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1) var(--space-3); }
+.mk-stage-head h3 { font-size: 1.1875rem; }
+.mk-stage-owner { font-size: 0.8125rem; font-weight: 550; color: var(--accent); }
+.mk-stage-caveat { font-size: 0.875rem; color: var(--text-muted); }
+
+/* The limits page: an article column, with figures allowed to run wider. */
+.mk-article-grid {
+  display: grid;
+  grid-template-columns: [full-start] minmax(0, 1fr) [content-start] minmax(0, 46rem) [content-end] minmax(0, 1fr) [full-end];
+  row-gap: var(--space-7);
+}
+.mk-article-grid > * { grid-column: content; min-width: 0; }
+.mk-article-grid > .is-wide { grid-column: full; }
+.mk-article-block { display: flex; flex-direction: column; gap: var(--space-4); }
+.mk-article-block > p:not([class]) { font-size: 1.0625rem; line-height: 1.7; }
+.mk-signs { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4); }
+.mk-signs li {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-5);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
+}
+.mk-signs h3 { font-size: 1.0625rem; line-height: 1.35; }
+.mk-signs p { font-size: 0.9375rem; color: var(--text-muted); }
+@media (max-width: 760px) {
+  .mk-signs { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* Pricing: what every workspace gets, as a ledger. */
+.mk-ledger {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-2) var(--space-5);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+.mk-ledger > div { display: grid; grid-template-columns: 9rem minmax(0, 1fr); gap: var(--space-4); padding-block: var(--space-4); }
+.mk-ledger > div + div { border-top: 1px solid var(--border); }
+.mk-ledger dt { font-weight: 600; }
+.mk-ledger dd { margin: 0; color: var(--text-muted); }
+@media (max-width: 520px) {
+  .mk-ledger > div { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); }
+}
+
+/* About: an essay column, one pulled line. */
+.mk-essay-body { display: flex; flex-direction: column; gap: var(--space-5); max-width: 40rem; font-size: 1.125rem; line-height: 1.7; }
+.mk-pull {
+  padding-left: var(--space-5);
+  border-left: 3px solid var(--accent);
+  font-size: clamp(1.375rem, 1.2rem + 0.8vw, 1.75rem);
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: -0.02em;
+}
+
+/* Security: six points, two to a row, each with its glyph. */
+.mk-points {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-6) clamp(2rem, 4vw, 4rem);
+}
+.mk-points li { display: grid; grid-template-columns: 2.75rem minmax(0, 1fr); gap: var(--space-2) var(--space-4); }
+.mk-points .mk-fact-icon { grid-row: span 2; }
+.mk-points h3 { align-self: center; font-size: 1.0625rem; line-height: 1.35; }
+.mk-points p { grid-column: 2; font-size: 0.9375rem; color: var(--text-muted); }
+@media (max-width: 760px) {
+  .mk-points { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ==== SEO content ==== */
+/*
+ * The frame for guides, alternatives, tools and audience pages
+ * (components/article.tsx). One reading column, wide enough for a table, with
+ * the tool or visual allowed to sit beside the opening on a wide screen.
+ */
+.article {
+  width: min(46rem, 100% - 2rem);
+  margin-inline: auto;
+  padding-block: var(--space-7) var(--space-8);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+.article-head { display: flex; flex-direction: column; gap: var(--space-3); }
+.article-head h1 {
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 1.4rem + 2.2vw, 2.75rem);
+  font-weight: 600;
+  line-height: 1.12;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+  margin: 0;
+}
+.article-crumbs ol { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: var(--space-2); font-size: 0.875rem; }
+.article-crumbs li + li::before { content: "/"; margin-right: var(--space-2); color: var(--text-subtle); }
+.article-crumbs a { color: var(--text-muted); }
+.article-lede { font-size: 1.1875rem; line-height: 1.55; color: var(--text-muted); max-width: 62ch; margin: 0; text-wrap: pretty; }
+.article-meta { display: flex; align-items: center; gap: var(--space-3); font-size: 0.875rem; color: var(--text-subtle); margin: 0; font-variant-numeric: tabular-nums; }
+.article-aside { display: flex; flex-direction: column; gap: var(--space-4); }
+
+.article-body { display: flex; flex-direction: column; gap: var(--space-4); font-size: 1.0625rem; line-height: 1.7; }
+.article-body > * { margin: 0; }
+.article-body h2 {
+  font-family: var(--font-display);
+  font-size: 1.625rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+  margin-top: var(--space-5);
+  text-wrap: balance;
+  scroll-margin-top: 5rem;
+}
+.article-body h3 { font-size: 1.1875rem; font-weight: 600; line-height: 1.35; margin-top: var(--space-3); }
+.article-body p, .article-body li { max-width: 68ch; text-wrap: pretty; }
+.article-body ul, .article-body ol { padding-left: 1.25rem; display: flex; flex-direction: column; gap: var(--space-2); }
+.article-body a { color: var(--accent); text-decoration: underline; text-underline-offset: 0.18em; text-decoration-thickness: 1px; }
+.article-body strong { font-weight: 600; color: var(--text); }
+.article-body blockquote {
+  border-left: 3px solid var(--accent-border);
+  padding: var(--space-1) 0 var(--space-1) var(--space-4);
+  color: var(--text-muted);
+}
+.article-body code { font-family: var(--font-mono); font-size: 0.9em; background: var(--surface-sunken); padding: 0.1em 0.35em; border-radius: var(--radius-sm); }
+
+.article-callout {
+  border-radius: var(--radius-lg);
+  padding: var(--space-4) var(--space-5);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  font-size: 1rem;
+  line-height: 1.6;
+}
+.article-callout.is-safety { background: color-mix(in srgb, var(--accent-2) 9%, var(--surface-raised)); border-color: color-mix(in srgb, var(--accent-2) 35%, var(--border)); }
+.article-callout.is-warning { background: var(--warning-soft); border-color: color-mix(in srgb, var(--warning) 30%, var(--border)); }
+
+.article-table { border-radius: var(--radius-lg); }
+.article-table table { width: 100%; border-collapse: collapse; font-size: 0.9375rem; line-height: 1.5; }
+.article-table caption { text-align: left; padding: var(--space-4) var(--space-4) var(--space-2); font-weight: 600; color: var(--text); }
+.article-table th, .article-table td { padding: var(--space-3) var(--space-4); text-align: left; vertical-align: top; border-top: 1px solid var(--border); }
+.article-table thead th { font-family: var(--font-sans); font-weight: 600; color: var(--text-muted); font-size: 0.875rem; text-transform: none; letter-spacing: 0; white-space: normal; }
+.article-table tbody th { font-weight: 550; color: var(--text); min-width: 10rem; }
+/* .table-scroll gives every table a 34rem floor so a wide one scrolls rather
+   than crushes. A two-column table of short facts fits a phone as it is. */
+.article-table table:not(:has(thead th:nth-child(3))) { min-width: 0; }
+@media (max-width: 640px) {
+  .article-lede { font-size: 1.0625rem; }
+}
+
+.article-faq, .article-sources, .article-next { display: flex; flex-direction: column; gap: var(--space-3); border-top: 1px solid var(--border); padding-top: var(--space-6); }
+.article-faq h2, .article-sources h2, .article-next h2 { font-family: var(--font-display); font-size: 1.375rem; font-weight: 600; letter-spacing: -0.015em; margin: 0; }
+.article-faq details { border-bottom: 1px solid var(--border); padding-block: var(--space-3); }
+.article-faq summary { cursor: pointer; font-weight: 550; list-style: none; display: flex; justify-content: space-between; gap: var(--space-4); }
+.article-faq summary::-webkit-details-marker { display: none; }
+.article-faq summary::after { content: "+" / ""; color: var(--accent); font-weight: 400; }
+.article-faq details[open] summary::after { content: "\2212" / ""; }
+.article-faq details p { margin: var(--space-2) 0 0; color: var(--text-muted); line-height: 1.65; max-width: 68ch; }
+.article-sources ol { margin: 0; padding-left: 1.25rem; display: flex; flex-direction: column; gap: var(--space-1); font-size: 0.9375rem; }
+.article-sources a { color: var(--text-muted); overflow-wrap: anywhere; }
+.article-next ul { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3); }
+@media (max-width: 640px) { .article-next ul { grid-template-columns: minmax(0, 1fr); } }
+.article-next a {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  height: 100%;
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+  color: var(--text);
+  text-decoration: none;
+  transition: border-color 140ms ease, transform 140ms ease;
+}
+.article-next a span { color: var(--text-muted); font-size: 0.9375rem; line-height: 1.5; }
+@media (hover: hover) { .article-next a:hover { border-color: var(--accent-border); transform: translateY(-1px); } }
+@media (prefers-reduced-motion: reduce) { .article-next a { transition: none; } }
+.hub-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); gap: var(--space-4); }
+.hub-list a {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  height: 100%;
+  padding: var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+  color: var(--text);
+  text-decoration: none;
+  box-shadow: var(--shadow-xs);
+  transition: border-color 140ms ease, transform 140ms ease;
+}
+.hub-list strong { font-size: 1.0625rem; font-weight: 600; line-height: 1.35; letter-spacing: -0.01em; }
+.hub-list span { color: var(--text-muted); font-size: 0.9375rem; line-height: 1.55; }
+@media (hover: hover) { .hub-list a:hover { border-color: var(--accent-border); transform: translateY(-1px); } }
+@media (prefers-reduced-motion: reduce) { .hub-list a { transition: none; } }
+.article.hub { width: min(72rem, 100% - 2rem); }
+
+/* ==== SEO tools ==== */
+/* The free tools on /tools/* (components/seo/tool-*.tsx). */
+.tool-panel { width: 100%; }
+.tool-count { margin: 0; font-size: 1rem; font-variant-numeric: tabular-nums; }
+.tool-count strong { font-family: var(--font-display); font-size: 1.75rem; font-weight: 600; letter-spacing: -0.02em; }
+.tool-findings { margin: 0; padding-left: 1.25rem; display: flex; flex-direction: column; gap: var(--space-2); font-size: 0.9375rem; line-height: 1.55; }
+.tool-inputs { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: var(--space-4); }
+.tool-figures { margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); gap: var(--space-3); }
+.tool-figures > div { display: flex; flex-direction: column; gap: var(--space-1); padding: var(--space-3) var(--space-4); border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); }
+.tool-figures dt { font-size: 0.8125rem; color: var(--text-muted); }
+.tool-figures dd { margin: 0; font-family: var(--font-display); font-size: 1.75rem; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.tool-figures dd span { font-size: 0.9375rem; font-weight: 400; letter-spacing: 0; }
+
+/* ==== SEO guide2 ==== */
+/*
+ * The connection note templates on /guides/linkedin-connection-request-templates:
+ * each note a quiet card, the words to swap marked, the count beneath it.
+ */
+.guide2-group { display: flex; flex-direction: column; gap: var(--space-3); }
+.article-body .guide2-group-meta { margin: 0; font-size: 1rem; color: var(--text-muted); }
+.article-body .guide2-notes { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); }
+.article-body .guide2-note {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  max-width: none;
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+}
+.article-body .guide2-note-text { margin: 0; font-size: 1rem; line-height: 1.6; color: var(--text); }
+.guide2-slot { background: var(--accent-soft); color: var(--text); padding: 0 0.2em; border-radius: var(--radius-sm); }
+.article-body .guide2-note-count { margin: 0; font-size: 0.875rem; color: var(--text-subtle); font-variant-numeric: tabular-nums; }
+
+/* ==== SEO audience ==== */
+/* A button-styled signup link inside an article body, which otherwise wears the body's link colour. */
+.article-body a.aud-cta-link { color: var(--text-inverse); text-decoration: none; }
+.article-meta a { color: var(--text); font-weight: 550; }
+.article-owner {
+  flex: none;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-inverse);
+}
+.article-owner.is-sage { background: var(--crew-sage); }
+.article-owner.is-scout { background: var(--crew-scout); }
+.article-owner.is-quinn { background: var(--crew-quinn); }
+.article-owner.is-reese { background: var(--crew-reese); }
+.article-feature { width: 100%; height: auto; aspect-ratio: 1200 / 630; border-radius: var(--radius-lg); border: 1px solid var(--border); background: var(--surface-raised); }
+
+/* ==== SEO alternatives ==== */
+/* The comparison under the /alternatives hub's cards: one page, so no second band of top padding. */
+.alt-hub-more { padding-top: 0; }
+/* A company name squeezed to one word a line reads as three companies. */
+.app .prospect-company { min-width: 9rem; }

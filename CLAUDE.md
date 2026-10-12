@@ -1368,6 +1368,26 @@ tests that were verified by deliberately breaking the code.
     conditional on the ticket still being open, so the model never overwrites an
     operator who answered while it was thinking.
 
+60. **Every search page is registered once, and the registry is the site
+    map.** Guides, comparisons, tools and audience pages live in
+    `apps/web/src/lib/seo-content.ts`: path, keyword-first title (60
+    characters or fewer), description (155 or fewer), the one primary query
+    it owns, owner teammate and related pages. The sitemap, the hubs, the
+    footer's links, `llms.txt`, `feed.xml`, each article's "Read next" and its
+    drawn feature image (`app/og/article`) all read from it, so a page missing
+    from it is invisible to all of them at once. One query per URL:
+    two pages chasing the same search split it and both lose.
+    `node scripts/seo-check.mjs` checks titles, lengths, unique queries,
+    broken internal links, inbound links, one H1 and dashes; run it after
+    touching content. The keyword plan behind every page is in `docs/seo/`.
+
+    Competitor facts on comparison pages are dated and sourced, and no
+    sentence puts a price beside Nora's name (`team.test.ts`): a competitor's
+    price is a fact about one month, and a price next to the product's name
+    reads as the product's price. Teammate bylines name a part of the
+    product, so structured-data authorship stays the organisation; a named
+    human reviewer is the next step once one exists.
+
 ## Conventions
 
 - Agent output is validated against a zod schema before it touches the

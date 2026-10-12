@@ -102,7 +102,7 @@ export const TOUR_STAGES: readonly TourStage[] = [
     title: "You tell it what you sell, once",
     owner: "setup",
     youDo: "Give it your website and a sentence about what you do, at signup.",
-    weDo: "The Strategy Agent reads the site and writes three to five customer profiles — who to go after, why they would care, what to say.",
+    weDo: "The Strategy Agent reads the site and writes three to five customer profiles: who to go after, why they would care, what to say.",
     caveat:
       "It reads what is publicly on your site. If your pricing lives behind a login, it does not know it, and neither will any message it writes.",
     step: "hasBusinessProfile",
@@ -126,7 +126,7 @@ export const TOUR_STAGES: readonly TourStage[] = [
     youDo: "Sign in on LinkedIn's own hosted page, at signup.",
     weDo: "We hold a session token, never your password, and every action after this goes out as you.",
     caveat:
-      "Sales Navigator is a separate subscription. Without it, searches cannot filter by seniority, company size or excluded titles — the campaign says so before you launch rather than quietly returning a looser list.",
+      "Sales Navigator is a separate subscription. Without it, searches cannot filter by seniority, company size or excluded titles. The campaign says so before you launch rather than quietly returning a looser list.",
     step: "hasLinkedInAccount",
     href: step("hasLinkedInAccount").href,
   },
@@ -137,7 +137,7 @@ export const TOUR_STAGES: readonly TourStage[] = [
     youDo: null,
     weDo: "The Targeting Agent searches LinkedIn, scores everyone it finds against the strategy, verifies each profile can actually be opened, and writes a connection note for each person from their own headline and role.",
     caveat:
-      "Somebody whose profile cannot be opened is dropped and counted, not hidden. They are usually real — LinkedIn hides addresses outside your network — but an invitation is spent from a capped daily allowance and a reviewer who cannot open a profile cannot review it.",
+      "Somebody whose profile cannot be opened is dropped and counted, not hidden. They are usually real (LinkedIn hides addresses outside your network), but an invitation is spent from a capped daily allowance and a reviewer who cannot open a profile cannot review it.",
     step: "hasCampaign",
     href: step("hasCampaign").href,
   },
@@ -156,7 +156,7 @@ export const TOUR_STAGES: readonly TourStage[] = [
     id: "review",
     title: "You launch it",
     owner: "decision",
-    youDo: "Press Launch. Read the names and the messages first if you want to — everything is there, and you can cut anyone.",
+    youDo: "Press Launch. Read the names and the messages first if you want to. Everything is there, and you can cut anyone.",
     weDo: "Nothing has left at this point. Launching starts the pacing loop and the agent takes it from there.",
     caveat:
       "Launching is the one gate with no way round it: every path to sending goes through it, including Send one now. Reading first is yours to skip; launching is not.",
@@ -170,7 +170,7 @@ export const TOUR_STAGES: readonly TourStage[] = [
     youDo: null,
     weDo: `Invitations go out ${LINKEDIN_LIMITS.minGapMs / 60000} to 11 minutes apart, inside your working hours, starting at ${LINKEDIN_LIMITS.invitesPerDayStart} a day and ramping over ${LINKEDIN_LIMITS.warmupDays} days.`,
     caveat:
-      "A quiet afternoon is usually the system working. The campaign page says which — waiting out the gap, outside your hours, allowance spent, or nothing running at all — because those look identical otherwise.",
+      "A quiet afternoon is usually the system working. The campaign page says which (waiting out the gap, outside your hours, allowance spent, or nothing running at all), because those look identical otherwise.",
     step: null,
     href: "/app/campaigns",
   },
@@ -192,7 +192,7 @@ export const TOUR_STAGES: readonly TourStage[] = [
     youDo: null,
     weDo: "The Reply Agent answers from the facts you gave it and offers only times this product actually holds. On autopilot it sends and books by itself; set to review instead, it drafts and waits for you in the Inbox.",
     caveat:
-      "Two things wait for a person whatever the setting: somebody who asks to speak to a human, and a message the agent did not understand. It may never invent a price, a date or a link — a draft carrying a URL nobody gave it is held rather than sent with the invented address quietly removed.",
+      "Two things wait for a person whatever the setting: somebody who asks to speak to a human, and a message the agent did not understand. It may never invent a price, a date or a link. A draft carrying a URL nobody gave it is held rather than sent with the invented address quietly removed.",
     step: "hasKnowledge",
     href: "/app/inbox",
   },
@@ -203,7 +203,7 @@ export const TOUR_STAGES: readonly TourStage[] = [
     youDo: "Take the call, send the proposal, do the part that is yours.",
     weDo: "Meetings booked through this product's own link appear on the Meetings page.",
     caveat:
-      "A booking made on your own Calendly happens on Calendly — there is no way for us to see it — so a campaign relying on your link cannot report meetings automatically, and the screens say so rather than showing a zero.",
+      "A booking made through your own scheduling link happens there, where we cannot see it, so a campaign relying on your link cannot report meetings automatically, and the screens say so rather than showing a zero.",
     step: null,
     href: "/app/meetings",
   },

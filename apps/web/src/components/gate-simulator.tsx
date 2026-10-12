@@ -23,7 +23,7 @@ type Verdict = {
 const HOLD_RULES: ReadonlyArray<{ rule: string; because: string; test: RegExp }> = [
   {
     rule: "Asks about price",
-    because: "Pricing waits for a person by default. You can let Reese answer it — the facts still come only from what you gave it.",
+    because: "Pricing waits for a person by default. You can let Reese answer it; the facts still come only from what you gave it.",
     test: /\b(cost|price|pricing|how much|budget|quote|discount|per seat|contract)\b/i,
   },
   {
@@ -83,7 +83,7 @@ function judge(message: string): Verdict | null {
 }
 
 const EXAMPLES = [
-  "Interesting — what does this actually cost for a team of six?",
+  "Interesting. What does this actually cost for a team of six?",
   "Please remove me from your list.",
   "Where is our data held? We need a DPA before anything else.",
   "Sounds good, Tuesday works for me.",
@@ -150,7 +150,7 @@ export function GateSimulator() {
               <p className="small">{verdict.because}</p>
             </motion.div>
           ) : (
-            <p className="small subtle">Nothing to judge yet — type something above.</p>
+            <p className="small subtle">Nothing to judge yet. Type something above.</p>
           )}
         </AnimatePresence>
       </div>

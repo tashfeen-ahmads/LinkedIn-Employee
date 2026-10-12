@@ -40,7 +40,7 @@ const BEATS: Beat[] = [
     title: "The first invitations go out",
     detail:
       "Ten on day one, spread across your working hours with two to nine minutes between each. Never at the same minute twice, because a scheduler is the easiest thing in the world to spot.",
-    quote: "Hi Dmitri — we work with RevOps leads on the lane-level reporting problem. Worth a look?",
+    quote: "Hi Dmitri, saw you run RevOps at Halstead. Curious how you report on lanes today.",
   },
   {
     day: 3,
@@ -54,15 +54,15 @@ const BEATS: Beat[] = [
     actor: "Reese",
     title: "The first message, within the hour",
     detail:
-      "Twenty to ninety minutes after the acceptance is noticed, inside working hours, under the daily message cap — while he still remembers accepting. If he had replied first, this would never have been sent — a reply ends the sequence whatever it says.",
-    quote: "Thanks for connecting. Most teams we talk to are stitching lane costs together in a spreadsheet — is that you too?",
+      "Twenty to ninety minutes after the acceptance is noticed, inside working hours, under the daily message cap, while he still remembers accepting. If he had replied first, this would never have been sent: a reply ends the sequence whatever it says.",
+    quote: "Thanks for connecting. Most teams we talk to are stitching lane costs together in a spreadsheet. Is that you too?",
   },
   {
     day: 6,
     actor: "The prospect",
     title: "He replies, and asks the price",
     detail: "Which is the moment most tools get wrong.",
-    quote: "Interesting — what does this actually cost for a team of six?",
+    quote: "Interesting. What does this actually cost for a team of six?",
   },
   {
     day: 6,
@@ -77,8 +77,8 @@ const BEATS: Beat[] = [
     human: true,
     title: "You edit one line and send",
     detail:
-      "The draft offers times your calendar says you are genuinely free — the agent never invents a slot. You change the price framing and approve. One click.",
-    quote: "Happy to go through it properly — it depends on lanes rather than seats. Thursday 2pm or Friday 10am?",
+      "The draft offers times your calendar says you are genuinely free; the agent never invents a slot. You change the price framing and approve. One click.",
+    quote: "Happy to go through it properly. It depends on lanes rather than seats. Thursday 2pm or Friday 10am?",
   },
   {
     day: 7,

@@ -64,7 +64,7 @@ export const TEAM: readonly TeamMember[] = [
     line: "Reads your business and writes who to target, and why.",
     does: [
       "Reads your website and LinkedIn page and writes your business profile.",
-      "Drafts three to five customer strategies — pains, buying signals, search filters — and more when you ask.",
+      "Drafts three to five customer strategies (pains, buying signals, search filters) and more when you ask.",
       "Never approves its own work: nothing is searched for until you approve a strategy.",
     ],
     href: "/app/strategy",
@@ -76,7 +76,7 @@ export const TEAM: readonly TeamMember[] = [
     line: "Finds real people on LinkedIn who match a strategy you approved.",
     does: [
       "Searches on the LinkedIn tier you actually have, and tells you which filters it could not apply.",
-      "Opens every profile first — anyone who cannot be checked is left out, and counted.",
+      "Opens every profile first. Anyone who cannot be checked is left out, and counted.",
       "Skips your exclusion list and never contacts anyone twice.",
     ],
     href: "/app/prospects",
@@ -89,7 +89,7 @@ export const TEAM: readonly TeamMember[] = [
     does: [
       "Writes every connection note from that person's own role, company and headline.",
       "Splits a campaign across angles you can test, and never calls a winner early.",
-      "Hands you a draft — nothing is sent until you press Launch.",
+      "Hands you a draft. Nothing is sent until you press Launch.",
     ],
     href: "/app/campaigns",
   },
@@ -101,7 +101,7 @@ export const TEAM: readonly TeamMember[] = [
     does: [
       "Sends invitations and follow-ups under daily caps, spread across your working hours.",
       "Answers replies only from facts you gave it, and holds what you want to see first.",
-      "Offers only real slots from your availability — never an invented time — and books the one they accept.",
+      "Offers only real slots from your availability, never an invented time, and books the one they accept.",
     ],
     href: "/app/inbox",
   },
@@ -162,7 +162,7 @@ export function teamStatus(f: TeamFacts): { lead: TeamStatus } & Record<MemberKe
     f.needsYou === 0
       ? { status: "Nothing needs you right now.", state: "done" }
       : {
-          status: `${f.needsYou === 1 ? "One thing needs" : `${f.needsYou} things need`} you — listed at the top.`,
+          status: `${f.needsYou === 1 ? "One thing needs" : `${f.needsYou} things need`} you, listed at the top.`,
           state: "waiting",
         };
 
@@ -170,7 +170,7 @@ export function teamStatus(f: TeamFacts): { lead: TeamStatus } & Record<MemberKe
     f.strategyPhase === "running"
       ? { status: "Reading your business and writing strategies.", state: "working" }
       : f.strategyPhase === "failed"
-        ? { status: "Could not finish reading your business — try again.", state: "blocked" }
+        ? { status: "Could not finish reading your business. Try again.", state: "blocked" }
         : f.strategiesAwaiting > 0
           ? {
               status: `${plural(f.strategiesAwaiting, "strategy", "strategies")} waiting for your approval.`,
@@ -212,7 +212,7 @@ export function teamStatus(f: TeamFacts): { lead: TeamStatus } & Record<MemberKe
   } else if (f.invited === 0) {
     reese =
       f.campaignsRunning > 0
-        ? { status: "No invitations sent yet — a launched campaign is queued.", state: "working" }
+        ? { status: "No invitations sent yet. A launched campaign is queued.", state: "working" }
         : { status: "Nothing to send until a campaign is launched.", state: "idle" };
   } else {
     const parts = [plural(f.invited, "invitation") + " sent", plural(f.replied, "reply", "replies")];

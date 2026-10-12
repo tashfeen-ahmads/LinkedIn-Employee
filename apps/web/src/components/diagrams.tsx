@@ -1,5 +1,5 @@
-import { dailyInviteCap } from "@le/linkedin";
 import { LINKEDIN_LIMITS } from "@le/shared";
+import { RAMP, RAMP_DAYS } from "@/lib/marketing-examples";
 import { DrawPath } from "./reveal";
 
 /*
@@ -13,19 +13,71 @@ import { DrawPath } from "./reveal";
 
 /* ------------------------------------------------------ the warm-up ramp */
 
-/**
+/*
  * Day zero of the ramp is an account's first invitation, not the day it was
- * connected — see dailyInviteCap. An account that has been connected for weeks
- * and never sent anything is still on the left-hand edge of this chart.
+ * connected: see dailyInviteCap. An account that has been connected for weeks
+ * and never sent anything is still on the left-hand edge of these charts.
+ * `RAMP` is that function called once a day, in lib/marketing-examples.ts, so
+ * the home page's tile and this page's chart are one series.
  */
-const DAY_ZERO = new Date("2026-01-01T00:00:00Z");
-const RAMP_DAYS = LINKEDIN_LIMITS.warmupDays + 7;
 
-/** Every point on this line is a call to the function that gates real sends. */
-const RAMP = Array.from({ length: RAMP_DAYS + 1 }, (_, day) => ({
-  day,
-  cap: dailyInviteCap(DAY_ZERO, new Date(DAY_ZERO.getTime() + day * 86_400_000)),
-}));
+/** A step line, because the cap changes once a day rather than continuously. */
+function stepPath(x: (day: number) => number, y: (cap: number) => number): string {
+  const steps = RAMP.flatMap((point, index) => {
+    const previous = RAMP[index - 1];
+    return previous ? [`L${x(point.day)},${y(previous.cap)}`, `L${x(point.day)},${y(point.cap)}`] : [];
+  });
+  return `M${x(0)},${y(RAMP[0]!.cap)} ${steps.join(" ")}`;
+}
+
+/**
+ * The home page's ramp: the same series, drawn small, in the limits colour.
+ * Dots mark one value a week so the line can be read against the axis.
+ */
+export function RampChart() {
+  const w = 640;
+  const h = 250;
+  const pad = { top: 14, right: 16, bottom: 30, left: 30 };
+  const plotW = w - pad.left - pad.right;
+  const plotH = h - pad.top - pad.bottom;
+  const maxY = 40;
+  const x = (day: number) => pad.left + (day / RAMP_DAYS) * plotW;
+  const y = (cap: number) => pad.top + plotH - (cap / maxY) * plotH;
+  const weeks = [0, 7, 14, 21, 28, 35, 42].filter((d) => d <= RAMP_DAYS);
+
+  return (
+    <svg viewBox={`0 0 ${w} ${h}`} role="img" className="mk-ramp" aria-labelledby="mk-ramp-title">
+      <title id="mk-ramp-title">
+        {`Daily invitation cap: ${weeks.map((d) => `day ${d}, ${RAMP[d]!.cap}`).join("; ")}.`}
+      </title>
+      {[0, 10, 20, 30, 40].map((tick) => (
+        <g key={tick}>
+          <line x1={pad.left} x2={pad.left + plotW} y1={y(tick)} y2={y(tick)} className="mk-ramp-grid" />
+          <text x={pad.left - 8} y={y(tick) + 4} className="mk-ramp-axis" textAnchor="end">
+            {tick}
+          </text>
+        </g>
+      ))}
+      <path d={stepPath(x, y)} className="mk-ramp-line" />
+      {weeks.map((day) => (
+        <circle key={day} cx={x(day)} cy={y(RAMP[day]!.cap)} r={4} className="mk-ramp-dot" />
+      ))}
+      {weeks.map((day) => (
+        <text
+          key={day}
+          x={x(day)}
+          y={h - 8}
+          // Every other week is dropped on a phone, where the labels are drawn
+          // larger and seven of them would run into each other.
+          className={`mk-ramp-axis${day % 14 === 7 ? " is-minor" : ""}`}
+          textAnchor={day === 0 ? "start" : day === weeks[weeks.length - 1] ? "end" : "middle"}
+        >
+          {day === 0 ? "First send" : `Day ${day}`}
+        </text>
+      ))}
+    </svg>
+  );
+}
 
 export function WarmupRamp() {
   const w = 720;
@@ -38,12 +90,7 @@ export function WarmupRamp() {
   const x = (day: number) => pad.left + (day / RAMP_DAYS) * plotW;
   const y = (cap: number) => pad.top + plotH - (cap / maxY) * plotH;
 
-  // A step line, because the cap changes once a day rather than continuously.
-  const steps = RAMP.flatMap((point, index) => {
-    const previous = RAMP[index - 1];
-    return previous ? [`L${x(point.day)},${y(previous.cap)}`, `L${x(point.day)},${y(point.cap)}`] : [];
-  });
-  const line = `M${x(0)},${y(RAMP[0]!.cap)} ${steps.join(" ")}`;
+  const line = stepPath(x, y);
   const area = `${line} L${x(RAMP_DAYS)},${pad.top + plotH} L${x(0)},${pad.top + plotH} Z`;
 
   const ticks = [0, 10, 20, 30, 35];

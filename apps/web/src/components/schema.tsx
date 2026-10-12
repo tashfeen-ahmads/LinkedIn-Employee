@@ -9,7 +9,7 @@ import { PUBLIC_LIMITS, SITE, canonical } from "@/lib/site";
  * visible on the page — Google treats a mismatch as spam, and it is also just
  * lying in a format nobody proofreads.
  */
-function Json({ data }: { data: Record<string, unknown> }) {
+export function Json({ data }: { data: Record<string, unknown> }) {
   return (
     <script
       type="application/ld+json"
@@ -22,16 +22,34 @@ function Json({ data }: { data: Record<string, unknown> }) {
 
 export function OrganizationSchema() {
   return (
-    <Json
+    <>
+      {/*
+        The site's own name, so a result can read "Nora AI SDR" rather than the
+        bare domain. Google takes the site name from WebSite markup.
+      */}
+      <Json
+        data={{
+          "@context": "https://schema.org",
+          "@type": "WebSite",
+          name: `${SITE.name} AI SDR`,
+          alternateName: ["Nora", "Nora SDR", "norasdr.com"],
+          url: SITE.url,
+        }}
+      />
+      <Json
       data={{
         "@context": "https://schema.org",
         "@type": "Organization",
         name: SITE.name,
+        // The bare name is shared with a musician, a novel and a dozen
+        // companies; these are what people actually type to find this one.
+        alternateName: ["Nora SDR", "Nora AI SDR", "norasdr"],
         url: SITE.url,
         description: SITE.description,
         logo: `${SITE.url}/og`,
       }}
-    />
+      />
+    </>
   );
 }
 
@@ -51,6 +69,7 @@ export function SoftwareSchema() {
         "@context": "https://schema.org",
         "@type": "SoftwareApplication",
         name: SITE.name,
+        alternateName: "Nora AI SDR for LinkedIn",
         applicationCategory: "BusinessApplication",
         applicationSubCategory: "Sales Engagement",
         operatingSystem: "Web",
@@ -67,7 +86,7 @@ export function SoftwareSchema() {
           "Customer strategies written from your website, approved by you before anything is searched",
           "Ranked prospect lists with the intent signals behind each score",
           `Sending capped at ${PUBLIC_LIMITS.invitesPerDayMax} invitations a day and ${PUBLIC_LIMITS.invitesPerWeek} a week`,
-          "Replies drafted for human approval",
+          "Replies answered under the rules you set, and an opt-out stops all contact",
           "Meetings booked from times you are actually available",
         ],
       }}
@@ -117,12 +136,15 @@ export function ArticleSchema({
   path,
   published,
   modified,
+  image,
 }: {
   headline: string;
   description: string;
   path: string;
   published: string;
   modified?: string;
+  /** Absolute URL of the article's feature image; defaults to the generic card. */
+  image?: string;
 }) {
   return (
     <Json
@@ -136,7 +158,7 @@ export function ArticleSchema({
         dateModified: modified ?? published,
         author: { "@type": "Organization", name: SITE.name, url: SITE.url },
         publisher: { "@type": "Organization", name: SITE.name, url: SITE.url },
-        image: `${SITE.url}/og?title=${encodeURIComponent(headline)}`,
+        image: image ?? `${SITE.url}/og?title=${encodeURIComponent(headline)}`,
       }}
     />
   );

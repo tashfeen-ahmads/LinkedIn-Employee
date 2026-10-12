@@ -17,7 +17,7 @@ import type { TeamFacts } from "@/lib/team";
 
 import { DailyReportSection } from "./report-section";
 import { LimitsSection } from "./limits-section";
-import { ResultsSection } from "./analytics-section";
+import { HeadlineStats, ResultsSection } from "./analytics-section";
 /**
  * The morning screen: what to do, and whether what was done is working.
  *
@@ -68,7 +68,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
   const { items: needs, facts: needsFacts } = await loadNeedsYou(supabase, session.workspaceId);
   const waiting = needsFacts.heldReplies + needsFacts.heldBookings + needsFacts.heldForCopy;
 
-  const report = funnelReport(funnel.rows, funnel.goals);
+  const report = funnelReport(funnel.rows, funnel.goals, Date.now());
   const byProfile = new Map<string, number>();
   for (const campaign of funnel.campaigns) {
     if (!campaign.customer_profile_id) continue;
@@ -105,8 +105,8 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
         screen you are on reads as a button that did nothing.
       */}
       <PageHeader
-        title={session.fullName ? `${greeting(me?.timezone)}, ${session.fullName.split(" ")[0]}.` : "Overview"}
-        lede="What needs you, and whether yesterday's sending worked."
+        title={session.fullName ? `${greeting(me?.timezone)}, ${session.fullName.split(" ")[0]}` : "Overview"}
+        lede={statusLine(team, waiting)}
       />
       <PageNotice error={params.error} notice={params.notice} />
 
@@ -141,42 +141,33 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
       ) : null}
 
       {/*
-        Who is doing what, under the list of what needs you rather than above
-        it: the list is the work, and this is the reassurance that everything
-        not on it is in hand — or, where a teammate is stopped, the reason.
+        Is it working, as four plain figures under the list of work: the same
+        reading Results used to open with, moved up rather than repeated.
       */}
-      <TeamPanel facts={team} />
-
-      {/*
-        A summary, and a link — not a second analytics page.
-        The dashboard and Reporting each used to compute the same five numbers
-        from their own query, which is two readings of one set of facts, and
-        two readings drift. Four figures here answer "is it working"; every
-        other number lives on Results.
-      */}
-      {/* First, above every chart. The funnel answers "how is it going",
-          which is a question about the month; this answers "what happened",
-          which is the question a person actually arrives with. */}
-      <DailyReportSection />
+      <HeadlineStats report={report} />
 
       {/*
         The guardrails, on the screen somebody opens daily.
 
         Every advantage this product has over the category lives in caps, a
-        ramp, a backoff and a spread — and all of it is invisible unless it
+        ramp, a backoff and a spread, and all of it is invisible unless it
         fails. A customer who cannot see the guardrails has no way to tell this
         apart from the tool that got them restricted, which is the one thing
-        they are actually afraid of.
+        they are actually afraid of. Today's allowance sits beside the last
+        fourteen days, because they answer one question from two ends.
       */}
       <LimitsSection />
 
+      {/* What happened today, in words, for the person who wants the story
+          behind the figures above. */}
+      <DailyReportSection />
+
       {/*
-        "How it is going" used to sit here: four tiles, three of which repeated
-        "This week" in Results below (the same invited count, and acceptance
-        and reply as counts beside the same figures as rates), with a button to
-        a Results page that redirects back to this one. Results is the one
-        reading of those numbers now.
+        Who is doing what, under the figures rather than above them: the list
+        is the work, and this is the reassurance that everything not on it is
+        in hand, or, where a teammate is stopped, the reason.
       */}
+      <TeamPanel facts={team} />
 
       <Section
         id="strategies"
@@ -243,6 +234,28 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
       </PageGroup>
     </>
   );
+}
+
+/**
+ * One status line under the greeting, from facts the page already has: what is
+ * running and what is waiting. Never a promise about the next send, which only
+ * the campaign page can make, because only it asks the limiter.
+ */
+function statusLine(team: TeamFacts, waiting: number): string {
+  const parts: string[] = [];
+  if (team.campaignsRunning > 0) {
+    parts.push(`${team.campaignsRunning} ${team.campaignsRunning === 1 ? "campaign" : "campaigns"} running.`);
+  } else if (team.campaignsDraft > 0) {
+    parts.push(
+      `${team.campaignsDraft} ${team.campaignsDraft === 1 ? "campaign is" : "campaigns are"} waiting for launch, and nothing is sending yet.`,
+    );
+  } else {
+    parts.push("No campaign is running yet.");
+  }
+  if (waiting > 0) {
+    parts.push(`${waiting} ${waiting === 1 ? "conversation is" : "conversations are"} waiting in your inbox.`);
+  }
+  return parts.join(" ");
 }
 
 /**
