@@ -79,7 +79,12 @@ describe("a customer's support ticket", () => {
   it("reopens without referring to a column that no longer exists", () => {
     const definitions = [...all.matchAll(/create (?:or replace )?function reopen_support_ticket\([\s\S]*?\$\$;/gi)];
     const latest = definitions.at(-1)![0];
-    for (const column of OPERATOR_ONLY) expect(latest).not.toMatch(new RegExp(`\\b${column}\\s*=`));
-    expect(latest).toMatch(/delete from support_ticket_drafts/);
+    // The ticket itself no longer carries the draft: the update of
+    // support_tickets must not set any of the columns that moved.
+    const ticketUpdate = latest.match(/update support_tickets[\s\S]*?where/i)?.[0] ?? "";
+    expect(ticketUpdate).toMatch(/update support_tickets/i);
+    for (const column of OPERATOR_ONLY) expect(ticketUpdate).not.toMatch(new RegExp(`\\b${column}\\s*=`));
+    // ...and the held draft is cleared where it now lives, emptied or removed.
+    expect(latest).toMatch(/(delete from|update) support_ticket_drafts/);
   });
 });

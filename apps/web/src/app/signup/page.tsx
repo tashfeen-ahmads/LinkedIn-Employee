@@ -340,6 +340,12 @@ export default async function SignupPage({
           <SubmitButton className="btn block" pendingLabel="Creating your account…">
             Create account
           </SubmitButton>
+
+          <p className="small muted">
+            By creating an account you agree to the{" "}
+            <a href={`${SITE.url}/terms`}>Terms</a> and the{" "}
+            <a href={`${SITE.url}/privacy`}>Privacy Policy</a>.
+          </p>
         </form>
 
         <p className="muted small">

@@ -15,6 +15,15 @@ import "server-only";
  * So the result is a discriminated union: a caller has to look at `ok`, and the
  * failure carries a sentence that can be shown to whoever clicked.
  */
+/**
+ * The Issues list reads every workspace, account and campaign in one request.
+ * It finishes in well under a second normally, but a schema change makes the
+ * database API reload and hold requests for several seconds, and ten seconds
+ * then reported "could not be read" on the operator's overview for a list that
+ * arrived a moment later. Generous, because this route only reads.
+ */
+export const ISSUES_TIMEOUT_MS = 20_000;
+
 export type WorkerResult<T> =
   | { ok: true; data: T | null }
   | { ok: false; error: string };

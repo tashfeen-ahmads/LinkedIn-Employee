@@ -274,6 +274,8 @@ const FOOTER_COLUMNS = [
     links: [
       { href: "/about", label: "About" },
       { href: "/security", label: "Security and data" },
+      { href: "/privacy", label: "Privacy" },
+      { href: "/terms", label: "Terms" },
       // Absolute: the dashboard is another host, and a relative /login here
       // lands on a marketing page that cannot hold a session.
       { href: `${SITE.app}/login`, label: "Sign in" },
@@ -326,7 +328,7 @@ export function SiteFooter() {
  * Somebody on these pages has one job, and the marketing nav beside it offered
  * five ways to leave and a second "Sign up" button on the sign-up page. So the
  * header is the logo and nothing else, and the footer is the one line every
- * page owes LinkedIn plus the two pages a careful buyer checks before typing a
+ * page owes LinkedIn plus the pages a careful buyer checks before typing a
  * password. These pages live on the app's host, so every link back to the site
  * is absolute.
  */
@@ -352,6 +354,8 @@ export function AuthFooter() {
         <nav className="auth-base-links" aria-label="Company">
           <a href={`${SITE.url}/security`}>Security and data</a>
           <a href={`${SITE.url}/about`}>About</a>
+          <a href={`${SITE.url}/privacy`}>Privacy</a>
+          <a href={`${SITE.url}/terms`}>Terms</a>
         </nav>
         <p>
           © {new Date().getFullYear()} {BRAND.name}. {DISCLAIMER}

@@ -20,6 +20,8 @@ export function GET() {
     "/pricing": "Pricing: free while we grow, no card.",
     "/security": "Where data is stored, who can reach it, and how a prospect is erased.",
     "/about": "Why the product is built this way.",
+    "/privacy": "Privacy policy: what is collected, the customer as controller of prospect data, retention, export and erasure.",
+    "/terms": "Terms of service: the free service, LinkedIn account risk, ownership of content and AI-written messages.",
   };
   const lines = [
     `# ${SITE.name}`,

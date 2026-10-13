@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requirePlatformAdmin } from "@/lib/admin";
-import { callWorker } from "@/lib/worker";
+import { ISSUES_TIMEOUT_MS, callWorker } from "@/lib/worker";
 import { PageHeader, Section, Empty } from "@/components/page";
 
 export const dynamic = "force-dynamic";
@@ -46,7 +46,7 @@ export default async function IssuesPage({
 }) {
   const admin = await requirePlatformAdmin();
   const params = await searchParams;
-  const result = await callWorker<{ issues: Issue[]; at: string }>("/admin/issues", { userId: admin.userId });
+  const result = await callWorker<{ issues: Issue[]; at: string }>("/admin/issues", { userId: admin.userId }, ISSUES_TIMEOUT_MS);
 
   const all = result.ok ? (result.data?.issues ?? []) : [];
   const areas = [...new Set(all.map((i) => i.area))];

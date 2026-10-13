@@ -72,13 +72,20 @@ begin
     raise exception 'that ticket is not yours or is already open';
   end if;
 
-  delete from support_ticket_drafts where ticket_id = p_ticket_id;
+  -- Emptied rather than deleted: an empty row reads exactly as no draft (the
+  -- worker upserts, the console treats nulls as nothing held).
+  update support_ticket_drafts
+     set draft_answer = null, draft_confidence = null, draft_reason = null, updated_at = now()
+   where ticket_id = p_ticket_id;
 end;
 $$;
 
 revoke execute on function reopen_support_ticket(uuid, text) from public;
 grant execute on function reopen_support_ticket(uuid, text) to authenticated;
 
+-- On the first live deployment these three columns were emptied (their values
+-- copied above) and left in place, because the migration tool there could not
+-- confirm a drop. Nothing reads or writes them; dropping them is safe.
 alter table support_tickets
   drop column draft_answer,
   drop column draft_confidence,

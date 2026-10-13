@@ -5,7 +5,7 @@ import { requirePlatformAdmin, ago } from "@/lib/admin";
 import { formatSpend } from "@/lib/spend-display";
 import { countersForToday } from "@/lib/account-day";
 import type { AccountRecord } from "@le/linkedin";
-import { callWorker } from "@/lib/worker";
+import { ISSUES_TIMEOUT_MS, callWorker } from "@/lib/worker";
 import { PageHeader, Section } from "@/components/page";
 import { PageNotice, type NoticeParams } from "@/components/page-notice";
 import { Kpi } from "@/components/charts";
@@ -52,7 +52,7 @@ export default async function AdminOverviewPage({ searchParams }: { searchParams
     supabase.from("profiles").select("id, timezone"),
     supabase.from("worker_heartbeats").select("name, beat_at, detail").in("name", [PACING_LOOP, BOOT_BEAT]),
     supabase.rpc("platform_spend_breakdown", { p_days: 7 }),
-    callWorker<{ issues: Issue[] }>("/admin/issues", { userId: admin.userId }),
+    callWorker<{ issues: Issue[] }>("/admin/issues", { userId: admin.userId }, ISSUES_TIMEOUT_MS),
   ]);
 
   const pacing = (beats ?? []).find((b) => b.name === PACING_LOOP);
@@ -112,8 +112,9 @@ export default async function AdminOverviewPage({ searchParams }: { searchParams
   }
   if (!loopFresh) waiting.push({ tone: "danger", text: "The sending loop has not run in the last 15 minutes.", href: "/admin/jobs" });
   if (bootDetail.queueReachable === false) waiting.push({ tone: "danger", text: "The worker cannot reach its job queue.", href: "/admin/jobs" });
+  const issuesWhy = issues.ok ? "the worker answered without a list" : issues.error;
   if (!issuesRead) {
-    waiting.push({ tone: "danger", text: "The Issues list could not be read, so nothing here can say the platform is clear.", href: "/admin/issues" });
+    waiting.push({ tone: "danger", text: `The Issues list could not be read (${issuesWhy}), so nothing here can say the platform is clear.`, href: "/admin/issues" });
   }
   if (critical) waiting.push({ tone: "danger", text: `${critical} critical issue${critical === 1 ? "" : "s"}.`, href: "/admin/issues" });
   if (heldForYou) {

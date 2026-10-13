@@ -90,6 +90,8 @@ export const PAGES = [
   { path: "/pricing", changeFrequency: "monthly", priority: 0.5, updated: "2026-10-12" },
   { path: "/security", changeFrequency: "monthly", priority: 0.6, updated: "2026-10-12" },
   { path: "/about", changeFrequency: "yearly", priority: 0.4, updated: "2026-10-12" },
+  { path: "/privacy", changeFrequency: "yearly", priority: 0.3, updated: "2026-10-13" },
+  { path: "/terms", changeFrequency: "yearly", priority: 0.3, updated: "2026-10-13" },
 ] as const;
 
 /**
