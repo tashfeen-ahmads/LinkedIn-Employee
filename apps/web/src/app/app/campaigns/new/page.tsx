@@ -65,7 +65,7 @@ function refuse(formData: FormData, message: string): never {
  */
 function failed(stage: string, error: { message?: string } | null): string {
   if (error?.message) console.error(`[campaigns/new] ${stage}: ${error.message}`);
-  return "The campaign could not be saved. Nothing was sent — try again, and tell us through Support if it keeps happening.";
+  return "The campaign could not be saved. Nothing was sent. Try again, and tell us through Support if it keeps happening.";
 }
 
 async function createCampaign(formData: FormData) {
@@ -81,11 +81,43 @@ async function createCampaign(formData: FormData) {
   const warmUp = formData.get("warm_up") === "on";
   const chosen = formData.getAll("prospect").map(String).filter(Boolean);
 
-  if (!name) refuse(formData, "Give the campaign a name you will recognise.");
+  if (!name) refuse(formData, "Give the campaign a name you will recognize.");
   if (!accountId) refuse(formData, "Connect a LinkedIn account before building a campaign.");
   if (chosen.length === 0) refuse(formData, "Pick at least one person for this campaign.");
-  if (!Number.isFinite(followUpDays) || followUpDays < 1 || followUpDays > 30) {
-    refuse(formData, "The follow-up wait has to be between 1 and 30 days.");
+  if (!Number.isInteger(followUpDays) || followUpDays < 1 || followUpDays > 30) {
+    refuse(formData, "The follow-up wait has to be a whole number of days, between 1 and 30.");
+  }
+
+  /*
+   * The form's ids are claims, so each one is checked against this workspace.
+   *
+   * The account is the one every message in this campaign is sent from: an id
+   * this workspace does not own, or one that has since disconnected, would
+   * build a campaign that sends from somebody else's LinkedIn or from nothing.
+   * And the people are re-read under the same rule the list was drawn with,
+   * because the page may be an hour old: somebody contacted or marked
+   * do-not-contact since it loaded is not added to a new campaign (rule 24).
+   */
+  const { data: sender } = await supabase
+    .from("linkedin_accounts")
+    .select("id")
+    .eq("id", accountId)
+    .eq("workspace_id", session.workspaceId)
+    .eq("status", "active")
+    .maybeSingle();
+  if (!sender) refuse(formData, "That LinkedIn account is not connected to this workspace any more. Choose another, or reconnect it on your profile.");
+
+  const { data: eligible } = await supabase
+    .from("prospects")
+    .select("id")
+    .eq("workspace_id", session.workspaceId)
+    .in("id", chosen)
+    .is("last_contacted_at", null)
+    .eq("do_not_contact", false);
+  const allowed = new Set((eligible ?? []).map((row) => row.id));
+  const people = chosen.filter((id) => allowed.has(id));
+  if (people.length === 0) {
+    refuse(formData, "Everybody you picked has been contacted or marked do not contact since this page loaded. Pick again.");
   }
 
   // The agent's own opener is the campaign's template note: the line every
@@ -191,13 +223,13 @@ async function createCampaign(formData: FormData) {
     redirect(
       errorQuery(
         `/app/campaigns/${campaign.id}`,
-        "The campaign was created as a draft, but its messages could not be saved. Nothing was sent — write them here before launching.",
+        "The campaign was created as a draft, but its messages could not be saved. Nothing was sent. Write them here before launching.",
       ),
     );
   }
 
   const { error: linkError } = await supabase.from("campaign_prospects").insert(
-    chosen.map((prospectId) => ({
+    people.map((prospectId) => ({
       workspace_id: session.workspaceId,
       campaign_id: campaign.id,
       prospect_id: prospectId,
@@ -218,10 +250,17 @@ async function createCampaign(formData: FormData) {
     );
   }
 
+  // Said when the list shrank, because a name that quietly goes missing from
+  // a list somebody chose is its own bug report (rule 24).
+  const skipped = chosen.length - people.length;
   redirect(
     noticeQuery(
       `/app/campaigns/${campaign.id}`,
-      `${chosen.length} ${chosen.length === 1 ? "person" : "people"} queued. Read the notes before you launch.`,
+      `${people.length} ${people.length === 1 ? "person" : "people"} queued.` +
+        (skipped > 0
+          ? ` ${skipped} left off: contacted or marked do not contact since the list loaded.`
+          : "") +
+        " Read the notes before you launch.",
     ),
   );
 }
@@ -337,7 +376,7 @@ export default async function NewCampaignPage({
                 <option value="">Just start a conversation</option>
                 {(ctas ?? []).map((cta) => (
                   <option key={cta.id} value={cta.id}>
-                    {cta.name} — {CTA_DEFINITIONS[cta.kind as "meeting" | "link" | "reply"].label}
+                    {cta.name} ({CTA_DEFINITIONS[cta.kind as "meeting" | "link" | "reply"].label})
                   </option>
                 ))}
               </select>
@@ -386,9 +425,8 @@ export default async function NewCampaignPage({
               at roughly a third more acceptances.
             </p>
             <p className="tiny subtle">
-              Views have their own daily allowance — {LINKEDIN_LIMITS.profileViewsPerDay} a day,
-              well under what LinkedIn tolerates — and they never come out of your invitation
-              allowance. They also keep running while LinkedIn is throttling invitations, which is
+              Views have their own daily allowance of {LINKEDIN_LIMITS.profileViewsPerDay} a day,
+              and they never come out of your invitation allowance. They also keep running while LinkedIn is throttling invitations, which is
               exactly when a campaign otherwise has nothing to do.
             </p>
           </Section>
@@ -398,7 +436,7 @@ export default async function NewCampaignPage({
             description="The first message goes out on acceptance. This is the wait before the one after it."
           >
             <p className="small muted">
-              Message 1: {FIRST_STEP_TIMING_LABEL} — inside your sending hours, twenty to ninety
+              Message 1: {FIRST_STEP_TIMING_LABEL}, inside your sending hours, twenty to ninety
               minutes after they accept. That one is not adjustable: a message three days after
               somebody accepted reaches a stranger who has forgotten accepting.
             </p>
@@ -422,7 +460,7 @@ export default async function NewCampaignPage({
             title="Who is on it"
             description={
               (prospects ?? []).length >= 200
-                ? "Only people this workspace has never contacted. Ranked by fit — the 200 best fits are listed here."
+                ? "Only people this workspace has never contacted. Ranked by fit; the 200 best fits are listed here."
                 : "Only people this workspace has never contacted. Ranked by fit."
             }
             action={<SelectAll name="prospect" label={`Select all ${(prospects ?? []).length}`} />}

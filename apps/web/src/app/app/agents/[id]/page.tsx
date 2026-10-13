@@ -70,19 +70,22 @@ async function loadAgent(id: string) {
 async function saveIdentity(formData: FormData) {
   "use server";
   const id = String(formData.get("id") ?? "");
-  const { session, supabase } = await loadAgent(id);
+  const { session, supabase, agent } = await loadAgent(id);
   const here = `/app/agents/${id}`;
+  // This workspace's agent or nothing. The id arrives from a form, and a line
+  // filed under another workspace's agent is read by that agent's campaigns.
+  if (!agent) notFound();
 
   const name = String(formData.get("name") ?? "").trim();
   const model = String(formData.get("model") ?? "").trim();
   const fromName = String(formData.get("from_name") ?? "").trim();
   const systemPrompt = String(formData.get("system_prompt") ?? "").trim();
 
-  if (!name) redirect(errorQuery(here, "Give the agent a name you will recognise in a picker."));
+  if (!name) redirect(errorQuery(here, "Give the agent a name you will recognize in a picker."));
   // Checked here as well as offered in the select, because a form posts
   // whatever it posts. A model missing from the price table costs null and
   // never zero, and a reader takes a null cost for a free one.
-  if (!isSelectableModel(model)) redirect(errorQuery(here, "Pick a model this deployment can price."));
+  if (!isSelectableModel(model)) redirect(errorQuery(here, "Pick one of the models in the list."));
 
   const { error } = await supabase
     .from("agents")
@@ -95,7 +98,7 @@ async function saveIdentity(formData: FormData) {
     .eq("id", id)
     .eq("workspace_id", session.workspaceId);
 
-  if (error) redirect(errorQuery(here, error.message));
+  if (error) redirect(errorQuery(here, "That did not save. Please try again."));
   revalidatePath(here);
   redirect(noticeQuery(here, "Saved."));
 }
@@ -103,8 +106,11 @@ async function saveIdentity(formData: FormData) {
 async function savePlaybook(formData: FormData) {
   "use server";
   const id = String(formData.get("id") ?? "");
-  const { session, supabase } = await loadAgent(id);
+  const { session, supabase, agent } = await loadAgent(id);
   const here = `/app/agents/${id}`;
+  // This workspace's agent or nothing. The id arrives from a form, and a line
+  // filed under another workspace's agent is read by that agent's campaigns.
+  if (!agent) notFound();
 
   // One question per line, which is how somebody actually writes a list of
   // things they need to know. A row of inputs for a list whose length nobody
@@ -132,7 +138,7 @@ async function savePlaybook(formData: FormData) {
     .eq("id", id)
     .eq("workspace_id", session.workspaceId);
 
-  if (error) redirect(errorQuery(here, error.message));
+  if (error) redirect(errorQuery(here, "That did not save. Please try again."));
   revalidatePath(here);
   redirect(noticeQuery(here, "Playbook saved."));
 }
@@ -170,7 +176,7 @@ async function addCustomField(formData: FormData) {
     .eq("id", id)
     .eq("workspace_id", session.workspaceId);
 
-  if (error) redirect(errorQuery(here, error.message));
+  if (error) redirect(errorQuery(here, "That did not save. Please try again."));
   revalidatePath(here);
   redirect(noticeQuery(here, `{{${parsed.data.key}}} is available in this agent's copy.`));
 }
@@ -190,7 +196,7 @@ async function removeCustomField(formData: FormData) {
     .eq("id", id)
     .eq("workspace_id", session.workspaceId);
 
-  if (error) redirect(errorQuery(here, `That did not save: ${error.message}`));
+  if (error) redirect(errorQuery(here, "That did not save. Please try again."));
   revalidatePath(here);
   redirect(noticeQuery(here, `Removed {{${key}}}. Copy still using it will show the placeholder.`));
 }
@@ -215,8 +221,11 @@ async function removeCustomField(formData: FormData) {
 async function writeLines(formData: FormData) {
   "use server";
   const id = String(formData.get("id") ?? "");
-  const { session } = await loadAgent(id);
+  const { session, agent } = await loadAgent(id);
   const here = `/app/agents/${id}`;
+  // This workspace's agent or nothing. The id arrives from a form, and a line
+  // filed under another workspace's agent is read by that agent's campaigns.
+  if (!agent) notFound();
   const table = String(formData.get("table") ?? "");
   const openers = table === "hooks";
   const instruction = String(formData.get("instruction") ?? "").trim();
@@ -244,7 +253,7 @@ async function writeLines(formData: FormData) {
   redirect(
     noticeQuery(
       here,
-      `Wrote ${result.data?.written ?? 0} ${openers ? "openers" : "offer lines"}. Read them before approving — they go to real people.`,
+      `Wrote ${result.data?.written ?? 0} ${openers ? "openers" : "offer lines"}. Read them before approving. They go to real people.`,
     ),
   );
 }
@@ -252,8 +261,11 @@ async function writeLines(formData: FormData) {
 async function addOpener(formData: FormData) {
   "use server";
   const id = String(formData.get("id") ?? "");
-  const { session, supabase } = await loadAgent(id);
+  const { session, supabase, agent } = await loadAgent(id);
   const here = `/app/agents/${id}`;
+  // This workspace's agent or nothing. The id arrives from a form, and a line
+  // filed under another workspace's agent is read by that agent's campaigns.
+  if (!agent) notFound();
 
   const name = String(formData.get("name") ?? "").trim();
   const body = String(formData.get("body") ?? "").trim();
@@ -280,7 +292,7 @@ async function addOpener(formData: FormData) {
     approved_by: session.userId,
   });
 
-  if (error) redirect(errorQuery(here, error.message));
+  if (error) redirect(errorQuery(here, "That did not save. Please try again."));
   revalidatePath(here);
   redirect(noticeQuery(here, "Opener added."));
 }
@@ -288,8 +300,11 @@ async function addOpener(formData: FormData) {
 async function addOffer(formData: FormData) {
   "use server";
   const id = String(formData.get("id") ?? "");
-  const { session, supabase } = await loadAgent(id);
+  const { session, supabase, agent } = await loadAgent(id);
   const here = `/app/agents/${id}`;
+  // This workspace's agent or nothing. The id arrives from a form, and a line
+  // filed under another workspace's agent is read by that agent's campaigns.
+  if (!agent) notFound();
 
   const name = String(formData.get("name") ?? "").trim();
   const body = String(formData.get("body") ?? "").trim();
@@ -310,7 +325,7 @@ async function addOffer(formData: FormData) {
     approved_by: session.userId,
   });
 
-  if (error) redirect(errorQuery(here, error.message));
+  if (error) redirect(errorQuery(here, "That did not save. Please try again."));
   revalidatePath(here);
   redirect(noticeQuery(here, "Offer line added."));
 }
@@ -320,8 +335,11 @@ async function approveLine(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   const table = String(formData.get("table") ?? "");
   const lineId = String(formData.get("line") ?? "");
-  const { session, supabase } = await loadAgent(id);
+  const { session, supabase, agent } = await loadAgent(id);
   const here = `/app/agents/${id}`;
+  // This workspace's agent or nothing. The id arrives from a form, and a line
+  // filed under another workspace's agent is read by that agent's campaigns.
+  if (!agent) notFound();
   if (table !== "hooks" && table !== "pitches") redirect(errorQuery(here, "Unknown line."));
 
   /*
@@ -341,7 +359,7 @@ async function approveLine(formData: FormData) {
     .eq("id", lineId)
     .eq("workspace_id", session.workspaceId);
 
-  if (error) redirect(errorQuery(here, error.message));
+  if (error) redirect(errorQuery(here, "That did not save. Please try again."));
   revalidatePath(here);
   redirect(noticeQuery(here, "Approved. The agent may use it now."));
 }
@@ -351,8 +369,11 @@ async function retireLine(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   const table = String(formData.get("table") ?? "");
   const lineId = String(formData.get("line") ?? "");
-  const { session, supabase } = await loadAgent(id);
+  const { session, supabase, agent } = await loadAgent(id);
   const here = `/app/agents/${id}`;
+  // This workspace's agent or nothing. The id arrives from a form, and a line
+  // filed under another workspace's agent is read by that agent's campaigns.
+  if (!agent) notFound();
   if (table !== "hooks" && table !== "pitches") redirect(errorQuery(here, "Unknown line."));
 
   // Un-approved rather than deleted. The line stays readable beside the
@@ -368,7 +389,7 @@ async function retireLine(formData: FormData) {
     .eq("id", lineId)
     .eq("workspace_id", session.workspaceId);
 
-  if (error) redirect(errorQuery(here, `That did not retire: ${error.message}`));
+  if (error) redirect(errorQuery(here, "That did not retire, so it is still in use. Please try again."));
   revalidatePath(here);
   redirect(noticeQuery(here, "Retired. It stays on record for campaigns that used it."));
 }
@@ -476,14 +497,14 @@ export default async function AgentPage({
               ))}
             </select>
             <span className="small muted">
-              Only models this deployment can price. Spend is on the overview.
+              The model that writes this agent&rsquo;s messages.
             </span>
           </label>
           <label className="field">
             <span>How it writes</span>
             <textarea name="system_prompt" rows={6} defaultValue={agent.system_prompt ?? ""} maxLength={4000} />
             <span className="small muted">
-              Voice, audience, and what to avoid — in your words. This is the difference between copy
+              Voice, audience, and what to avoid, in your words. This is the difference between copy
               that sounds like you and copy that sounds like software.
             </span>
           </label>
@@ -494,7 +515,7 @@ export default async function AgentPage({
       <PageGroup id="copy">
         <Section
           title="Openers"
-          description={`The first line a stranger reads, up to ${HOOK_MAX_CHARS} characters. Shapes to lean on — the note is still written for the person receiving it.`}
+          description={`The first line a stranger reads, up to ${HOOK_MAX_CHARS} characters. Shapes to lean on: the note is still written for the person receiving it.`}
         >
           {/* Written by the product from your onboarding answers, waiting on one
               click. A line nobody has read never opens a conversation. */}
@@ -517,7 +538,7 @@ export default async function AgentPage({
           {approvedOpeners.length === 0 && pendingOpeners.length === 0 ? (
             <Empty title="No openers yet">
               Without one the agent writes from nothing and every note reads the same. A plain,
-              recognisable line beats a clever one: <code>{DEFAULT_OPENER_TEMPLATE}</code>
+              recognizable line beats a clever one: <code>{DEFAULT_OPENER_TEMPLATE}</code>
             </Empty>
           ) : approvedOpeners.length === 0 ? null : (
             <div className="table-scroll">
@@ -538,7 +559,7 @@ export default async function AgentPage({
                         {opener.body}
                         {opener.angle ? <div className="small muted">{opener.angle}</div> : null}
                       </td>
-                      <td className="small muted">{opener.written_by}</td>
+                      <td className="small muted">{opener.written_by === "agent" ? "The agent" : "You"}</td>
                       <td className="row-actions">
                         <form action={retireLine}>
                           <input type="hidden" name="id" value={id} />
@@ -569,7 +590,7 @@ export default async function AgentPage({
               />
               <span className="small muted">
                 Written from your business profile and your approved strategies, and approved by
-                nobody — they arrive here for you to read first.
+                nobody. They arrive here for you to read first.
               </span>
             </label>
             <SubmitButton className="btn secondary" pendingLabel="Writing…">
@@ -615,7 +636,7 @@ export default async function AgentPage({
           {approvedOffers.length === 0 && pendingOffers.length === 0 ? (
             <Empty title="No offer line yet">
               Without one the agent argues for the product from the business profile and does it
-              slightly differently every time — so every prospect who asks &ldquo;what is this?&rdquo;
+              slightly differently every time, so every prospect who asks &ldquo;what is this?&rdquo;
               hears a different proposition, and none of them was read by anyone.
             </Empty>
           ) : approvedOffers.length === 0 ? null : (
@@ -716,7 +737,7 @@ export default async function AgentPage({
             <textarea name="hand_over" rows={3} defaultValue={playbook.handOver} maxLength={500} />
             <span className="small muted">
               Never the only thing that stops it. A message it is unsure of, and a prospect who asks
-              for a person, are always held — the first because it does not know what was said, the
+              for a person, are always held: the first because it does not know what was said, the
               second because they asked.
             </span>
           </label>
@@ -804,7 +825,7 @@ export default async function AgentPage({
 
         <Section
           title="What it may state as fact"
-          description="Documents this agent can answer from. It never states a product fact that is not in one."
+          description="The knowledge base every agent in this workspace answers from. It never states a product fact that is not in one."
         >
           {(documents ?? []).length === 0 ? (
             <Empty title="No documents yet" action="Add one" href="/app/knowledge">
@@ -813,12 +834,12 @@ export default async function AgentPage({
               like a right one.
             </Empty>
           ) : (
-            <ul className="list">
+            <ul className="agent-doc-list">
+              {/* No "shared" mark. The reply writer reads the workspace's
+                  documents whichever agent a campaign runs on, so marking some
+                  as another agent's suggested a boundary nothing enforces. */}
               {(documents ?? []).map((doc) => (
-                <li key={doc.id}>
-                  {doc.title}
-                  {doc.agent_id === id ? null : <span className="small subtle"> · shared</span>}
-                </li>
+                <li key={doc.id}>{doc.title}</li>
               ))}
             </ul>
           )}

@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { LINKEDIN_LIMITS, MIN_SENDS_TO_COMPARE, stagesFor, wilson } from "@le/shared";
-import { ArticleLayout, articleMeta, Callout, CompareTable, type Faq, type Source } from "@/components/article";
-import { PUBLIC_LIMITS, SITE } from "@/lib/site";
+import { ArticleLayout, articleMeta, CompareTable, type Faq, type Source } from "@/components/article";
+import { RangeFigure, RateBars, type RangeRow } from "@/components/seo/ga1-diagrams";
+import { PUBLIC_LIMITS } from "@/lib/site";
 
 const PATH = "/guides/linkedin-acceptance-rate";
 
@@ -10,7 +11,6 @@ export const metadata: Metadata = articleMeta(PATH);
 
 const HEALTHY = PUBLIC_LIMITS.healthyAcceptance;
 const MIN_GAP_MIN = Math.round(LINKEDIN_LIMITS.minGapMs / 60_000);
-const MAX_GAP_MIN = Math.round(LINKEDIN_LIMITS.maxGapMs / 60_000);
 
 function pct(x: number): string {
   return `${Math.round(x * 100)}%`;
@@ -28,21 +28,32 @@ const PAIRS = [
   { label: "200 invitations each", a: [50, 200], b: [80, 200] },
 ] as const;
 
-const PAIR_ROWS = PAIRS.map((pair) => {
-  const a = reading(pair.a[0], pair.a[1]);
-  const b = reading(pair.b[0], pair.b[1]);
-  const aRange = wilson(pair.a[0], pair.a[1]);
-  const bRange = wilson(pair.b[0], pair.b[1]);
-  const separated = bRange.low > aRange.high;
+const PAIR_ROWS: RangeRow[] = PAIRS.map((pair) => {
+  const versions = [
+    { name: "A", counts: pair.a },
+    { name: "B", counts: pair.b },
+  ].map(({ name, counts }) => {
+    const [accepted, sent] = counts;
+    const { low, high } = wilson(accepted, sent);
+    const r = reading(accepted, sent);
+    return { name, rate: accepted / sent, low, high, text: `${accepted} of ${sent}: ${r.rate}, likely ${r.range}` };
+  });
+  const separated = versions[1]!.low > versions[0]!.high;
   return {
     label: pair.label,
-    values: [
-      `${pair.a[0]} accepted: ${a.rate} (likely ${a.range})`,
-      `${pair.b[0]} accepted: ${b.rate} (likely ${b.range})`,
-      separated ? "Yes, the ranges no longer overlap" : "No, the ranges overlap",
-    ],
+    versions,
+    separated,
+    verdict: separated ? "Yes: the ranges no longer overlap" : "Not yet: the ranges overlap",
   };
 });
+
+const INDUSTRY_BARS = [
+  { label: "Staffing and recruiting", value: 36.5, note: "Highest of the 38; 423,792 requests from 462 accounts" },
+  { label: "Design", value: 31.3, note: "148,589 requests from 118 accounts" },
+  { label: "All industries", value: 28.5, note: "13.2 million requests from 13,302 accounts" },
+  { label: "Information technology and services", value: 28.4, note: "1,731,259 requests" },
+  { label: "Telecommunications", value: 21.8, note: "Lowest of the 38" },
+];
 
 const SMALL = reading(4, 11);
 const ZERO = wilson(0, 8);
@@ -56,7 +67,7 @@ const GOALS = [
 const FAQ: readonly Faq[] = [
   {
     q: "What is a good LinkedIn acceptance rate?",
-    a: `Around 30% or higher on cold requests. The largest 2026 vendor dataset we found averages 28.5% across 13.2 million requests, and Nora flags an account below ${HEALTHY}%. Rates above 40% are realistic for tightly targeted lists. Judge it over at least a few dozen invitations; on a handful, the number is mostly chance.`,
+    a: `Around 30% or higher on cold requests. The largest 2026 vendor dataset we found averages 28.5% across 13.2 million requests, and Nora flags an account below ${HEALTHY}%. Expandi itself describes 30% to 45% as good. Judge it over at least a few dozen invitations; on a handful, the number is mostly chance.`,
   },
   {
     q: "Is 30% a good LinkedIn acceptance rate?",
@@ -72,7 +83,7 @@ const FAQ: readonly Faq[] = [
   },
   {
     q: "How many people do you need for a LinkedIn A/B test?",
-    a: `More than most people use. At typical acceptance rates you need on the order of a hundred or more invitations per version before a real difference separates from noise, and Nora will not compare two angles until each has at least ${MIN_SENDS_TO_COMPARE} sends. Assign people to versions in rotation, not by hand.`,
+    a: `More than most people use. At typical acceptance rates it takes about 200 invitations per version before a 15-point difference, such as 25% against 40%, separates from noise, and Nora will not compare two angles until each has at least ${MIN_SENDS_TO_COMPARE} sends. Assign people to versions in rotation, not by hand.`,
   },
 ];
 
@@ -80,6 +91,22 @@ const SOURCES: readonly Source[] = [
   {
     label: "Expandi: LinkedIn outreach benchmarks 2026, 13.2M outreach attempts (28.5% average, May 2025 to April 2026)",
     url: "https://expandi.io/blog/linkedin-outreach-benchmarks-2026/",
+  },
+  {
+    label: "Expandi: LinkedIn outreach benchmarks for staffing and recruiting, 2026 (industry range across 38 industries)",
+    url: "https://expandi.io/industry-benchmarks/staffing-and-recruiting/",
+  },
+  {
+    label: "Expandi: LinkedIn outreach benchmarks for information technology and services, 2026",
+    url: "https://expandi.io/blog/information-technology-and-services/",
+  },
+  {
+    label: "Expandi: LinkedIn outreach benchmarks for the design industry, 2026",
+    url: "https://expandi.io/blog/design/",
+  },
+  {
+    label: "LaGrowthMachine Help: should I add a note to my LinkedIn request?",
+    url: "https://help.lagrowthmachine.com/en/articles/4886694-should-i-add-a-note-to-my-linkedin-request",
   },
   {
     label: "Expandi: LinkedIn acceptance rate in 2026 (30% to 45% described as good)",
@@ -123,12 +150,22 @@ export default function Page() {
         rows={[
           {
             label: "Expandi 2026 benchmark",
-            values: ["28.5% average", "13,218,869 requests from 13,302 accounts, May 2025 to April 2026; industries ranged 17.5% to 40.1%"],
+            values: ["28.5% average", "13,218,869 requests from 13,302 accounts, May 2025 to April 2026"],
           },
           { label: "Expandi's own guidance", values: ["30% to 45% is good", "Below 20% described as a restriction risk"] },
           { label: "Salesforge, citing Expandi", values: ["About 29.6%", "An earlier Expandi figure, quoted secondhand"] },
           { label: "Nora's health threshold", values: [`${HEALTHY}%`, "Below this, an account is flagged for review by the nightly check"] },
         ]}
+      />
+      <p>
+        Industry moves the number more than anything else in that dataset. Across the 38 industries with at least 50 sending
+        accounts, Expandi reports acceptance from 21.8% to 36.5%. A few of them, as published:
+      </p>
+      <RateBars
+        caption="LinkedIn acceptance rate by industry, Expandi 2026 benchmark (May 2025 to April 2026)"
+        bars={INDUSTRY_BARS}
+        threshold={HEALTHY}
+        thresholdLabel={`Nora flags an account below ${HEALTHY}%`}
       />
       <p>
         These numbers are useful as a ceiling for expectations, less so as a target. Each comes from one
@@ -160,24 +197,24 @@ export default function Page() {
         The honest way to show a rate on small numbers is as a range: the values the true rate plausibly sits
         in, given what you have seen. Nora uses a Wilson interval, a standard formula that stays sensible at
         the extremes. The simpler textbook formula claims perfect certainty at zero out of eight and can
-        produce ranges below 0% or above 100%, which is exactly where young campaigns live. The table below
-        is computed with the same function Nora&rsquo;s campaign screen uses. In each row, version B really
-        is accepted more often than A; the question is when you could tell.
+        produce ranges below 0% or above 100%, which is exactly where young campaigns live. The figure
+        below is computed the same way. In each pair, version B really is accepted more often than A; the
+        question is when you could tell.
       </p>
-      <CompareTable
-        caption="Two versions compared at three sample sizes, with 95% Wilson ranges"
-        columns={["Version A", "Version B", "Can you call it?"]}
+      <RangeFigure
+        caption="Two versions at three sample sizes. The dot is the rate you would read; the bar is its 95% Wilson range, computed by the same function as Nora's campaign screen."
         rows={PAIR_ROWS}
       />
       <p>
-        Look at the first two rows. B is ahead on the raw rate both times, and you still cannot say it is
-        better. Only at a couple of hundred invitations each do the ranges come apart.
+        Look at the first two pairs. B is ahead on the raw rate both times, and you still cannot say it is
+        better. Only at 200 invitations each does a 15-point gap, 25% against 40%, come apart from the noise. A smaller
+        gap needs more.
       </p>
 
       <h2 id="safety">Why low acceptance is a safety problem too</h2>
       <p>
         Acceptance rate is not only a measure of copy. It is one of the clearest signals of whether you are
-        inviting people who want to hear from you, and LinkedIn acts on related signals. Its help centre says
+        inviting people who want to hear from you, and LinkedIn acts on related signals. Its help center says
         that if many recipients respond with &ldquo;I don&rsquo;t know this person&rdquo;, the sender can be
         restricted from sending invitations. LinkedIn does not publish the threshold, and outreach vendors
         uniformly treat a low acceptance rate as a risk factor.
@@ -213,29 +250,28 @@ export default function Page() {
         The most expensive cause, and the hardest to see. A competitor matches your ideal customer profile
         almost perfectly: same titles, same industry, same company size, often the same words in their
         headline. On paper they are your best prospects. In practice they ignore or decline you, and every
-        decline drags your rate down. We have seen an AI strategy list a company&rsquo;s competitors in one
-        field and propose those same competitors as the top customer segment in the next, and a person
-        approved it. Nora now checks each segment against the company&rsquo;s named competitors on the
-        approval screen. The{" "}
+        decline drags your rate down. Nora checks each segment against the company&rsquo;s named competitors on
+        the approval screen. The{" "}
         <Link href="/guides/ideal-customer-profile-for-linkedin">guide to an ideal customer profile for LinkedIn</Link>{" "}
         explains how to define buyers by what they would pay for rather than what they resemble.
       </p>
 
       <h3 id="generic-notes">Generic notes</h3>
       <p>
-        A note that could have gone to anyone signals a script, and studies of templated notes find they do
-        worse than sending none. Either say one specific, true thing, or send the request blank. The{" "}
+        A note that could have gone to anyone signals a script. Vendor tests of a note against a blank request
+        disagree with each other, and the differences they report are small either way; LaGrowthMachine, which sells an
+        outreach tool, advises testing a blank request against a specific note on the same audience rather than assuming.
+        Either say one specific, true thing, or send the request blank. The{" "}
         <Link href="/guides/linkedin-connection-request-templates">connection request templates</Link> show
         notes built around a real detail.
       </p>
 
       <h3 id="bursts">Bursty sending</h3>
       <p>
-        A daily cap is not a pace. On the first day a real account ever sent through Nora, an early version
-        sent seven connection requests in under half an hour, at the cadence the loop then used. LinkedIn
-        began refusing invitations from that account and was still refusing them five days later. Nora now
-        spreads each day&rsquo;s allowance across the working hours left, with a random {MIN_GAP_MIN} to{" "}
-        {MAX_GAP_MIN} minutes between actions as the floor rather than the pace.
+        A daily cap is not a pace. Ten invitations sent in one sitting look like a machine emptying a queue, however
+        small the cap; the{" "}
+        <Link href="/guides/is-linkedin-automation-safe#incident">first account Nora ever ran learned that the hard way</Link>.
+        Nora now spreads each day&rsquo;s allowance across your working hours, never closer than {MIN_GAP_MIN} minutes apart.
       </p>
 
       <h3 id="thin-profile">A thin profile</h3>
@@ -257,7 +293,7 @@ export default function Page() {
       <p>
         Assign people to angles in strict rotation, not at random and not by hand. Random assignment of fifty
         people across two angles lands unevenly often enough to invent a difference, and hand-picking puts
-        your favourite prospects in your favourite angle. Nora rotates over the counts each angle already has,
+        your favorite prospects in your favorite angle. Nora rotates over the counts each angle already has,
         so adding a second batch continues the rotation, and never reassigns anyone once the list is built:
         moving people between angles credits one angle with results the other produced.
       </p>
@@ -286,7 +322,7 @@ export default function Page() {
               .map((stage) => stage.label)
               .join(", "),
             goal.kind === "link"
-              ? "Clicks are not measured: counting them would mean rewriting your link through another domain"
+              ? "LinkedIn does not report clicks, so the funnel ends at a positive reply"
               : goal.kind === "reply"
                 ? "A positive reply is the goal"
                 : "Meetings Nora books are counted; ones booked on your own external scheduling link are not visible to it",
@@ -297,14 +333,10 @@ export default function Page() {
         Read every stage the way you read acceptance: as a share of the stage before it, over enough people to
         mean something. Reply rate after acceptance is usually where good targeting and a good first message
         show up most clearly. To see how the rest of the process works, from the strategy you approve to the
-        meeting, see <Link href="/how-it-works">how Nora works</Link>.
+        meeting, see <Link href="/how-it-works">how Nora works</Link>: it shows each angle&rsquo;s acceptance as a range
+        and holds off calling winners until the numbers can support it.
       </p>
 
-      <Callout tone="safety">
-        Nora shows each angle&rsquo;s acceptance as a range, holds off calling winners until the numbers can
-        support it, and paces every account inside caps it cannot raise. <a href={`${SITE.app}/signup`}>Sign up free</a>.
-        No card. More in the <Link href="/guides">LinkedIn outreach guides</Link>.
-      </Callout>
     </ArticleLayout>
   );
 }

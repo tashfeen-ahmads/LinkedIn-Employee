@@ -2,12 +2,15 @@ import {
   backOff,
   checkAction,
   classifyProviderError,
+  dailyInviteCap,
   jitteredRetryMs,
   localDate,
   localDayStart,
   msUntilNextLocalMidnight,
   nextGapMs,
   warmStillCounts,
+  workingMsLeftToday,
+  workingMsAhead,
 } from "@le/linkedin";
 import {
   canTransition,
@@ -38,10 +41,11 @@ import {
   ACCOUNT_USAGE_COLUMNS,
 } from "../accounts.js";
 import { stepFor } from "../sequence.js";
+import { warmUpWaitMs } from "../warm.js";
 import { syncConversationToCrm } from "../crm.js";
 import { loadExclusions } from "../exclusions.js";
 import { clearHold, flagForHuman } from "../holds.js";
-import { pitchFor } from "../pitch.js";
+import { HELD_FOR_PITCH, pitchFor } from "../pitch.js";
 import { agentForCampaign } from "../agent.js";
 import { createBookingLink } from "./book.js";
 import { OUTREACH_PAUSE_RETRY_MS, outreachPause } from "../platform.js";
@@ -67,7 +71,7 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
   const { data: cp } = await db
     .from("campaign_prospects")
     .select(
-      "id, workspace_id, campaign_id, prospect_id, status, last_step_sent, invitation_id, invite_note, variant_id, warmed_at",
+      "id, workspace_id, campaign_id, prospect_id, status, last_step_sent, invitation_id, invite_note, variant_id, warmed_at, next_action_at, invite_refusals",
     )
     .eq("id", job.campaignProspectId)
     .single();
@@ -76,7 +80,7 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
   const { data: campaign } = await db
     .from("campaigns")
     .select(
-      "id, status, connection_note, linkedin_account_id, owner_user_id, cta_id, cta_kind, cta_url, cta_label, daily_invite_cap",
+      "id, status, connection_note, linkedin_account_id, owner_user_id, cta_id, cta_kind, cta_url, cta_label, daily_invite_cap, warm_up",
     )
     .eq("id", cp.campaign_id)
     .single();
@@ -219,28 +223,11 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
     throw new RescheduleError(decision.reason, jitteredRetryMs(decision.retryAfterMs, decision.reason));
   }
 
-  /*
-   * The campaign's own daily cap, re-checked immediately before the call.
-   *
-   * The pacing loop budgets against it, but it is not the only way an
-   * invitation reaches here — Send one now takes the next queued row directly,
-   * and a job revived after a restart was placed by a tick that no longer
-   * knows about it. A cap enforced only where work is scheduled is a cap on
-   * scheduling; this is where it becomes a cap on sending.
-   */
-  if (job.kind === "invite" && Number.isFinite(campaign.daily_invite_cap)) {
-    const { count: sentToday } = await db
-      .from("campaign_prospects")
-      .select("id", { count: "exact", head: true })
-      .eq("campaign_id", cp.campaign_id)
-      .gte("invited_at", localDayStart(new Date(), timezone).toISOString());
-    if ((sentToday ?? 0) >= campaign.daily_invite_cap) {
-      throw new RescheduleError(
-        "campaign_daily_cap",
-        jitteredRetryMs(msUntilNextLocalMidnight(new Date(), timezone), "campaign_daily_cap"),
-      );
-    }
-  }
+  // The campaign's own daily cap is re-checked immediately before the call,
+  // after the row is claimed and with every claim in flight counted: see
+  // `claimsOverCap`. A cap enforced only where work is scheduled is a cap on
+  // scheduling — Send one now and a job revived after a restart never passed
+  // through the loop's budget.
 
   if (job.kind === "warm_up") {
     /*
@@ -276,6 +263,20 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
       return;
     }
 
+    /*
+     * Not a view the invitation cannot follow today.
+     *
+     * The loop queues a day's views a few minutes apart, so the last of them
+     * can run an hour after the loop decided there was room. Viewed at ten to
+     * five, the invitation falls due after hours, nothing can place it, the
+     * view goes stale overnight and the person is looked at a second time the
+     * next morning. Asked here, at the moment of looking, with the same
+     * arithmetic that decides the wait below; the loop offers the view again
+     * tomorrow, when it can be spent at full value.
+     */
+    const wait = warmUpWaitMs(Math.random, workingMsAhead(new Date(), usage.workingHours, usage.timezone));
+    if (wait === null) return;
+
     const viewed = await ctx.linkedin.viewProfile({
       accountId: accountRow.provider_account_id,
       providerId: prospect.provider_id,
@@ -299,7 +300,11 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
       console.error("could not warm a prospect", { campaignProspectId: cp.id, error: viewed.error });
       await db
         .from("campaign_prospects")
-        .update({ warmed_at: new Date().toISOString(), next_action_at: null })
+        // Stamped as a view that has already matured, because no view happened
+        // to wait for: the invitation may go at once, and the send path's
+        // "never sooner than the wait after a view" is satisfied by a view
+        // that was never taken.
+        .update({ warmed_at: new Date(Date.now() - LINKEDIN_LIMITS.warmUpToInviteMinMs).toISOString(), next_action_at: null })
         .eq("id", cp.id)
         .eq("status", "queued");
       await recordEvent(db, {
@@ -322,9 +327,6 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
      * working-hours check and the ordinary gap still apply on top: this is the
      * earliest the invitation may go, not a promise that it goes then.
      */
-    const wait =
-      LINKEDIN_LIMITS.warmUpToInviteMinMs +
-      Math.random() * (LINKEDIN_LIMITS.warmUpToInviteMaxMs - LINKEDIN_LIMITS.warmUpToInviteMinMs);
     // Written down before it is counted. A count that fails throws and the
     // job is retried, and a retry that found no record of the view would look
     // at them a second time — the invitation below has the longer version.
@@ -348,6 +350,42 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
 
   if (job.kind === "invite") {
     if (!canTransition(cp.status as CampaignProspectStatus, "invited")) return;
+
+    /*
+     * A hold of this person's own, re-checked here as the account's is.
+     *
+     * "Already invited recently" puts the row back with a wait, and the loop
+     * honours it — but Send one now took the oldest queued row whatever it
+     * carried, and asked LinkedIn the question it had answered a minute ago.
+     * Rule 1: the send path is where a rule becomes a rule.
+     */
+    const heldUntil = cp.next_action_at ? Date.parse(cp.next_action_at) : NaN;
+    if (Number.isFinite(heldUntil) && heldUntil > Date.now()) {
+      throw new RescheduleError("prospect_hold", jitteredRetryMs(heldUntil - Date.now(), "prospect_hold"));
+    }
+
+    /*
+     * On a warm-up campaign, only on a view that still counts and has had time
+     * to land.
+     *
+     * The loop placed warmed invitations inside the window, but an invitation
+     * placed after hours was deferred to the next morning and sent there on a
+     * seventeen-hour-old view, or minutes after the re-warm the morning tick
+     * had queued — and Send one now invited people nobody had looked at. A
+     * stale view is left for the loop to re-warm; an unripe one waits its turn.
+     *
+     * The one exception is the probe. While LinkedIn has been refusing this
+     * account, one invitation goes before any view is spent (see the loop), and
+     * that invitation is cold by design.
+     */
+    const probing = (accountRow.invite_throttle_streak ?? 0) >= 1;
+    if (campaign.warm_up && !probing) {
+      if (!warmStillCounts(cp.warmed_at, new Date())) return;
+      const ripe = Date.parse(cp.warmed_at!) + LINKEDIN_LIMITS.warmUpToInviteMinMs;
+      if (ripe > Date.now()) {
+        throw new RescheduleError("warm_up_wait", jitteredRetryMs(ripe - Date.now(), "warm_up_wait"));
+      }
+    }
 
     // The fallback belonging to this person's angle, read only when there is no
     // written note to send — one row, and only on the path that can use it.
@@ -381,7 +419,43 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
       .select("full_name")
       .eq("id", accountRow.user_id)
       .maybeSingle();
-    const result = await ctx.linkedin.sendInvitation({
+
+    /*
+     * The row is claimed before LinkedIn is asked, in one conditional write.
+     *
+     * Every check above is a read, and two sends of the same person both pass
+     * every read before either writes: Send one now pressed twice, or pressed
+     * while the loop's job for that row was firing. Each asked LinkedIn, and
+     * one stranger received two connection requests under a real rep's name.
+     * A claim matched by `queued` and an empty (or expired) lease lets exactly
+     * one of them through; the other matches nothing and stops here.
+     */
+    if (!(await claimInvite(db, cp.id))) return;
+
+    /*
+     * ...and the caps are re-read with every claim in flight counted.
+     *
+     * At one under the cap, two sends that each read "one left" both went.
+     * Counting the claims after taking our own turns that into at most one:
+     * whichever counts second sees both, and backs off.
+     */
+    const overCap = await claimsOverCap(db, {
+      campaignId: cp.campaign_id,
+      campaignCap: campaign.daily_invite_cap,
+      accountId: accountRow.id,
+      timezone,
+    });
+    if (overCap) {
+      await releaseInvite(db, cp.id);
+      throw new RescheduleError(
+        overCap,
+        jitteredRetryMs(msUntilNextLocalMidnight(new Date(), timezone), overCap),
+      );
+    }
+
+    let result: Awaited<ReturnType<typeof ctx.linkedin.sendInvitation>>;
+    try {
+      result = await ctx.linkedin.sendInvitation({
       accountId: accountRow.provider_account_id,
       providerId: prospect.provider_id,
       // The note written for this person when the campaign was built, and read
@@ -399,7 +473,13 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
           variantNote,
           mergeValuesFor(prospect, inviteSender, inviteAgent),
         ) || undefined,
-    });
+      });
+    } catch (err) {
+      // Thrown, not refused: the job is retried, and the retry must not find
+      // the row still held by an attempt that is over.
+      await releaseInvite(db, cp.id);
+      throw err;
+    }
     if (result.health) await applyHealth(db, accountRow, result.health, { email: ctx.email, appUrl: ctx.env.APP_URL });
     if (!result.ok) {
       await handleInviteRefusal(ctx, {
@@ -407,6 +487,7 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
         workspaceId: cp.workspace_id,
         accountId: accountRow.id,
         error: result.error ?? "invitation failed",
+        refusals: cp.invite_refusals ?? 0,
       });
       return;
     }
@@ -430,6 +511,10 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
         invited_at: new Date().toISOString(),
         invitation_id: result.providerId ?? null,
         next_action_at: null,
+        // An earlier refusal's words are history once LinkedIn has said yes;
+        // left in place the screen reported an invited person as refused.
+        status_reason: null,
+        invite_claimed_at: null,
       })
       .eq("id", cp.id);
     await db.from("prospects").update({ last_contacted_at: new Date().toISOString() }).eq("id", prospect.id);
@@ -529,6 +614,13 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
     // the act that releases it is approving a line on the Agents screen. Sending
     // a manual reply must not clear it.
     await flagForHuman(db, conversation.id, withPitch.reason, "copy");
+    // Said on the row as well, in the one sentence the pacing loop recognises,
+    // so its next offer of this step is not reported as the loop's work.
+    await db
+      .from("campaign_prospects")
+      .update({ status_reason: HELD_FOR_PITCH })
+      .eq("id", cp.id)
+      .eq("status", cp.status);
     console.error("a follow-up is waiting for an approved pitch", {
       campaignProspectId: cp.id,
       workspaceId: cp.workspace_id,
@@ -655,9 +747,12 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
       status: target,
       last_step_sent: job.stepNumber,
       next_action_at: nextStep ? addDays(new Date(), nextStep.delay_days).toISOString() : null,
+      // A hold or a cooldown this step was waiting on is over once it is sent.
+      status_reason: null,
     })
     .eq("id", cp.id);
   await db.from("prospects").update({ last_contacted_at: new Date().toISOString() }).eq("id", prospect.id);
+  await noteOutbound(db, conversation, result.chatId);
   await db.from("messages").insert({
     workspace_id: cp.workspace_id,
     conversation_id: conversation.id,
@@ -700,7 +795,7 @@ async function sendApprovedReply(
   const { db } = ctx;
   const { data: draft } = await db
     .from("reply_drafts")
-    .select("id, workspace_id, conversation_id, body, prompt_version, status")
+    .select("id, workspace_id, conversation_id, body, prompt_version, status, resolved_by")
     .eq("id", job.draftId)
     .single();
   if (!draft || draft.status !== "approved") return;
@@ -718,6 +813,24 @@ async function sendApprovedReply(
     .eq("id", conversation.linkedin_account_id)
     .single();
   if (!account?.provider_account_id || account.status !== "active") return;
+
+  /*
+   * The operator's kill switch holds machine-written replies (rule 59).
+   *
+   * A reply a person approved (`resolved_by` set) still goes: that is a human
+   * answering a human, which is what migration 0041 promised and what the
+   * pause was never meant to stop. An autopilot reply is the agent writing
+   * from a real account on the morning LinkedIn started restricting them, so
+   * it waits. Waiting, never failing: the draft stays approved and goes the
+   * moment the switch is lifted.
+   */
+  const replyPause = draft.resolved_by ? null : await outreachPause(db);
+  if (replyPause) {
+    throw new RescheduleError(
+      `outreach_paused: ${replyPause}`,
+      jitteredRetryMs(OUTREACH_PAUSE_RETRY_MS, "outreach_paused"),
+    );
+  }
 
   // A human approving a draft does not exempt it from the caps: it is still a
   // message leaving a real LinkedIn account, and the limiter is the only thing
@@ -752,12 +865,46 @@ async function sendApprovedReply(
     text: draft.body,
   });
   if (result.health) await applyHealth(db, account, result.health, { email: ctx.email, appUrl: ctx.env.APP_URL });
-  if (!result.ok) return;
+  if (!result.ok) {
+    /*
+     * A reply the provider would not send is never finished as if it were.
+     *
+     * This returned, and the job completed: the draft stayed `approved`, the
+     * conversation was not held, nothing was recorded, and a prospect who had
+     * written back warmly was never answered while every screen showed a
+     * conversation dealt with. The provider's own sentence went nowhere.
+     *
+     * "Try later" is tried later, after the provider's own cooldown. Anything
+     * else is put in front of a person: the draft is marked failed, the
+     * provider's words are kept, and the conversation is held as a reply to
+     * write — because that is the act that finishes it.
+     */
+    const refusal = classifyProviderError(result.error);
+    if (refusal.kind === "retry_later") {
+      throw new RescheduleError(refusal.summary, jitteredRetryMs(refusal.cooldownMs, "reply_retry_later"));
+    }
+    const words = (result.error ?? "the provider refused the message").slice(0, 300);
+    await db
+      .from("reply_drafts")
+      .update({ status: "failed", resolved_at: new Date().toISOString() })
+      .eq("id", draft.id)
+      .eq("status", "approved");
+    await flagForHuman(db, conversation.id, `The reply could not be sent: ${words}`, "reply");
+    await recordEvent(db, {
+      workspaceId: draft.workspace_id,
+      name: "reply.failed",
+      subjectType: "conversation",
+      subjectId: conversation.id,
+      payload: { draftId: draft.id, provider: words },
+    });
+    return;
+  }
 
   // The draft is marked sent before the send is counted, so a counter write
   // that throws cannot hand the retry an `approved` draft to send a second
   // time — the invitation path explains the trade.
   await db.from("reply_drafts").update({ status: "sent", resolved_at: new Date().toISOString() }).eq("id", draft.id);
+  await noteOutbound(db, conversation, result.chatId);
   await db.from("messages").insert({
     workspace_id: draft.workspace_id,
     conversation_id: conversation.id,
@@ -825,6 +972,27 @@ export async function ensureConversation(
 }
 
 /**
+ * What a sent message tells the conversation row: when it last moved, and the
+ * chat it lives in.
+ *
+ * Neither was ever written on the way out. `last_message_at` moved only on an
+ * inbound message, so a thread the agent had just written to sorted as if it
+ * had been silent for days; and the chat a first message opened was dropped, so
+ * every later message started a new chat by attendee instead of continuing
+ * the one the prospect was reading. The chat id is only ever filled in, never
+ * replaced: a thread does not move.
+ */
+async function noteOutbound(
+  db: WorkerContext["db"],
+  conversation: { id: string; provider_chat_id: string | null },
+  chatId: string | undefined,
+): Promise<void> {
+  const patch: { last_message_at: string; provider_chat_id?: string } = { last_message_at: new Date().toISOString() };
+  if (chatId && !conversation.provider_chat_id) patch.provider_chat_id = chatId;
+  await db.from("conversations").update(patch).eq("id", conversation.id);
+}
+
+/**
  * Ends one prospect's place in a campaign — only if they are still where the
  * caller saw them.
  *
@@ -851,8 +1019,101 @@ async function closeProspect(
 async function failProspect(ctx: WorkerContext, campaignProspectId: string, reason: string): Promise<void> {
   await ctx.db
     .from("campaign_prospects")
-    .update({ status: "failed", status_reason: reason, next_action_at: null })
+    .update({ status: "failed", status_reason: reason, next_action_at: null, invite_claimed_at: null })
     .eq("id", campaignProspectId);
+}
+
+/**
+ * How long a claim on an invitation holds. Long enough for any provider call
+ * to finish, short enough that a process which died mid-send does not strand
+ * the person for more than a few ticks.
+ */
+export const INVITE_CLAIM_LEASE_MS = 10 * 60_000;
+
+/**
+ * Takes this row for one send, or reports that somebody else has it.
+ *
+ * Conditional on `queued` and on the lease being free, in one statement per
+ * case — an empty lease, or one old enough that its holder is gone — because
+ * the whole point is that two callers cannot both read "free" and both write.
+ */
+async function claimInvite(db: WorkerContext["db"], campaignProspectId: string): Promise<boolean> {
+  const now = new Date();
+  const free = await db
+    .from("campaign_prospects")
+    .update({ invite_claimed_at: now.toISOString() })
+    .eq("id", campaignProspectId)
+    .eq("status", "queued")
+    .is("invite_claimed_at", null)
+    .select("id");
+  if (free.data?.length) return true;
+  const expired = await db
+    .from("campaign_prospects")
+    .update({ invite_claimed_at: now.toISOString() })
+    .eq("id", campaignProspectId)
+    .eq("status", "queued")
+    .lt("invite_claimed_at", new Date(now.getTime() - INVITE_CLAIM_LEASE_MS).toISOString())
+    .select("id");
+  return Boolean(expired.data?.length);
+}
+
+async function releaseInvite(db: WorkerContext["db"], campaignProspectId: string): Promise<void> {
+  await db.from("campaign_prospects").update({ invite_claimed_at: null }).eq("id", campaignProspectId);
+}
+
+/**
+ * Which cap, if any, this claimed invitation would take past its limit with
+ * every other claim in flight counted — or null when it may go.
+ *
+ * Read after the claim, so our own is in the count. The account's counters
+ * are read fresh rather than from the row the job started with, because the
+ * point is what the other sends did in the meantime.
+ */
+async function claimsOverCap(
+  db: WorkerContext["db"],
+  input: { campaignId: string; campaignCap: number; accountId: string; timezone: string },
+): Promise<"campaign_daily_cap" | "daily_invite_cap" | "weekly_invite_cap" | null> {
+  const now = new Date();
+  const leaseStart = new Date(now.getTime() - INVITE_CLAIM_LEASE_MS).toISOString();
+
+  if (Number.isFinite(input.campaignCap)) {
+    const [{ count: sent }, { count: claimed }] = await Promise.all([
+      db
+        .from("campaign_prospects")
+        .select("id", { count: "exact", head: true })
+        .eq("campaign_id", input.campaignId)
+        .gte("invited_at", localDayStart(now, input.timezone).toISOString()),
+      db
+        .from("campaign_prospects")
+        .select("id", { count: "exact", head: true })
+        .eq("campaign_id", input.campaignId)
+        .eq("status", "queued")
+        .gte("invite_claimed_at", leaseStart),
+    ]);
+    if ((sent ?? 0) + (claimed ?? 0) > input.campaignCap) return "campaign_daily_cap";
+  }
+
+  const { data: campaigns } = await db.from("campaigns").select("id").eq("linkedin_account_id", input.accountId);
+  const ids = (campaigns ?? []).map((c) => c.id);
+  const { count: claimedOnAccount } = ids.length
+    ? await db
+        .from("campaign_prospects")
+        .select("id", { count: "exact", head: true })
+        .in("campaign_id", ids)
+        .eq("status", "queued")
+        .gte("invite_claimed_at", leaseStart)
+    : { count: 0 };
+  const { data: fresh } = await db
+    .from("linkedin_accounts")
+    .select(ACCOUNT_USAGE_COLUMNS)
+    .eq("id", input.accountId)
+    .maybeSingle();
+  if (!fresh) return null;
+  const usage = toUsage(fresh as AccountRecord, input.timezone);
+  const inFlight = claimedOnAccount ?? 0;
+  if (usage.invitesThisWeek + inFlight > LINKEDIN_LIMITS.invitesPerWeek) return "weekly_invite_cap";
+  if (usage.invitesToday + inFlight > dailyInviteCap(usage.firstActionAt, now)) return "daily_invite_cap";
+  return null;
 }
 
 /**
@@ -1045,6 +1306,13 @@ export function addDays(date: Date, days: number): Date {
   return new Date(date.getTime() + days * 86_400_000);
 }
 
+/**
+ * How many refusals about one recipient close their row. LinkedIn's
+ * "invited recently" block lasts weeks; a second refusal a day after the first
+ * is the evidence that waiting will not change the answer.
+ */
+export const RECIPIENT_REFUSALS_BEFORE_CLOSING = 2;
+
 /** Thrown when the limiter denies an action that was already scheduled. */
 export class RescheduleError extends Error {
   constructor(
@@ -1085,8 +1353,26 @@ export class RescheduleError extends Error {
  */
 async function handleInviteRefusal(
   ctx: WorkerContext,
-  input: { campaignProspectId: string; workspaceId: string; accountId: string; error: string },
+  input: {
+    campaignProspectId: string;
+    workspaceId: string;
+    accountId: string;
+    error: string;
+    /** Refusals about this recipient before this one. */
+    refusals?: number;
+  },
 ): Promise<void> {
+  /*
+   * A refused request is still a request, and the gap counts from it.
+   *
+   * `last_action_at` moved only when a send was counted, so a refusal left the
+   * account looking idle and the next job went straight after it — two
+   * requests inside the two-minute floor, the second into an account LinkedIn
+   * had just pushed back on. Not a counter (rule 2 is about those): only the
+   * time, which the limiter reads for its gap.
+   */
+  await ctx.db.from("linkedin_accounts").update({ last_action_at: new Date().toISOString() }).eq("id", input.accountId);
+
   const verdict = classifyProviderError(input.error);
   if (verdict.kind === "permanent") {
     await failProspect(ctx, input.campaignProspectId, input.error);
@@ -1130,6 +1416,40 @@ async function handleInviteRefusal(
 
   const cooldownMs = accountWide ? backOff(verdict.cooldownMs, streak) : verdict.cooldownMs;
   const until = new Date(Date.now() + cooldownMs);
+
+  /*
+   * A recipient LinkedIn keeps refusing is let go, with LinkedIn's reason.
+   *
+   * "Already invited recently" is a block LinkedIn keeps for weeks. Requeued
+   * with a day's wait and nothing counting, the same person was asked again
+   * every day for as long as the campaign ran — each a rejected request logged
+   * against the account, for an invitation that was never going to be
+   * accepted. Twice is enough evidence. The row is closed, not failed and not
+   * quietly dropped: a name that leaves a reviewed list says why (rule 24).
+   */
+  const refusals = (input.refusals ?? 0) + (accountWide ? 0 : 1);
+  if (!accountWide && refusals >= RECIPIENT_REFUSALS_BEFORE_CLOSING) {
+    await ctx.db
+      .from("campaign_prospects")
+      .update({
+        status: "closed",
+        status_reason: `LinkedIn refused to invite this person ${refusals} times: ${verdict.summary} (${input.error.slice(0, 200)})`,
+        closed_at: new Date().toISOString(),
+        next_action_at: null,
+        invite_claimed_at: null,
+        invite_refusals: refusals,
+      })
+      .eq("id", input.campaignProspectId)
+      .eq("status", "queued");
+    await recordEvent(ctx.db, {
+      workspaceId: input.workspaceId,
+      name: "invite.recipient_closed",
+      subjectType: "campaign_prospect",
+      subjectId: input.campaignProspectId,
+      payload: { refusals, reason: verdict.summary, provider: input.error },
+    });
+    return;
+  }
 
   /*
    * Who the refusal is about decides who waits.
@@ -1180,10 +1500,17 @@ async function handleInviteRefusal(
     // them. Without it a prospect-scoped refusal is no wait at all: the next
     // tick picks them straight back up and asks LinkedIn the same question it
     // just answered.
+    //
+    // An account-wide refusal holds this person back past the hold as well,
+    // so the probe after it is somebody else. Left at null, the row the probe
+    // fell on was first in line again the moment the hold lifted: the same
+    // person refused on every probe, and everybody else waited behind them.
     .update({
       status: "queued",
       status_reason: input.error,
-      next_action_at: accountWide ? null : until.toISOString(),
+      next_action_at: accountWide ? new Date(until.getTime() + verdict.cooldownMs).toISOString() : until.toISOString(),
+      invite_claimed_at: null,
+      invite_refusals: refusals,
     })
     .eq("id", input.campaignProspectId);
 

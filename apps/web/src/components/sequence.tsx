@@ -1,4 +1,4 @@
-import { FIRST_STEP_DELAY_DAYS, LINKEDIN_LIMITS } from "@le/shared";
+import { LINKEDIN_LIMITS } from "@le/shared";
 
 /**
  * What a prospect actually receives, drawn as the sequence it is.
@@ -14,7 +14,7 @@ import { FIRST_STEP_DELAY_DAYS, LINKEDIN_LIMITS } from "@le/shared";
  * request (rule 29), the first message after an acceptance is not on a schedule
  * anybody sets (rule 43), and the warm-up view has to land before the invitation
  * rather than wherever it was dropped. A builder offering those would be
- * offering a campaign this product refuses to send — which is worse than not
+ * offering a campaign this product refuses to send, which is worse than not
  * offering it, because the refusal arrives after the work.
  *
  * So the steps a person owns are shown as theirs, and the ones the product owns
@@ -60,7 +60,7 @@ export function sequenceFor(input: {
     label: "Connection request",
     body: input.connectionNote,
     when: "Paced across your sending hours",
-    fixed: "Written for each person from their own profile, and never carrying a link, because LinkedIn penalises them in invitations.",
+    fixed: "Written for each person from their own profile, and never carrying a link, because a link in an invitation reads as a sales pitch.",
   });
 
   for (const step of [...input.steps].sort((a, b) => a.step_number - b.step_number)) {
@@ -71,14 +71,12 @@ export function sequenceFor(input: {
       body: step.message,
       variant: step.variant ?? null,
       when: first
-        ? `${Math.round(LINKEDIN_LIMITS.acceptFollowUpMinMs / 60_000)} to ${Math.round(
-            LINKEDIN_LIMITS.acceptFollowUpMaxMs / 60_000,
-          )} minutes after they accept`
+        ? "Usually a couple of hours after they accept"
         : `${step.delay_days} ${step.delay_days === 1 ? "day" : "days"} after the message before it`,
       /*
        * Step 1 has no configurable delay, and saying so is the point.
        *
-       * What precedes it is the acceptance, not a message — so `delay_days` is
+       * What precedes it is the acceptance, not a message, so `delay_days` is
        * meaningless there, and left configurable the Targeting Agent wrote 3
        * into step 1 of every campaign this deployment ever built. Three
        * strangers accepted a connection request and heard nothing for three
@@ -86,12 +84,43 @@ export function sequenceFor(input: {
        * of a rule, and the screen's is the one somebody believes.
        */
       fixed: first
-        ? `Sent while they still remember accepting. This one is not on a schedule: ${FIRST_STEP_DELAY_DAYS === 0 ? "it goes out the same day" : "it follows the acceptance"}, whatever a step number suggests.`
+        ? `Acceptances are checked every hour, and this goes out ${Math.round(
+            LINKEDIN_LIMITS.acceptFollowUpMinMs / 60_000,
+          )} to ${Math.round(
+            LINKEDIN_LIMITS.acceptFollowUpMaxMs / 60_000,
+          )} minutes after one is noticed, inside your working hours, while they still remember accepting. It is not on a schedule anybody sets; the acceptance is what starts it.`
         : undefined,
     });
   }
 
   return out;
+}
+
+/*
+ * A message carries placeholders that are filled at send time, `{{cta_link}}`
+ * above all (rule 29). Printed raw they read as a broken page to anyone who is
+ * not the person who wrote the campaign, so each one is drawn as a labelled
+ * chip: visibly a slot, and visibly not the words a prospect receives.
+ */
+const VARIABLE_LABEL: Record<string, string> = {
+  cta_link: "your link",
+  pitch: "your offer",
+  first_name: "first name",
+  company: "company",
+};
+
+function withVariables(body: string): React.ReactNode {
+  const parts = body.split(/\{\{\s*(\w+)\s*\}\}/g);
+  if (parts.length === 1) return body;
+  return parts.map((part, i) =>
+    i % 2 === 1 ? (
+      <span key={i} className="sequence-var" title="Filled in when the message is sent">
+        {VARIABLE_LABEL[part] ?? part.replace(/_/g, " ")}
+      </span>
+    ) : (
+      part
+    ),
+  );
 }
 
 export function Sequence({ steps }: { steps: SequenceStep[] }) {
@@ -111,7 +140,7 @@ export function Sequence({ steps }: { steps: SequenceStep[] }) {
             </p>
             {/* The message as a prospect reads it, in a quote rather than a
                 field: this is copy, and a textarea makes it look like config. */}
-            {step.body ? <blockquote className="sequence-message">{step.body}</blockquote> : null}
+            {step.body ? <blockquote className="sequence-message">{withVariables(step.body)}</blockquote> : null}
             {step.fixed ? <p className="tiny subtle prose">{step.fixed}</p> : null}
           </div>
         </li>

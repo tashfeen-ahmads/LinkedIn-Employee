@@ -105,6 +105,10 @@ export async function openersFor(
     const { data } = await db
       .from("hooks")
       .select("body")
+      // The workspace as well as the agent: the worker holds the service role,
+      // so row-level security will not stop an agent id from another company
+      // reading that company's approved lines into this campaign's notes.
+      .eq("workspace_id", workspaceId)
       .eq("agent_id", agent.id)
       .not("approved_at", "is", null)
       .limit(12);

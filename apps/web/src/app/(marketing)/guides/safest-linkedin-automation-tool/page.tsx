@@ -3,7 +3,9 @@ import Link from "next/link";
 import { INVITE_NOTE_MAX_CHARS, LINKEDIN_LIMITS } from "@le/shared";
 import { dailyInviteCap } from "@le/linkedin";
 import { ArticleLayout, articleMeta, Callout, CompareTable, type Faq, type Source } from "@/components/article";
-import { PUBLIC_LIMITS, SITE } from "@/lib/site";
+import { PUBLIC_LIMITS } from "@/lib/site";
+import { Gb1Summary } from "@/components/seo/gb1-visuals";
+import { Scorecard, type ScoreMark } from "@/components/seo/gb2-scorecard";
 
 const PATH = "/guides/safest-linkedin-automation-tool";
 export const metadata: Metadata = articleMeta(PATH);
@@ -23,17 +25,44 @@ const LI_AGREEMENT = "https://www.linkedin.com/legal/user-agreement";
 const HEYREACH_LIMITS = "https://help.heyreach.io/en/articles/15128619-how-do-connection-request-limits-work-in-heyreach";
 const DRIPIFY_LIMITS = "https://help.dripify.com/en/articles/8201637-how-dripify-daily-limits-safeguard-your-linkedin-account";
 const WAALAXY_QUOTAS = "https://intercom.help/waalaxy/en/articles/10327318-what-are-quotas";
-const EXPANDI_LIMIT = "https://expandi.io/blog/linkedin-connections-limit/";
 const PHANTOM_LIMITS = "https://phantombuster.com/blog/linkedin-automation/linkedin-automation-safe-limits-2026/";
+const EXPANDI_HELP_LIMITS = "https://help.expandi.io/en/articles/9688856-recommended-limits";
+const EXPANDI_WARMUP = "https://help.expandi.io/en/articles/5405001-account-warm-up";
+const EXPANDI_DUPES = "https://help.expandi.io/en/articles/5405809-duplicating-leads-in-multiple-campaigns-removing-duplicates";
+const EXPANDI_BLACKLIST = "https://help.expandi.io/en/articles/5405272-blacklists";
+const HEYREACH_LAUNCH = "https://help.heyreach.io/en/articles/9877952-how-to-launch-your-first-campaign";
+const DRIPIFY_FILTERS = "https://help.dripify.io/en/articles/11199236-step-2-how-to-manage-lead-list-filters";
+const DRIPIFY_BLACKLIST = "https://help.dripify.com/en/articles/5029130-how-to-blacklist-certain-linkedin-users-in-dripify";
+const WAALAXY_LIMITS = "https://blog.waalaxy.com/en/what-is-the-linkedin-maximum-connections-per-day/";
+const WAALAXY_WEEKLY = "https://blog.waalaxy.com/en/bypass-linkedin-limit/";
+const WAALAXY_BLACKLIST = "https://blog.waalaxy.com/en/how-to-create-a-blacklist-with-prospectin/";
+
+/*
+ * The scorecard. Every competitor cell rests on a vendor page listed in
+ * SOURCES (the same pages the comparison pages cite); Nora's column is our own
+ * claim about our own product and the page says so.
+ */
+/** A soft hyphen lets the longest name break at its seam in a narrow header. */
+const TOOLS = ["Nora", "HeyReach", "Dripify", "Waalaxy", "Expandi", "Phantom\u00ADBuster"] as const;
+const SCORECARD: ReadonlyArray<{ check: string; marks: readonly ScoreMark[] }> = [
+  { check: "1. Published daily and weekly caps", marks: ["Pass", "Partly", "Partly", "Partly", "Partly", "Partly"] },
+  { check: "2. A ramp from the first send", marks: ["Pass", "Not published", "Not published", "Not published", "Partly", "Not published"] },
+  { check: "3. Pacing inside the day", marks: ["Pass", "Not published", "Not published", "Not published", "Not published", "Partly"] },
+  { check: "4. A weekly ceiling across campaigns", marks: ["Pass", "Partly", "Not published", "Partly", "Partly", "Not published"] },
+  { check: "5. Never contacting anyone twice", marks: ["Pass", "Partly", "Partly", "Partly", "Partly", "Not published"] },
+  { check: "6. Opt-outs checked by rule", marks: ["Pass", "Not published", "Not published", "Not published", "Not published", "Not published"] },
+  { check: "7. A human approves before launch", marks: ["Pass", "Pass", "Pass", "Pass", "Pass", "Pass"] },
+  { check: "8. Honesty about restrictions", marks: ["Pass", "Not published", "Not published", "Not published", "Not published", "Not published"] },
+];
 
 const FAQ: readonly Faq[] = [
   {
     q: "Which LinkedIn automation tool is safest?",
-    a: "No independent body measures it, so every published ranking is a vendor ranking itself. The safest tool is the one whose caps are published and enforced, whose warm-up counts from the first send, which spreads a day's sending across the day, never contacts anyone twice, checks opt-outs by rule and makes you approve the launch. Run the eight checks on this page against each candidate.",
+    a: "No independent body measures it, so every published ranking is a vendor ranking itself. The safest tool is the one whose caps are published and enforced, whose warm-up counts from the first send, which spreads a day’s sending across the day, never contacts anyone twice, checks opt-outs by rule and makes you approve the launch. Run the 8 checks on this page against each candidate.",
   },
   {
     q: "Is LinkedIn automation safe?",
-    a: "Not entirely. LinkedIn's User Agreement prohibits bots and automated access, and its help center says accounts using third-party automation may be restricted. What a careful tool can change is how likely and how severe trouble is: low daily volume, a slow ramp, no bursts, and notes people want to accept. Read the full answer in our guide to whether LinkedIn automation is safe.",
+    a: "Not entirely. LinkedIn’s User Agreement prohibits bots and automated access, and its help center says accounts using third-party automation may be restricted. What a careful tool can change is how likely and how severe trouble is: low daily volume, a slow ramp, no bursts, and notes people want to accept. Read the full answer in our guide to whether LinkedIn automation is safe.",
   },
   {
     q: "Do dedicated IPs prevent LinkedIn bans?",
@@ -41,7 +70,7 @@ const FAQ: readonly Faq[] = [
   },
   {
     q: "Is a cloud tool safer than a Chrome extension?",
-    a: "Neither architecture is safe on its own. Extensions run in your browser, where LinkedIn's page can see what is installed; cloud tools run your session on a server, so you must trust how they store it. What decides risk is volume, pacing and acceptance rate, which both kinds of tool control in the same way.",
+    a: "Neither architecture is safe on its own. Extensions run in your browser, where LinkedIn’s page can see what is installed; cloud tools run your session on a server, so you must trust how they store it. What decides risk is volume, pacing and acceptance rate, which both kinds of tool control in the same way.",
   },
   {
     q: "Can any tool guarantee my account will not be restricted?",
@@ -55,19 +84,22 @@ const SOURCES: readonly Source[] = [
   { label: "HeyReach help center: how connection request limits work (checked October 2026)", url: HEYREACH_LIMITS },
   { label: "Dripify help center: how daily limits safeguard your account (checked October 2026)", url: DRIPIFY_LIMITS },
   { label: "Waalaxy help center: what are quotas (checked October 2026)", url: WAALAXY_QUOTAS },
-  { label: "Expandi: LinkedIn connections limit guide (checked October 2026)", url: EXPANDI_LIMIT },
   { label: "PhantomBuster: LinkedIn automation safe limits 2026 (checked October 2026)", url: PHANTOM_LIMITS },
-  { label: "Salesflow: how to choose a safe LinkedIn automation tool (a vendor guide, studied for this page)", url: "https://salesflow.io/how-safe-is-linkedin-automation/" },
-  { label: "Expandi: safest LinkedIn automation tools (a vendor ranking, studied for this page)", url: "https://expandi.io/blog/safest-linkedin-automation-tools/" },
-  {
-    label: "Valley: the safest LinkedIn automation tools in 2026 (a vendor ranking, studied for this page)",
-    url: "https://www.joinvalley.co/blog/the-safest-linkedin-automation-tools-in-2026-that-wont-get-your-account-banned",
-  },
+  { label: "Expandi help center: recommended limits (checked October 2026)", url: EXPANDI_HELP_LIMITS },
+  { label: "Expandi help center: account warm-up", url: EXPANDI_WARMUP },
+  { label: "Expandi help center: duplicated leads across campaigns", url: EXPANDI_DUPES },
+  { label: "Expandi help center: blacklists", url: EXPANDI_BLACKLIST },
+  { label: "HeyReach help center: launching your first campaign, with filters for leads already contacted", url: HEYREACH_LAUNCH },
+  { label: "Dripify help center: lead list filters", url: DRIPIFY_FILTERS },
+  { label: "Dripify help center: blacklisting LinkedIn users", url: DRIPIFY_BLACKLIST },
+  { label: "Waalaxy blog: LinkedIn maximum connections per day", url: WAALAXY_LIMITS },
+  { label: "Waalaxy blog: weekly limit on invitations sent on LinkedIn", url: WAALAXY_WEEKLY },
+  { label: "Waalaxy blog: how to create a blacklist", url: WAALAXY_BLACKLIST },
 ];
 
-function Ext({ href, children }: { href: string; children: React.ReactNode }) {
+function Ext({ href, children, cell = false }: { href: string; children: React.ReactNode; cell?: boolean }) {
   return (
-    <a href={href} rel="noopener nofollow" target="_blank">
+    <a href={href} rel="noopener nofollow" target="_blank" className={cell ? "gb2-src" : undefined}>
       {children}
     </a>
   );
@@ -78,31 +110,72 @@ export default function Page() {
     <ArticleLayout
       path={PATH}
       h1="The safest LinkedIn automation tool is the one that passes these 8 checks"
-      lede="The safest LinkedIn automation tool is the one that publishes and enforces low caps, ramps a new account from its first send, spreads each day's sending across the day, never contacts the same person twice and makes a person approve the launch. No tool is risk-free, because LinkedIn's terms prohibit automation, so judge every candidate on the eight checks below rather than on who wrote the ranking."
+      lede="The safest LinkedIn automation tool is the one that publishes and enforces low caps, ramps a new account from its first send, spreads each day’s sending across the day, never contacts the same person twice and makes a person approve the launch. No tool is risk-free, because LinkedIn’s terms prohibit automation, so judge every candidate on the 8 checks below rather than on who wrote the ranking."
       faq={FAQ}
       sources={SOURCES}
     >
-      <p>In short:</p>
+      <Gb1Summary>
+        <ul>
+          <li>
+            <strong>There is no neutral &ldquo;safest tool&rdquo; ranking.</strong> The lists you will
+            find are written by vendors, and each puts itself at or near the top.
+          </li>
+          <li>
+            <strong>Safety is behavior, not infrastructure.</strong> A dedicated IP or a cloud server
+            helps a little; volume, bursts and acceptance rate decide most of the outcome.
+          </li>
+          <li>
+            <strong>Check what is published and enforced.</strong> A cap you can raise to 75 a day is a
+            default, not a guardrail.
+          </li>
+        </ul>
+      </Gb1Summary>
+
+      <h2 id="scorecard">The 8 checks, tool by tool</h2>
+      <p>
+        Six tools against the 8 checks this page explains, from what each vendor&rsquo;s own help center
+        or blog said in October 2026. <strong>Pass</strong> means the vendor says the tool does it.{" "}
+        <strong>Partly</strong> means it is published but looser than the check asks, or left to your
+        settings. <strong>Not published</strong> means we could not find it, which is not proof the tool
+        lacks it: ask. Nora&rsquo;s column is our own claim about our own product, so test it like the
+        others.
+      </p>
+      <Scorecard
+        caption="Scorecard: the 8 safety checks across six LinkedIn automation tools, as published by each vendor, October 2026"
+        tools={TOOLS}
+        rows={SCORECARD}
+      />
       <ul>
         <li>
-          <strong>There is no neutral &ldquo;safest tool&rdquo; ranking.</strong> The pages that rank
-          for this question are written by vendors, and each puts itself at or near the top.
+          <strong>Nora:</strong> passes all 8 by design; the cost is speed, with {CAP_NEVER_SENT} invitations
+          a day in the first week.
         </li>
         <li>
-          <strong>Safety is behaviour, not infrastructure.</strong> A dedicated IP or a cloud server
-          helps a little; volume, bursts and acceptance rate decide most of the outcome.
+          <strong>HeyReach:</strong> caps are published and shared across a sender&rsquo;s campaigns, but the
+          200-a-week ceiling is twice what most guides report, and we found no automatic ramp.
         </li>
         <li>
-          <strong>Check what is published and enforced.</strong> A cap you can raise to 75 a day is a
-          default, not a guardrail.
+          <strong>Dripify:</strong> a daily cap of up to 75 is published, with no weekly ceiling or ramp we
+          could find; avoiding double contact is filters and a blacklist you apply.
+        </li>
+        <li>
+          <strong>Waalaxy:</strong> publishes 80 to 100 a day on top plans and holds invitations past 200 a
+          week to the next week; we found no automatic ramp.
+        </li>
+        <li>
+          <strong>Expandi:</strong> the most conservative published guidance after Nora&rsquo;s, under 100 a
+          week, and an optional ramp, but as recommendations and settings rather than enforced caps.
+        </li>
+        <li>
+          <strong>PhantomBuster:</strong> sensible advice (15 to 25 a day for aged accounts) and pacing
+          controls; the volume and the deduplication are yours to build.
         </li>
       </ul>
 
       <h2 id="why-rankings">Why every &ldquo;safest LinkedIn automation tool&rdquo; list ranks its author first</h2>
       <p>
-        Search for the safest LinkedIn automation tool and the top results, as of October 2026, are
-        a ranking on Expandi&rsquo;s blog that puts Expandi at the top, a long 2026 list from
-        Valley, another vendor in the space, and a safety guide from Salesflow, a third. Each is
+        The best-known &ldquo;safest LinkedIn automation tool&rdquo; lists, as of October 2026, are
+        written by vendors in this market, and each ranks its author at or near the top. Most are
         useful on the basics. None explains how a score was reached, and the ban rates quoted across
         vendor posts disagree widely, with no method we could check behind any of them.
       </p>
@@ -123,10 +196,10 @@ export default function Page() {
         </p>
       </Callout>
 
-      <h2 id="eight-checks">Eight checks you can run yourself</h2>
+      <h2 id="eight-checks">8 checks you can run yourself</h2>
       <p>
-        Each check has a question to ask the vendor and a test you can run in a trial. Where we say
-        what Nora does, it is a rule in the product&rsquo;s code, not a setting.
+        Each check has a question to ask the vendor and a test you can run before you commit. Where we
+        say what Nora does, it is a rule built into the product, not a setting you could change.
       </p>
 
       <h3 id="caps">1. Published daily and weekly caps</h3>
@@ -155,12 +228,11 @@ export default function Page() {
       <p>
         A daily cap with nothing underneath it is a burst with a maximum size. Ten invitations sent
         in forty minutes look nothing like ten sent across a working day, and the burst is the
-        pattern detection systems are built to notice. We learned this ourselves: an early version of
-        Nora placed a day&rsquo;s allowance a few minutes apart, a new account sent its first seven
-        requests inside half an hour, and LinkedIn refused invitations from it for days afterwards.
-        Nora now divides the working time left in the day by the day&rsquo;s allowance, never sends
-        two actions less than {MIN_GAP_MIN} minutes apart, randomises every gap, and sends only
-        inside the rep&rsquo;s working hours. Ask any vendor how a day&rsquo;s allowance is spread,
+        pattern detection systems are built to notice. We learned it the hard way, in{" "}
+        <Link href="/guides/is-linkedin-automation-safe#incident">an incident we describe in full on our safety guide</Link>.
+        Nora now spreads the day&rsquo;s allowance across the working hours left, never sends two
+        actions less than {MIN_GAP_MIN} minutes apart, varies every gap at random, and sends only
+        inside your working hours. Ask any vendor how a day&rsquo;s allowance is spread,
         not just how big it is.
       </p>
 
@@ -182,8 +254,8 @@ export default function Page() {
         is per campaign or across the workspace, and when it is checked. Two campaigns built from
         the same audience can queue the same person legitimately, so the only safe moment to check is
         immediately before sending. That is where Nora checks both its record of everyone ever
-        contacted and the shared exclusion list your team keeps, so a customer added to the list at
-        10am stops a send queued for 10:05.
+        contacted and the shared exclusion list your team keeps, so a customer added to the list
+        mid-morning stops an invitation that was already queued for later that day.
       </p>
 
       <h3 id="opt-outs">6. Opt-outs checked by rule</h3>
@@ -199,9 +271,9 @@ export default function Page() {
         The most common way an account gets into trouble is a campaign that went out before anybody
         read it: a list of the wrong people, or a note that reads like a template. Nora makes three
         decisions yours: the customer profile it searches for, the copy, and the launch. Each
-        connection note is written for one person from their own profile, stays under LinkedIn&rsquo;s{" "}
+        connection note is written for one person from their own profile, stays within LinkedIn&rsquo;s{" "}
         {INVITE_NOTE_MAX_CHARS}-character limit, and is sent with no note at all if it contains a link,
-        because links in invitations cut acceptance.
+        because a link in an invitation reads as the first message of a sales sequence.
       </p>
 
       <h3 id="honesty">8. Honesty about restrictions</h3>
@@ -211,8 +283,8 @@ export default function Page() {
         temporary limit becomes a long one. When LinkedIn refuses an invitation, Nora waits hours,
         not minutes, and waits longer each time the refusal repeats. It withdraws invitations still
         pending after {WITHDRAW_DAYS} days, flags any account whose acceptance rate falls below{" "}
-        {PUBLIC_LIMITS.healthyAcceptance}% for review, and when you press Send one now on a
-        campaign it hands back LinkedIn&rsquo;s own words rather than a quiet zero. Also look at the
+        {PUBLIC_LIMITS.healthyAcceptance}% for review, and a one-off test send from any campaign shows
+        you LinkedIn&rsquo;s exact error message when it refuses, rather than a quiet zero. Also look at the
         marketing: a vendor promising
         &ldquo;100% safe&rdquo; or a precise ban rate is claiming something it cannot know. LinkedIn
         can act against a vendor as well as its users: read{" "}
@@ -242,8 +314,7 @@ export default function Page() {
             label: "HeyReach",
             values: [
               <>
-                Default 25 per sender, settable up to 40 (
-                <Ext href={HEYREACH_LIMITS}>help center</Ext>)
+                Default 25 per sender, settable up to 40 (<Ext cell href={HEYREACH_LIMITS}>help center</Ext>)
               </>,
               "200 per sender, then a cooldown until Monday",
               "Manual guidance, not an automatic ramp we could find",
@@ -253,8 +324,7 @@ export default function Page() {
             label: "Dripify",
             values: [
               <>
-                Up to 75, adjustable, with a random range (
-                <Ext href={DRIPIFY_LIMITS}>help center</Ext>)
+                Up to 75, adjustable, with a random range (<Ext cell href={DRIPIFY_LIMITS}>help center</Ext>)
               </>,
               "Not published",
               "Not published",
@@ -264,29 +334,29 @@ export default function Page() {
             label: "Waalaxy",
             values: [
               <>
-                Up to 100 on top plans, randomised between 80% and 100% of it (
-                <Ext href={WAALAXY_QUOTAS}>help center</Ext>)
+                Up to 100 on top plans, varied at random between 80% and 100% of it (<Ext cell href={WAALAXY_QUOTAS}>help center</Ext>)
               </>,
-              "Follows LinkedIn's weekly limit; invitations past it wait for the next week",
+              "Follows LinkedIn’s weekly limit; invitations past it wait for the next week",
               "Not published",
             ],
           },
           {
             label: "Expandi",
             values: [
+              "Not published; set by you",
               <>
-                Recommends staying around 80 to 100 a week (<Ext href={EXPANDI_LIMIT}>blog</Ext>)
+                Recommends staying under 100, not stated as enforced (<Ext cell href={EXPANDI_HELP_LIMITS}>help center</Ext>)
               </>,
-              "Recommended, not stated as enforced",
-              "A warm-up setting with dates you choose",
+              <>
+                Optional: plus 2 a day every 1 to 3 days, off at 21 (<Ext cell href={EXPANDI_WARMUP}>help center</Ext>)
+              </>,
             ],
           },
           {
             label: "PhantomBuster",
             values: [
               <>
-                Suggests 15 to 25 for aged accounts, lower for new ones (
-                <Ext href={PHANTOM_LIMITS}>blog</Ext>)
+                Suggests 15 to 25 for aged accounts, lower for new ones (<Ext cell href={PHANTOM_LIMITS}>blog</Ext>)
               </>,
               "Suggests 60 to 100",
               "Advice to start low, set by you",
@@ -295,8 +365,8 @@ export default function Page() {
         ]}
       />
       <p>
-        Two things stand out. First, the published ceilings range from about Nora&rsquo;s{" "}
-        {PUBLIC_LIMITS.invitesPerWeek} a week to HeyReach&rsquo;s 200, and the daily maximums from{" "}
+        Two things stand out. First, the published weekly ceilings range from Nora&rsquo;s{" "}
+        {PUBLIC_LIMITS.invitesPerWeek} to 200, and the published daily maximums from{" "}
         {PUBLIC_LIMITS.invitesPerDayMax} to 100, which tells you how much each vendor leaves to you.
         Second, vendors&rsquo; own pages often disagree with each other: Dripify&rsquo;s help center,
         FAQ and features page give different message caps, and PhantomBuster&rsquo;s blog uses both
@@ -324,14 +394,13 @@ export default function Page() {
         </Link>{" "}
         goes through the trade-offs, and{" "}
         <Link href="/guides/is-linkedin-automation-safe">is LinkedIn automation safe</Link> covers
-        the behaviours that get accounts restricted.
+        the behaviors that get accounts restricted.
       </p>
 
       <h2 id="where-nora-falls-short">Where Nora passes, and where it falls short</h2>
       <p>
-        Nora was built around the eight checks, so it passes them by design, and its safety rules
-        are guarded by tests that were checked by deliberately breaking the code. That still
-        leaves honest gaps:
+        Nora was built around the 8 checks, so it passes them by design, and our safety rules are
+        covered by automated tests that run on every change. That still leaves honest gaps:
       </p>
       <ul>
         <li>
@@ -355,8 +424,8 @@ export default function Page() {
         </li>
         <li>
           <strong>Acceptances are found by checking.</strong> No notification reaches Nora when
-          somebody accepts, so it checks every hour, and the first follow-up can come later than it
-          would by hand.
+          somebody accepts, so it checks every hour. The first message usually goes out within a
+          couple of hours of the acceptance, which can be later than it would by hand.
         </li>
       </ul>
       <p>
@@ -365,16 +434,10 @@ export default function Page() {
         specific competitors, and the{" "}
         <Link href="/guides/best-ai-sdr-for-linkedin">guide to choosing an AI SDR for LinkedIn</Link>{" "}
         covers what to ask beyond safety. More reading is in the{" "}
-        <Link href="/guides">LinkedIn outreach guides</Link>.
+        <Link href="/guides">LinkedIn outreach guides</Link>. And run the 8 checks on Nora too: connect
+        an account and you can see its first day&rsquo;s allowance before anything is sent. More on{" "}
+        <Link href="/free-linkedin-automation-tool">Nora as a free LinkedIn automation tool</Link>.
       </p>
-
-      <Callout tone="info">
-        <p>
-          Run the eight checks on Nora too. <a href={`${SITE.app}/signup`}>Sign up free</a>, connect
-          an account and see its first day&rsquo;s allowance before anything is sent. Read more about{" "}
-          <Link href="/free-linkedin-automation-tool">Nora as a free LinkedIn automation tool</Link>.
-        </p>
-      </Callout>
     </ArticleLayout>
   );
 }

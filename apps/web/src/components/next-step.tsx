@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { OnboardingStep } from "@le/shared";
+import { Section } from "./page";
 
 /**
  * The one thing to do next, said once and given the whole top of the page.
@@ -18,22 +19,20 @@ import type { OnboardingStep } from "@le/shared";
 export function NextStep({ step, ready }: { step: OnboardingStep | null; ready: boolean }) {
   if (!step) {
     return (
-      <section className="card next-step done">
-        <p className="eyebrow">You are set up</p>
-        <h2>Everything is connected and running.</h2>
-        <p className="small muted">
-          Invitations go out through the day, paced two to eleven minutes apart. Replies that need you
-          appear in the Inbox — nothing is sent on your behalf without the rules you set.
-        </p>
-      </section>
+      <Section
+        title="Everything is connected and running."
+        description="Invitations are spread across your sending hours, never in a burst. Replies that need you appear in the Inbox, and nothing is sent on your behalf outside the rules you set."
+        surface={{ className: "card next-step done", eyebrow: "You are set up" }}
+      />
     );
   }
 
   return (
-    <section className="card next-step">
-      <p className="eyebrow">{ready ? "Worth doing next" : "Your next step"}</p>
-      <h2>{step.label}</h2>
-      <p className="small muted">{step.why}</p>
+    <Section
+      title={step.label}
+      description={step.why}
+      surface={{ className: "card next-step", eyebrow: ready ? "Worth doing next" : "Your next step" }}
+    >
       <p>
         <Link className="btn" href={step.href}>
           {step.action}
@@ -44,6 +43,6 @@ export function NextStep({ step, ready }: { step: OnboardingStep | null; ready: 
         // somebody waiting for something to happen that is waiting on them.
         <p className="tiny subtle">Nothing is sent to anybody until this is done.</p>
       ) : null}
-    </section>
+    </Section>
   );
 }

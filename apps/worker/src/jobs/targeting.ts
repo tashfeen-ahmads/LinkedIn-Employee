@@ -111,7 +111,7 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
   if (job.campaignId) {
     const { data: row } = await db
       .from("campaigns")
-      .select("id, customer_profile_id, linkedin_account_id, connection_note, search_cursor, search_exhausted")
+      .select("id, customer_profile_id, linkedin_account_id, owner_user_id, connection_note, search_cursor, search_exhausted")
       .eq("id", job.campaignId)
       .eq("workspace_id", job.workspaceId)
       .maybeSingle();
@@ -139,7 +139,7 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
 
   const { data: profileRow } = await db
     .from("customer_profiles")
-    .select("id, spec, business_profile_id, do_not_pursue, approved_at, cta_kind, cta_label, cta_url")
+    .select("id, spec, business_profile_id, do_not_pursue, approved_at, cta_kind, cta_label, cta_url, search_position")
     .eq("id", customerProfileId)
     // Every id in this job arrived from a form. The worker holds the service
     // role, so RLS does not stand between a member and another workspace's
@@ -199,6 +199,21 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
   // customer profile matched nobody" rather than "you are not subscribed".
   // The column already existed and nothing read it.
   const searchTier = account.has_sales_navigator ? "sales_navigator" : "classic";
+
+  /*
+   * Where a search that builds no campaign carries on from (migration 0042).
+   *
+   * A continuation reads its position off the campaign. A fresh search used to
+   * have nowhere to read one from, so a first press that built nothing — the
+   * whole page already known, or nobody over the fit bar — left the next press
+   * reading (and paying for) the same first page, for ever. The position is
+   * keyed to the search that produced it: edited filters, a different tier or
+   * a different seat are a different result set, and a cursor into the old one
+   * is meaningless there.
+   */
+  const searchKey = strategySearchKey(profile.salesNavFilters, searchTier, account.id);
+  const strategyCursor = continuing ? null : strategyPositionCursor(profileRow.search_position, searchKey);
+  const startCursor = continuing ? continuing.search_cursor : strategyCursor;
   let page;
   try {
     page = await ctx.linkedin.searchProspects({
@@ -206,7 +221,7 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
       query: profile.salesNavFilters,
       limit: job.limit,
       tier: searchTier,
-      ...(continuing?.search_cursor ? { cursor: continuing.search_cursor } : {}),
+      ...(startCursor ? { cursor: startCursor } : {}),
     });
   } catch (err) {
     // A throw here is retried by the queue and then given up on, all of it out
@@ -242,11 +257,17 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
   // campaign parked on that page, and every future press would read it again.
   // "Find more" would go permanently dead at the first repeat page.
   if (continuing) await rememberPosition(ctx, job, continuing.id, page.cursor);
+  else await rememberStrategyPosition(ctx, job, profileRow.id, searchKey, page.cursor);
 
   // Anyone this workspace already knows about is excluded, whichever rep owns
   // them. This is the cross-rep duplicate prevention promised in the spec.
-  const known = await loadKnownUrls(ctx, job.workspaceId, page.items.map((c) => c.linkedinUrl));
-  const unknown = page.items.filter((c) => !known.has(normalizeLinkedInUrl(c.linkedinUrl)));
+  //
+  // Matched by provider id as well as by address. Somebody outside the
+  // viewer's network arrives with no public address — only the provider id —
+  // so an address check alone never recognises them, and the profile lookup
+  // below would be spent on a person we already have.
+  const known = await loadKnown(ctx, job.workspaceId, page.items);
+  const unknown = page.items.filter((c) => !isKnown(known, c));
 
   // The shared exclusion list, applied before the scoring model sees anyone.
   // The send-time check in linkedin-action.ts is the one that has to be right;
@@ -307,17 +328,47 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
   // Resolving is tried before dropping: the profile endpoint usually knows the
   // public identifier the search result omitted, which turns a real person into
   // a usable prospect rather than discarding them.
-  const { verified, unverifiable } = await verifyProfiles(
+  const { verified: resolved, unverifiable } = await verifyProfiles(
     ctx,
     account.provider_account_id,
     fresh,
   );
 
+  /*
+   * Asked again, now that everybody has a real address (rules 24 and 26).
+   *
+   * The check above runs on what the search returned, and for somebody outside
+   * the viewer's network that is `linkedin.com/in/<provider id>` — an address
+   * no stored prospect ever has. Resolving turns it into the real one, which
+   * may be somebody another strategy found and this workspace has already
+   * written to. Unchecked, that person was scored again, had their strategy
+   * and fit score overwritten, and was put on a second campaign: a second
+   * first contact under the same company's name.
+   *
+   * The exclusion list is applied again for the same reason: a person excluded
+   * by their address cannot be matched on an address the search withheld.
+   */
+  const knownOnceResolved = await loadKnown(ctx, job.workspaceId, resolved);
+  const verified = resolved.filter(
+    (c) =>
+      !isKnown(knownOnceResolved, c) &&
+      !matchExclusion(exclusions, { company: c.company, linkedinUrl: c.linkedinUrl }),
+  );
+  const knownOnResolve = resolved.length - verified.length;
+
   if (verified.length === 0) {
+    if (knownOnResolve > 0 && unverifiable === 0) {
+      return giveUp(ctx, job, nothingNewYet(continuing, page), {
+        searchTier,
+        returnedByProvider: page.items.length,
+        alreadyKnown: page.items.length - unknown.length + knownOnResolve,
+      });
+    }
     return giveUp(ctx, job, "Nobody found had a profile that can be opened and checked.", {
       searchTier,
       returnedByProvider: page.items.length,
       unverifiable,
+      alreadyKnown: page.items.length - unknown.length + knownOnResolve,
     });
   }
 
@@ -336,7 +387,17 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
     });
   }
 
-  const { data: rep } = await db.from("profiles").select("full_name").eq("id", job.userId).single();
+  /*
+   * Whose name the notes go out under, and who owns the people found.
+   *
+   * The campaign's owner when adding to a campaign, never whoever pressed Find
+   * more. The invitations go out from the campaign's seat, so a note signed by
+   * the teammate who pressed the button reaches a stranger under one name from
+   * another person's account — and the people found would sit in the presser's
+   * pipeline while every message to them came from somebody else.
+   */
+  const ownerUserId = continuing?.owner_user_id ?? job.userId;
+  const { data: rep } = await db.from("profiles").select("full_name").eq("id", ownerUserId).maybeSingle();
   const repName = rep?.full_name ?? "the sender";
 
   // Continuing a list adds people to it. The copy, the steps and the angle are
@@ -346,6 +407,7 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
   if (continuing) {
     const added = await attachProspects(ctx, job, {
       campaignId: continuing.id,
+      ownerUserId,
       customerProfileId: profileRow.id,
       campaignAngle: continuing.connection_note,
       business,
@@ -363,7 +425,7 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
         campaignId: continuing.id,
         added,
         searched: page.items.length,
-        alreadyKnown: page.items.length - unknown.length,
+        alreadyKnown: page.items.length - unknown.length + knownOnResolve,
         searchTier,
         exhausted: page.cursor === null,
       },
@@ -445,6 +507,17 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
       ? "autonomous"
       : "supervised";
 
+  /*
+   * The workspace's default agent, as a campaign built on /app/campaigns/new
+   * gets.
+   *
+   * Without it a strategy-built campaign had no agent at all, so the pitch and
+   * opener the rep approved on that agent, its voice and its from-name were
+   * all skipped for exactly the campaigns most people launch — the agent
+   * screen was a settings page that changed nothing for them.
+   */
+  const agentId = await defaultAgentId(ctx, job.workspaceId);
+
   const { data: campaign, error } = await db
     .from("campaigns")
     .insert({
@@ -452,6 +525,7 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
       customer_profile_id: profile ? profileRow.id : null,
       linkedin_account_id: account.id,
       owner_user_id: job.userId,
+      agent_id: agentId,
       name: plan.name,
       status: "draft",
       connection_note: plan.connectionNote,
@@ -528,7 +602,7 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
   // a campaign holding step 1 and step 3 sends a follow-up and then silently
   // stops.
   const variantIdByName = new Map((variantRows ?? []).map((v) => [v.name, v.id]));
-  await db.from("campaign_steps").insert([
+  const { error: stepsError } = await db.from("campaign_steps").insert([
     ...plan.steps.map((step, index) => ({
       workspace_id: job.workspaceId,
       campaign_id: campaign.id,
@@ -550,9 +624,22 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
       }));
     }),
   ]);
+  if (stepsError) {
+    /*
+     * A campaign with invitations and no follow-ups launches, collects
+     * acceptances, and then says nothing to anybody — the one outcome the
+     * campaign existed to produce, spent. The error used to be ignored and the
+     * run went on to report the campaign built. Nobody has been attached yet,
+     * so the half-built campaign is removed and the run fails where it can be
+     * seen and retried.
+     */
+    await discardCampaign(ctx, job.workspaceId, campaign.id);
+    throw new Error(`could not store the campaign's follow-up sequence: ${stepsError.message}`);
+  }
 
   const attached = await attachProspects(ctx, job, {
     campaignId: campaign.id,
+    ownerUserId: job.userId,
     customerProfileId: profileRow.id,
     campaignAngle: plan.connectionNote,
     business,
@@ -560,6 +647,23 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
     repName,
     shortlist,
   });
+
+  if (attached === 0) {
+    /*
+     * Everybody on the shortlist became somebody else's in the moments since
+     * this run checked: another strategy's search running at the same time
+     * (targeting runs two at once, and `startPendingSearches` starts several)
+     * wrote them first. They are that search's people now (rule 26), and an
+     * empty draft campaign beside theirs is a list that can only report zero.
+     */
+    await discardCampaign(ctx, job.workspaceId, campaign.id);
+    return giveUp(
+      ctx,
+      job,
+      "Everyone this search found was taken by another search that ran at the same time. Press again to read the next page.",
+      { searchTier, returnedByProvider: page.items.length, shortlisted: shortlist.length },
+    );
+  }
 
   // Where the search stopped, so the next press reads past it rather than
   // re-reading the page this campaign was built from.
@@ -601,7 +705,12 @@ function wholePageKnown(page: { items: unknown[] }, unknown: unknown[]): boolean
  */
 function nothingNewYet(continuing: CampaignPosition | null, page: { cursor: string | null }): string {
   if (!continuing) {
-    return "Everyone LinkedIn returned is already on your prospect list. Open the campaign built from this profile and use Find more, which reads past the page this search keeps landing on.";
+    // Never "use Find more": a search that builds no campaign has no campaign
+    // to press it on. The strategy keeps its own position (migration 0042),
+    // so pressing the same button again is the instruction that works.
+    return page.cursor
+      ? "Everyone LinkedIn returned is already on your prospect list. The search has moved past them — press again to read the next page."
+      : "Everyone LinkedIn returned is already on your prospect list, and that was the last page LinkedIn will return for this strategy. The next search starts again from the first page.";
   }
   return page.cursor
     ? "Everyone on this page is already on your prospect list. The search has moved past them — press Find more again to read the next page."
@@ -705,6 +814,7 @@ interface CampaignPosition {
   id: string;
   customer_profile_id: string;
   linkedin_account_id: string;
+  owner_user_id: string | null;
   connection_note: string;
   search_cursor: string | null;
   search_exhausted: boolean;
@@ -755,6 +865,8 @@ async function attachProspects(
   job: TargetingJob,
   input: {
     campaignId: string;
+    /** Who owns the people found: the campaign's owner, never the presser. */
+    ownerUserId: string;
     /**
      * The strategy whose search found these people.
      *
@@ -774,6 +886,19 @@ async function attachProspects(
 ): Promise<number> {
   const { db } = ctx;
 
+  /*
+   * Created, never overwritten (rules 24 and 26).
+   *
+   * An existing row is somebody this workspace already has: found by another
+   * strategy, possibly already written to. Overwriting it moved them onto this
+   * strategy, replaced the fit score they were scored with against the one that
+   * found them, reassigned their owner — and the returned row then put them on
+   * this campaign as well. `ignoreDuplicates` makes the write ON CONFLICT DO
+   * NOTHING, which returns only the rows it created, so only people this run
+   * actually created are attached. That is also what makes two searches
+   * running at once safe: whichever writes a person first has them, and the
+   * other gets nothing back for that person.
+   */
   const { data: insertedProspects } = await db
     .from("prospects")
     .upsert(
@@ -805,11 +930,11 @@ async function attachProspects(
         fit_reasons: r.fitReasons as never,
         intent_score: r.intentScore,
         signals: r.candidate.signals as never,
-        owner_user_id: job.userId,
+        owner_user_id: input.ownerUserId,
       })),
-      { onConflict: "workspace_id,linkedin_url" },
+      { onConflict: "workspace_id,linkedin_url", ignoreDuplicates: true },
     )
-    .select("id");
+    .select("id, provider_id");
 
   if (!insertedProspects?.length) return 0;
 
@@ -856,9 +981,11 @@ async function attachProspects(
   // limiter has already scheduled, where a slow or failed response becomes a
   // missed send rather than a visible problem.
   //
-  // The upsert above returns ids in the order it was given, so the shortlist
-  // and the inserted rows line up — but "lines up" is an assumption that
-  // breaks silently, so the note is matched by provider id instead.
+  // Every row is paired with its person by the provider id it was written
+  // with, never by position: the insert returns only the rows it created, in
+  // whatever order the database likes, so position is exactly the assumption
+  // that hands one person's note to somebody else (rule 16).
+  const providerIdByProspectId = new Map(insertedProspects.map((p) => [p.id, p.provider_id ?? ""]));
   // A writer outage degrades a campaign; it does not strand the people in it.
   //
   // `inviteNote` already falls back to the campaign template when a prospect
@@ -881,9 +1008,6 @@ async function attachProspects(
     // writer choosing which to lean on per person — and the group labels would
     // then describe an assignment nobody made. It also caches better: the angle
     // is the stable half of the prompt.
-    const providerIdByProspectId = new Map(
-      insertedProspects.map((p, index) => [p.id, input.shortlist[index]?.candidate.providerId ?? ""]),
-    );
     /*
      * The campaign's agent, which decides the openers, the voice and the name.
      *
@@ -957,12 +1081,6 @@ async function attachProspects(
       campaignId: input.campaignId,
       reason: writerFailed,
     });
-  }
-
-  const providerIdByProspectId = new Map<string, string>();
-  for (const [index, p] of insertedProspects.entries()) {
-    const candidate = input.shortlist[index]?.candidate;
-    if (candidate) providerIdByProspectId.set(p.id, candidate.providerId);
   }
 
   const { error: attachError } = await db.from("campaign_prospects").upsert(
@@ -1056,28 +1174,131 @@ async function attachProspects(
 }
 
 /**
- * Which of these candidates the workspace already has.
+ * Which of these candidates the workspace already has, by address and by
+ * provider id.
  *
  * Asks about the candidates rather than downloading every prospect the
  * workspace has ever seen: the old query pulled up to 50,000 rows to filter a
  * page of fifty, so its cost grew with the customer's history rather than with
  * the work being done.
+ *
+ * Both keys, because either alone misses people. A search result for somebody
+ * outside the viewer's network carries `linkedin.com/in/<provider id>`, which
+ * matches no stored address; a stored prospect written before provider ids
+ * were kept matches on nothing else.
  */
-async function loadKnownUrls(
+interface KnownPeople {
+  urls: Set<string>;
+  providerIds: Set<string>;
+}
+
+async function loadKnown(
   ctx: WorkerContext,
   workspaceId: string,
-  candidateUrls: string[],
-): Promise<Set<string>> {
-  const normalized = [...new Set(candidateUrls.map(normalizeLinkedInUrl))];
-  if (normalized.length === 0) return new Set();
+  candidates: ReadonlyArray<Pick<ProspectCandidate, "linkedinUrl" | "providerId">>,
+): Promise<KnownPeople> {
+  const urls = [...new Set(candidates.map((c) => normalizeLinkedInUrl(c.linkedinUrl)))];
+  const providerIds = [...new Set(candidates.map((c) => c.providerId).filter(Boolean))];
+  if (urls.length === 0) return { urls: new Set(), providerIds: new Set() };
 
+  const [byUrl, byProviderId] = await Promise.all([
+    ctx.db.from("prospects").select("linkedin_url").eq("workspace_id", workspaceId).in("linkedin_url", urls),
+    providerIds.length
+      ? ctx.db.from("prospects").select("provider_id").eq("workspace_id", workspaceId).in("provider_id", providerIds)
+      : Promise.resolve({ data: [] as Array<{ provider_id: string | null }>, error: null }),
+  ]);
+  // Unanswered is not "nobody". A dedupe that silently reads an error as an
+  // empty list is how somebody already contacted is put on a second campaign.
+  if (byUrl.error) throw new Error(`could not check who is already known: ${byUrl.error.message}`);
+  if (byProviderId.error) throw new Error(`could not check who is already known: ${byProviderId.error.message}`);
+
+  return {
+    urls: new Set((byUrl.data ?? []).map((p) => normalizeLinkedInUrl(p.linkedin_url))),
+    providerIds: new Set(
+      (byProviderId.data ?? []).map((p) => p.provider_id).filter((id): id is string => Boolean(id)),
+    ),
+  };
+}
+
+function isKnown(known: KnownPeople, candidate: Pick<ProspectCandidate, "linkedinUrl" | "providerId">): boolean {
+  return (
+    known.urls.has(normalizeLinkedInUrl(candidate.linkedinUrl)) ||
+    (Boolean(candidate.providerId) && known.providerIds.has(candidate.providerId))
+  );
+}
+
+/**
+ * The workspace's default agent, or its oldest live one, or nobody.
+ *
+ * The same answer `/app/campaigns/new` preselects, so a campaign built from a
+ * strategy and one built by hand start on the same agent.
+ */
+async function defaultAgentId(ctx: WorkerContext, workspaceId: string): Promise<string | null> {
   const { data } = await ctx.db
-    .from("prospects")
-    .select("linkedin_url")
+    .from("agents")
+    .select("id, is_default, created_at")
     .eq("workspace_id", workspaceId)
-    .in("linkedin_url", normalized);
+    .is("archived_at", null)
+    .order("created_at", { ascending: true });
+  const agents = data ?? [];
+  return (agents.find((a) => a.is_default) ?? agents[0])?.id ?? null;
+}
 
-  return new Set((data ?? []).map((p) => normalizeLinkedInUrl(p.linkedin_url)));
+/**
+ * Removes a campaign this run created and could not finish, before anybody
+ * was put on it.
+ */
+async function discardCampaign(ctx: WorkerContext, workspaceId: string, campaignId: string): Promise<void> {
+  await ctx.db.from("campaign_steps").delete().eq("campaign_id", campaignId).eq("workspace_id", workspaceId);
+  await ctx.db.from("campaign_variants").delete().eq("campaign_id", campaignId).eq("workspace_id", workspaceId);
+  const { error } = await ctx.db.from("campaigns").delete().eq("id", campaignId).eq("workspace_id", workspaceId);
+  if (error) console.error("could not remove an unfinished campaign", { campaignId, reason: error.message });
+}
+
+/**
+ * What identifies one search: the filters, the tier and the seat. A cursor is
+ * only meaningful inside the result set that produced it.
+ */
+function strategySearchKey(filters: unknown, tier: string, accountId: string): string {
+  return JSON.stringify({ filters, tier, accountId });
+}
+
+/**
+ * The cursor a fresh search should start from, or null for the first page.
+ *
+ * A position stored for a different search (edited filters, another tier or
+ * seat) starts again from the beginning. So does one at the end of LinkedIn's
+ * answer: people change jobs and titles, and a strategy that could never be
+ * searched again would be a worse dead end than a re-read page.
+ */
+function strategyPositionCursor(stored: unknown, key: string): string | null {
+  if (!stored || typeof stored !== "object") return null;
+  const position = stored as { key?: unknown; cursor?: unknown };
+  if (position.key !== key) return null;
+  return typeof position.cursor === "string" && position.cursor ? position.cursor : null;
+}
+
+/**
+ * Stores where a fresh search stopped, on the strategy (migration 0042).
+ *
+ * Written whatever the run goes on to find, for the reason a campaign's is
+ * (rule 20): a page read is a page spent, and the run that builds nothing is
+ * exactly the one that used to leave the next press on the same page.
+ */
+async function rememberStrategyPosition(
+  ctx: WorkerContext,
+  job: TargetingJob,
+  customerProfileId: string,
+  key: string,
+  cursor: string | null,
+): Promise<void> {
+  const { error } = await ctx.db
+    .from("customer_profiles")
+    .update({ search_position: { key, cursor, at: new Date().toISOString() } as never })
+    .eq("id", customerProfileId)
+    .eq("workspace_id", job.workspaceId);
+  // Loud, and never fatal, exactly as for a campaign's position.
+  if (error) console.error("could not store the strategy's search position", { customerProfileId, reason: error.message });
 }
 
 /**

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { findFreeSlots, offerableStarts } from "../src/slots.js";
 import { planDays, type PlannedMeeting } from "../src/plan.js";
 
@@ -16,6 +16,17 @@ const ZONE = "America/New_York";
 const HOURS = { start: 9, end: 17, days: [1, 2, 3, 4, 5] };
 // A Monday, well clear of the notice period below.
 const FROM = new Date("2026-10-05T00:00:00Z");
+
+// The slot finder never offers a time in the past, so the clock is pinned to
+// FROM: against the real clock this week went by on October 12, 2026 and every
+// test here found nothing to draw.
+beforeAll(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(FROM);
+});
+afterAll(() => {
+  vi.useRealTimers();
+});
 
 function base(over: Partial<Parameters<typeof planDays>[0]> = {}) {
   return {
@@ -148,5 +159,58 @@ describe("planDays", () => {
     );
     const day = plan.find((d) => d.meetings.length > 0);
     expect(day?.date).toBe("2026-10-06");
+  });
+});
+
+/*
+ * The week across the autumn clock change.
+ *
+ * Fixed 24-hour steps from local midnight land at 23:00 on the *same* date
+ * after the 25-hour day (America/New_York, Sunday 1 November 2026): Sunday was
+ * drawn twice, every later column was an hour out, and Thursday — with every
+ * time the agent would offer on it — was never drawn at all.
+ */
+describe("planDays across a clock change", () => {
+  // Friday 30 October 2026, 08:00 in New York (EDT).
+  const DST_NOW = new Date("2026-10-30T12:00:00Z");
+  beforeAll(() => vi.setSystemTime(DST_NOW));
+  afterAll(() => vi.setSystemTime(FROM));
+
+  const week = (timezone: string, from = DST_NOW) =>
+    planDays({
+      from,
+      days: 7,
+      durationMinutes: 30,
+      workingHours: HOURS,
+      timezone,
+      meetings: [],
+      blocked: [],
+      minNoticeHours: 0,
+      bufferMinutes: 15,
+    });
+
+  it("draws seven distinct dates through the end of daylight saving", () => {
+    expect(week("America/New_York").map((d) => d.date)).toEqual([
+      "2026-10-30",
+      "2026-10-31",
+      "2026-11-01",
+      "2026-11-02",
+      "2026-11-03",
+      "2026-11-04",
+      "2026-11-05",
+    ]);
+  });
+
+  it("offers Thursday after the change, at the rep's own nine o'clock", () => {
+    const thursday = week("America/New_York").find((d) => d.date === "2026-11-05")!;
+    // 09:00 EST is 14:00 UTC.
+    expect(thursday.free[0]).toBe("2026-11-05T14:00:00.000Z");
+  });
+
+  it("starts the day at local midnight east of Greenwich and on a half-hour offset", () => {
+    // 23:00 in Tokyo and 19:30 in Kolkata: both still the 31st locally.
+    expect(week("Asia/Tokyo", new Date("2026-10-31T14:00:00Z"))[0]!.date).toBe("2026-10-31");
+    expect(week("Asia/Kolkata", new Date("2026-10-31T14:00:00Z")).map((d) => d.date)).toHaveLength(7);
+    expect(new Set(week("Asia/Kolkata", new Date("2026-10-31T14:00:00Z")).map((d) => d.date)).size).toBe(7);
   });
 });

@@ -50,12 +50,15 @@ export async function BillingSection() {
           </p>
           {/*
             A link, not a form: the answer is a download, and a server action can
-            only redirect or re-render. Owners and admins only — the file holds
-            other people's personal data in bulk.
+            only redirect or re-render. Owners and admins only, because the file
+            holds other people's personal data in bulk. No `download` attribute:
+            the response says attachment itself, and a failure comes back as a
+            redirect to this page with the reason, which `download` would have
+            saved to disk as if it were the export.
           */}
           {["owner", "admin"].includes(session.role) ? (
             <p>
-              <a className="btn secondary small" href="/app/export" download>
+              <a className="btn secondary small" href="/app/export">
                 Download workspace export
               </a>
             </p>

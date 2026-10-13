@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { HOOK_MAX_CHARS, INVITE_NOTE_MAX_CHARS } from "@le/shared";
-import { ArticleLayout, articleMeta, Callout, CompareTable, type Faq, type Source } from "@/components/article";
+import { INVITE_NOTE_MAX_CHARS } from "@le/shared";
+import { ArticleLayout, articleMeta, CompareTable, type Faq, type Source } from "@/components/article";
 import { LINKEDIN_NOTE_LIMITS } from "@/lib/note-check";
-import { PUBLIC_LIMITS, SITE } from "@/lib/site";
+import { Gb1LengthBars, NOTE_AIM } from "@/components/seo/gb1-visuals";
+import { PUBLIC_LIMITS } from "@/lib/site";
 
 const PATH = "/guides/linkedin-connection-note-character-limit";
 
@@ -11,6 +12,8 @@ export const metadata: Metadata = articleMeta(PATH);
 
 const FREE = LINKEDIN_NOTE_LIMITS.free;
 const PREMIUM = LINKEDIN_NOTE_LIMITS.premium;
+/** The one rule this page gives: aim for this range, never pass the hard stop. */
+const AIM = `about ${NOTE_AIM.low} to ${NOTE_AIM.high}`;
 
 /*
  * Example notes for the "full thought" section. Their counts are computed the
@@ -24,7 +27,7 @@ const EXAMPLES = [
   },
   {
     label: "Cut to one thought",
-    text: "Hi Sam, your post on moving Northwind's onboarding to async video was the clearest version of that argument I have read. I run ops at a similar-sized team. Would be glad to connect.",
+    text: "Hi Sam, your post on moving Northwind’s onboarding to async video was the clearest version of that argument I have read. I run ops at a similar-sized team. Would be glad to connect.",
   },
   {
     label: "Shorter still",
@@ -35,19 +38,19 @@ const EXAMPLES = [
 const FAQ: readonly Faq[] = [
   {
     q: "Is the LinkedIn connection note limit 200 or 300 characters?",
-    a: `Both, depending on the account. LinkedIn's help pages, as found in October 2026, give ${FREE} characters for a personalised note on a free account and ${PREMIUM} with Premium. Many guides still say ${PREMIUM} for everyone. Writing to ${FREE} works on every account, which is why Nora caps every note at ${INVITE_NOTE_MAX_CHARS}.`,
+    a: `Both, depending on the account. LinkedIn’s help pages, as found in October 2026, give ${FREE} characters for a personalized note on a free account and ${PREMIUM} with Premium. Many guides still say ${PREMIUM} for everyone. Aim for ${AIM} characters and treat ${INVITE_NOTE_MAX_CHARS} as the hard stop: that works on every account, and it is the cap Nora enforces on every note.`,
   },
   {
     q: "Do spaces and emojis count toward the limit?",
-    a: "Spaces count, as do punctuation and line breaks. Emojis count too, and some counters treat one emoji as two characters because of how text is stored, so a note full of emojis can run out sooner than it looks. The safe habit is to leave a margin below the limit and skip emojis in a first message to a stranger.",
+    a: `Spaces count, as do punctuation and line breaks. Emojis count too, and some counters treat one emoji as two characters because of how text is stored, so a note full of emojis can run out sooner than it looks. The safe habit is to aim for ${AIM} characters and skip emojis in a first message to a stranger.`,
   },
   {
     q: "Does Premium increase the connection note limit?",
-    a: `According to LinkedIn's help pages as of October 2026, yes: Premium raises the note to ${PREMIUM} characters and removes the monthly cap on how many personalised notes you can send. Sales Navigator is a Premium product, and guides that list it give it the same ${PREMIUM}. We have not tested Sales Navigator's limit ourselves.`,
+    a: `According to LinkedIn’s help pages as of October 2026, yes: Premium raises the note to ${PREMIUM} characters and removes the monthly cap on how many personalized notes you can send. Sales Navigator is a Premium product, and guides that list it give it the same ${PREMIUM}. We have not tested Sales Navigator’s limit ourselves.`,
   },
   {
     q: "Why was my LinkedIn invitation refused or cut off?",
-    a: `If the note was over your account's limit, the most likely reason is length. A note we sent at 222 characters from a free account was refused outright, with a "too many characters" error, rather than trimmed. Other causes include the weekly invitation limit and invitations restricted after many recipients clicked "I don't know this person".`,
+    a: `The most common cause is a note over your account’s limit. A note we sent at 222 characters from a free account was refused outright, with a “too many characters” error, rather than trimmed. Other causes include the weekly invitation limit and invitations restricted after many recipients clicked “I don’t know this person”.`,
   },
   {
     q: "How many personalized notes can a free account send?",
@@ -81,7 +84,7 @@ const SOURCES: readonly Source[] = [
     url: "https://help.dripify.io/en/articles/8490987-limited-personalized-connection-request-notes-for-free-linkedin-accounts",
   },
   {
-    label: "LinkedIn Help: Using the \"I don't know this person\" option for invitations",
+    label: "LinkedIn Help: Using the “I don’t know this person” option for invitations",
     url: "https://www.linkedin.com/help/linkedin/answer/a540947/using-the-i-don-t-know-this-person-option-for-invitations",
   },
 ];
@@ -91,14 +94,14 @@ export default function Page() {
     <ArticleLayout
       path={PATH}
       h1="LinkedIn connection note character limit: 200 or 300 characters?"
-      lede={`The LinkedIn connection note character limit is ${FREE} characters on a free account and ${PREMIUM} on Premium, according to LinkedIn's help pages as of October 2026. Write to ${FREE}: it works on every account, and a note over the limit can get the whole invitation refused rather than trimmed.`}
+      lede={`The LinkedIn connection note character limit is ${FREE} characters on a free account and ${PREMIUM} on Premium, according to LinkedIn’s help pages as of October 2026. Aim for ${AIM} characters and treat ${FREE} as the hard stop: that works on every account, and a note over the limit can get the whole invitation refused rather than trimmed.`}
       faq={FAQ}
       sources={SOURCES}
     >
       <h2 id="short-answer">The short answer: the LinkedIn connection note character limit by account</h2>
       <CompareTable
         caption="Connection note limits by account type, as reported in October 2026"
-        columns={["Note length", "Personalised notes per month"]}
+        columns={["Note length", "Personalized notes per month"]}
         rows={[
           { label: "Free (basic) account", values: [`${FREE} characters`, "Capped; sources say 3, 5 or 10"] },
           { label: "Premium", values: [`${PREMIUM} characters`, "No monthly cap on notes"] },
@@ -107,20 +110,20 @@ export default function Page() {
         ]}
       />
       <p>
-        If you only remember one number, remember {FREE}. A Premium user who writes to {FREE} loses
-        nothing anyone notices. A free user who writes to {PREMIUM} loses the invitation.
+        The one rule: aim for {AIM} characters; {FREE} is the hard stop. A Premium user who writes to
+        that loses nothing anyone notices. A free user who writes to {PREMIUM} loses the invitation.
       </p>
 
       <h2 id="why-sources-disagree">Why sources disagree: free, Premium and Sales Navigator</h2>
       <p>
-        Search for the limit and you will find confident answers in both directions. Several popular
+        Look the limit up and you will find confident answers in both directions. Several popular
         guides, as of October 2026, give {PREMIUM} characters for every account. Others, including pages that quote
-        LinkedIn&rsquo;s own help centre, say {FREE} for free accounts and {PREMIUM} for Premium.
+        LinkedIn&rsquo;s own help center, say {FREE} for free accounts and {PREMIUM} for Premium.
       </p>
       <p>Three things explain most of the disagreement:</p>
       <ul>
         <li>
-          <strong>Old pages keep ranking.</strong> Some {PREMIUM}-for-everyone figures probably date from
+          <strong>Old pages stay up.</strong> Some {PREMIUM}-for-everyone figures probably date from
           before free and paid accounts were treated differently, and were right when they were written.
         </li>
         <li>
@@ -148,17 +151,17 @@ export default function Page() {
 
       <h3 id="refused-not-truncated">A 222-character note: the whole invitation refused, not truncated</h3>
       <p>
-        An early version of Nora wrote connection notes to {PREMIUM} characters, because that number was
-        written into its prompt and into every check that followed it. The first live campaign sent from a free account.
-        A 222-character note came back with a &ldquo;too many characters&rdquo; error, and the invitation
-        did not go at all. Nothing was trimmed; the request simply failed, off a capped daily allowance,
-        against a real person on a list somebody had reviewed.
+        An early version of Nora wrote connection notes to {PREMIUM} characters, because that was the
+        number it had been given and every check downstream trusted it. The first live campaign sent from a
+        free account. A 222-character note came back with a &ldquo;too many characters&rdquo; error, and the
+        invitation did not go at all. Nothing was trimmed; the request simply failed, and it still used up
+        one of that day&rsquo;s limited invitations on a real person someone had chosen for the campaign.
       </p>
       <p>
         When we checked, sixteen of the first twenty-three notes written had been between 200 and 278
         characters: inside the limit we believed in, outside the one that was real. The fix was to cap
-        every note at {INVITE_NOTE_MAX_CHARS}, for every account, and to check that cap in code on the way
-        out rather than trusting the writer. A note over it is never shortened, because a sentence cut
+        every note at {INVITE_NOTE_MAX_CHARS}, for every account, and to check that cap at the moment of
+        sending rather than trusting the writer. A note over it is never shortened, because a sentence cut
         mid-word reaches a real person under a real name. It is replaced by the campaign&rsquo;s approved
         fallback, and if that does not fit either, the invitation goes with no note at all, which is
         ordinary on LinkedIn.
@@ -168,7 +171,7 @@ export default function Page() {
       <ul>
         <li>
           <strong>Spaces and punctuation</strong> count, every one. A note with double spaces after
-          full stops is longer than it looks.
+          periods is longer than it looks.
         </li>
         <li>
           <strong>Line breaks</strong> are characters in any counter. LinkedIn does not document how its own
@@ -183,20 +186,22 @@ export default function Page() {
         </li>
         <li>
           <strong>Names you merge in</strong> count at their real length. A template that fits with
-          &ldquo;Sam&rdquo; can fail with &ldquo;Alexandra-Louise&rdquo;. Leave a margin of a dozen
-          characters or more.
+          &ldquo;Sam&rdquo; can fail with &ldquo;Alexandra-Louise&rdquo;. That is why the aim is {AIM},
+          not {FREE}.
         </li>
       </ul>
       <p>
-        The <Link href="/tools/connection-note-checker">free connection note checker</Link> counts a note
+        We could not confirm, as of October 2026, how LinkedIn&rsquo;s own invite box shows a count on
+        desktop and in the mobile app, so count the note before you paste it in. The{" "}
+        <Link href="/tools/connection-note-checker">free connection note checker</Link> counts a note
         the same way Nora does, tells you whether it fits a free account, Premium or neither, and flags
         links and sales phrases. Nothing you paste is stored.
       </p>
 
-      <h2 id="notes-per-month">How many personalised notes a free account gets each month</h2>
+      <h2 id="notes-per-month">How many personalized notes a free account gets each month</h2>
       <p>
         The character limit is not the only constraint on free accounts. LinkedIn also caps how many
-        invitations a free account can personalise each month. As of October 2026 the figure is reported
+        invitations a free account can personalize each month. As of October 2026 the figure is reported
         differently almost everywhere: LinkedIn help text quoted in search results gives three in one
         version and five in another, and older vendor documentation says five to ten. Premium removes the
         cap.
@@ -220,19 +225,14 @@ export default function Page() {
       <p>
         {FREE} characters is about two short sentences. That is enough for exactly one idea, which is all
         a connection note needs: one specific, true reason you are writing to this person, and a
-        low-pressure close. Here is the same note cut down, with counts measured the way Nora measures them.
+        low-pressure close. Here is one note cut down twice, counted the way Nora counts.
       </p>
-      <ol>
-        {EXAMPLES.map((example) => (
-          <li key={example.label}>
-            <strong>
-              {example.label} ({example.text.length} characters
-              {example.text.length > INVITE_NOTE_MAX_CHARS ? `, ${example.text.length - INVITE_NOTE_MAX_CHARS} over` : ""}):
-            </strong>{" "}
-            &ldquo;{example.text}&rdquo;
-          </li>
-        ))}
-      </ol>
+      <Gb1LengthBars
+        caption="The same note, cut down, against the two published limits"
+        notes={EXAMPLES.map((example) => ({ label: example.label, length: example.text.length, text: example.text }))}
+        free={FREE}
+        premium={PREMIUM}
+      />
       <p>What came out, and why:</p>
       <ul>
         <li>
@@ -249,20 +249,18 @@ export default function Page() {
         </li>
       </ul>
       <p>
-        Nora&rsquo;s approved opening lines are capped at {HOOK_MAX_CHARS} characters for the same reason:
-        an opener that fills the note leaves no room for the one thing about the person that makes it
-        theirs. For ready-made shapes that fit, see the{" "}
+        For ready-made shapes that fit, see the{" "}
         <Link href="/guides/linkedin-connection-request-templates">connection request templates</Link>, each
         shown with its character count.
       </p>
 
-      <Callout tone="safety">
-        Nora writes one note per prospect from their own profile, checks every one against{" "}
-        {INVITE_NOTE_MAX_CHARS} characters in code, and shows them to you before anything is sent. See{" "}
-        <Link href="/how-it-works">how Nora works</Link>, or <a href={`${SITE.app}/signup`}>Sign up free</a>.
-        No card. Every automation tool, Nora included, carries some risk under LinkedIn&rsquo;s user
-        agreement. More in the <Link href="/guides">LinkedIn outreach guides</Link>.
-      </Callout>
+      <p>
+        Nora writes one note per prospect from that person&rsquo;s own profile, holds every one to{" "}
+        {INVITE_NOTE_MAX_CHARS} characters at the moment it is sent, and shows them all to you before
+        launch; <Link href="/how-it-works">how Nora works</Link> covers the rest. Like any automation tool,
+        it carries some risk under LinkedIn&rsquo;s User Agreement. More on notes is in the{" "}
+        <Link href="/guides">LinkedIn outreach guides</Link>.
+      </p>
     </ArticleLayout>
   );
 }

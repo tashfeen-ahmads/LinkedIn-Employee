@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArticleLayout, articleMeta, Callout, CompareTable, type Faq, type Source } from "@/components/article";
-import { PUBLIC_LIMITS, SITE } from "@/lib/site";
+import { ArticleLayout, articleMeta, CompareTable, type Faq, type Source } from "@/components/article";
+import { Gb1Timeline, type Gb1Step } from "@/components/seo/gb1-visuals";
+import { PUBLIC_LIMITS } from "@/lib/site";
 
 const PATH = "/guides/linkedin-automation-tool-bans";
 
@@ -10,62 +11,126 @@ export const metadata: Metadata = articleMeta(PATH);
 const FAQ: readonly Faq[] = [
   {
     q: "Why did LinkedIn ban HeyReach?",
-    a: "Nobody outside LinkedIn knows, because LinkedIn has published no reason. On 25 March 2026 it removed HeyReach's company page and restricted several executives' personal profiles. Competitors have attributed it to HeyReach's cloud and proxy setup, but that is inference. HeyReach says it received no notice. The safe reading is that LinkedIn prohibits automation tools in general and acted against a well-known one.",
+    a: "Nobody outside LinkedIn knows, because LinkedIn has published no reason. On March 25, 2026, it removed HeyReach’s company page and restricted several executives’ personal profiles. Competitors have attributed it to HeyReach’s cloud and proxy setup, but that is inference. HeyReach says it received no notice. The safe reading is that LinkedIn prohibits automation tools in general and acted against a well-known one.",
   },
   {
     q: "Are HeyReach users affected?",
-    a: "As of October 2026 we found no public evidence that customers' LinkedIn accounts were restricted because of the March action. HeyReach says customer accounts, campaigns and its platform kept running normally. That says nothing about ordinary restrictions: individual accounts using any automation tool can still be restricted for what they send, exactly as before.",
+    a: "As of October 2026 we found no public evidence that customers’ LinkedIn accounts were restricted because of the March action, and no report that HeyReach’s own page has been restored. HeyReach says customer accounts, campaigns and its platform kept running normally. Individual accounts using any automation tool can still be restricted for what they send, exactly as before.",
   },
   {
     q: "Is LinkedIn cracking down on automation?",
-    a: "Two vendor-level actions are documented: against Apollo and Seamless in March 2025 and against HeyReach in March 2026. Each took down the vendor's own LinkedIn presence, gave no public reason, and left the product reported as working. Two events are not a published policy. The rule itself has not changed: LinkedIn's terms prohibit automated activity, and they did before either event.",
+    a: "Two vendor-level actions are documented: against Apollo and Seamless in March 2025 and against HeyReach in March 2026. Each took down the vendor’s own LinkedIn presence, gave no public reason, and left the product reported as working. Two events are not a published policy. The rule itself has not changed: LinkedIn’s terms prohibit automated activity, and they did before either event.",
   },
   {
     q: "Did LinkedIn ban Apollo?",
-    a: "LinkedIn removed Apollo.io's company page, along with Seamless.ai's, around 6 March 2025, as MarTech reported at the time. Apollo's CEO said the company was working with LinkedIn to understand the restriction and that it did not disrupt Apollo's services. Later reports say Apollo's brand page has since been restored. LinkedIn has not explained either the removal or the return.",
+    a: "It removed Apollo.io’s company page, not the product, in March 2025, along with Seamless.ai’s. That is the closest precedent for the HeyReach action: a vendor’s own presence on LinkedIn taken down without a published reason while the software kept working. Apollo’s page has reportedly returned since, which is one reason not to assume HeyReach’s removal is permanent.",
   },
 ];
 
 const SOURCES: readonly Source[] = [
-  { label: "HeyReach: LinkedIn deleted HeyReach company page. Here's what it didn't delete.", url: "https://www.heyreach.io/blog/heyreach-ban" },
-  { label: "HeyReach: Quick update from Nick, CEO (25 March 2026)", url: "https://www.heyreach.io/blog/quick-update-from-nick" },
+  { label: "HeyReach: LinkedIn deleted HeyReach company page. Here’s what it didn’t delete.", url: "https://www.heyreach.io/blog/heyreach-ban" },
+  { label: "HeyReach: Quick update from Nick, CEO (March 25, 2026)", url: "https://www.heyreach.io/blog/quick-update-from-nick" },
   { label: "MarTech: A pair of lead gen providers have disappeared from LinkedIn (March 2025)", url: "https://martech.org/a-pair-of-lead-gen-providers-have-disappeared-from-linkedin/" },
-  { label: "Salesmotion: When LinkedIn removed Apollo's brand page (March 2025)", url: "https://salesmotion.io/blog/linkedin-removed-apollo-brand-page-2025-alternatives" },
-  { label: "Overloop: HeyReach review 2026 (a competitor, studied for this page)", url: "https://overloop.com/blog/heyreach-review" },
-  { label: "Valley: LinkedIn automation safety 2026 (a competitor, studied for this page)", url: "https://www.joinvalley.co/blog/linkedin-automation-safety-2026" },
-  { label: "AIwithKay: HeyReach review 2026 (studied for this page)", url: "https://aiwithkay.com/blog/heyreach-review-2026" },
-  { label: "Northlight: Northlight vs HeyReach (a competitor's account of the cause)", url: "https://northlight.ai/blog/northlight-vs-heyreach" },
+  { label: "Salesmotion: When LinkedIn removed Apollo’s brand page (March 2025)", url: "https://salesmotion.io/blog/linkedin-removed-apollo-brand-page-2025-alternatives" },
+  { label: "Northlight: Northlight vs HeyReach (a competitor’s account of the cause)", url: "https://northlight.ai/blog/northlight-vs-heyreach" },
   { label: "Wonda: Is LinkedIn automation safe? The HeyReach ban, explained", url: "https://www.wonda.sh/blog/linkedin-automation-safety-heyreach-ban" },
   { label: "LinkedIn Help: Automated activity on LinkedIn", url: "https://www.linkedin.com/help/linkedin/answer/90586" },
 ];
 
 const CLAIMS = [
   {
-    label: "\"The ban is permanent\"",
+    label: "“The ban is permanent”",
     values: [
       "Unverified",
-      "Some competitor blogs call it permanent. HeyReach's CEO called the restrictions temporary. LinkedIn has said nothing either way.",
+      "Some competitor blogs call it permanent. HeyReach’s CEO called the restrictions temporary. LinkedIn has said nothing either way.",
     ],
   },
   {
-    label: "\"LinkedIn acted because of HeyReach's cloud and proxy setup\"",
+    label: "“LinkedIn acted because of HeyReach’s cloud and proxy setup”",
     values: ["Unverified", "Inference by commentators, several of them competitors. LinkedIn has given no reason."],
   },
   {
-    label: "\"Customers' LinkedIn accounts were banned\"",
+    label: "“Customers\u2019 LinkedIn accounts were banned”",
     values: ["No public evidence", "HeyReach says customer accounts were unaffected, and we found no report of a customer-side outage tied to the removal."],
   },
   {
-    label: "\"Four executives were restricted\"",
-    values: ["Partly verified", "HeyReach's own post names its CEO, CTO, CRO and CMO. Some third-party write-ups name fewer."],
+    label: "“Four executives were restricted”",
+    values: ["Partly verified", "HeyReach’s own post names its CEO, CTO, CRO and CMO. Some third-party write-ups name fewer."],
   },
   {
-    label: "\"About 40% of automation users were restricted in early 2026\"",
+    label: "“About 40% of automation users were restricted in early 2026”",
     values: ["Unverified", "Published by vendors without a method we could inspect. We could not trace it to any study."],
   },
   {
-    label: "\"LinkedIn flagged the accounts of Apollo and Seamless users\" (2025)",
-    values: ["Unverified", "One write-up says so; contemporaneous coverage and Apollo's statement do not support it."],
+    label: "“LinkedIn flagged the accounts of Apollo and Seamless users” (2025)",
+    values: ["Unverified", "One write-up says so; contemporaneous coverage and Apollo’s statement do not support it."],
+  },
+];
+
+const STATUS_CLASS: Record<string, string> = {
+  Unverified: "is-unverified",
+  "Partly verified": "is-verified",
+};
+
+/*
+ * The dated record the "verified" section rests on. Dates are the ones every
+ * account agrees on; a step we could not date is labeled as such rather than
+ * given a date nobody reported.
+ */
+const TIMELINE: readonly Gb1Step[] = [
+  {
+    when: "Around March 6, 2025",
+    dateTime: "2025-03-06",
+    title: "Apollo.io and Seamless.ai company pages disappear from LinkedIn",
+    body: (
+      <p>
+        Reported by MarTech at the time, which noted that both sold sales data and that coverage linked the removals to
+        LinkedIn&rsquo;s stance on scraping. That link was inference: LinkedIn gave no reason. Apollo&rsquo;s CEO said the
+        company was working with LinkedIn to understand the restriction and that Apollo&rsquo;s services were not disrupted.
+      </p>
+    ),
+  },
+  {
+    when: "Later, date not reported",
+    title: "Apollo\u2019s company page is reported restored",
+    body: <p>Neither side has explained the removal or the return.</p>,
+    gap: { label: "Months later", size: 1 },
+    tone: "muted",
+  },
+  {
+    when: "March 25, 2026",
+    dateTime: "2026-03-25",
+    title: "HeyReach\u2019s company page removed; executives\u2019 profiles restricted",
+    body: (
+      <ul>
+        <li>The date comes from HeyReach&rsquo;s own posts, and every third-party account we read agrees.</li>
+        <li>
+          HeyReach&rsquo;s later post names its CEO, CTO, CRO and CMO as restricted. Some third-party write-ups name fewer, so
+          treat the list as HeyReach&rsquo;s account.
+        </li>
+        <li>HeyReach says there was no notice beforehand, and we found no statement from LinkedIn about the action.</li>
+        <li>
+          HeyReach says only its own presence was hit (no page, posts or ads) while customer accounts, campaigns and the
+          platform carried on, and its CEO called the restrictions temporary the same day. We cannot check that, and found no
+          report contradicting it.
+        </li>
+      </ul>
+    ),
+    gap: { label: "About a year after the Apollo removal", size: 3 },
+  },
+  {
+    when: "As of October 2026",
+    dateTime: "2026-10",
+    title: "No reported restoration and no statement from LinkedIn",
+    body: (
+      <p>
+        HeyReach&rsquo;s own account still describes the page as gone. We could not check LinkedIn directly, so read this as
+        the latest reported state. If the page returns, it would follow the Apollo precedent: a removal and a return, neither
+        explained.
+      </p>
+    ),
+    gap: { label: "Seven months on", size: 2 },
+    tone: "muted",
   },
 ];
 
@@ -73,66 +138,20 @@ export default function Page() {
   return (
     <ArticleLayout
       path={PATH}
-      h1="When LinkedIn acts against an automation tool: what happened in 2026"
-      lede="The HeyReach ban, as it is usually called, was LinkedIn removing HeyReach's company page and restricting several of its executives' personal profiles on 25 March 2026. HeyReach says its product and its customers' campaigns kept running; LinkedIn has published no reason, and much of what has been written since, often by competitors, is unverified."
+      h1="The HeyReach ban: what LinkedIn did in March 2026, and what is verified"
+      lede="The HeyReach ban was LinkedIn removing HeyReach’s company page and restricting several of its executives’ personal profiles on March 25, 2026. HeyReach says its product and its customers’ campaigns kept running; LinkedIn has published no reason, and as of October 2026 we found no report that the page has been restored."
       faq={FAQ}
       sources={SOURCES}
     >
       <p>
-        This page separates what is documented from what is claimed, then turns to the question most readers actually have: what
-        it means for the LinkedIn account you send from. We make a LinkedIn automation tool ourselves, so we have tried to be
-        careful. Where the only source is HeyReach, we say so. Where the source is a competitor of HeyReach, we say that too.
+        This page separates what is documented from what is claimed, then turns to what it means for the LinkedIn account you
+        send from. We make a LinkedIn automation tool ourselves, so we label every source: where it is only HeyReach, or a
+        competitor of HeyReach, we say so. As of October 2026 no general news outlet had covered the HeyReach event; the 2025
+        Apollo and Seamless removals were covered by the trade press at the time.
       </p>
-      <Callout tone="info">
-        <p>
-          <strong>A note on sources, as of October 2026:</strong> we found no coverage of the HeyReach event by a general news
-          outlet. The primary sources are HeyReach&apos;s own posts. The other write-ups are by software companies, several of
-          which compete with HeyReach. The 2025 Apollo and Seamless event was covered by the trade press at the time.
-        </p>
-      </Callout>
 
-      <h2 id="verified">What is verified about the HeyReach ban and the 2025 precedent, with dates</h2>
-
-      <h3 id="apollo-seamless">Apollo and Seamless pages (March 2025)</h3>
-      <ul>
-        <li>
-          <strong>Around 6 March 2025</strong> the LinkedIn company pages of Apollo.io and Seamless.ai disappeared. MarTech reported
-          it at the time, noting that both sold sales data and that coverage linked the removals to LinkedIn&apos;s stance on
-          scraping. That link was inference; LinkedIn gave no reason.
-        </li>
-        <li>
-          <strong>Apollo&apos;s CEO</strong> said the company was working with LinkedIn to understand the brand page restriction, and
-          that it did not disrupt Apollo&apos;s services.
-        </li>
-        <li>
-          <strong>Later reports</strong> say Apollo&apos;s brand page has since been restored. We found no explanation of the
-          restoration from either side.
-        </li>
-      </ul>
-
-      <h3 id="heyreach">HeyReach company page and executives (March 2026)</h3>
-      <ul>
-        <li>
-          <strong>On 25 March 2026</strong> LinkedIn removed HeyReach&apos;s company page. HeyReach&apos;s own posts give that date and
-          every third-party account we read agrees.
-        </li>
-        <li>
-          <strong>Executives&apos; personal profiles were restricted.</strong> HeyReach&apos;s later post names its CEO, CTO, CRO and
-          CMO. Some third-party write-ups name fewer, so treat the exact list as HeyReach&apos;s account.
-        </li>
-        <li>
-          <strong>No warning.</strong> HeyReach says there was no notice beforehand.
-        </li>
-        <li>
-          <strong>No reason from LinkedIn.</strong> We found no statement from LinkedIn about the action.
-        </li>
-        <li>
-          <strong>HeyReach&apos;s position</strong> is that the action was limited to its own presence on LinkedIn: no page, no
-          posts, no ads, while customer accounts, campaigns and the platform carried on. Its CEO&apos;s same-day post called the
-          restrictions temporary. We cannot check those statements independently, and we found no public report contradicting
-          the claim that the software kept running.
-        </li>
-      </ul>
+      <h2 id="verified">What is verified about the HeyReach ban, with dates</h2>
+      <Gb1Timeline label="LinkedIn’s actions against automation vendors, 2025 to October 2026" steps={TIMELINE} />
 
       <h2 id="unverified">What is claimed but not verified</h2>
       <p>
@@ -140,9 +159,12 @@ export default function Page() {
         verify, and why.
       </p>
       <CompareTable
-        caption="Claims about LinkedIn's action against automation vendors, and their status as of October 2026"
+        caption="Claims about LinkedIn’s action against automation vendors, and their status as of October 2026"
         columns={["Status", "Why"]}
-        rows={CLAIMS}
+        rows={CLAIMS.map((claim) => ({
+          label: claim.label,
+          values: [<span key="status" className={`gb1-status ${STATUS_CLASS[claim.values[0] ?? ""] ?? ""}`}>{claim.values[0]}</span>, claim.values[1]],
+        }))}
       />
       <p>
         The pattern to notice: the claims that would sell a competing product most effectively (permanent, caused by the very
@@ -151,13 +173,13 @@ export default function Page() {
 
       <h2 id="two-levels">Platform-level enforcement versus account-level restriction</h2>
       <p>
-        Two different things get called a &quot;ban&quot;, and confusing them is where most of the panic comes from.
+        Two different things get called a &ldquo;ban&rdquo;, and confusing them is where most of the panic comes from.
       </p>
       <CompareTable
         caption="Vendor-level action compared with account-level restriction"
         columns={["Vendor-level action", "Account-level restriction"]}
         rows={[
-          { label: "Who it hits", values: ["The tool company's own page and staff profiles", "Your personal LinkedIn account"] },
+          { label: "Who it hits", values: ["The tool company’s own page and its executives’ profiles", "Your personal LinkedIn account"] },
           { label: "How often", values: ["Rare: two documented events in two years", "Routine, every day, across every tool"] },
           { label: "What triggers it", values: ["Not published", "Published in outline: volume, speed, ignored or reported invitations, suspected automation"] },
           { label: "Whether you control it", values: ["No", "Mostly: it follows what your account sends"] },
@@ -166,20 +188,23 @@ export default function Page() {
       />
       <p>
         As far as the public evidence goes, both documented actions targeted companies, not the people using their products.
-        Individual accounts are restricted for what they do, and LinkedIn&apos;s help center says it does not allow third-party
+        Individual accounts are restricted for what they do, and LinkedIn&rsquo;s help center says it does not allow third-party
         software that automates activity on its site, and that an account restricted for automated activity is re-enabled once
         the software is disabled. That rule applies to every tool, including ours, and was true before March 2026.
       </p>
 
-      <h2 id="this-week">If your tool was affected: what to do this week</h2>
+      <h2 id="if-affected">If your tool is affected</h2>
+      <p>
+        Whether your vendor is HeyReach or the next company this happens to, the steps are the same.
+      </p>
       <ol>
         <li>
           <strong>Export your data today.</strong> Prospect lists, conversations, who was contacted and when. A vendor losing its
-          LinkedIn presence is the vendor&apos;s business risk; it becomes yours if your history lives only inside it.
+          LinkedIn presence is the vendor&rsquo;s business risk; it becomes yours if your history lives only inside it.
         </li>
         <li>
           <strong>Check your own account, not the news.</strong> Can you send an invitation by hand? Any notice on login? If the
-          account is fine, nothing about it changed when the vendor&apos;s page disappeared.
+          account is fine, nothing about it changed when the vendor&rsquo;s page disappeared.
         </li>
         <li>
           <strong>Do not switch in a panic.</strong> Moving tools mid-campaign often means re-importing prospects into a tool that
@@ -197,7 +222,7 @@ export default function Page() {
         </li>
         <li>
           <strong>Ask any vendor five questions.</strong> What are the daily and weekly caps, and can a plan raise them? Does the
-          warm-up start from my first send? What happens on LinkedIn&apos;s first refusal? Do you store my LinkedIn password? Can I
+          warm-up start from my first send? What happens on LinkedIn&rsquo;s first refusal? Do you store my LinkedIn password? Can I
           export everything today without asking support?
         </li>
       </ol>
@@ -208,7 +233,7 @@ export default function Page() {
         the architecture argument competitors made after March.
       </p>
 
-      <h2 id="lesson">The lesson: behaviour matters more than which vendor you use</h2>
+      <h2 id="lesson">The lesson: behavior matters more than which vendor you use</h2>
       <p>
         Neither documented action reached an individual account as far as anyone has shown. What reaches individual accounts,
         every day, is the pattern they send: a burst of invitations from an account with no history, a list of people who do not
@@ -227,12 +252,6 @@ export default function Page() {
         <Link href="/how-it-works">how Nora works</Link> covers the rest, and more safety guides are in the{" "}
         <Link href="/guides">LinkedIn outreach guides</Link>.
       </p>
-      <Callout tone="safety">
-        <p>
-          If you want outreach that stays well under the line by design, <a href={`${SITE.app}/signup`}>Sign up free</a>. Nothing is
-          sent until you approve and launch.
-        </p>
-      </Callout>
     </ArticleLayout>
   );
 }

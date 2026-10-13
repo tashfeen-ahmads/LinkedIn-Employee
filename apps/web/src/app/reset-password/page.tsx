@@ -1,11 +1,13 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase-server";
 import { isAppConfigured } from "@/lib/config";
-import { SiteFooter, SiteHeader } from "@/components/marketing";
-import { AuthAside } from "@/components/auth-aside";
+import { AuthFooter, AuthHeader } from "@/components/marketing";
 import { PasswordField } from "@/components/password-field";
 import { SubmitButton } from "@/components/submit-button";
 import { checkPassword, PASSWORD_MIN } from "@/lib/auth-fields";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = { title: { absolute: "Reset password: Nora" } };
 
 /* `?error=` is a key, never a sentence from the URL. */
 const ERRORS: Record<string, string> = {
@@ -54,51 +56,48 @@ export default async function ResetPasswordPage({ searchParams }: { searchParams
 
   return (
     <>
-      <SiteHeader />
-      <div className="auth-split">
-        <main className="auth-page" id="main" tabIndex={-1}>
-          <header>
-            <h1>Choose a new password</h1>
-            <p className="muted">For {user.email}.</p>
-          </header>
-          {error ? (
-            <div className="notice danger" role="alert">
-              {error}
-            </div>
-          ) : null}
-          <form action={setPassword} className="card">
-            {/*
-              The account this password belongs to, for the password manager.
-              Without a username field beside a new-password field a manager
-              saves the new password against nothing, or against whatever it
-              guessed, and offers the old one at the next sign-in.
-            */}
-            <input
-              type="email"
-              name="username"
-              autoComplete="username"
-              value={user.email ?? ""}
-              readOnly
-              className="sr-only"
-              tabIndex={-1}
-              aria-hidden="true"
-            />
-            <PasswordField
-              name="password"
-              label="New password"
-              autoComplete="new-password"
-              minLength={PASSWORD_MIN}
-              hint={`At least ${PASSWORD_MIN} characters.`}
-            />
-            <PasswordField name="confirm" label="Confirm password" autoComplete="new-password" minLength={PASSWORD_MIN} />
-            <SubmitButton className="btn block" pendingLabel="Saving…">
-              Save new password
-            </SubmitButton>
-          </form>
-        </main>
-        <AuthAside />
-      </div>
-      <SiteFooter />
+      <AuthHeader />
+      <main className="auth-page" id="main" tabIndex={-1}>
+        <header>
+          <h1>Choose a new password</h1>
+          <p className="muted">For {user.email}.</p>
+        </header>
+        {error ? (
+          <div className="notice danger" role="alert">
+            {error}
+          </div>
+        ) : null}
+        <form action={setPassword} className="card">
+          {/*
+            The account this password belongs to, for the password manager.
+            Without a username field beside a new-password field a manager
+            saves the new password against nothing, or against whatever it
+            guessed, and offers the old one at the next sign-in.
+          */}
+          <input
+            type="email"
+            name="username"
+            autoComplete="username"
+            value={user.email ?? ""}
+            readOnly
+            className="sr-only"
+            tabIndex={-1}
+            aria-hidden="true"
+          />
+          <PasswordField
+            name="password"
+            label="New password"
+            autoComplete="new-password"
+            minLength={PASSWORD_MIN}
+            hint={`At least ${PASSWORD_MIN} characters.`}
+          />
+          <PasswordField name="confirm" label="Confirm password" autoComplete="new-password" minLength={PASSWORD_MIN} />
+          <SubmitButton className="btn block" pendingLabel="Saving…">
+            Save new password
+          </SubmitButton>
+        </form>
+      </main>
+      <AuthFooter />
     </>
   );
 }

@@ -1,4 +1,6 @@
-import { runLinkedInAction, RescheduleError } from "./linkedin-action.js";
+import { LINKEDIN_LIMITS } from "@le/shared";
+import { warmStillCounts } from "@le/linkedin";
+import { INVITE_CLAIM_LEASE_MS, runLinkedInAction, RescheduleError } from "./linkedin-action.js";
 import type { WorkerContext } from "../context.js";
 
 /**
@@ -40,7 +42,7 @@ export async function sendOneNow(
 
   const { data: campaign } = await db
     .from("campaigns")
-    .select("id, status")
+    .select("id, status, warm_up, linkedin_account_id")
     .eq("id", input.campaignId)
     .eq("workspace_id", input.workspaceId)
     .maybeSingle();
@@ -51,16 +53,50 @@ export async function sendOneNow(
     return { ok: false, detail: `The campaign is ${campaign.status}. Launch it first.` };
   }
 
-  const { data: next } = await db
+  /*
+   * The next person the loop itself would invite, not merely the oldest row.
+   *
+   * It took the oldest `queued` row whatever it carried: somebody LinkedIn had
+   * just refused *about them* and asked us to leave for a day, or — on a
+   * warm-up campaign — somebody nobody had looked at yet, invited cold out of
+   * a campaign whose whole setting is that nobody is. The send path re-checks
+   * both (rule 1); choosing by the same rules here is what makes the button
+   * send somebody rather than report a refusal it walked into.
+   */
+  const { data: queued } = await db
     .from("campaign_prospects")
-    .select("id")
+    .select("id, next_action_at, warmed_at, invite_claimed_at")
     .eq("campaign_id", input.campaignId)
     .eq("workspace_id", input.workspaceId)
     .eq("status", "queued")
     .order("created_at")
-    .limit(1)
+    .limit(SEND_ONE_WINDOW);
+  if (!queued?.length) return { ok: false, detail: "Nobody on this campaign is waiting to be invited." };
+
+  const { data: account } = await db
+    .from("linkedin_accounts")
+    .select("invite_throttle_streak")
+    .eq("id", campaign.linkedin_account_id)
     .maybeSingle();
-  if (!next) return { ok: false, detail: "Nobody on this campaign is waiting to be invited." };
+  // While LinkedIn has been refusing the account, the next invitation is a cold
+  // probe on any campaign, exactly as the loop sends it.
+  const needsWarm = Boolean(campaign.warm_up) && (account?.invite_throttle_streak ?? 0) < 1;
+  const now = Date.now();
+  const next = queued.find((row) => {
+    if (row.next_action_at && Date.parse(row.next_action_at) > now) return false;
+    if (row.invite_claimed_at && now - Date.parse(row.invite_claimed_at) < INVITE_CLAIM_LEASE_MS) return false;
+    if (!needsWarm) return true;
+    if (!warmStillCounts(row.warmed_at, new Date(now))) return false;
+    return Date.parse(row.warmed_at!) + LINKEDIN_LIMITS.warmUpToInviteMinMs <= now;
+  });
+  if (!next) {
+    return {
+      ok: false,
+      detail: needsWarm
+        ? "Nobody is ready to invite yet. On a warm-up campaign each person's profile is viewed first and invited 45 minutes to 4 hours later; the next will be ready soon."
+        : "Everybody still queued is waiting on a hold of their own from LinkedIn, so nobody can be sent right now.",
+    };
+  }
 
   try {
     await runLinkedInAction(ctx, {
@@ -101,7 +137,7 @@ export async function sendOneNow(
   // what gets reported.
   const { data: after } = await db
     .from("campaign_prospects")
-    .select("status, status_reason")
+    .select("status, status_reason, invite_claimed_at")
     .eq("id", next.id)
     .maybeSingle();
 
@@ -111,6 +147,17 @@ export async function sendOneNow(
       campaignProspectId: next.id,
       status: after.status,
       detail: "Invitation sent. It should be visible in LinkedIn's sent invitations within a minute.",
+    };
+  }
+
+  // Another send holds this person — a second press, or the loop's own job
+  // firing at the same moment. Exactly one of them asks LinkedIn.
+  if (after?.status === "queued" && after.invite_claimed_at) {
+    return {
+      ok: false,
+      campaignProspectId: next.id,
+      status: after.status,
+      detail: "This person's invitation is already being sent by another request. Nothing was sent twice.",
     };
   }
 
@@ -124,3 +171,6 @@ export async function sendOneNow(
       : `Not sent. The row is now "${after?.status ?? "gone"}" and nothing said why, which is itself worth reporting.`,
   };
 }
+
+/** How far down the queue to look for somebody ready to invite. */
+const SEND_ONE_WINDOW = 200;

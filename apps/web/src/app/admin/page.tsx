@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { BOOT_BEAT, PACING_LOOP, PACING_STALE_MS } from "@le/shared";
 import { createClient } from "@/lib/supabase-server";
-import { requirePlatformAdmin, ago, formatUsd } from "@/lib/admin";
+import { requirePlatformAdmin, ago } from "@/lib/admin";
+import { formatSpend } from "@/lib/spend-display";
+import { countersForToday } from "@/lib/account-day";
+import type { AccountRecord } from "@le/linkedin";
 import { callWorker } from "@/lib/worker";
 import { PageHeader, Section } from "@/components/page";
 import { PageNotice, type NoticeParams } from "@/components/page-notice";
@@ -33,16 +36,20 @@ export default async function AdminOverviewPage({ searchParams }: { searchParams
     { data: campaigns },
     { data: tickets },
     { data: settings },
+    { data: zones },
     { data: beats },
     { data: spend },
     issues,
   ] = await Promise.all([
     supabase.from("workspaces").select("id, created_at"),
     supabase.rpc("platform_users"),
-    supabase.from("linkedin_accounts").select("id, status, invites_today, messages_today, invites_paused_until"),
+    supabase
+      .from("linkedin_accounts")
+      .select("id, user_id, status, invites_today, messages_today, counters_reset_on, invites_paused_until"),
     supabase.from("campaigns").select("id, status"),
     supabase.from("support_tickets").select("id, status, answered_by, drafted_at, created_at"),
     supabase.from("platform_settings").select("outreach_paused_at, outreach_paused_reason, support_autopilot").maybeSingle(),
+    supabase.from("profiles").select("id, timezone"),
     supabase.from("worker_heartbeats").select("name, beat_at, detail").in("name", [PACING_LOOP, BOOT_BEAT]),
     supabase.rpc("platform_spend_breakdown", { p_days: 7 }),
     callWorker<{ issues: Issue[] }>("/admin/issues", { userId: admin.userId }),
@@ -53,7 +60,11 @@ export default async function AdminOverviewPage({ searchParams }: { searchParams
   const loopFresh = pacing?.beat_at ? Date.now() - Date.parse(pacing.beat_at) <= PACING_STALE_MS : false;
   const bootDetail = (boot?.detail ?? {}) as { commit?: string | null; queueReachable?: boolean };
 
-  const allIssues = issues.ok ? (issues.data?.issues ?? []) : [];
+  // A list that could not be read is not an empty list. Counted as zero, it
+  // turned "Waiting on you" into "Nothing" and the Issues pill green beside the
+  // words "could not check" (rule 17's disease, on the operator's own screen).
+  const issuesRead = issues.ok && Array.isArray(issues.data?.issues);
+  const allIssues = issuesRead ? (issues.data?.issues ?? []) : [];
   const critical = allIssues.filter((i) => i.severity === "critical").length;
   const warnings = allIssues.filter((i) => i.severity === "warning").length;
 
@@ -65,11 +76,21 @@ export default async function AdminOverviewPage({ searchParams }: { searchParams
   const held = (accounts ?? []).filter(
     (a) => a.invites_paused_until && Date.parse(a.invites_paused_until) > Date.now(),
   ).length;
-  const invitesToday = (accounts ?? []).reduce((sum, a) => sum + (a.invites_today ?? 0), 0);
-  const messagesToday = (accounts ?? []).reduce((sum, a) => sum + (a.messages_today ?? 0), 0);
+  // Each account's counters rolled over to its owner's today, as the worker
+  // does before its first send. Summed as stored, every idle account added
+  // yesterday's sends to "Sent today".
+  const zoneOf = new Map((zones ?? []).map((p) => [p.id, p.timezone ?? "UTC"]));
+  const today = (accounts ?? []).map((a) =>
+    countersForToday(a as unknown as AccountRecord, zoneOf.get(a.user_id) ?? "UTC"),
+  );
+  const invitesToday = today.reduce((sum, a) => sum + (a.invites_today ?? 0), 0);
+  const messagesToday = today.reduce((sum, a) => sum + (a.messages_today ?? 0), 0);
   const running = (campaigns ?? []).filter((c) => c.status === "running").length;
   const drafts = (campaigns ?? []).filter((c) => c.status === "draft").length;
   const spendWeek = (spend ?? []).reduce((sum, row) => sum + Number(row.spend_usd), 0);
+  const callsWeek = (spend ?? []).reduce((sum, row) => sum + Number(row.calls), 0);
+  const unpricedWeek = (spend ?? []).reduce((sum, row) => sum + Number(row.unpriced), 0);
+  const bootKnown = Boolean(boot?.beat_at);
   const newWeek = (users ?? []).filter((u) => u.created_at >= weekAgo).length;
   const signedInWeek = (users ?? []).filter((u) => u.last_sign_in_at && u.last_sign_in_at >= weekAgo).length;
 
@@ -91,6 +112,9 @@ export default async function AdminOverviewPage({ searchParams }: { searchParams
   }
   if (!loopFresh) waiting.push({ tone: "danger", text: "The sending loop has not run in the last 15 minutes.", href: "/admin/jobs" });
   if (bootDetail.queueReachable === false) waiting.push({ tone: "danger", text: "The worker cannot reach its job queue.", href: "/admin/jobs" });
+  if (!issuesRead) {
+    waiting.push({ tone: "danger", text: "The Issues list could not be read, so nothing here can say the platform is clear.", href: "/admin/issues" });
+  }
   if (critical) waiting.push({ tone: "danger", text: `${critical} critical issue${critical === 1 ? "" : "s"}.`, href: "/admin/issues" });
   if (heldForYou) {
     waiting.push({ tone: "warning", text: `${heldForYou} support ticket${heldForYou === 1 ? "" : "s"} drafted and waiting for you.`, href: "/admin/support" });
@@ -148,7 +172,15 @@ export default async function AdminOverviewPage({ searchParams }: { searchParams
             tone={notSending ? "warning" : "neutral"}
           />
           <Kpi label="Support" value={String(open.length)} note={`open · ${assistantWeek} answered by the assistant this week`} />
-          <Kpi label="AI spend, 7 days" value={formatUsd(spendWeek)} note={<Link href="/admin/spend">by agent and model</Link>} />
+          <Kpi
+            label="AI spend, 7 days"
+            value={formatSpend(spendWeek, callsWeek, unpricedWeek)}
+            note={
+              <Link href="/admin/spend">
+                {unpricedWeek ? `${unpricedWeek} unpriced calls, so a floor` : "by agent and model"}
+              </Link>
+            }
+          />
         </div>
       </Section>
 
@@ -166,8 +198,12 @@ export default async function AdminOverviewPage({ searchParams }: { searchParams
               <tr>
                 <th scope="row">Worker</th>
                 <td>
-                  <span className={`pill tiny ${bootDetail.queueReachable === false ? "danger" : "positive"}`}>
-                    {bootDetail.queueReachable === false ? "queue unreachable" : "up"}
+                  {/* No boot stamp is unknown, never "up" (rule 23): it is also
+                      what a build that has not shipped the stamp looks like. */}
+                  <span
+                    className={`pill tiny ${!bootKnown ? "plain" : bootDetail.queueReachable === false ? "danger" : "positive"}`}
+                  >
+                    {!bootKnown ? "unknown" : bootDetail.queueReachable === false ? "queue unreachable" : "up"}
                   </span>
                 </td>
                 <td className="small subtle">
@@ -177,8 +213,10 @@ export default async function AdminOverviewPage({ searchParams }: { searchParams
               <tr>
                 <th scope="row">Issues</th>
                 <td>
-                  <span className={`pill tiny ${critical ? "danger" : warnings ? "warning" : "positive"}`}>
-                    {issues.ok ? `${critical} critical · ${warnings} warning` : "could not check"}
+                  <span
+                    className={`pill tiny ${!issuesRead ? "danger" : critical ? "danger" : warnings ? "warning" : "positive"}`}
+                  >
+                    {issuesRead ? `${critical} critical · ${warnings} warning` : "could not check"}
                   </span>
                 </td>
                 <td className="small subtle">{issues.ok ? "" : issues.error}</td>

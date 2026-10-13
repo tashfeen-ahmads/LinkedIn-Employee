@@ -2,13 +2,16 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase-server";
 import { isAppConfigured } from "@/lib/config";
-import { SiteFooter, SiteHeader } from "@/components/marketing";
+import { AuthFooter, AuthHeader, FREE_LINE } from "@/components/marketing";
 import { AuthAside } from "@/components/auth-aside";
 import { PasswordField } from "@/components/password-field";
 import { SubmitButton } from "@/components/submit-button";
 import { checkEmail, checkPassword, PASSWORD_MIN } from "@/lib/auth-fields";
 import { requestAccountEmails } from "@/lib/account-emails";
 import { SITE } from "@/lib/site";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = { title: { absolute: "Create your account: Nora" } };
 
 /*
  * What `?error=` may say. The action below redirects with a short code, and
@@ -62,7 +65,7 @@ function signupErrorCode(error: { message?: string; code?: string; status?: numb
  * became an account, a known one got a session. That is tidy and it is the
  * wrong shape for this product. Nothing was ever collected but an address, so
  * every fact about a person had to be asked for again later, on a settings
- * screen they had to go and find — which is the same disease the profile
+ * screen they had to go and find, which is the same disease the profile
  * rebuild was about. A product that keeps asking for things it could have
  * gathered once feels unfinished however good each screen is.
  *
@@ -85,7 +88,7 @@ async function signUp(formData: FormData) {
    * Every rejection used to redirect to a bare `?error=`, which re-rendered an
    * empty form: fix the one field that was wrong and you retype your name, your
    * email and both passwords. Two rejections in a row and people stop. The
-   * password is deliberately not echoed — it would be in the URL bar, the
+   * password is deliberately not echoed, it would be in the URL bar, the
    * browser history and every access log between here and the CDN.
    */
   const back = (reason: SignupError) => {
@@ -133,7 +136,7 @@ async function signUp(formData: FormData) {
    * Signing up signs you in, when the project lets it.
    *
    * This threw the session away and redirected to a "check your inbox" screen
-   * — so somebody who had just chosen a password could not carry on, and the
+   *, so somebody who had just chosen a password could not carry on, and the
    * password they set was beside the point: the only way in was still a link
    * in an email. That is the shape of the flow this replaced, wearing a
    * password field.
@@ -142,7 +145,7 @@ async function signUp(formData: FormData) {
    * a session means the address needs no confirming and the person is already
    * signed in, so the only correct next step is the work. No session with a
    * user means the project requires confirmation, and then the inbox really is
-   * the next step — reported honestly rather than pretended past, because a
+   * the next step, reported honestly rather than pretended past, because a
    * screen that says "you are in" over a session that does not exist sends
    * somebody to a login that will refuse them.
    *
@@ -175,8 +178,8 @@ export default async function SignupPage({
   if (!isAppConfigured()) {
     return (
       <>
-        <SiteHeader />
-        <div className="auth-split">
+        <AuthHeader />
+        <div className="auth-split auth-paired">
         <main className="auth-page" id="main" tabIndex={-1}>
           <header>
             <h1>Not open yet</h1>
@@ -192,7 +195,7 @@ export default async function SignupPage({
         </main>
         <AuthAside variant="signup" />
         </div>
-        <SiteFooter />
+        <AuthFooter />
       </>
     );
   }
@@ -211,8 +214,8 @@ export default async function SignupPage({
     const sentTo = sentCheck.ok ? sentCheck.value : null;
     return (
       <>
-        <SiteHeader />
-        <div className="auth-split">
+        <AuthHeader />
+        <div className="auth-split auth-paired">
         <main className="auth-page" id="main" tabIndex={-1}>
           <header>
             <h1>Confirm your email</h1>
@@ -234,18 +237,19 @@ export default async function SignupPage({
         </main>
         <AuthAside variant="signup" />
         </div>
-        <SiteFooter />
+        <AuthFooter />
       </>
     );
   }
 
   return (
     <>
-      <SiteHeader />
-      <div className="auth-split">
-      <main className="auth-page wide" id="main" tabIndex={-1}>
+      <AuthHeader />
+      <div className="auth-split auth-paired">
+      <main className="auth-page" id="main" tabIndex={-1}>
         <header>
           <h1>Create your account</h1>
+          <p className="auth-free">{FREE_LINE} No card.</p>
           <p className="muted">
             Two things: who the messages come from, and how you sign back in. Everything about your
             business is asked once, on the next screen.
@@ -261,7 +265,7 @@ export default async function SignupPage({
         {/*
           Two groups, not six boxes in a row.
           Every field used to carry a paragraph justifying itself, so a form of
-          six inputs read as a page of prose with slots in it — and the
+          six inputs read as a page of prose with slots in it, and the
           business address was asked for here, at onboarding and again on the
           profile, three times for one value. Signup is the moment to get
           somebody in; the detail belongs where it is already asked properly.
@@ -272,7 +276,7 @@ export default async function SignupPage({
           {params.invite ? <input type="hidden" name="invite" value={params.invite} /> : null}
 
           <div className="field-group">
-            <p className="field-group-label">Who the messages come from</p>
+            <p className="auth-group-label">Who the messages come from</p>
 
             <label className="field">
               <span>Your name</span>
@@ -281,7 +285,7 @@ export default async function SignupPage({
                 name="fullName"
                 required
                 autoComplete="name"
-                placeholder="Daniel Okafor"
+                placeholder="Your full name"
                 defaultValue={params.name ?? ""}
               />
               <span className="hint">Yours, not your company&rsquo;s. A prospect reads it on the invitation.</span>
@@ -290,7 +294,7 @@ export default async function SignupPage({
           </div>
 
           <div className="field-group">
-            <p className="field-group-label">How you sign back in</p>
+            <p className="auth-group-label">How you sign back in</p>
 
             <label className="field">
               <span>Work email</span>
@@ -322,24 +326,16 @@ export default async function SignupPage({
                 name="password"
                 label="Password"
                 minLength={PASSWORD_MIN}
-                hint={`At least ${PASSWORD_MIN} characters.`}
+                hint={`At least ${PASSWORD_MIN} characters. Length is the only rule, so a short phrase works.`}
               />
               <PasswordField name="confirm" label="Confirm password" minLength={PASSWORD_MIN} />
             </div>
-            <span className="hint">
-              Length is the only rule. A demand for a capital, a digit and a symbol produces
-              &ldquo;Password1!&rdquo;, which every cracking dictionary already has.
-            </span>
           </div>
 
-          <div className="notice">
-            <p className="small">
-              <strong>Works with any LinkedIn account.</strong> With Sales Navigator, NORA can also
-              target by seniority and company size and leave out job titles you don&rsquo;t want, so
-              your lists are tighter. Without it, lists are broader and you&rsquo;ll review more of
-              them. You&rsquo;ll choose on the next step.
-            </p>
-          </div>
+          <p className="small muted">
+            Works with any LinkedIn account. Sales Navigator, if you have it, makes the search more
+            precise; you say which on the next step.
+          </p>
 
           <SubmitButton className="btn block" pendingLabel="Creating your account…">
             Create account
@@ -353,7 +349,7 @@ export default async function SignupPage({
       </main>
       <AuthAside variant="signup" />
       </div>
-      <SiteFooter />
+      <AuthFooter />
     </>
   );
 }

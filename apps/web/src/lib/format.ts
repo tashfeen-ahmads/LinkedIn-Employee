@@ -6,7 +6,7 @@
  * screens wrote the same moment three different ways. Every screen formats
  * through here, in the reader's own timezone when we know it.
  */
-const LOCALE = "en-GB";
+const LOCALE = "en-US";
 
 function at(iso: string | Date | null | undefined): Date | null {
   if (!iso) return null;

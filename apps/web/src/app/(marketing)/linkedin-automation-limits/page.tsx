@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
 import { ArticleSchema, BreadcrumbSchema, FaqSchema } from "@/components/schema";
 import { PUBLIC_LIMITS, pageMeta } from "@/lib/site";
-import { Faq, PageHero } from "@/components/marketing";
+import { Faq, Glance, PageHero } from "@/components/marketing";
+import { CompareTable } from "@/components/article";
 import { WarmupRamp } from "@/components/diagrams";
 import { Forecast } from "@/components/forecast";
+import { formatDate } from "@/lib/format";
+import { BRAND } from "@le/shared";
 
 const TITLE = "LinkedIn connection request limit and automation limits in 2026";
 const DESCRIPTION =
@@ -45,7 +48,23 @@ const FAQ = [
   },
   {
     q: "Is LinkedIn automation against the terms of service?",
-    a: "LinkedIn's user agreement prohibits automated access, and no tool can honestly promise zero risk. What a tool can do is stay far enough under the thresholds that the behaviour is indistinguishable from a person working their network, and stop the moment the platform pushes back. Anyone promising unlimited safe sending is selling you a restriction.",
+    a: "LinkedIn's user agreement prohibits automated access, and no tool can honestly promise zero risk. What a tool can do is stay far enough under the thresholds that the behavior is indistinguishable from a person working their network, and stop the moment the platform pushes back. Anyone promising unlimited safe sending is selling you a restriction.",
+  },
+];
+
+/** The table: the industry's figures beside ours, ours read from the constants. */
+const LIMIT_ROWS = [
+  {
+    label: "Connection requests a day",
+    values: ["20 to 25", `${PUBLIC_LIMITS.invitesPerDayStart} rising to ${PUBLIC_LIMITS.invitesPerDayMax}`],
+  },
+  { label: "Connection requests a week", values: ["100 to 200", `${PUBLIC_LIMITS.invitesPerWeek}`] },
+  { label: "Messages a day", values: ["50 to 100", `${PUBLIC_LIMITS.messagesPerDay}`] },
+  { label: "Warm-up before full volume", values: ["2 to 4 weeks", `${PUBLIC_LIMITS.warmupWeeks} weeks`] },
+  {
+    // A warning, not a cap: nothing stops sending at this rate, it raises an alert.
+    label: "Healthy acceptance rate",
+    values: ["Above 30%", `Alert below ${PUBLIC_LIMITS.healthyAcceptance}%`],
   },
 ];
 
@@ -86,13 +105,26 @@ export default function LimitsPage() {
           <>
             <p>
               The safe numbers, where they come from, and the warning signs that arrive two or three
-              days before a restriction does. These are also the limits this product enforces, so
-              every figure below is one our own code refuses to exceed.
+              days before a restriction does. The daily, weekly and warm-up caps below are also the
+              ones {BRAND.name} refuses to exceed.
             </p>
-            <p className="mk-caption">
-              Published {new Date(PUBLISHED).toLocaleDateString("en-GB", { dateStyle: "long" })}
-            </p>
+            <p className="mk-caption">Published {formatDate(PUBLISHED)}</p>
           </>
+        }
+        aside={
+          <Glance
+            title={`What ${BRAND.name} enforces`}
+            items={[
+              { label: "New account", value: `${PUBLIC_LIMITS.invitesPerDayStart} invitations a day` },
+              {
+                label: "Warm-up",
+                value: `Up to ${PUBLIC_LIMITS.invitesPerDayMax} a day over ${PUBLIC_LIMITS.warmupWeeks} weeks`,
+              },
+              { label: "Weekly ceiling", value: `${PUBLIC_LIMITS.invitesPerWeek} invitations` },
+              { label: "Messages", value: `${PUBLIC_LIMITS.messagesPerDay} a day` },
+              { label: "Acceptance alert", value: `Below ${PUBLIC_LIMITS.healthyAcceptance}%` },
+            ]}
+          />
         }
       >
         <h1>LinkedIn automation limits in 2026</h1>
@@ -102,47 +134,12 @@ export default function LimitsPage() {
         <div className="container mk-article-grid">
           <section className="mk-article-block">
             <h2 className="mk-h2-sm">The LinkedIn connection request limit, and the other numbers</h2>
-            <div className="table-scroll">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Action</th>
-                    <th className="num">Commonly cited as safe</th>
-                    <th className="num">What we enforce</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td>Connection requests a day</td>
-                    <td className="num">20 to 25</td>
-                    <td className="num">
-                      {PUBLIC_LIMITS.invitesPerDayStart} rising to {PUBLIC_LIMITS.invitesPerDayMax}
-                    </td>
-                  </tr>
-                  <tr>
-                    <td>Connection requests a week</td>
-                    <td className="num">100 to 200</td>
-                    <td className="num">{PUBLIC_LIMITS.invitesPerWeek}</td>
-                  </tr>
-                  <tr>
-                    <td>Messages a day</td>
-                    <td className="num">50 to 100</td>
-                    <td className="num">{PUBLIC_LIMITS.messagesPerDay}</td>
-                  </tr>
-                  <tr>
-                    <td>Warm-up before full volume</td>
-                    <td className="num">2 to 4 weeks</td>
-                    <td className="num">{PUBLIC_LIMITS.warmupWeeks} weeks</td>
-                  </tr>
-                  <tr>
-                    <td>Healthy acceptance rate</td>
-                    <td className="num">above 30%</td>
-                    <td className="num">{PUBLIC_LIMITS.healthyAcceptance}%</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-            <p className="mk-caption">
+            <CompareTable
+              caption={`Commonly cited figures, and what ${BRAND.name} does`}
+              columns={["Commonly cited as safe", `What ${BRAND.name} enforces`]}
+              rows={LIMIT_ROWS}
+            />
+            <p>
               One figure is above the usual guidance on purpose: a fully warmed account may send up
               to {PUBLIC_LIMITS.invitesPerDayMax} invitations on a single day. It cannot keep that
               up, because the weekly ceiling of {PUBLIC_LIMITS.invitesPerWeek} averages{" "}
@@ -154,7 +151,7 @@ export default function LimitsPage() {
             </p>
           </section>
 
-          <section className="mk-article-block">
+          <section className="mk-article-block fx4-ramp">
             <WarmupRamp />
           </section>
 
@@ -172,10 +169,12 @@ export default function LimitsPage() {
               produces a low acceptance rate, and a low acceptance rate produces a restriction. The
               chain runs in that order every time.
             </p>
-            <p className="mk-callout">
-              <strong>What we do about it.</strong> Acceptance is checked nightly per account. Below{" "}
-              {PUBLIC_LIMITS.healthyAcceptance}% you get told, with the campaign named, while there
-              is still time to fix the targeting rather than after the account is gone.
+            <p className="fx4-rule">
+              <strong>What we do about it.</strong> Acceptance is checked every night for each
+              account. Once there are enough invitations to judge, a rate below{" "}
+              {PUBLIC_LIMITS.healthyAcceptance}% puts a warning in your daily summary email, while
+              there is still time to fix the targeting rather than after the account is gone. It is
+              a warning, not a cap: nothing stops sending at that number.
             </p>
           </section>
 
@@ -205,11 +204,11 @@ export default function LimitsPage() {
             ))}
           </ol>
           <section className="mk-article-block">
-            <p className="mk-callout">
-              <strong>What we do about it.</strong> Account health is polled every night and checked
-              on the response to every single send. Anything other than a clean result pauses the
-              account immediately and emails the rep. Sending resumes by itself once the platform
-              reports the account healthy again.
+            <p className="fx4-rule">
+              <strong>What we do about it.</strong> Account health is checked every night and on the
+              response to every single send. Anything other than a clean result pauses the account
+              immediately and emails the rep. Sending resumes by itself once the platform reports
+              the account healthy again.
             </p>
           </section>
 
@@ -222,15 +221,17 @@ export default function LimitsPage() {
             </p>
             <p>
               What a tool can honestly offer is this: stay far enough under the thresholds that the
-              pattern is indistinguishable from a person working their own network, randomise the
+              pattern is indistinguishable from a person working their own network, randomize the
               timing so it never looks like a scheduler, keep the acceptance rate high enough that
               nobody is reporting the messages, and stop the moment the platform pushes back. That is
               the whole safety model, and everything above is how it is enforced.
             </p>
-            <p className="mk-callout">
-              <strong>These limits are the product.</strong> Every number on this page is read from
-              one constants file that the sending code checks before each action. They are not
-              settings a campaign can raise; an account override may only make them stricter.
+            <p>
+              These limits are the product. {BRAND.name}&rsquo;s own figures on this page (the daily
+              and weekly caps, the message cap and the warm-up) come from the same rules the sender
+              checks before each action. They are not settings a campaign can raise; an
+              account&rsquo;s own limits may only be set lower. The commonly cited figures are the
+              industry&rsquo;s, not ours.
             </p>
           </section>
         </div>

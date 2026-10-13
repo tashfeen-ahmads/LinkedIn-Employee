@@ -18,9 +18,9 @@ import {
 describe("connection request templates", () => {
   const templates = allTemplates();
 
-  it("offers twelve to sixteen templates across several situations", () => {
+  it("offers twelve to twenty templates across several situations", () => {
     expect(templates.length).toBeGreaterThanOrEqual(12);
-    expect(templates.length).toBeLessThanOrEqual(16);
+    expect(templates.length).toBeLessThanOrEqual(20);
     expect(TEMPLATE_GROUPS.length).toBeGreaterThanOrEqual(6);
     expect(new Set(templates.map((t) => t.id)).size).toBe(templates.length);
   });

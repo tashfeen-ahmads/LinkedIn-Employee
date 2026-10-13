@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArticleLayout, articleMeta, Callout, CompareTable, type Faq, type Source } from "@/components/article";
-import { PUBLIC_LIMITS, SITE } from "@/lib/site";
+import { PUBLIC_LIMITS } from "@/lib/site";
 import { LINKEDIN_LIMITS } from "@le/shared";
 import { backOff, classifyProviderError } from "@le/linkedin";
 
@@ -21,7 +21,7 @@ const MIN_GAP_MIN = Math.round(LINKEDIN_LIMITS.minGapMs / MINUTE_MS);
 const FAQ: readonly Faq[] = [
   {
     q: "Are Chrome extensions safe for LinkedIn automation?",
-    a: "No automation is safe in the sense of risk-free, because LinkedIn's terms prohibit it. Extensions carry one risk of their own: as of 2026 LinkedIn's site is reported to check visitors' browsers for thousands of installed extensions, and LinkedIn confirmed it scans for them. A careful, low-volume extension user may still be at less risk than a cloud user sending at full volume. Behaviour decides most of it.",
+    a: "No automation is safe in the sense of risk-free, because LinkedIn's terms prohibit it. Extensions carry one risk of their own: as of 2026 LinkedIn's site is reported to check visitors' browsers for thousands of installed extensions, and LinkedIn confirmed it scans for them. A careful, low-volume extension user may still be at less risk than a cloud user sending at full volume. Behavior decides most of it.",
   },
   {
     q: "Can LinkedIn detect cloud-based automation?",
@@ -39,46 +39,56 @@ const FAQ: readonly Faq[] = [
 
 const SOURCES: readonly Source[] = [
   { label: "LinkedIn Help: Automated activity on LinkedIn (prohibited software and extensions)", url: "https://www.linkedin.com/help/linkedin/answer/90586" },
-  { label: "BleepingComputer: LinkedIn secretly scans for 6,000+ Chrome extensions, collects data (3 April 2026)", url: "https://www.bleepingcomputer.com/news/security/linkedin-secretely-scans-for-6-000-plus-chrome-extensions-collects-data" },
+  { label: "BleepingComputer: LinkedIn secretly scans for 6,000+ Chrome extensions, collects data (April 3, 2026)", url: "https://www.bleepingcomputer.com/news/security/linkedin-secretely-scans-for-6-000-plus-chrome-extensions-collects-data" },
   { label: "Tom's Hardware: LinkedIn scans visitors' browsers for over 6,000 Chrome extensions", url: "https://www.tomshardware.com/software/browsers/linkedin-scans-visitors-browsers-for-over-6000-chrome-extensions-and-collects-device-data" },
   { label: "Tom's Guide: what LinkedIn says about scanning browser extensions", url: "https://www.tomsguide.com/computing/online-security/linkedin-reportedly-extracting-the-customer-lists-of-thousands-of-software-companies-from-their-users-browsers-and-its-not-asking-for-permission" },
   { label: "Computing: LinkedIn accused of covert data collection in BrowserGate report", url: "https://computing.co.uk/news/2026/security/linkedin-accused-of-covert-data-collection-in-browsergate-report" },
-  { label: "Konnector: Chrome extension vs cloud-based LinkedIn automation (a cloud vendor, studied for this page)", url: "https://konnector.ai/chrome-extension-vs-cloud-based-linkedin-automation/" },
-  { label: "Dripify: cloud vs extension (a cloud vendor, studied for this page)", url: "https://dripify.com/?p=28026" },
+  { label: "Linked Helper support: is it safe to use Linked Helper (a desktop app; checked October 2026)", url: "https://support.linkedhelper.com/hc/en-us/articles/360015454919-Is-it-safe-to-use-Linked-Helper-Is-it-detectable" },
+  { label: "Dux-Soup knowledge base: Meet STACKED, the new Dux-Soup experience (2026)", url: "https://support.dux-soup.com/article/702-meet-stacked-the-new-dux-soup-experience" },
+  { label: "Waalaxy: FAQ on the Waalaxy Cloud and the free plan (checked October 2026)", url: "https://www.waalaxy.com/blog/linkedin-automation-software/waalaxy-faq" },
+  { label: "Waalaxy: Waalaxy runs itself thanks to the Waalaxy Cloud", url: "https://blog.waalaxy.com/en/waalaxy-cloud/" },
+  { label: "Expandi: Expandi vs Dux-Soup, cloud with a dedicated IP per account (Expandi's own page)", url: "https://expandi.io/expandi-vs-dux-soup/" },
+  { label: "HeyReach: LinkedIn connection automation without an extension (HeyReach's own blog)", url: "https://www.heyreach.io/blog/linkedin-connection-automation-tool" },
+  { label: "Dripify: FAQ, runs with your browser closed (checked October 2026)", url: "https://dripify.com/faq/" },
 ];
 
 export default function Page() {
   return (
     <ArticleLayout
       path={PATH}
-      h1="Cloud vs browser extension LinkedIn automation: which is safer?"
-      lede="Neither cloud nor Chrome-extension LinkedIn automation is safe by design: an extension runs in your own browser, where LinkedIn has confirmed it scans for installed extensions, while a cloud tool runs your session on a server, which removes that risk and adds trust in the vendor. What decides whether an account gets restricted is behaviour (volume, pace, acceptance and what happens after a refusal), not where the software runs."
+      h1="Cloud vs Chrome extension LinkedIn automation: which is safer?"
+      lede="Neither cloud nor Chrome extension LinkedIn automation is safe by design. An extension runs in your own browser, where LinkedIn has confirmed it looks for installed extensions; a cloud tool runs your session on a server, which removes that check and asks you to trust the vendor. What decides whether an account gets restricted is behavior: volume, pace, acceptance and what happens after a refusal."
       faq={FAQ}
       sources={SOURCES}
     >
-      <p>In short:</p>
-      <ul>
-        <li>
-          <strong>Extension:</strong> cheap, simple, works only while your browser is open, and visible to LinkedIn&apos;s
-          extension check.
-        </li>
-        <li>
-          <strong>Cloud:</strong> runs on a schedule with your laptop shut, nothing to detect in your browser, and you trust a
-          vendor with your session.
-        </li>
-        <li>
-          <strong>Both:</strong> against LinkedIn&apos;s terms, and both get accounts restricted when they send too much, too fast,
-          to people who do not accept.
-        </li>
-      </ul>
+      <Callout tone="info">
+        <div className="ga1-summary">
+          <p>
+            <strong>The short version</strong>
+          </p>
+          <ul>
+            <li>
+              <strong>Extension:</strong> cheap, simple, works only while your browser is open, and visible to LinkedIn&apos;s
+              extension check.
+            </li>
+            <li>
+              <strong>Cloud:</strong> runs on a schedule with your laptop shut, nothing to detect in your browser, and you trust a
+              vendor with your session.
+            </li>
+            <li>
+              <strong>Both:</strong> against LinkedIn&apos;s terms, and both get accounts restricted when they send too much, too fast,
+              to people who do not accept.
+            </li>
+          </ul>
+        </div>
+      </Callout>
       <p>
-        The pages that rank for this question are mostly written by vendors arguing for their own architecture, and they
-        disagree with each other, and the risk percentages some of them quote come with no published method behind them. We run
-        in the cloud ourselves, so weigh this page the same way, and check what we say
-        against the sources at the end.
+        Most comparisons of the two are written by vendors arguing for their own architecture, they disagree with each other,
+        and the risk percentages some of them quote come with no published method behind them. We run in the cloud ourselves,
+        so weigh this page the same way, and check what we say against the sources at the end.
       </p>
 
-      <h2 id="architectures">Cloud vs Chrome extension LinkedIn automation: the two architectures in plain words</h2>
+      <h2 id="architectures">The two architectures in plain words</h2>
       <p>
         A <strong>browser extension</strong> is installed in Chrome and acts on the LinkedIn tab you have open, using the
         session you are already signed in with. Actions come from your own computer and internet connection. It works while the
@@ -114,6 +124,44 @@ export default function Page() {
         ]}
       />
 
+      <h3 id="which-tools">Which tools run where, as of October 2026</h3>
+      <p>
+        The line between the three has blurred, because several tools that began as extensions now run in the cloud. Here is
+        what each vendor says about its own product as of October 2026; check before you buy, since two of them changed
+        during 2026.
+      </p>
+      <CompareTable
+        caption="How named LinkedIn automation tools run, from each vendor's own pages, as of October 2026"
+        columns={["Runs as", "Computer must be on?"]}
+        rows={[
+          { label: "Linked Helper", values: ["A desktop app with its own built-in browser", "Yes, or a server you rent for it"] },
+          {
+            label: "Dux-Soup",
+            values: [
+              "Began as a Chrome extension; in 2026 it moved to a desktop app, in a local and a cloud version, and retired its Chrome extensions",
+              "Local version yes, cloud version no",
+            ],
+          },
+          {
+            label: "Waalaxy",
+            values: [
+              "A Chrome extension to set up; paid plans run in Waalaxy's cloud",
+              "Free plan yes, with a LinkedIn tab open; paid plans no",
+            ],
+          },
+          { label: "Expandi", values: ["Cloud, no extension, a fixed address per account", "No"] },
+          { label: "HeyReach", values: ["Cloud, no extension", "No"] },
+          { label: "Dripify", values: ["Cloud, no extension", "No"] },
+          { label: "Nora", values: ["Cloud, with a hosted LinkedIn sign-in", "No"] },
+        ]}
+      />
+      <p>
+        Price does not follow architecture either. Linked Helper&apos;s desktop license is among the cheapest options, Waalaxy
+        has a free plan that runs from your browser, and the cloud tools mostly charge per LinkedIn account or per sender.
+        Dated prices for the main tools are in the{" "}
+        <Link href="/guides/best-ai-sdr-for-linkedin#prices">price table in our guide to AI SDR tools</Link>.
+      </p>
+
       <h2 id="what-linkedin-sees">What LinkedIn can see from each</h2>
       <p>
         LinkedIn&apos;s help center says it does not allow third-party software, including bots, browser plug-ins and extensions,
@@ -138,7 +186,7 @@ export default function Page() {
 
       <h3 id="scanning-2026">The 2026 extension-scanning reports</h3>
       <p>
-        On 3 April 2026 BleepingComputer reported on a document called BrowserGate, published by Fairlinked, a group describing
+        On April 3, 2026, BleepingComputer reported on a document called BrowserGate, published by Fairlinked, a group describing
         itself as an association of commercial LinkedIn users. BleepingComputer tested the claim and found a script on
         LinkedIn&apos;s site that checks for 6,236 browser extensions by trying to load files belonging to each one, and collects
         device details such as screen resolution, time zone and memory. LinkedIn confirmed that it scans for extensions, said it
@@ -172,17 +220,17 @@ export default function Page() {
         </li>
       </ul>
 
-      <h2 id="behaviour">Why behaviour beats architecture</h2>
+      <h2 id="behavior">Why behavior beats architecture</h2>
       <p>
         LinkedIn&apos;s own published reasons for restricting invitations say nothing about architecture. They are many invitations
         in a short time, many invitations ignored, left pending or marked as spam, and suspected use of automation tools. The first
-        two are entirely about behaviour, and they are visible whatever the software.
+        two are entirely about behavior, and they are visible whatever the software.
       </p>
       <p>
-        Our own first live account is the example. It was cloud-run, with nothing in anybody&apos;s browser, and it still sent seven
-        invitations in 27 minutes on its first day because nothing spread the day&apos;s allowance out. LinkedIn throttled its
-        invitations for days. The architecture was the &quot;safe&quot; one; the behaviour was not. What fixed it was pacing: a
-        day&apos;s allowance divided across the working hours left, with at least {MIN_GAP_MIN} minutes between any two actions.
+        Our own first live account ran in the cloud and was still refused invitations for days, because it sent seven in 27
+        minutes; the <Link href="/guides/is-linkedin-automation-safe#seven-in-27">full account is in our safety guide</Link>.
+        What fixed it was pacing, not architecture: a day&apos;s allowance divided across the working hours left, with at least{" "}
+        {MIN_GAP_MIN} minutes between any two actions.
       </p>
       <Callout tone="safety">
         <p>
@@ -221,14 +269,8 @@ export default function Page() {
         {PUBLIC_LIMITS.warmupWeeks} weeks from its first send, never passes {PUBLIC_LIMITS.invitesPerWeek} a week, and has each
         day spread across your working hours. A &quot;try again later&quot; from LinkedIn stops invitations for{" "}
         {FIRST_COOLDOWN_H} hours, doubling up to {LONGEST_COOLDOWN_H}, and a warning or restriction pauses the account. The{" "}
-        <Link href="/security">security page</Link> covers where your data sits, <Link href="/how-it-works">how Nora works</Link>{" "}
-        covers the rest, and more guides are in the <Link href="/guides">LinkedIn outreach guides</Link>.
+        <Link href="/security">security page</Link> covers where your data sits.
       </p>
-      <Callout tone="info">
-        <p>
-          Nothing to install, and nothing sent until you approve and launch. <a href={`${SITE.app}/signup`}>Sign up free</a>.
-        </p>
-      </Callout>
     </ArticleLayout>
   );
 }

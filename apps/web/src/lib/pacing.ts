@@ -7,6 +7,7 @@ import {
   workingMsLeftToday,
   type AccountRecord,
 } from "@le/linkedin";
+import { countersForToday } from "./account-day";
 
 /**
  * What the sending loop is doing, said on the screen that started it.
@@ -27,6 +28,14 @@ export interface PacingState {
   tone: "accent" | "danger" | "muted";
   title: string;
   body: string;
+  /**
+   * The same fault for whoever runs the deployment: the queue's address, the
+   * build, where to look. Rendered for platform admins only (rule 54). The
+   * person reading the campaign page is normally the business owner, and a
+   * host name and a commit hash are our plumbing on their screen and a repair
+   * they have no access to perform.
+   */
+  operator?: string;
 }
 
 export function describePacing(input: {
@@ -51,6 +60,12 @@ export function describePacing(input: {
    * the screen has to as well or it quotes a faster pace than the loop keeps.
    */
   sentToday?: number;
+  /**
+   * The operator's kill switch, as the pacing loop's own stamp reports it
+   * (`detail.paused`). While it holds, the loop keeps beating and enqueues
+   * nothing, so a fresh beat is not evidence of sending (rule 59).
+   */
+  outreachPaused?: boolean;
   now?: Date;
 }): PacingState | null {
   const now = input.now ?? new Date();
@@ -61,6 +76,16 @@ export function describePacing(input: {
   const beat = input.lastBeatAt ? new Date(input.lastBeatAt).getTime() : null;
   if (beat === null || now.getTime() - beat > PACING_STALE_MS) {
     return { tone: "danger", ...notSending(input.boot ?? null, beat, now) };
+  }
+
+  // Said as a pause and nothing more: customers are told sending is paused,
+  // never the operator's reason (rule 59).
+  if (input.outreachPaused) {
+    return {
+      tone: "muted",
+      title: "Sending is paused for now.",
+      body: "Nothing is going out from any campaign at the moment. Everybody queued stays queued, and sending resumes on its own when the pause is lifted.",
+    };
   }
 
   if (!input.account || input.account.status !== "active") {
@@ -103,11 +128,14 @@ export function describePacing(input: {
     return {
       tone: "muted",
       title: "LinkedIn is holding invitations from this account.",
-      body: `${input.account.invites_paused_reason ?? "The provider is refusing invitations"}. Sending resumes on its own ${inWords(heldUntil - now.getTime())}. Nothing is lost — everybody still queued stays queued, and this is LinkedIn slowing the account down rather than anything wrong with the campaign.`,
+      body: `${input.account.invites_paused_reason ?? "LinkedIn is refusing invitations for now"}. Sending resumes on its own ${inWords(heldUntil - now.getTime())}. Nothing is lost: everybody still queued stays queued, and this is LinkedIn slowing the account down rather than anything wrong with the campaign.`,
     };
   }
 
-  const usage = toUsage(input.account, input.timezone);
+  // Rolled over to the rep's today first, as the worker does before it asks.
+  // Read as it stood, the row said "allowance used up" every morning until the
+  // first send of the day, about an account about to send at full allowance.
+  const usage = toUsage(countersForToday(input.account, input.timezone, now), input.timezone);
   const decision = checkAction("invite", usage, now);
 
   if (!decision.allowed) {
@@ -125,8 +153,8 @@ export function describePacing(input: {
           title: "Today's invitation allowance is used up.",
           body:
             decision.reason === "weekly_invite_cap"
-              ? `This account has sent ${usage.invitesThisWeek} invitations this week, and the ceiling is ${LINKEDIN_LIMITS.invitesPerWeek}. Sending resumes when the week rolls over.`
-              : `${usage.invitesToday} of ${dailyInviteCap(usage.firstActionAt, now)} sent. Sending resumes tomorrow — the daily cap is what keeps the account out of trouble, and it is not raisable.`,
+              ? `This account has sent ${usage.invitesThisWeek} invitations in the last seven days, and the ceiling is ${LINKEDIN_LIMITS.invitesPerWeek}. LinkedIn counts a rolling seven days, so sending resumes as the oldest of those drop out of it.`
+              : `${usage.invitesToday} of ${dailyInviteCap(usage.firstActionAt, now)} sent. Sending resumes tomorrow. The daily cap is what keeps the account out of trouble, and it is not raisable.`,
         };
       case "too_soon":
         return {
@@ -150,10 +178,14 @@ export function describePacing(input: {
   // The campaign's own cap is a real cap now, so "up to N more today" is the
   // lower of the two — the account's allowance is shared with every other
   // campaign on it, and this one may not take all of it.
+  // And the week's ceiling, which the loop's budget includes (`paceMs` below
+  // honours it too): 97 of 100 this week is three more today, whatever the
+  // day's ramp says.
   const left = Math.max(
     0,
     Math.min(
       dailyInviteCap(usage.firstActionAt, now) - usage.invitesToday,
+      LINKEDIN_LIMITS.invitesPerWeek - usage.invitesThisWeek,
       input.dailyCap === undefined ? Number.POSITIVE_INFINITY : input.dailyCap - (input.sentToday ?? 0),
     ),
   );
@@ -174,8 +206,8 @@ export function describePacing(input: {
      * then not delivering one.
      */
     body: pace
-      ? `Invitations go out about ${Math.round(pace / 60_000)} minutes apart, spread across the rest of your sending hours so the account never sends in a burst — up to ${left} more today. The first can take up to a quarter of an hour to appear.`
-      : `Invitations go out ${Math.round(LINKEDIN_LIMITS.minGapMs / 60_000)}–${Math.round(LINKEDIN_LIMITS.maxGapMs / 60_000)} minutes apart, never two together, up to ${left} more today. The first can take up to a quarter of an hour to appear.`,
+      ? `Invitations go out about ${Math.round(pace / 60_000)} minutes apart, spread across the rest of your sending hours so the account never sends in a burst, up to ${left} more today. The first can take up to a quarter of an hour to appear.`
+      : `Invitations go out ${Math.round(LINKEDIN_LIMITS.minGapMs / 60_000)} to ${Math.round(LINKEDIN_LIMITS.maxGapMs / 60_000)} minutes apart, never two together, up to ${left} more today. The first can take up to a quarter of an hour to appear.`,
   };
 }
 
@@ -193,7 +225,7 @@ function notSending(
   boot: { beat_at: string; detail: unknown } | null,
   beat: number | null,
   now: Date,
-): { title: string; body: string } {
+): { title: string; body: string; operator?: string } {
   const detail = boot?.detail && typeof boot.detail === "object" ? (boot.detail as Record<string, unknown>) : {};
   const startedAgo = boot ? minutesAgo(now.getTime() - new Date(boot.beat_at).getTime()) : null;
 
@@ -202,7 +234,8 @@ function notSending(
     // service healthy, and every queued job unconsumed.
     return {
       title: "The worker is running, but it cannot reach its job queue.",
-      body: `It started ${startedAgo} and could not see the queue at ${typeof detail.redisHost === "string" ? detail.redisHost : "its configured address"}. Nothing queued will be sent until that is fixed — this is a problem with the deployment, not with your campaign.`,
+      body: `It started ${startedAgo}. Nothing queued will be sent until that is fixed. This is a problem with the deployment, not with your campaign, and it is ours to fix.`,
+      operator: `Queue unreachable from the worker at ${typeof detail.redisHost === "string" ? detail.redisHost : "its configured address"}${typeof detail.commit === "string" ? ` (build ${detail.commit.slice(0, 7)})` : ""}. Check REDIS_URL on the worker.`,
     };
   }
 
@@ -211,7 +244,8 @@ function notSending(
     // problem, so it must not be reported as one.
     return {
       title: "The worker started but its sending loop has not run.",
-      body: `It started ${startedAgo}${typeof detail.commit === "string" ? ` on build ${detail.commit.slice(0, 7)}` : ""} and reached its queue, but no run has been recorded. Check the worker's logs — this is a problem with the deployment, not with your campaign.`,
+      body: `It started ${startedAgo}, but no run has been recorded. This is a problem with the deployment, not with your campaign, and it is ours to fix.`,
+      operator: `Booted${typeof detail.commit === "string" ? ` on build ${detail.commit.slice(0, 7)}` : ""} and reached the queue, but no PACING_LOOP stamp. Check the worker's logs.`,
     };
   }
 
@@ -224,7 +258,7 @@ function notSending(
 
   return {
     title: "The sending loop has stopped.",
-    body: `It last ran ${minutesAgo(now.getTime() - beat!)} and should run every five minutes. Nothing will go out until it is back — this is a problem with the deployment, not with your campaign.`,
+    body: `It last ran ${minutesAgo(now.getTime() - beat!)} and should run every five minutes. Nothing will go out until it is back. This is a problem with the deployment, not with your campaign.`,
   };
 }
 
@@ -275,6 +309,10 @@ function inWords(ms: number): string {
   return `in about ${Math.round(hours / 24)} days`;
 }
 
+/** An hour of the day as a US reader writes it: "8 AM", "6 PM", "12 PM". */
 function hour(value: number): string {
-  return `${String(value).padStart(2, "0")}:00`;
+  const h = ((value % 24) + 24) % 24;
+  if (h === 0) return "12 AM";
+  if (h === 12) return "12 PM";
+  return h < 12 ? `${h} AM` : `${h - 12} PM`;
 }

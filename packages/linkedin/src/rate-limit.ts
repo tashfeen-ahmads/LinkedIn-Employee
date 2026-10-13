@@ -3,6 +3,7 @@ import {
   isWithinWorkingHours as sharedIsWithinWorkingHours,
   msUntilNextLocalMidnight as sharedMsUntilNextLocalMidnight,
   workingMsLeftToday as sharedWorkingMsLeftToday,
+  workingMsAhead as sharedWorkingMsAhead,
   zonedParts as sharedZonedParts,
   type WorkingHours,
 } from "@le/shared";
@@ -82,6 +83,7 @@ export const zonedParts = sharedZonedParts;
 export const isWithinWorkingHours = sharedIsWithinWorkingHours;
 export const msUntilNextLocalMidnight = sharedMsUntilNextLocalMidnight;
 export const workingMsLeftToday = sharedWorkingMsLeftToday;
+export const workingMsAhead = sharedWorkingMsAhead;
 
 /** Milliseconds until the next working-hours window opens. */
 export function msUntilWorkingHours(now: Date, hours: WorkingHours, timezone: string): number {

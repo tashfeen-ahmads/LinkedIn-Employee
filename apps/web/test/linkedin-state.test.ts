@@ -31,7 +31,7 @@ describe("linkedInState", () => {
   });
 
   it("reports a real account by its status, and never as connecting", () => {
-    expect(linkedInState({ status: "reauth_required", provider_account_id: "a" }).label).toBe("reauth required");
+    expect(linkedInState({ status: "reauth_required", provider_account_id: "a" }).label).toBe("needs reconnecting");
     expect(linkedInState({ status: "connecting", provider_account_id: "a" }).label).toBe("needs reconnecting");
   });
 

@@ -19,6 +19,7 @@ import {
 import type { WorkerContext } from "../context.js";
 import { pitchFor } from "../pitch.js";
 import { agentForCampaign, voiceOf } from "../agent.js";
+import { knowledgeQuery } from "../knowledge.js";
 import { recordEvent } from "../context.js";
 import { flagForHuman } from "../holds.js";
 import { enqueueOnce, jobId } from "../queues.js";
@@ -49,12 +50,7 @@ export async function handleInboundMessage(
     .single();
   if (!account) return;
 
-  const { data: prospect } = await db
-    .from("prospects")
-    .select("id, workspace_id, first_name, last_name, do_not_contact")
-    .eq("workspace_id", job.workspaceId)
-    .eq("provider_id", job.fromProviderId)
-    .maybeSingle();
+  const prospect = await findSender(ctx, job.workspaceId, job.fromProviderId);
   // A message from someone we never contacted is not ours to answer.
   if (!prospect) return;
 
@@ -289,6 +285,10 @@ export async function handleInboundMessage(
     if (outcome.status === "booked") {
       bookedMeeting = true;
       await syncMeetingToCrm(db, ctx.env, { workspaceId: job.workspaceId, meetingId: outcome.meetingId });
+    } else if (outcome.status === "already_booked") {
+      // Confirming the meeting they have: the reply confirms it too, and
+      // offers no further times.
+      bookedMeeting = true;
     } else if (outcome.status === "held") {
       bookingHeld = outcome.reason;
     }
@@ -385,9 +385,32 @@ export async function handleInboundMessage(
   // here:" pointing at nothing, which reads worse than the invented link did,
   // and a hallucinated link is evidence the draft as a whole drifted.
   const linkCheck = draftLinkCheck(draft.message, allowedLinks);
+
+  // The times this message offers, as the prospect will read them (rule 6).
+  // Storing every slot handed to the agent meant "the second one" was matched
+  // against a list the prospect never saw, and booked a time nobody offered.
+  const offer = draft.proposesMeeting
+    ? slotsInDraft(draft.message, draft.proposedSlots ?? [], slots)
+    : { iso: [], unmapped: [] };
+  const slotCheck =
+    offer.unmapped.length > 0
+      ? {
+          ok: false as const,
+          reason: `The reply offers a time that is not on your calendar's list (${offer.unmapped.join("; ")}). Check the times before sending.`,
+        }
+      : { ok: true as const };
+  if (!slotCheck.ok) {
+    console.error("held a draft offering a time the calendar did not produce", {
+      conversationId: conversation.id,
+      slots: offer.unmapped,
+    });
+  }
+
   const gate: { action: "send" | "hold_for_human"; reason?: string } = !linkCheck.ok
     ? { action: "hold_for_human", reason: linkCheck.reason }
-    : bookingHeld
+    : !slotCheck.ok
+      ? { action: "hold_for_human", reason: slotCheck.reason }
+      : bookingHeld
       ? { action: "hold_for_human", reason: bookingHeld }
       : decision.action === "send"
         ? { action: "send" }
@@ -399,6 +422,23 @@ export async function handleInboundMessage(
     });
   }
 
+  /*
+   * One answer per conversation, the latest.
+   *
+   * A draft still pending was written for an earlier message. The inbox shows
+   * the newest draft on a conversation and lists any conversation with one
+   * pending, so the stale answer came straight back after the rep sent the new
+   * one, ready to go out as a second reply. The schema agrees: only one
+   * pending draft per conversation is allowed, so without this the new draft
+   * could not be stored at all.
+   */
+  await db
+    .from("reply_drafts")
+    .update({ status: "superseded", resolved_at: new Date().toISOString() })
+    .eq("workspace_id", job.workspaceId)
+    .eq("conversation_id", conversation.id)
+    .eq("status", "pending");
+
   const { data: saved } = await db
     .from("reply_drafts")
     .insert({
@@ -407,10 +447,11 @@ export async function handleInboundMessage(
       in_reply_to: inbound.id,
       body: draft.message,
       proposes_meeting: draft.proposesMeeting,
-      // The ISO slots we actually offered, not the model's rendering of them.
-      // The booking step matches a prospect's acceptance against this list, so
-      // it has to be authoritative.
-      proposed_slots: (draft.proposesMeeting ? slots.iso : []) as never,
+      // The ISO slots this message offered, in the order the prospect reads
+      // them — not every slot the agent was handed. The booking step matches
+      // "the second one" against this list, so it has to be exactly what was
+      // shown, and nothing at all when a named time could not be traced.
+      proposed_slots: (slotCheck.ok ? offer.iso : []) as never,
       unanswered_questions: draft.unansweredQuestions as never,
       prompt_version: DRAFT_PROMPT_VERSION,
       status: gate.action === "send" ? "approved" : "pending",
@@ -479,6 +520,104 @@ export async function handleInboundMessage(
       { jobId: jobId("reply", saved.id as string) },
     );
   }
+}
+
+/**
+ * The prospect a message came from.
+ *
+ * `provider_id` carries no unique key, so one person can sit on two rows (two
+ * imports, a search that found them before an id was resolved). A
+ * `maybeSingle()` errored on the second row, the error was read as "nobody",
+ * and the reply was dropped without a trace. The choice is deterministic: the
+ * row somebody actually contacted, most recently first, then the newest. An
+ * opt-out on any of the rows is an opt-out of the person (rule 7). A lookup
+ * that fails is thrown, so the queue retries it and a failure past its retries
+ * is listed, rather than read as a stranger's message.
+ */
+async function findSender(
+  ctx: WorkerContext,
+  workspaceId: string,
+  providerId: string,
+): Promise<{ id: string; workspace_id: string; first_name: string | null; last_name: string | null; do_not_contact: boolean } | null> {
+  const { data, error } = await ctx.db
+    .from("prospects")
+    .select("id, workspace_id, first_name, last_name, do_not_contact, last_contacted_at, created_at")
+    .eq("workspace_id", workspaceId)
+    .eq("provider_id", providerId)
+    .limit(20);
+  if (error) throw new Error(`could not look up the sender of a reply: ${error.message}`);
+  const rows = (data ?? []) as Array<{
+    id: string;
+    workspace_id: string;
+    first_name: string | null;
+    last_name: string | null;
+    do_not_contact: boolean | null;
+    last_contacted_at: string | null;
+    created_at: string | null;
+  }>;
+  if (rows.length === 0) return null;
+  if (rows.length > 1) {
+    console.warn("a reply matched several prospect rows; answering on the most recently contacted", {
+      workspaceId,
+      rows: rows.length,
+    });
+  }
+  const time = (value: string | null) => (value ? Date.parse(value) || 0 : 0);
+  const [chosen] = [...rows].sort(
+    (a, b) =>
+      time(b.last_contacted_at) - time(a.last_contacted_at) ||
+      time(b.created_at) - time(a.created_at) ||
+      a.id.localeCompare(b.id),
+  );
+  return {
+    id: chosen!.id,
+    workspace_id: chosen!.workspace_id,
+    first_name: chosen!.first_name,
+    last_name: chosen!.last_name,
+    do_not_contact: rows.some((row) => row.do_not_contact === true),
+  };
+}
+
+/**
+ * The ISO slots a draft offered, traced back from the readable strings the
+ * agent reports it used to the list it was handed. A string that does not
+ * trace is `unmapped` — a time the model wrote that the calendar never
+ * produced — and the caller holds the draft. When the agent names none, the
+ * message itself is read for the listed strings. Ordered as they appear in
+ * the message when every one does, since that is the order "the second one"
+ * counts in.
+ */
+export function slotsInDraft(
+  message: string,
+  proposed: string[],
+  slots: { iso: string[]; readable: string[] },
+): { iso: string[]; unmapped: string[] } {
+  const key = (text: string) => text.replace(/\s+/g, " ").trim().toLowerCase();
+  const isoFor = new Map<string, string>();
+  slots.readable.forEach((readable, index) => {
+    const iso = slots.iso[index];
+    if (iso) isoFor.set(key(readable), iso);
+  });
+  const text = key(message);
+
+  const named = proposed.length
+    ? proposed
+    : slots.readable.filter((readable) => text.includes(key(readable)));
+
+  const iso: string[] = [];
+  const unmapped: string[] = [];
+  for (const slot of named) {
+    const match = isoFor.get(key(slot));
+    if (!match) unmapped.push(slot);
+    else if (!iso.includes(match)) iso.push(match);
+  }
+
+  const position = (slot: string) => {
+    const index = slots.iso.indexOf(slot);
+    return index < 0 ? -1 : text.indexOf(key(slots.readable[index]!));
+  };
+  if (iso.every((slot) => position(slot) >= 0)) iso.sort((a, b) => position(a) - position(b));
+  return { iso, unmapped };
 }
 
 /** What a person sees when the model could not write the answer. */
@@ -704,11 +843,7 @@ async function loadHistory(
 }
 
 async function loadKnowledge(ctx: WorkerContext, workspaceId: string) {
-  const { data } = await ctx.db
-    .from("knowledge_documents")
-    .select("title, content")
-    .eq("workspace_id", workspaceId)
-    .limit(20);
+  const { data } = await knowledgeQuery(ctx.db, workspaceId);
   return data ?? [];
 }
 

@@ -34,7 +34,7 @@ export default async function TutorialPage() {
         title="How this works"
         lede={
           <>
-          Three of these need a decision from you — approve a strategy, approve the words, press
+          Three of these need a decision from you: approve a strategy, approve the words, press
           launch. Two are answered once at signup. The agents run the rest, and you can take any of
           it over by hand whenever you want to. Each stage says what it cannot do as well as what
           it does: you are going to meet those edges either way, and meeting them here is cheaper.
@@ -109,7 +109,7 @@ export default async function TutorialPage() {
 
       <Section
         title="Still stuck"
-        description="Raise a ticket and it carries what the product believed at that moment — which step you are on, whether LinkedIn is connected, whether the sending loop is running. You do not have to go and check any of that first."
+        description="Raise a ticket and it carries what the product could see at that moment: which step you are on, whether LinkedIn is connected, and whether your agent is sending. You do not have to go and check any of that first."
       >
         <p>
           <Link className="btn secondary small" href="/app/support">

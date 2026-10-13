@@ -33,7 +33,7 @@ async function saveCta(formData: FormData) {
   const label = String(formData.get("label") ?? "").trim();
   const url = String(formData.get("url") ?? "").trim();
 
-  if (!name) redirect(errorQuery("/app/cta", "Give it a name you will recognise in a list."));
+  if (!name) redirect(errorQuery("/app/cta", "Give it a name you will recognize in a list."));
   if (!CTA_KINDS.includes(kind)) redirect(errorQuery("/app/cta", "Pick what this asks for."));
 
   // The same check the agent's drafts pass. A destination refused here can
@@ -42,6 +42,37 @@ async function saveCta(formData: FormData) {
   if (CTA_DEFINITIONS[kind].needsUrl) {
     const verdict = checkCtaUrl(url);
     if (!verdict.ok) redirect(errorQuery("/app/cta", verdict.reason));
+  }
+
+  /*
+   * The goal of a call to action in use is fixed.
+   *
+   * A campaign copies its goal when it picks one (`campaigns.cta_kind`), and
+   * its copy was written toward that ask (rule 29). Changing a link into a
+   * meeting here cleared the destination every one of those campaigns reads
+   * through the pointer at send time, so a message written around
+   * `{{cta_link}}` went out with the placeholder in it, under "Updated
+   * everywhere it is used". The destination and the wording still change in
+   * place; a different ask is a different call to action.
+   */
+  if (id) {
+    const [{ data: current }, { count: users }] = await Promise.all([
+      supabase.from("ctas").select("kind").eq("id", id).eq("workspace_id", session.workspaceId).maybeSingle(),
+      supabase
+        .from("campaigns")
+        .select("id", { count: "exact", head: true })
+        .eq("workspace_id", session.workspaceId)
+        .eq("cta_id", id),
+    ]);
+    if (!current) redirect(errorQuery("/app/cta", "That call to action is gone."));
+    if (current.kind !== kind && (users ?? 0) > 0) {
+      redirect(
+        errorQuery(
+          "/app/cta",
+          `${users} campaign${users === 1 ? " was" : "s were"} written to ask for ${CTA_DEFINITIONS[current.kind as CtaKind].label.toLowerCase()}, so what this asks for cannot change. Add a new call to action for the new goal instead.`,
+        ),
+      );
+    }
   }
 
   const row = {
@@ -59,7 +90,7 @@ async function saveCta(formData: FormData) {
     ? await supabase.from("ctas").update(row).eq("id", id).eq("workspace_id", session.workspaceId)
     : await supabase.from("ctas").insert({ ...row, created_by: session.userId });
 
-  if (error) redirect(errorQuery("/app/cta", `That did not save: ${error.message}`));
+  if (error) redirect(errorQuery("/app/cta", "That did not save. Please try again."));
 
   revalidatePath("/app/cta");
   redirect(noticeQuery("/app/cta", id ? "Updated everywhere it is used." : "Added."));
@@ -79,13 +110,17 @@ async function archiveCta(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   const restore = String(formData.get("restore") ?? "") === "1";
 
-  await supabase
+  const { data: changed, error } = await supabase
     .from("ctas")
     .update({ archived_at: restore ? null : new Date().toISOString() })
     .eq("id", id)
-    .eq("workspace_id", session.workspaceId);
+    .eq("workspace_id", session.workspaceId)
+    .select("id");
 
   revalidatePath("/app/cta");
+  if (error || !changed?.length) {
+    redirect(errorQuery("/app/cta", restore ? "That did not restore. Please try again." : "That did not archive. Please try again."));
+  }
   redirect(noticeQuery("/app/cta", restore ? "Back in the picker." : "Archived. Campaigns already using it are unchanged."));
 }
 
@@ -122,7 +157,7 @@ export default async function CtaPage({ searchParams }: { searchParams: NoticePa
       <PageHeader
         eyebrow="Settings"
         title="Calls to action"
-        lede="What your campaigns ask for. Keep as many as you run — a campaign picks one, and changing a destination here changes it everywhere it is used."
+        lede="What your campaigns ask for. Keep as many as you run: a campaign picks one, and changing a destination here changes it everywhere it is used."
       />
 
       <PageNotice error={params.error} notice={params.notice} />
@@ -138,7 +173,7 @@ export default async function CtaPage({ searchParams }: { searchParams: NoticePa
               <label className="field grow">
                 <span>Name it</span>
                 <input type="text" name="name" placeholder="Free teardown" maxLength={80} required />
-                <span className="hint">What you will recognise in a list of twenty.</span>
+                <span className="hint">What you will recognize in a list of twenty.</span>
               </label>
               <label className="field">
                 <span>What it asks for</span>
@@ -198,13 +233,18 @@ export default async function CtaPage({ searchParams }: { searchParams: NoticePa
                       </label>
                       <label className="field">
                         <span>What it asks for</span>
-                        <select name="kind" defaultValue={cta.kind}>
+                        <select name="kind" defaultValue={cta.kind} aria-describedby={used.length ? `cta-kind-${cta.id}` : undefined}>
                           {CTA_KINDS.map((kind) => (
                             <option key={kind} value={kind}>
                               {CTA_DEFINITIONS[kind].label}
                             </option>
                           ))}
                         </select>
+                        {used.length ? (
+                          <span className="hint" id={`cta-kind-${cta.id}`}>
+                            Fixed while campaigns use it.
+                          </span>
+                        ) : null}
                       </label>
                     </div>
                     <div className="form-row">
@@ -267,7 +307,7 @@ export default async function CtaPage({ searchParams }: { searchParams: NoticePa
                   <tr key={cta.id}>
                     <td>{cta.name}</td>
                     <td className="small muted">{CTA_DEFINITIONS[cta.kind].label}</td>
-                    <td className="small mono breakable">{cta.url ?? "—"}</td>
+                    <td className="small mono cta-url-cell">{cta.url ?? "None"}</td>
                     <td>
                       <form action={archiveCta}>
                         <input type="hidden" name="id" value={cta.id} />

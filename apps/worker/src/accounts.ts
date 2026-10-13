@@ -4,7 +4,7 @@ import type { AccountHealth, ConnectedAccount, LinkedInProvider } from "@le/link
 // itself, once a screen needed the same answer the pacing loop gets. Re-exported
 // so every existing caller keeps its import.
 export { ACCOUNT_USAGE_COLUMNS, parseWorkingHours, toUsage, type AccountRecord } from "@le/linkedin";
-import { ACCOUNT_USAGE_COLUMNS as USAGE_COLUMNS, type AccountRecord } from "@le/linkedin";
+import { ACCOUNT_USAGE_COLUMNS as USAGE_COLUMNS, rollCounters, type AccountRecord } from "@le/linkedin";
 import { accountPausedEmail } from "@le/email";
 import type { EmailProvider } from "@le/email";
 import { recordEvent } from "./context.js";
@@ -466,23 +466,25 @@ export async function recoverAccounts(
  * second write matches nothing and the row is read back instead.
  */
 export async function resetCountersIfNeeded(db: Db, account: AccountRecord, today: string): Promise<AccountRecord> {
-  if (account.counters_reset_on === today) return account;
-  // YYYY-MM-DD compares correctly as a string.
-  if (account.counters_reset_on && account.counters_reset_on > today) return account;
 
-  const newWeek =
-    !account.counters_reset_on || isoWeekStart(account.counters_reset_on) !== isoWeekStart(today);
-
+  /*
+   * The same rollover every screen applies on read (`rollCounters`), written
+   * back. The week is not zeroed on a Monday any more: LinkedIn's weekly limit
+   * is a rolling seven days (docs/06-research.md section 2), so the total is
+   * recomputed from the per-day record as each day rolls over. Profile views
+   * reset with the daily counters — left out, the warm-up allowance is spent
+   * once and never refilled.
+   */
+  const rolled = rollCounters(account, today);
+  // Nothing to roll: today already, or a stamp later than today (only ever
+  // forwards — see `rollCounters`), and nothing is written.
+  if (rolled === account) return account;
   const update = {
-    invites_today: 0,
-    messages_today: 0,
-    // Reset with the rest of them. Left out, the warm-up allowance is spent
-    // once and never refilled — a campaign that warms forty people on its
-    // first day would never look at anybody again, and the screen would say
-    // the allowance was used up for ever.
-    profile_views_today: 0,
+    invites_today: rolled.invites_today,
+    messages_today: rolled.messages_today,
+    profile_views_today: rolled.profile_views_today ?? 0,
     counters_reset_on: today,
-    ...(newWeek ? { invites_this_week: 0 } : {}),
+    invites_this_week: rolled.invites_this_week,
   };
   const write = db.from("linkedin_accounts").update(update).eq("id", account.id);
   const { data: written } = await (account.counters_reset_on

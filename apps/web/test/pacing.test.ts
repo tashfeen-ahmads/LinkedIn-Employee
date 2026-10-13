@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describePacing } from "../src/lib/pacing";
 import type { AccountRecord } from "@le/linkedin";
 
@@ -243,8 +245,10 @@ describe("describePacing", () => {
     expect(state?.tone).toBe("danger");
     expect(state?.title).toMatch(/cannot reach its job queue/);
     // The address, so somebody can check the one they configured against the
-    // one it actually tried.
-    expect(state?.body).toContain("red-abc:6379");
+    // one it actually tried. On the operator's half only (rule 54): the
+    // business owner reading this page can do nothing with a host name.
+    expect(state?.operator).toContain("red-abc:6379");
+    expect(state?.body).not.toContain("red-abc");
   });
 
   it("does not blame the queue when the worker reached it and still never ran", () => {
@@ -257,12 +261,14 @@ describe("describePacing", () => {
     expect(state?.title).toMatch(/sending loop has not run/);
     // Which build is actually running, from the process rather than from a
     // dashboard reporting on it — those disagreed for most of an afternoon.
-    expect(state?.body).toContain("abc1234");
+    expect(state?.operator).toContain("abc1234");
+    expect(state?.body).not.toContain("abc1234");
     // Not the queue's fault, and it must not be reported as one: sending
     // somebody to check REDIS_URL when the queue answered is a wasted hour
     // and it is the hour this whole mechanism exists to stop.
     expect(state?.body).not.toMatch(/cannot reach|unreachable/i);
-    expect(state?.body).toMatch(/logs/);
+    expect(state?.operator).not.toMatch(/unreachable/i);
+    expect(state?.operator).toMatch(/logs/);
   });
 
   it("does not claim the process is down when it has simply never said", () => {
@@ -276,8 +282,9 @@ describe("describePacing", () => {
   it("names the working hours when the clock is outside them", () => {
     const state = describePacing({ ...live, now: new Date("2026-09-17T19:30:00Z"), lastBeatAt: "2026-09-17T19:28:00Z" });
     expect(state?.title).toMatch(/sending hours/);
-    expect(state?.body).toContain("08:00");
-    expect(state?.body).toContain("18:00");
+    // Written the way a US reader writes a time, not on a 24-hour clock.
+    expect(state?.body).toContain("8 AM");
+    expect(state?.body).toContain("6 PM");
     expect(state?.tone).not.toBe("danger");
   });
 
@@ -319,5 +326,59 @@ describe("describePacing", () => {
   it("does not claim to be sending when there is nobody left to invite", () => {
     const state = describePacing({ ...live, queued: 0 });
     expect(state?.title).toMatch(/has been invited/);
+  });
+});
+
+describe("describePacing and the operator's kill switch", () => {
+  it("says sending is paused, without the operator's reason, while the loop reports the switch", () => {
+    const state = describePacing({ ...live, outreachPaused: true });
+    expect(state?.title).not.toMatch(/^Sending\./);
+    expect(state?.title).toMatch(/paused/);
+  });
+
+  it("is fed from the loop's own stamp on the campaign page", () => {
+    const page = readFileSync(join(__dirname, "../src/app/app/campaigns/[id]/page.tsx"), "utf8");
+    expect(page).toMatch(/outreachPaused: Boolean\(\(heartbeat\?\.detail/);
+  });
+});
+
+describe("describePacing and the week", () => {
+  const morning = new Date("2026-09-17T10:00:00Z"); // A Thursday morning.
+  const ready = {
+    status: "running",
+    queued: 50,
+    timezone: "UTC",
+    lastBeatAt: "2026-09-17T09:58:00Z",
+    dailyCap: 35,
+    sentToday: 0,
+    now: morning,
+  };
+  const ramped = (overrides: Partial<AccountRecord> = {}) =>
+    account({
+      first_action_at: "2026-06-01T09:00:00Z", // fully ramped: 35 a day
+      counters_reset_on: "2026-09-17",
+      working_hours: { start: 8, end: 18, days: [1, 2, 3, 4, 5] },
+      ...overrides,
+    });
+
+  it("does not promise more today than the weekly ceiling leaves", () => {
+    // 97 of 100: the loop budgets min(day, week, campaign) = 3.
+    const state = describePacing({ ...ready, account: ramped({ invites_this_week: 97 }) });
+    expect(state?.body).toContain("up to 3 more today");
+  });
+
+  it("counts LinkedIn's rolling seven days, not the calendar week", () => {
+    // A hundred sent Friday to Tuesday. Monday did not reset anything: the
+    // send path refuses, so the screen must not say "Sending".
+    const state = describePacing({
+      ...ready,
+      account: ramped({
+        counters_reset_on: "2026-09-16",
+        invites_this_week: 30,
+        invites_by_day: { "2026-09-11": 35, "2026-09-14": 35, "2026-09-16": 30 },
+      }),
+    });
+    expect(state?.title).not.toMatch(/^Sending\./);
+    expect(state?.body).toMatch(/rolling seven days/);
   });
 });

@@ -1,3 +1,4 @@
+import { label } from "../../../lib/labels";
 /**
  * What a LinkedIn account row means to the person it belongs to.
  *
@@ -44,5 +45,8 @@ export function linkedInState(row: LinkedInRow | null | undefined): LinkedInStat
   // `connecting` still has that account; it reads as needing a reconnect, never
   // as a connection in progress.
   if (row.status === "connecting") return { kind: "attached", label: "needs reconnecting" };
-  return { kind: "attached", label: row.status.replaceAll("_", " ") };
+  // In words, through the same labels every other screen uses: the raw status
+  // put "reauth required" beside the rep's name, which is our jargon for
+  // "connect it again".
+  return { kind: "attached", label: label(row.status).toLowerCase() };
 }

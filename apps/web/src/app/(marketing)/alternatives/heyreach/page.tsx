@@ -1,14 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { INVITE_NOTE_MAX_CHARS, LINKEDIN_LIMITS } from "@le/shared";
 import { ArticleLayout, articleMeta, CompareTable, Callout, type Faq, type Source } from "@/components/article";
-import { PUBLIC_LIMITS, SITE } from "@/lib/site";
+import { PUBLIC_LIMITS } from "@/lib/site";
+import { Glance, NORA, Verdict, NOT_DOCUMENTED, withGlanceSources, type GlanceTool } from "../_glance";
 
 const PATH = "/alternatives/heyreach";
 export const metadata: Metadata = articleMeta(PATH);
 
-const FIRST_MESSAGE_MIN = Math.round(LINKEDIN_LIMITS.acceptFollowUpMinMs / 60_000);
-const FIRST_MESSAGE_MAX = Math.round(LINKEDIN_LIMITS.acceptFollowUpMaxMs / 60_000);
+const GLANCE: readonly GlanceTool[] = ["nora", "heyreach", "expandi", "waalaxy", "dripify", "phantombuster"];
 
 const HEYREACH_PRICING = "https://www.heyreach.io/pricing";
 const HEYREACH_STATEMENT = "https://www.heyreach.io/blog/heyreach-ban";
@@ -43,19 +42,20 @@ const FAQ: readonly Faq[] = [
   },
 ];
 
-const SOURCES: readonly Source[] = [
-  { label: "HeyReach: pricing page", url: HEYREACH_PRICING },
-  { label: "Overloop: HeyReach review 2026, pricing and tiers (a competitor, which it discloses)", url: OVERLOOP },
-  { label: "ColdSaaS: HeyReach pricing 2026, sender tiers", url: COLDSAAS },
-  { label: "HeyReach help center: how connection request limits work (checked October 2026)", url: HEYREACH_LIMITS },
-  { label: "HeyReach help center: is HeyReach safe to use", url: HEYREACH_SAFE },
-  { label: "HeyReach help center: launching your first campaign, with exclusion filters", url: HEYREACH_LAUNCH },
-  { label: "HeyReach: LinkedIn deleted HeyReach's company page, what it didn't delete (August 2026)", url: HEYREACH_STATEMENT },
-  { label: "La Growth Machine: best HeyReach alternatives (a competitor, studied for this page)", url: LGM },
-  { label: "Expandi: HeyReach alternatives (a competitor, studied for this page)", url: "https://expandi.io/blog/heyreach-alternatives/" },
-  { label: "Salesforge: HeyReach alternatives (a competitor, studied for this page)", url: "https://www.salesforge.ai/blog/heyreach-alternatives" },
-  { label: "LinkedIn User Agreement", url: LI_AGREEMENT },
-];
+const SOURCES: readonly Source[] = withGlanceSources(
+  [
+    { label: "HeyReach: pricing page", url: HEYREACH_PRICING },
+    { label: "Overloop: HeyReach review 2026, pricing and tiers (a competitor, which it discloses)", url: OVERLOOP },
+    { label: "ColdSaaS: HeyReach pricing 2026, sender tiers", url: COLDSAAS },
+    { label: "HeyReach help center: how connection request limits work (checked October 2026)", url: HEYREACH_LIMITS },
+    { label: "HeyReach help center: is HeyReach safe to use", url: HEYREACH_SAFE },
+    { label: "HeyReach help center: launching your first campaign, with exclusion filters", url: HEYREACH_LAUNCH },
+    { label: "HeyReach: LinkedIn deleted HeyReach's company page, what it didn't delete (August 2026)", url: HEYREACH_STATEMENT },
+    { label: "La Growth Machine: best HeyReach alternatives, describing its own product (a competitor)", url: LGM },
+    { label: "LinkedIn User Agreement", url: LI_AGREEMENT },
+  ],
+  GLANCE,
+);
 
 function Ext({ href, children }: { href: string; children: React.ReactNode }) {
   return (
@@ -69,21 +69,29 @@ export default function Page() {
   return (
     <ArticleLayout
       path={PATH}
-      h1="HeyReach alternatives for safe, personal LinkedIn outreach"
-      lede="The right HeyReach alternatives depend on what you use HeyReach for: an agency running many sender accounts needs another multi-sender platform, while a founder or small team sending from their own profile is usually better served by an AI SDR that writes to each person. Nora is the second kind, with a note written for every prospect, a person approving the strategy, the copy and the launch, caps fixed in code, and no bill while it grows."
+      h1="HeyReach alternatives: for one rep sending from their own profile"
+      lede="The right HeyReach alternative depends on what you use HeyReach for. An agency running many sender accounts needs another multi-sender platform; a founder or small team sending from their own profiles is usually better served by an AI SDR such as Nora, which writes a note for every prospect and waits for a person to approve the strategy, the copy and the launch."
       faq={FAQ}
       sources={SOURCES}
     >
-      <CompareTable
-        caption="In short: which HeyReach alternative fits, as of October 2026"
-        columns={["Look at"]}
-        rows={[
-          { label: "You run many sender accounts for clients", values: ["Stay with HeyReach, or another multi-sender platform"] },
-          { label: "You want LinkedIn and email in one sequence", values: ["A multichannel tool such as Expandi or La Growth Machine"] },
-          { label: "You send from your own profile and want it done for you", values: ["An AI SDR such as Nora, free while it grows"] },
-          { label: "You mainly need LinkedIn data, not conversations", values: ["A scraping and enrichment tool such as PhantomBuster"] },
-        ]}
+      <h2 id="short-answer">Nora or HeyReach: the short answer</h2>
+      <Verdict
+        rival="HeyReach"
+        nora={["You send from your own profile, or a few teammates send from theirs.", "You want a note written for each prospect and a person approving the launch.", "You want caps that can only be lowered, and to start free."]}
+        them={["You run outreach for clients from many LinkedIn accounts and want one campaign spread across them.", "LinkedIn is one step in a sequence that also sends email through a tool you already use.", "Your lists and personalization come from an enrichment workflow, and you need a reliable sender."]}
       />
+      <p>
+        An agency whose founder sends from their own profile is the second case, covered in{" "}
+        <Link href="/for/agencies">LinkedIn lead generation for agencies</Link>.
+      </p>
+
+      <h2 id="at-a-glance">HeyReach alternatives at a glance</h2>
+      <p>
+        Six tools people weigh against HeyReach, by who each suits, what it costs to start and what
+        each publishes about LinkedIn volume. HeyReach&rsquo;s caps are per sender; Nora&rsquo;s are
+        per account, across every campaign on it.
+      </p>
+      <Glance tools={GLANCE} />
 
       <h2 id="why-alternative">Why people look for a HeyReach alternative</h2>
       <p>
@@ -110,7 +118,7 @@ export default function Page() {
       <h2 id="heyreach-in-brief">HeyReach in brief, fairly</h2>
       <p>
         HeyReach is a cloud LinkedIn outreach platform built around one commercial idea: you pay per
-        LinkedIn sender account, not per teammate, so an agency can add staff and clients without
+        LinkedIn sender account, not per teammate, so an agency can add teammates and clients without
         the bill growing. A campaign can rotate across several senders so each stays under its own
         daily volume, and one inbox gathers conversations from every connected account.
       </p>
@@ -151,78 +159,39 @@ export default function Page() {
         columns={["Nora", "HeyReach"]}
         rows={[
           { label: "Built for", values: ["Founders and small teams sending from their own profiles", "Agencies and teams running many sender accounts"] },
-          { label: "Price", values: ["Free while it grows, no card", "Per sender, $79 a month on Growth, teammates free"] },
           { label: "Several senders in one campaign", values: ["No: each teammate's account runs its own campaigns", "Yes, with sender rotation"] },
-          { label: "Who finds prospects", values: ["The agent, from a customer profile you approved", "You bring or build the list"] },
-          {
-            label: "Connection notes",
-            values: [`Written per person from their profile, under ${INVITE_NOTE_MAX_CHARS} characters`, "Templates with variables and fallbacks"],
-          },
-          { label: "Human approval", values: ["Strategy, copy and launch, each by a person", "You build and launch the campaign"] },
-          {
-            label: "Invitation caps",
-            values: [
-              `${PUBLIC_LIMITS.invitesPerDayStart} rising to ${PUBLIC_LIMITS.invitesPerDayMax} a day from the first send, ${PUBLIC_LIMITS.invitesPerWeek} a week; can only be lowered`,
-              "Default 25 a day, up to 40; 200 a week per sender",
-            ],
-          },
-          { label: "Not contacting anyone twice", values: ["Always on, checked before each send", "Filters you choose per campaign"] },
-          { label: "Replies", values: ["Answered from your documents under your rules, or held for you", "One inbox for your team"] },
-          { label: "Meeting booking", values: ["Booking page or your own scheduling link", "Not covered by the sources we checked"] },
-          { label: "Email steps", values: ["No, LinkedIn only", "Through integrations with email tools"] },
+          { label: "Who finds prospects", values: [NORA.prospects, "You bring or build the list"] },
+          { label: "Connection notes", values: [NORA.notes, "Templates with variables and fallbacks"] },
+          { label: "Human approval", values: [NORA.approval, "You build and launch the campaign"] },
+          { label: "Daily invitations", values: [NORA.daily, "Default 25 per sender, settable to 40"] },
+          { label: "Weekly ceiling", values: [NORA.weekly, "200 per sender"] },
+          { label: "Never contacting anyone twice", values: [NORA.twice, "Filters you choose per campaign"] },
+          { label: "Replies", values: [NORA.replies, "One inbox for your team; you reply"] },
+          { label: "Meeting booking", values: [NORA.booking, NOT_DOCUMENTED] },
         ]}
       />
 
-      <h3 id="finding-prospects">Finding prospects</h3>
+      <h2 id="where-nora-differs">Where Nora differs from HeyReach</h2>
       <p>
-        HeyReach executes a list you supply. Nora starts from your website: it drafts three to five
-        customer profiles and searches for nobody until a person approves one. It then searches on
-        the LinkedIn tier your account actually has, names on the campaign any filter that tier
-        cannot apply, opens each profile before it reaches the list, and leaves out anyone your
-        workspace has already contacted.
+        HeyReach executes a list you supply. Nora starts a step earlier: it drafts customer profiles
+        from your website, searches only once a person approves one, and writes every note from the
+        prospect&rsquo;s own profile. The rest is on <Link href="/how-it-works">how Nora works</Link>.
       </p>
-
-      <h3 id="writing-notes">Writing notes</h3>
       <p>
-        Every connection note is written for one person from their own headline, role and company,
-        and the review screen shows which details it used, so &ldquo;personalised&rdquo; is
-        something you can check. A note containing a link is sent with no note at all, because
-        links in invitations cut acceptance. You can split a campaign across two or three angles and
-        compare them fairly, with people assigned evenly.
-      </p>
-
-      <h3 id="replies-booking">Replies and booking</h3>
-      <p>
-        Nora checks for new acceptances through the day and sends the first message{" "}
-        {FIRST_MESSAGE_MIN} to {FIRST_MESSAGE_MAX} minutes after it notices one, inside your working
-        hours. Replies are answered only from the documents you gave it. By default pricing, legal and
-        negative replies wait for you; a workspace can choose to let them be answered. A prospect who
-        asks for a person, or a message the agent could not read, always waits. Meeting times come
-        from Nora&rsquo;s booking page, which knows what was booked through it, the times you block
-        and any calendar feed you add, or Nora sends your own scheduling link.
-      </p>
-
-      <h3 id="safety">Safety guardrails</h3>
-      <p>
-        The caps are product rules: an owner can lower them, nobody can raise them, and the ramp
-        counts from an account&rsquo;s first send rather than the day it was connected. A day&rsquo;s
-        allowance is spread across working hours. The shared exclusion list and the
-        never-contact-twice rule are checked immediately before every send, and an opt-out is
-        matched by a fixed rule as well as by the model. The reasoning behind each number is on{" "}
+        The bigger difference is the unit each product is built around. HeyReach&rsquo;s unit is the
+        sender: a campaign can spread across a pool of accounts, each allowed up to 200 invitations a
+        week, and adding senders is how volume grows. Nora&rsquo;s unit is one person&rsquo;s own
+        profile. It never rotates a campaign across accounts, each account&rsquo;s ceiling is{" "}
+        {PUBLIC_LIMITS.invitesPerWeek} a week across every campaign on it, and the daily allowance
+        is spread across that person&rsquo;s working hours. That makes Nora the wrong tool for an
+        agency&rsquo;s sender pool and a careful one for a founder whose own name is on every note.
+        The reasoning behind each number is on{" "}
         <Link href="/linkedin-automation-limits">the LinkedIn automation limits page</Link>.
-      </p>
-
-      <h3 id="price">Price</h3>
-      <p>
-        Nora is free for every workspace while it grows, with no card and no plan to pick, and the
-        caps are the same for everyone. <Link href="/pricing">The pricing page</Link> says what
-        happens if that ever changes. If you need dozens of senders, HeyReach&rsquo;s bundles are
-        built for it and Nora is not.
       </p>
 
       <h2 id="march-2026">What the March 2026 enforcement means for HeyReach users</h2>
       <p>
-        On 25 March 2026 LinkedIn removed HeyReach&rsquo;s company page and restricted the personal
+        On March 25, 2026 LinkedIn removed HeyReach&rsquo;s company page and restricted the personal
         profiles of several of its executives. In{" "}
         <Ext href={HEYREACH_STATEMENT}>its own account of the event</Ext>, HeyReach says the action
         was limited to the company&rsquo;s own LinkedIn presence and that customer accounts and
@@ -261,6 +230,10 @@ export default function Page() {
           per user. See <Link href="/alternatives/waalaxy">Waalaxy compared</Link> and{" "}
           <Link href="/alternatives/dripify">Dripify compared</Link>.
         </li>
+        <li>
+          <strong>PhantomBuster</strong>, if what you mainly need from LinkedIn is data rather than
+          conversations. See <Link href="/alternatives/phantombuster">PhantomBuster compared</Link>.
+        </li>
       </ul>
       <p>
         Every tool side by side, by published caps, warm-up and price, is on{" "}
@@ -270,44 +243,35 @@ export default function Page() {
         lists the questions to ask any vendor, including us.
       </p>
 
-      <h2 id="stay-with-heyreach">Who should stay with HeyReach</h2>
-      <ul>
-        <li>You run outreach for clients from many LinkedIn accounts and want one campaign spread across them.</li>
-        <li>LinkedIn is one step in a sequence that also sends email through a tool you already use.</li>
-        <li>Your lists and personalization come from an enrichment workflow, and you need a reliable sender.</li>
-      </ul>
-      <p>
-        Nora does none of those. Agencies whose founder sends from their own profile are a different
-        case, covered in <Link href="/for/agencies">LinkedIn lead generation for agencies</Link>.
-      </p>
-
       <h2 id="switching">Switching without contacting anyone twice</h2>
+      <p>
+        Leaving a multi-sender tool is mostly about one question: which of those senders is the
+        profile you are moving, and who has it already written to.
+      </p>
       <ol>
         <li>
-          <strong>Let running sequences finish or pause them.</strong> Two tools writing to one
-          person in the same week is the quickest way to look automated.
+          <strong>Take the profile out of HeyReach&rsquo;s rotation.</strong> If it stays in a
+          sender pool, HeyReach can keep sending from it while Nora counts a different day.
         </li>
         <li>
-          <strong>Export your contacted leads</strong> from HeyReach so you keep the history.
+          <strong>Let its running campaigns finish, or pause them.</strong> One person hearing from two
+          tools in the same week is the quickest way to look automated.
         </li>
         <li>
-          <strong>Add anyone you must not contact</strong> to Nora&rsquo;s exclusion list, by person or
-          by company.
+          <strong>Keep your own record of who it contacted,</strong> then put the people and companies
+          you must not reach twice on Nora&rsquo;s exclusion list. Nora&rsquo;s own rule against
+          contacting anyone twice starts from its first send, so the history has to come with you.
         </li>
         <li>
-          <strong>Connect your account and approve one customer profile.</strong> It starts at{" "}
-          {PUBLIC_LIMITS.invitesPerDayStart} invitations a day whatever it sent before, because the ramp
-          counts from its first send through Nora.
+          <strong>Connect the account and approve one customer profile.</strong> It begins at{" "}
+          {PUBLIC_LIMITS.invitesPerDayStart} invitations a day however long it sent through HeyReach,
+          because the warm-up counts from its first send through Nora.
         </li>
         <li>
-          <strong>Read the notes, launch, and send one now</strong> if you want to see the first
-          invitation go out and what happened to it.
+          <strong>Read the notes and launch.</strong> If you would rather not wait for the schedule,
+          you can send the first invitation straight away and see what happened to it.
         </li>
       </ol>
-      <p>
-        Read <Link href="/how-it-works">how Nora works step by step</Link>, or{" "}
-        <a href={`${SITE.app}/signup`}>Sign up free</a>.
-      </p>
     </ArticleLayout>
   );
 }

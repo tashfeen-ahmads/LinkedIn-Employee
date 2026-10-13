@@ -3,6 +3,7 @@ import { loadBusinessProfile } from "@le/db";
 import { BusinessProfileSchema } from "@le/shared";
 import type { WorkerContext } from "../context.js";
 import { recordEvent } from "../context.js";
+import { knowledgeQuery } from "../knowledge.js";
 
 export interface WritePostsInput {
   workspaceId: string;
@@ -60,11 +61,7 @@ export async function writeWorkspacePosts(
 
   const [{ data: knowledge }, { data: rep }, { data: existing }, { data: audiences }] =
     await Promise.all([
-      ctx.db
-        .from("knowledge_documents")
-        .select("title, content")
-        .eq("workspace_id", input.workspaceId)
-        .limit(20),
+      knowledgeQuery(ctx.db, input.workspaceId),
       ctx.db.from("profiles").select("full_name").eq("id", input.userId).maybeSingle(),
       // Only this person's unapproved drafts. A post sits on one profile, so
       // two reps in a workspace each have their own set and one pressing the

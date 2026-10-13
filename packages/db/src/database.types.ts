@@ -203,6 +203,12 @@ export type LinkedinAccountRow = {
    * accepting one.
    */
   invite_throttle_streak: number;
+  /**
+   * Invitations by the rep's own date, the last eight days (migration 0042).
+   * The weekly ceiling is the sum of the last seven: LinkedIn's week is a
+   * rolling window, not the calendar's.
+   */
+  invites_by_day: Json;
   created_at: string;
 };
 
@@ -259,6 +265,11 @@ export type CustomerProfileRow = {
   updated_at: string;
   /** The workspace CTA this strategy's campaigns inherit. */
   cta_id: string | null;
+  /**
+   * Where this strategy's own search had got to, for a search that built no
+   * campaign (migration 0042). Opaque, and read only by the targeting job.
+   */
+  search_position: Json | null;
 };
 
 export type ProspectRow = {
@@ -416,6 +427,13 @@ export type CampaignProspectRow = {
   invite_note_thin: boolean;
   /** A human rewrote it; the agent must not overwrite it. */
   invite_note_edited: boolean;
+  /**
+   * A send in progress holds the row, so a second job or a second press of
+   * Send one now cannot invite the same person again. A lease, not a flag.
+   */
+  invite_claimed_at: string | null;
+  /** How many times LinkedIn refused to invite this person, about them. */
+  invite_refusals: number;
   created_at: string;
   updated_at: string;
 };
@@ -758,12 +776,24 @@ export type SupportTicketRow = {
   /** Migration 0041: what the support assistant made of it. */
   category: string | null;
   answered_by: "agent" | "operator" | null;
-  draft_answer: string | null;
-  draft_confidence: number | null;
-  draft_reason: string | null;
   drafted_at: string | null;
   reopened_at: string | null;
   followup: string | null;
+};
+
+/**
+ * The support assistant's held draft (migration 0044). Its own table because
+ * a member can read every column of their own ticket, and an unsent answer and
+ * the reason it was held are the operator's, not the customer's. Readable only
+ * by a platform admin; written only by the worker.
+ */
+export type SupportTicketDraftRow = {
+  ticket_id: string;
+  workspace_id: string;
+  draft_answer: string | null;
+  draft_confidence: number | null;
+  draft_reason: string | null;
+  updated_at: string;
 };
 
 /** The one row of platform-wide switches (migration 0041). Written only by the worker. */
@@ -876,6 +906,7 @@ export type Database = {
       linkedin_posts: Table<LinkedInPostRow>;
       agent_test_runs: Table<AgentTestRunRow>;
       support_tickets: Table<SupportTicketRow>;
+      support_ticket_drafts: Table<SupportTicketDraftRow>;
       worker_heartbeats: Table<WorkerHeartbeatRow>;
       platform_admins: Table<PlatformAdminRow>;
       email_sends: Table<EmailSendRow>;

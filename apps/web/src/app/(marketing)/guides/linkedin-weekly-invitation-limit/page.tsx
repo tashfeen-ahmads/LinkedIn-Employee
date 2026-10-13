@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArticleLayout, articleMeta, Callout, CompareTable } from "@/components/article";
-import { PUBLIC_LIMITS, SITE } from "@/lib/site";
+import { PUBLIC_LIMITS } from "@/lib/site";
+import { Gb1Summary } from "@/components/seo/gb1-visuals";
+import { ROLLING_EXAMPLE, RollingWindow } from "@/components/seo/gb2-rolling";
 import { DEFAULT_WORKING_HOURS, INVITE_NOTE_MAX_CHARS, LINKEDIN_LIMITS } from "@le/shared";
 
 const PATH = "/guides/linkedin-weekly-invitation-limit";
@@ -40,7 +42,7 @@ const EX_WED = Math.max(0, Math.min(PUBLIC_LIMITS.invitesPerDayMax, PUBLIC_LIMIT
 const FAQ = [
   {
     q: "How many connection requests can I send per week on LinkedIn?",
-    a: `LinkedIn does not publish a number. As of October 2026 third-party guides mostly report a ceiling of about 100 a week, with some reporting more for long-established or Sales Navigator accounts and older posts quoting 200. Nora holds every account to ${PUBLIC_LIMITS.invitesPerWeek} a week across all its campaigns, and suggests spreading them over the working week rather than front-loading Monday.`,
+    a: `LinkedIn does not publish a number. As of October 2026 third-party guides mostly report a ceiling of about 100 a week, with some reporting more for long-established or Sales Navigator accounts and older posts quoting 200. Nora holds every account to ${PUBLIC_LIMITS.invitesPerWeek} in any seven days in a row (a rolling week, counted in your time zone) across all its campaigns, and suggests spreading them over the working week rather than front-loading one or two days.`,
   },
   {
     q: "When does the LinkedIn weekly limit reset?",
@@ -48,15 +50,15 @@ const FAQ = [
   },
   {
     q: "Is the weekly invitation limit a ban?",
-    a: "No. Reaching it stops new connection requests for a while; messages, posts, replies and accepting other people's invitations keep working. LinkedIn's help center says an invitation restriction typically lasts about a week and most lift automatically. It is a signal about your pattern, though, and hitting it week after week is how longer restrictions start.",
+    a: "No. Reaching it stops new connection requests for a while; messages, posts, replies and accepting other people’s invitations keep working. LinkedIn’s help center says an invitation restriction typically lasts about a week and most lift automatically. It is a signal about your pattern, though, and hitting it week after week is how longer restrictions start.",
   },
   {
     q: "Does withdrawing invitations restore my weekly quota?",
-    a: "No. LinkedIn's help center says withdrawing pending invitations will not remove an invitation restriction, and after withdrawing you cannot invite the same person again for up to three weeks. Withdrawing very old invitations is still worth doing for the account's health, because invitations left pending are one of the reasons LinkedIn gives for restrictions.",
+    a: "No. LinkedIn’s help center says withdrawing pending invitations will not remove an invitation restriction, and after withdrawing you cannot invite the same person again for up to three weeks. Withdrawing very old invitations is still worth doing for the account’s health, because invitations left pending are one of the reasons LinkedIn gives for restrictions.",
   },
   {
     q: "Does a higher SSI let you send more invitations?",
-    a: "Not as far as anyone can show. LinkedIn's Social Selling Index measures how you use the platform, and LinkedIn has never said it changes the invitation limit. Vendor guides that tie a score of 70 or more to a higher allowance cite no source. A strong acceptance rate plausibly matters more, because ignored invitations are a trigger LinkedIn does name.",
+    a: "Not as far as anyone can show. LinkedIn’s Social Selling Index measures how you use the platform, and LinkedIn has never said it changes the invitation limit. Vendor guides that tie a score of 70 or more to a higher allowance cite no source. A strong acceptance rate plausibly matters more, because ignored invitations are a trigger LinkedIn does name.",
   },
 ];
 
@@ -64,8 +66,7 @@ const SOURCES = [
   { label: "LinkedIn Help: Invitation restrictions (reasons, durations, withdrawing)", url: "https://www.linkedin.com/help/linkedin/answer/4800" },
   { label: "LinkedIn Help: Invitation limit reached", url: "https://www.linkedin.com/help/billing/answer/a550555" },
   { label: "ContentIn glossary: What is the LinkedIn weekly invitation limit? (rolling window)", url: "https://contentin.io/glossary/weekly-invitation-limit/" },
-  { label: "Aomni: LinkedIn weekly invitation limit (studied for this page)", url: "https://www.aomni.com/blog/linkedin-weekly-invitation-limit" },
-  { label: "Bardeen: LinkedIn weekly invitation limit (studied for this page)", url: "https://www.bardeen.ai/answers/linkedin-weekly-invitation-limit" },
+  { label: "LinkedIn Help: Withdraw an invitation (the Sent tab)", url: "https://www.linkedin.com/help/linkedin/answer/a568295" },
   { label: "Snov.io: how to bypass the LinkedIn weekly invitation limit, 2026 (observed ceilings, contact sync)", url: "https://snov.io/blog/linkedin-invitation-limit/" },
   { label: "Waalaxy: weekly limit on invitations sent on LinkedIn (bypass no longer works)", url: "https://blog.waalaxy.com/en/bypass-linkedin-limit/" },
   { label: "Evaboot: email invitations by CSV upload no longer available (German)", url: "https://evaboot.com/de/blog/umgehung-des-woechentlichen-einladungslimits" },
@@ -96,17 +97,17 @@ export default function Page() {
     <ArticleLayout
       path={PATH}
       h1="LinkedIn weekly invitation limit in 2026, explained"
-      lede={`The LinkedIn weekly invitation limit is not published: LinkedIn confirms it restricts invitations sent too fast or too often ignored, and third-party reports put the practical ceiling at about 100 a week, freeing up on a rolling seven days rather than on Monday. Nora holds every account to ${PUBLIC_LIMITS.invitesPerWeek} a week across all its campaigns, because the safe move is to stay under the line rather than find it.`}
+      lede={`The LinkedIn weekly invitation limit is not published: LinkedIn confirms only that it restricts invitations sent too fast or too often ignored. Third-party reports put the practical ceiling at about 100 a week, and most say it frees up on a rolling seven days rather than on Monday. Nora counts the same way: every account is held to ${PUBLIC_LIMITS.invitesPerWeek} in the last seven days across all its campaigns, because the safe move is to stay under the line rather than find it.`}
       faq={FAQ}
       sources={SOURCES}
     >
-      <p>In short:</p>
-      <ul>
+      <Gb1Summary>
+        <ul>
         <li>
           <strong>The number:</strong> unpublished. About 100 a week is the common report as of October 2026.
         </li>
         <li>
-          <strong>The reset:</strong> unpublished. Probably rolling: each invitation stops counting seven days after it was sent.
+          <strong>The reset:</strong> unpublished. Most reports say it rolls: each invitation stops counting seven days after it was sent.
         </li>
         <li>
           <strong>When you hit it:</strong> stop inviting, keep messaging. Withdrawing does not give the week back.
@@ -117,22 +118,23 @@ export default function Page() {
         <li>
           <strong>Paid plans and SSI:</strong> no evidence from LinkedIn that either raises it.
         </li>
-      </ul>
+        </ul>
+      </Gb1Summary>
 
       <h2 id="what-linkedin-says">What the LinkedIn weekly invitation limit is, and what LinkedIn actually says</h2>
       <p>
         The weekly invitation limit is the point at which LinkedIn stops accepting new connection requests from your account for
         a while. You find out from a banner that says you have reached the weekly invitation limit, or from invitations that
-        quietly fail in a tool. As of October 2026, LinkedIn&apos;s help center is clear about causes and durations and silent about
+        quietly fail in a tool. As of October 2026, LinkedIn&rsquo;s help center is clear about causes and durations and silent about
         numbers.
       </p>
       <CompareTable
-        caption="What LinkedIn's help center says about invitation limits, as of October 2026"
+        caption="What LinkedIn’s help center says about invitation limits, as of October 2026"
         columns={["Status", "What is known"]}
         rows={PUBLISHED}
       />
       <p>
-        So &quot;100 a week&quot; is not a LinkedIn rule. It is what people running outreach have observed, and LinkedIn&apos;s own triggers
+        So &ldquo;100 a week&rdquo; is not a LinkedIn rule. It is what people running outreach have observed, and LinkedIn&rsquo;s own triggers
         suggest why it varies: an account whose invitations are mostly accepted gives a different picture from one whose
         invitations are mostly ignored, at the same volume. Treat any number, including ours, as a ceiling to stay under rather
         than a quota to fill.
@@ -141,7 +143,7 @@ export default function Page() {
       <h2 id="reset">When it resets: rolling seven days or a fixed day?</h2>
       <p>
         LinkedIn does not say. Most third-party guides describe a <strong>rolling seven-day window</strong>: an invitation sent
-        on Tuesday at 10:00 stops counting the following Tuesday at about 10:00, so room comes back a few invitations at a time.
+        on Tuesday at 10 a.m. stops counting the following Tuesday at about 10 a.m., so room comes back a few invitations at a time.
         A minority describe a reset seven days after the first invitation of a cycle. Almost nobody still argues for a fixed
         Monday reset. If you plan as if the window rolls, you are safe under every reading.
       </p>
@@ -153,29 +155,35 @@ export default function Page() {
       </p>
       <ul>
         <li>
-          <strong>If LinkedIn&apos;s window rolls,</strong> nothing frees up until the next Monday, and then only Monday&apos;s{" "}
+          <strong>If LinkedIn&rsquo;s window rolls,</strong> nothing frees up until the next Monday, and then only Monday&rsquo;s{" "}
           {EX_MON}, hour by hour as each one turns seven days old. Tuesday frees another {EX_TUE}. Send the same way again and
           you are back at the edge by Wednesday, every week, with no slack.
         </li>
         <li>
           <strong>If it reset on Monday,</strong> the whole {PUBLIC_LIMITS.invitesPerWeek} would come back at once, which is the
-          reading that tempts people to send it all again on Monday morning. That is the burst LinkedIn names first.
+          reading that tempts people to send it all again on Monday morning. That is the burst LinkedIn names first, and
+          against a rolling window it puts {ROLLING_EXAMPLE.calendarPeak} invitations into seven days in a row, as the figure
+          below shows.
         </li>
         <li>
           <strong>Spread evenly instead,</strong> at {EVEN_DAILY} a day across {WORKING_DAYS} working days, any seven days in a row
           hold at most {PUBLIC_LIMITS.invitesPerWeek}, whichever way LinkedIn counts.
         </li>
       </ul>
+      <RollingWindow />
       <Callout tone="info">
         <p>
-          <strong>How Nora counts.</strong> Nora&apos;s own ceiling is a calendar week starting Monday in your time zone, compared
-          by week number so an idle weekend cannot skip a reset. Because LinkedIn&apos;s window probably rolls, a front-loaded week
-          followed by another can put more than {PUBLIC_LIMITS.invitesPerWeek} into the seven days that straddle them. Keeping an
-          account&apos;s campaigns to {EVEN_DAILY} a day between them closes that gap.
+          <strong>How Nora counts the week.</strong> Nora counts a rolling seven days, matching what most reports say about
+          LinkedIn&rsquo;s own window. Before every invitation it adds up what the account sent today and on the six days
+          before it, in your time zone and across every campaign on the account, and sends only if that stays under{" "}
+          {PUBLIC_LIMITS.invitesPerWeek}. Nothing resets on a Monday: each day&rsquo;s invitations stop counting when that day
+          is seven days old. An account that spends the whole {PUBLIC_LIMITS.invitesPerWeek} from a {ROLLING_EXAMPLE.launchDay}{" "}
+          launch sends again on the following {ROLLING_EXAMPLE.resumeDay}, not the following Monday, and no seven days in a row
+          ever hold more than {PUBLIC_LIMITS.invitesPerWeek}.
         </p>
       </Callout>
 
-      <h2 id="reached-it">&quot;You&apos;ve reached the weekly invitation limit&quot;: what to do now</h2>
+      <h2 id="reached-it">&ldquo;You&rsquo;ve reached the weekly invitation limit&rdquo;: what to do now</h2>
       <ol>
         <li>
           <strong>Stop inviting from every tool.</strong> Each further attempt is a refused request on an account LinkedIn is
@@ -201,15 +209,27 @@ export default function Page() {
         </li>
       </ol>
       <p>
+        Third-party guides quote the banner in slightly different words, some with a date after which you can send again;
+        LinkedIn does not publish the text, so go by what your own account shows.
+      </p>
+      <h3 id="check-sent">How to check what you have sent in the last seven days</h3>
+      <p>
+        On desktop, open <strong>My Network</strong>, choose <strong>Manage</strong> next to Invitations, then the{" "}
+        <strong>Sent</strong> tab (on the app: My Network, Invitations, Sent). It lists only the invitations still waiting for
+        an answer, so it undercounts: anyone who accepted since has left that list and joined your connections. To count the
+        week, add the pending invitations sent in the last seven days to the people who connected with you in the same days. A
+        tool&rsquo;s own log is the fuller record, but only for what that tool sent.
+      </p>
+      <p>
         If what you see is a restriction notice rather than the weekly banner, our{" "}
         <Link href="/guides/linkedin-account-restricted">plan for a restricted LinkedIn account</Link> has the first 48 hours.
       </p>
 
       <h2 id="bypass">Why bypass tricks are a bad trade</h2>
       <p>
-        Search results for this topic lead with ways around the limit. As of October 2026 most of the tricks have been closed,
+        Much of the advice on this topic leads with ways around the limit. As of October 2026 most of the tricks have been closed,
         and some vendors that used to sell them now say so. The deeper problem is that the triggers LinkedIn names are about
-        behaviour (how many invitations, how fast, how they are received), so a workaround that pushes more invitations through
+        behavior (how many invitations, how fast, how they are received), so a workaround that pushes more invitations through
         changes none of that. It moves the restriction later, onto an account that now has more ignored invitations behind it.
       </p>
 
@@ -217,14 +237,14 @@ export default function Page() {
       <p>
         The classic trick was inviting people through their email address, by upload or contact sync, on the theory that those
         did not count. Vendor guides now report that inviting by CSV upload is no longer available, and the remaining
-        contact-sync route depends on you already having the person&apos;s address. If you have their email, you have a better
+        contact-sync route depends on you already having the person&rsquo;s address. If you have their email, you have a better
         channel than a connection request anyway.
       </p>
 
       <h3 id="events-groups">Event and group invitations</h3>
       <p>
         Messaging fellow group members or event attendees is often cited as not counting toward the limit. Even where that
-        holds, it is a stranger receiving an unexpected message, which is the reaction LinkedIn&apos;s triggers are built around.
+        holds, it is a stranger receiving an unexpected message, which is the reaction LinkedIn&rsquo;s triggers are built around.
         Used for people you genuinely share the group or event with, it is ordinary networking. Used as a volume channel, it is
         the same pattern through a side door.
       </p>
@@ -233,7 +253,7 @@ export default function Page() {
       <p>
         InMail does not use the invitation allowance, and on a paid plan it is a legitimate channel. It is also metered by
         credits, lands in a separate tab many people rarely open, and builds no connection you can follow up with later. Use it
-        for a handful of high-value people, not as a way to keep the week&apos;s volume up.
+        for a handful of high-value people, not as a way to keep the week&rsquo;s volume up.
       </p>
 
       <h2 id="paid-plans-ssi">Does Sales Navigator, Premium or a high SSI raise it?</h2>
@@ -243,7 +263,7 @@ export default function Page() {
         Navigator accounts with a strong Social Selling Index. None cite LinkedIn.
       </p>
       <p>
-        The SSI version is the most repeated and the least supported. SSI is LinkedIn&apos;s score for how you use the platform; we
+        The SSI version is the most repeated and the least supported. SSI is LinkedIn&rsquo;s score for how you use the platform; we
         found no LinkedIn statement linking it to the invitation limit. The likelier explanation for the anecdotes is that people
         with high scores also tend to have high acceptance rates, and acceptance is a factor LinkedIn does name. Nora applies the
         same weekly ceiling to every account, paid or not. Where a paid plan does matter is search: Sales Navigator filters find
@@ -252,7 +272,7 @@ export default function Page() {
 
       <h2 id="planning">Planning a week around {PUBLIC_LIMITS.invitesPerWeek} invitations</h2>
       <p>
-        {PUBLIC_LIMITS.invitesPerWeek} a week sounds small until you do the sums. At an acceptance rate of {PUBLIC_LIMITS.healthyAcceptance}%, the
+        {PUBLIC_LIMITS.invitesPerWeek} a week sounds small until you do the math. At an acceptance rate of {PUBLIC_LIMITS.healthyAcceptance}%, the
         level below which Nora flags an account, that is about {WEEKLY_ACCEPTED} new connections a week, every one of them
         someone who chose to connect. The constraint is not volume; it is whether each invitation goes to the right person.
       </p>
@@ -270,12 +290,12 @@ export default function Page() {
         <li>
           <strong>Write to the person.</strong> A note that mentions something real about them is the difference between accepted
           and ignored. Our{" "}
-          <Link href="/guides/linkedin-connection-request-templates">connection request templates under {INVITE_NOTE_MAX_CHARS} characters</Link> show
-          what that looks like.
+          <Link href="/guides/linkedin-connection-request-templates">connection request templates</Link>, each up to{" "}
+          {INVITE_NOTE_MAX_CHARS} characters, show what that looks like.
         </li>
         <li>
           <strong>Count everything.</strong> Invitations sent by hand, from your phone or from a second tool draw on the same
-          week. A tool only knows what it sent itself, so after a conference, lower your campaigns&apos; daily limits by roughly the
+          week. A tool only knows what it sent itself, so after a conference, lower your campaigns&rsquo; daily limits by roughly the
           number you sent by hand, and never run two automation tools on one account.
         </li>
         <li>
@@ -290,12 +310,23 @@ export default function Page() {
         {PUBLIC_LIMITS.invitesPerWeek}. The week runs out first.
       </p>
       <CompareTable
-        caption={`A fully warmed account spending each day's allowance as soon as it can (daily cap ${PUBLIC_LIMITS.invitesPerDayMax}, weekly cap ${PUBLIC_LIMITS.invitesPerWeek})`}
-        columns={["Invitations that day", "Total this week"]}
-        rows={FULL_WEEK.map((d) => ({ label: d.day, values: [d.today, d.sent] }))}
+        caption={`The same ${PUBLIC_LIMITS.invitesPerWeek} invitations, spread evenly or sent as fast as the daily cap allows (${PUBLIC_LIMITS.invitesPerDayMax} a day)`}
+        columns={["Spread evenly (the plan)", "As fast as allowed"]}
+        rows={[
+          ...FULL_WEEK.map((d, i) => ({
+            label: d.day,
+            values: [EVEN_DAILY + (i < EVEN_REMAINDER ? 1 : 0), d.today],
+          })),
+          {
+            label: "Week total",
+            values: [PUBLIC_LIMITS.invitesPerWeek, FULL_WEEK[FULL_WEEK.length - 1]?.sent ?? PUBLIC_LIMITS.invitesPerWeek],
+          },
+        ]}
       />
       <p>
-        On those numbers the week is spent by {LAST_SENDING_DAY}. That is the limiter&apos;s arithmetic, not a plan to aim for. Every
+        Both weeks hold {PUBLIC_LIMITS.invitesPerWeek}. The fast one is spent by {LAST_SENDING_DAY} and is the burst LinkedIn
+        names first; the even one never sends more than {EVEN_DAILY + (EVEN_REMAINDER > 0 ? 1 : 0)} in a day. The right-hand
+        column is the limiter&rsquo;s arithmetic for a week that follows a quiet one, not a plan to aim for. Every
         Nora campaign has its own daily limit you can set to {EVEN_DAILY} or lower, and the weekly ceiling is shared by every
         campaign on the account, so two campaigns at {EVEN_DAILY} a day do not get twice the week. A new account starts lower
         still, at {PUBLIC_LIMITS.invitesPerDayStart} a day, and reaches the full daily allowance after{" "}
@@ -308,8 +339,8 @@ export default function Page() {
         To see what your own account can send today and this week, use the{" "}
         <Link href="/tools/linkedin-limit-calculator">LinkedIn connection limit calculator</Link>, and the{" "}
         <Link href="/linkedin-automation-limits">full table of LinkedIn limits Nora enforces</Link> shows how the daily, weekly and
-        message caps fit together. <Link href="/how-it-works">How Nora works</Link> covers the rest; it is free while we grow:{" "}
-        <a href={`${SITE.app}/signup`}>Sign up free</a>. More in the <Link href="/guides">LinkedIn outreach guides</Link>.
+        message caps fit together. <Link href="/how-it-works">How Nora paces a week for you</Link> covers the rest, and there is
+        more in the <Link href="/guides">LinkedIn outreach guides</Link>.
       </p>
     </ArticleLayout>
   );

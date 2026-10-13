@@ -3,17 +3,22 @@ import Link from "next/link";
 import { INVITE_NOTE_MAX_CHARS } from "@le/shared";
 import { ArticleLayout, Callout, CompareTable, articleMeta, type Faq, type Source } from "@/components/article";
 import { NoteChecker } from "@/components/seo/tool-note-checker";
-import { LINKEDIN_NOTE_LIMITS } from "@/lib/note-check";
-import { SITE } from "@/lib/site";
+import { LINKEDIN_NOTE_LIMITS, checkNote } from "@/lib/note-check";
 
 const PATH = "/tools/connection-note-checker";
 
 export const metadata: Metadata = articleMeta(PATH);
 
+/** The worked example under "Fixing a note that fails", run through the same check as the tool. */
+const BEFORE =
+  "Hi Sam, we help logistics companies cut admin time with our AI platform. Do you have 15 minutes this week for a quick call?";
+const AFTER =
+  "Hi Sam, your post about moving dispatch off spreadsheets matched what we kept hearing from other ops leads. Would be good to connect.";
+
 const FAQ: readonly Faq[] = [
   {
     q: "How many characters is a LinkedIn connection note?",
-    a: `As of October 2026, LinkedIn's help pages give ${LINKEDIN_NOTE_LIMITS.free} characters for a personalised note from a free account, and guides list ${LINKEDIN_NOTE_LIMITS.premium} for Premium. Spaces and punctuation count. If you do not know which account will send it, write to ${LINKEDIN_NOTE_LIMITS.free}: it fits both. Nora caps every note it writes at ${INVITE_NOTE_MAX_CHARS} for the same reason.`,
+    a: `As of October 2026, LinkedIn's help pages give ${LINKEDIN_NOTE_LIMITS.free} characters for a personalized note from a free account, and guides list ${LINKEDIN_NOTE_LIMITS.premium} for Premium. Spaces and punctuation count. If you do not know which account will send it, write to ${LINKEDIN_NOTE_LIMITS.free}: it fits both. Nora caps every note it writes at ${INVITE_NOTE_MAX_CHARS} for the same reason.`,
   },
   {
     q: "Why should a connection note have no link?",
@@ -49,19 +54,14 @@ export default function Page() {
       lede={`This LinkedIn connection note checker counts your note against the character limit (${LINKEDIN_NOTE_LIMITS.free} on a free account as of October 2026, and the ${LINKEDIN_NOTE_LIMITS.premium} that guides give for Premium) and flags links and the phrases that turn an introduction into a pitch. It runs in your browser and nothing you paste is stored.`}
       faq={FAQ}
       sources={SOURCES}
+      aside={<NoteChecker />}
     >
-      <h2 id="checker">The LinkedIn connection note checker</h2>
-      <p>
-        Paste a note, or edit the example. The result updates as you type.
-      </p>
-      <NoteChecker />
-
       <h2 id="what-it-checks">What it checks and why</h2>
       <p>
         A connection note has one job: to make a stranger think &ldquo;fair enough&rdquo; and press
-        accept. The connection note checker looks for the mechanical mistakes that most often sink a note. It does
-        not score your writing, because whether a detail is interesting to one person is a judgement
-        about someone you know and it does not.
+        accept. The connection note checker looks for the mechanical mistakes that most often sink a
+        note. It does not score your writing: it cannot know whether a detail matters to the person
+        you are writing to, and you can.
       </p>
 
       <h3 id="length">Length</h3>
@@ -95,7 +95,7 @@ export default function Page() {
         It catches a full web address, a <code>www.</code> address, and a bare domain such as{" "}
         <code>example.com/demo</code>, which reads as a link even without{" "}
         <code>https://</code> in front. The check for full and <code>www.</code> addresses is the
-        same <code>containsLink</code> function Nora runs before every invitation it sends.
+        same one Nora runs before every invitation it sends.
       </p>
       <Callout tone="safety">
         <strong>How Nora handles a link.</strong> A note that carries one is not trimmed into a
@@ -111,7 +111,7 @@ export default function Page() {
       <ul>
         <li>
           <strong>Opening with what you do</strong>: &ldquo;we help&rdquo;, &ldquo;we
-          provide&rdquo;, &ldquo;we specialise&rdquo;.
+          provide&rdquo;, &ldquo;we specialize&rdquo;.
         </li>
         <li>
           <strong>Asking for a meeting</strong>: &ldquo;book a quick call&rdquo;, &ldquo;15
@@ -156,18 +156,27 @@ export default function Page() {
           one.
         </li>
       </ol>
-      <blockquote>
-        <p>
-          <strong>Before:</strong> &ldquo;Hi Sam, we help logistics companies cut admin time with
-          our AI platform. Do you have 15 minutes this week for a quick call?&rdquo;
-        </p>
-      </blockquote>
-      <blockquote>
-        <p>
-          <strong>After:</strong> &ldquo;Hi Sam, your post about moving dispatch off spreadsheets
-          matched what we kept hearing from other ops leads. Would be good to connect.&rdquo;
-        </p>
-      </blockquote>
+      <div className="tool-ba">
+        {[
+          { label: "Before", text: BEFORE, tone: "is-before" },
+          { label: "After", text: AFTER, tone: "is-after" },
+        ].map((note) => {
+          const check = checkNote(note.text);
+          const flags = check.findings.map((f) => f.label);
+          return (
+            <figure key={note.label} className={`tool-ba-card ${note.tone}`}>
+              <figcaption>{note.label}</figcaption>
+              <blockquote>
+                <p>&ldquo;{note.text}&rdquo;</p>
+              </blockquote>
+              <p className="tool-ba-meta">
+                {check.length} characters.{" "}
+                {flags.length ? `Flagged: ${flags.join(", ").toLowerCase()}.` : "Nothing flagged."}
+              </p>
+            </figure>
+          );
+        })}
+      </div>
       <p>
         For starting points by situation, each annotated with the profile detail it uses, see{" "}
         <Link href="/guides/linkedin-connection-request-templates">
@@ -181,10 +190,9 @@ export default function Page() {
         all the <Link href="/tools">free LinkedIn tools</Link>.
       </p>
       <p>
-        Nora writes one note per person from their own details, caps each at{" "}
-        {INVITE_NOTE_MAX_CHARS} characters in code, and shows you every note before launch. See{" "}
-        <Link href="/how-it-works">how Nora works</Link>. It is free while it grows:{" "}
-        <a href={`${SITE.app}/signup`}>Sign up free</a>.
+        Nora writes one note per person from their own details, holds each to{" "}
+        {INVITE_NOTE_MAX_CHARS} characters, and shows you every note before launch. See{" "}
+        <Link href="/how-it-works">how Nora works</Link>.
       </p>
     </ArticleLayout>
   );

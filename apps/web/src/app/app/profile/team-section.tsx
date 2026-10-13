@@ -19,6 +19,8 @@ import { SubmitButton } from "@/components/submit-button";
 import { ConfirmButton } from "@/components/confirm-button";
 import { formatDate, isoAttr } from "@/lib/format";
 import { label } from "@/lib/labels";
+import { countersForToday } from "@/lib/account-day";
+import type { AccountRecord } from "@le/linkedin";
 
 /**
  * Where a team action reports back: the profile screen, at the team section.
@@ -51,10 +53,15 @@ async function inviteMember(formData: FormData) {
   "use server";
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const role = String(formData.get("role") ?? "rep");
-  if (!email || !["rep", "manager", "admin"].includes(role)) return;
+  // Said rather than a bare return, which from the other side of the screen is
+  // a Send button that did nothing.
+  if (!email || !email.includes("@")) redirect(teamQuery(errorQuery, "Type the email address to send the invitation to."));
+  if (!["rep", "manager", "admin"].includes(role)) redirect(teamQuery(errorQuery, "Pick a role for them."));
 
   const session = await requireSession();
-  if (!["owner", "admin", "manager"].includes(session.role)) return;
+  if (!["owner", "admin", "manager"].includes(session.role)) {
+    redirect(teamQuery(errorQuery, "Only an owner, admin or manager can invite people."));
+  }
 
   const supabase = await createClient();
 
@@ -76,7 +83,7 @@ async function inviteMember(formData: FormData) {
     redirect(
       teamQuery(
         errorQuery,
-        "This workspace has reached its member limit for now. Ask us from Support and we will raise it — there is nothing to pay.",
+        "This workspace has reached its member limit for now. Ask us from Support and we will raise it. There is nothing to pay.",
       ),
     );
   }
@@ -91,7 +98,7 @@ async function inviteMember(formData: FormData) {
     .is("accepted_at", null)
     .is("revoked_at", null);
 
-  const { data: invitation } = await supabase
+  const { data: invitation, error: inviteError } = await supabase
     .from("invitations")
     .insert({
       workspace_id: session.workspaceId,
@@ -103,6 +110,12 @@ async function inviteMember(formData: FormData) {
     })
     .select("id")
     .single();
+
+  // A refused insert fell through to "Invitation sent", so whoever invited
+  // waited on a colleague who had been sent nothing and had no link to copy.
+  if (inviteError || !invitation) {
+    redirect(teamQuery(errorQuery, `The invitation for ${email} was not created. Please try again.`));
+  }
 
   // The worker sends it. If mail is not configured the invitation still exists
   // and the link is shown below, so this never blocks adding a teammate — but
@@ -143,9 +156,11 @@ async function revokeInvitation(formData: FormData) {
   // read `invitationId`, so every Revoke updated a row with the id "null" and
   // the invitation stayed live — a link anyone holding could still join with.
   const id = String(formData.get("invitationId") ?? "");
-  if (!id) return;
+  if (!id) redirect(teamQuery(errorQuery, "No invitation was named."));
   const session = await requireSession();
-  if (!["owner", "admin", "manager"].includes(session.role)) return;
+  if (!["owner", "admin", "manager"].includes(session.role)) {
+    redirect(teamQuery(errorQuery, "Only an owner, admin or manager can revoke an invitation."));
+  }
 
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -157,7 +172,7 @@ async function revokeInvitation(formData: FormData) {
 
   // Said either way. A revoke that failed quietly leaves a live link that
   // anyone holding it can still join with, while the list looks cleared.
-  if (error) redirect(teamQuery(errorQuery, `That invitation is still live: ${error.message}`));
+  if (error) redirect(teamQuery(errorQuery, "That invitation is still live. Please try again."));
   revalidatePath("/app/profile");
   const email = data?.[0]?.email;
   redirect(
@@ -239,7 +254,7 @@ export async function TeamSection({
         .eq("workspace_id", session.workspaceId),
       supabase
         .from("linkedin_accounts")
-        .select("user_id, status, provider_account_id, invites_today, invites_this_week")
+        .select("user_id, status, provider_account_id, invites_today, invites_this_week, invites_by_day, counters_reset_on")
         .eq("workspace_id", session.workspaceId),
       supabase
         .from("invitations")
@@ -301,6 +316,12 @@ export async function TeamSection({
               {(members ?? []).map((member) => {
                 const person = personById.get(member.user_id);
                 const account = accountByUser.get(member.user_id);
+                // Rolled over to that person's today, as the worker does before
+                // its first send. Read as stored, every morning showed
+                // yesterday's invitations as today's.
+                const counts = account
+                  ? countersForToday(account as unknown as AccountRecord, person?.timezone ?? "UTC")
+                  : null;
                 const broken = !account || cannotSend(account.status) || account.status !== "active";
                 return (
                   <tr key={member.id}>
@@ -333,8 +354,8 @@ export async function TeamSection({
                         </>
                       ) : null}
                     </td>
-                    <td className="num mono">{account?.invites_today ?? "—"}</td>
-                    <td className="num mono">{account?.invites_this_week ?? "—"}</td>
+                    <td className="num mono">{counts?.invites_today ?? "—"}</td>
+                    <td className="num mono">{counts?.invites_this_week ?? "—"}</td>
                   </tr>
                 );
               })}

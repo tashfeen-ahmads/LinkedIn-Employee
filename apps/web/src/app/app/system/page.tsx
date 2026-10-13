@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase-server";
 import { formatDateTime, isoAttr } from "@/lib/format";
 import { isPlatformAdmin } from "@/lib/admin";
 import { callWorker } from "@/lib/worker";
+import { systemSummary } from "@/lib/system-summary";
 
 /**
  * Where the chain is broken, and what to do about it.
@@ -70,8 +71,8 @@ export default async function SystemPage() {
             <strong>The background service could not be reached.</strong> {result.error}
           </p>
           <p className="small">
-            That is itself the first answer: nothing that depends on it — the agents, LinkedIn,
-            sending — is running right now. It is ours to fix rather than yours;{" "}
+            That is itself the first answer: nothing that depends on it (the agents, LinkedIn,
+            sending) is running right now. It is ours to fix rather than yours;{" "}
             <Link href="/app/support">tell us</Link> and we will.
           </p>
         </div>
@@ -83,11 +84,11 @@ export default async function SystemPage() {
   const { data: me } = await supabase.from("profiles").select("timezone").eq("id", session.userId).maybeSingle();
 
   const checks = result.data?.checks ?? [];
-  const blocked = checks.filter((c) => c.state === "blocked");
-  const todo = checks.filter((c) => c.state === "todo");
   // The first thing standing in the way, named once at the top. A list of
-  // fifteen rows with one red one in the middle is a list nobody reads.
-  const next = blocked[0] ?? todo[0] ?? null;
+  // fifteen rows with one red one in the middle is a list nobody reads. And
+  // "nothing is blocked" only when every row actually looked (rule 17).
+  const summary = systemSummary(checks);
+  const next = summary.kind === "blocked" || summary.kind === "todo" ? checks[summary.index]! : null;
 
   const stages = [...new Set(checks.map((c) => c.stage))];
 
@@ -99,7 +100,7 @@ export default async function SystemPage() {
         lede={
           <>
           What is standing in the way. Every step between signing up and a booked meeting, checked against what is true right now.
-          Two of these ask LinkedIn itself rather than trusting what is stored here — which is the
+          Two of these ask LinkedIn itself rather than trusting what is stored here, which is the
           difference between an account that says it is connected and one that is. Anything on this
           list that is ours to fix says so.
           </>
@@ -122,6 +123,23 @@ export default async function SystemPage() {
               ) : null}
             </p>
           ) : null}
+        </div>
+      ) : summary.kind === "empty" ? (
+        <div className="notice warning">
+          <p>
+            <strong>The check came back with nothing to show.</strong> No stage could be confirmed
+            either way. Reload to run it again, and <Link href="/app/support">tell us</Link> if it
+            keeps happening.
+          </p>
+        </div>
+      ) : summary.kind === "unconfirmed" ? (
+        <div className="notice">
+          <p>
+            <strong>Nothing is blocked.</strong> {summary.count}{" "}
+            {summary.count === 1 ? "check is" : "checks are"} still waiting for something to look
+            at, so {summary.count === 1 ? "that stage is" : "those stages are"} not confirmed
+            working yet. They are marked below.
+          </p>
         </div>
       ) : (
         <div className="notice accent">
@@ -185,7 +203,7 @@ export default async function SystemPage() {
           "just now"
         )}
         .
-        Reload to run it again — the LinkedIn checks are live calls, so they are not cached.
+        Reload to run it again. The LinkedIn checks are live calls, so they are not cached.
       </p>
     </>
   );

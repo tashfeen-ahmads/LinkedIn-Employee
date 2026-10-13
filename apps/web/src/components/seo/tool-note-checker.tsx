@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { INVITE_NOTE_MAX_CHARS } from "@le/shared";
 import { LINKEDIN_NOTE_LIMITS, checkNote, type LengthStatus } from "@/lib/note-check";
@@ -17,7 +18,7 @@ const STATUS: Record<LengthStatus, { pill: string; label: string; detail: (overB
   fits: {
     pill: "positive",
     label: "Fits every account",
-    detail: () => `Inside ${LINKEDIN_NOTE_LIMITS.free} characters, so it sends from a free account as well as Premium.`,
+    detail: () => `Within ${LINKEDIN_NOTE_LIMITS.free} characters, so it sends from a free account as well as Premium.`,
   },
   premium_only: {
     pill: "warning",
@@ -40,6 +41,7 @@ export function NoteChecker() {
 
   return (
     <div className="card raised stack-4 tool-panel">
+      <p className="small muted tool-intro">Paste a note, or edit the example. The result updates as you type.</p>
       <label className="field" htmlFor="tool-note">
         <span>Your connection note</span>
         <span className="hint" id="tool-note-hint">
@@ -114,10 +116,10 @@ export function NoteChecker() {
         ) : null}
       </div>
 
-      <p className="tiny subtle">
-        The link check is Nora&rsquo;s own <code>containsLink</code>, the function that runs before
-        every invitation it sends. Nora caps its own notes at {INVITE_NOTE_MAX_CHARS} characters
-        so they fit any account.
+      <p className="tool-tie small">
+        Nora writes a note like this for every prospect, from their own profile, caps it at{" "}
+        {INVITE_NOTE_MAX_CHARS} characters and runs this same link check before it sends.{" "}
+        <Link href="/how-it-works">See how it works</Link>
       </p>
     </div>
   );

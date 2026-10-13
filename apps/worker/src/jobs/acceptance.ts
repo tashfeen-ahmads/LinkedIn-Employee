@@ -95,6 +95,9 @@ async function detectForAccount(
       .update({
         status: "accepted",
         accepted_at: now.toISOString(),
+        // A fresh stage: whatever the invitation was waiting on is over, and a
+        // reason left from it would read as a fault on an accepted row.
+        status_reason: null,
         // What makes the follow-up scheduler pick them up. Without it the
         // prospect sits in `accepted` and is still never messaged.
         next_action_at: followUpDueAt(now, delayDays).toISOString(),

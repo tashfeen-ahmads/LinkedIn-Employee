@@ -2,82 +2,89 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { BreadcrumbSchema } from "@/components/schema";
 import { Reveal } from "@/components/reveal";
-import { PageHero } from "@/components/marketing";
-import { ProductFilm } from "@/components/product-film";
 import { AgentTimeline } from "@/components/agent-timeline";
 import { Sequence, sequenceFor } from "@/components/sequence";
 import { GateSimulator } from "@/components/gate-simulator";
-import { ReplyGate } from "@/components/diagrams";
-import { PUBLIC_LIMITS, pageMeta } from "@/lib/site";
+import { NavIcon } from "@/components/icons";
+import { PUBLIC_LIMITS, SITE, pageMeta } from "@/lib/site";
 import { TOUR_STAGES, YOUR_DECISIONS } from "@le/shared";
-import { TeamAvatar } from "@/components/team-avatar";
-import { type MemberKey } from "@/lib/team";
+import { TEAM_MEMBER, type MemberKey } from "@/lib/team";
 import { BRAND } from "@le/shared";
 
 export const metadata: Metadata = pageMeta({
   title: "How an AI SDR works: LinkedIn automation with your approval",
   description:
-    "How an AI SDR for LinkedIn works, step by step. Approve a strategy, approve the words, press launch. Sage, Scout, Quinn and Reese find the people, write to each one, answer the replies and book the calls.",
+    "How an AI SDR for LinkedIn works, step by step: you approve the strategy, the words and the launch, and Nora's team does the rest inside safe limits.",
   path: "/how-it-works",
 });
 
 /*
- * The same four the product's dashboard introduces, with the detail this page
- * has room for. Names and roles come from `lib/team.ts`; what each one hands
- * over is said here because it is the point of this page.
+ * The four the product's dashboard introduces, with the detail this page has
+ * room for. Names come from `lib/team.ts`; what each one hands over is said
+ * here because it is the point of this page.
+ *
+ * Each wears the icon of the screen its work lands on rather than an initial:
+ * Sage and Scout share a first letter, and two identical "S" plates side by
+ * side read as one teammate drawn twice.
  */
 const AGENTS: ReadonlyArray<{
   key: MemberKey | null;
   name: string;
+  icon: string;
   job: string;
   detail: string;
-  handover: string;
-  output: string[];
+  output: string;
+  then: string;
 }> = [
   {
     key: "sage",
-    name: "Sage, the strategist",
+    name: `${TEAM_MEMBER.sage.name}, the strategist`,
+    icon: "strategies",
     job: "Learns what you sell and to whom",
     detail:
-      "Reads your website and LinkedIn page and writes a business profile plus three to five customer strategies, each with the pains, the buying signals, opening angles, and the search filters to execute it. Ask for more and it extends the list rather than starting again.",
-    handover: "You approve one. That is what starts the search; there is no second button.",
-    output: ["Business profile", "3 to 5 customer strategies", "Search filters per strategy"],
+      "Reads your website and LinkedIn page, then writes a business profile and three to five customer strategies: the pains, the buying signals, the opening angles and the search filters. Ask for more and it extends the list.",
+    output: "Business profile, 3 to 5 strategies, search filters",
+    then: "You approve one, and only that starts the search.",
   },
   {
     key: "scout",
-    name: "Scout, the prospector",
+    name: `${TEAM_MEMBER.scout.name}, the prospector`,
+    icon: "prospects",
     job: "Finds the people",
     detail:
-      "Searches LinkedIn on the tier your account actually has, opens every profile before it reaches the list, removes anyone your workspace has already contacted or excluded, and scores the rest on fit and intent. Filters it could not apply are named on the campaign, not quietly dropped.",
-    handover: "Hands Quinn a ranked list of real, checked people.",
-    output: ["Ranked prospects with reasons", "Filters it could not apply"],
+      "Searches LinkedIn on the tier your account actually has, opens every profile before it reaches the list, removes anyone you have already contacted or excluded, and scores the rest on fit. Filters it could not apply are named on the campaign.",
+    output: "Ranked prospects with reasons, filters it could not apply",
+    then: "Quinn gets a ranked list of real, checked people.",
   },
   {
     key: "quinn",
-    name: "Quinn, the campaign writer",
+    name: `${TEAM_MEMBER.quinn.name}, the campaign writer`,
+    icon: "campaigns",
     job: "Writes to each person",
     detail:
-      "Builds the campaign and writes every connection note from that person's own headline, role and company, plus the follow-ups. Split a campaign across angles and it keeps the groups even, so a result means something. It hands you a draft campaign, never a running one.",
-    handover: "You press Launch. Read the names and the messages first if you want to; nothing has left yet.",
-    output: ["A note per person", "Follow-ups", "Angles to test"],
+      "Builds the campaign and writes every connection note from that person's own headline, role and company, plus the follow-ups. Split a campaign across angles and it keeps the groups even, so a result means something. It hands you a draft, never a running campaign.",
+    output: "A note per person, follow-ups, angles to test",
+    then: "You approve the words and press Launch.",
   },
   {
     key: "reese",
-    name: "Reese, outreach and booking",
-    job: "Sends, answers, and knows when not to",
+    name: `${TEAM_MEMBER.reese.name}, the outreach lead`,
+    icon: "inbox",
+    job: "Sends, answers and books",
     detail:
-      "Sends the invitations and follow-ups under daily caps, spread across your working hours. Classifies every reply before writing anything, and answers only from the facts you gave it. You choose how much rope it gets: hold pricing, legal, security and anything negative for you, or let it answer and book on its own. Two things always wait: somebody who asks for a human, and a message it did not understand.",
-    handover: "On autopilot it sends and books by itself. Set it to review instead and it waits for you.",
-    output: ["Paced invitations", "Drafted replies", "Times you are genuinely free"],
+      "Sends invitations and follow-ups under daily caps, spread across your working hours. Reads every reply before writing anything and drafts answers only from the documents you gave it. Offers only times you have open.",
+    output: "Paced invitations, drafted replies, booked meetings",
+    then: "Each reply waits for your approval by default. Switch on autopilot and clean replies go out on their own.",
   },
   {
     key: null,
     name: "You",
+    icon: "meetings",
     job: "Close",
     detail:
-      "Meetings booked through your booking page arrive with the whole conversation and the reasons the prospect matched. You spend the day in conversations rather than in a search box.",
-    handover: "The part that was never going to be automated.",
-    output: ["Booked meeting", "Context to open with"],
+      "Booked meetings appear on your Meetings page with who the person is and why they matched. You spend the day in conversations rather than in a search box.",
+    output: "A booked meeting, context to open with",
+    then: "The part that was never going to be automated.",
   },
 ];
 
@@ -99,128 +106,53 @@ export default function HowItWorksPage() {
         ]}
       />
 
-      <PageHero
-        crumb="How it works"
-        lede={
-          <p>
-            Approve a strategy, approve the words, press launch. From there {BRAND.name}&rsquo;s team finds
-            the people, writes to each one by name, answers what comes back and books the calls,
-            inside limits that keep the account alive. Anything you would rather do yourself, you
-            still can.
-          </p>
-        }
-      >
-        <h1>How an AI SDR for LinkedIn works, with your approval at three points</h1>
-      </PageHero>
-
       {/*
-        The three, said before the stages rather than left to be counted out
-        of them. Each is a gate in the code rather than a promise in a
-        paragraph.
+        The hero carries the one picture that explains the product fastest:
+        what a single prospect actually receives, drawn by the same function
+        the campaign screen uses, with the timings the product owns.
       */}
-      <section className="mk-section">
-        <div className="container mk-stack">
-          <header className="mk-head">
-            <h2 className="mk-h2">What actually needs you</h2>
-            <p className="mk-lede">
-              Three decisions. Nothing else is asked of you unless you ask for it.
-            </p>
-          </header>
-          <ol className="mk-index">
-            {YOUR_DECISIONS.map((decision, index) => (
-              <li key={decision.title}>
-                <span className="mk-index-n mk-num" aria-hidden="true">
-                  {index + 1}
-                </span>
-                <div className="mk-index-main">
-                  <h3>{decision.title}</h3>
-                  <p>{decision.detail}</p>
-                </div>
-                <p className="mk-index-why">
-                  <strong>Why you and not us.</strong> {decision.because}
-                </p>
-              </li>
-            ))}
-          </ol>
-          <p className="mk-caption mk-measure">
-            Everything else runs without you: the search, the scoring, a note written for each
-            person, the pacing, the follow-ups, the replies, the booking. Every one of them can be
-            taken over by hand: read the drafts before they send, cut names off a list, write a
-            reply yourself, or send one invitation now and watch what happens.
-          </p>
-        </div>
-      </section>
-
-      <section className="mk-section mk-tint">
-        <div className="container mk-stack">
-          <h2 className="mk-h2">Five stages, and what each one hands over.</h2>
-          <ProductFilm />
-        </div>
-      </section>
-
-      <section className="mk-section">
-        <div className="container mk-stack">
-          <header className="mk-head">
-            <h2 className="mk-h2">Who does what</h2>
-            <p className="mk-lede">
-              Each teammate does one job and hands its work to the next. Names for the jobs, not
-              people pretending to be people: every message still goes out under your own name.
-            </p>
-          </header>
-          <ol className="mk-team">
-            {AGENTS.map((agent) => (
-              <li key={agent.name} className={agent.key ? "mk-team-card" : "mk-team-card is-you"}>
-                <div className="mk-team-head">
-                  {agent.key ? <TeamAvatar member={agent.key} /> : null}
-                  <div>
-                    <h3>{agent.name}</h3>
-                    <p className="mk-muted">{agent.job}</p>
-                  </div>
-                </div>
-                <p>{agent.detail}</p>
-                <p className="mk-team-out">
-                  <strong>Hands over:</strong> {agent.output.join(", ")}
-                </p>
-                <p className="mk-team-out">
-                  <strong>Then:</strong> {agent.handover}
-                </p>
-              </li>
-            ))}
-          </ol>
-        </div>
-      </section>
-
-      <section className="mk-section mk-tint">
-        <div className="container mk-stack">
-          <header className="mk-head">
-            <h2 className="mk-h2">Watch one campaign, day by day.</h2>
-            <p className="mk-lede">
-              Step through an example below: every beat names who acted, and the square markers are
-              the moments nothing moves without you.
-            </p>
-          </header>
-          <Reveal>
-            <AgentTimeline />
-          </Reveal>
-        </div>
-      </section>
-
-      {/*
-        What a prospect actually receives: the same component the campaign
-        screen draws, with a worked example in it, rendered by the same
-        function with the same rules, including the steps a person may not
-        move.
-      */}
-      <section className="mk-section" id="the-sequence">
-        <div className="container mk-split">
-          <header className="mk-head mk-split-aside">
-            <h2 className="mk-h2">A conversation, not a blast.</h2>
-            <p className="mk-lede">
-              Every campaign runs the same shape. You write the words. The timing is a product rule,
-              because the timing is what gets accounts restricted.
-            </p>
-          </header>
-          <div className="card raised">
+      <section className="mk-page-hero hero-wash">
+        <div className="container hiw-hero">
+          <nav className="mk-crumb hiw-hero-crumb" aria-label="Breadcrumb">
+            <Link href="/">Home</Link>
+            <span aria-hidden="true">/</span>
+            <span aria-current="page">How it works</span>
+          </nav>
+          <div className="mk-page-hero-inner">
+            <h1>How an AI SDR for LinkedIn works</h1>
+            <div className="mk-page-lede">
+              <p>
+                You approve a strategy, the words and the launch. {BRAND.name}&rsquo;s team does the
+                rest, inside daily limits nobody can raise.
+              </p>
+            </div>
+            <div className="mk-actions">
+              <Link href={`${SITE.app}/signup`} className="btn large">
+                Sign up free
+              </Link>
+              <Link href="/linkedin-automation-limits" className="mk-textlink">
+                Read the limits <span aria-hidden="true">→</span>
+              </Link>
+            </div>
+            <dl className="hiw-glance">
+              <div>
+                <dt>Decisions that are yours</dt>
+                <dd className="mk-num">{YOUR_DECISIONS.length}</dd>
+              </div>
+              <div>
+                <dt>Invitations a day</dt>
+                <dd className="mk-num">
+                  {PUBLIC_LIMITS.invitesPerDayStart} to {PUBLIC_LIMITS.invitesPerDayMax}
+                </dd>
+              </div>
+              <div>
+                <dt>Weekly ceiling</dt>
+                <dd className="mk-num">{PUBLIC_LIMITS.invitesPerWeek}</dd>
+              </div>
+            </dl>
+          </div>
+          <figure className="card raised hiw-hero-card">
+            <figcaption className="hiw-card-title">What one prospect receives</figcaption>
             <Sequence
               steps={sequenceFor({
                 warmUp: true,
@@ -242,23 +174,107 @@ export default function HowItWorksPage() {
                 ],
               })}
             />
-          </div>
+          </figure>
         </div>
       </section>
 
-      <section className="mk-section mk-tint">
+      {/*
+        The three, said before anything else rather than left to be counted
+        out of the stages. Each is a gate in the code rather than a promise in
+        a paragraph.
+      */}
+      <section className="mk-section">
         <div className="container mk-stack">
           <header className="mk-head">
-            <h2 className="mk-h2">It knows when to stop.</h2>
+            <h2 className="mk-h2">What actually needs you</h2>
             <p className="mk-lede">
-              Anyone can draft a reply. The reason this can be left running is what it refuses to
-              answer. Type something a prospect might send and watch which rule catches it.
+              Three decisions. Everything else runs without you, and you can take any of it over:
+              read drafts before they send, cut names off a list, or write a reply yourself.
             </p>
           </header>
-          <div className="mk-pair">
-            <GateSimulator />
-            <ReplyGate />
-          </div>
+          <ol className="mk-index">
+            {YOUR_DECISIONS.map((decision, index) => (
+              <li key={decision.title}>
+                <span className="mk-index-n mk-num" aria-hidden="true">
+                  {index + 1}
+                </span>
+                <div className="mk-index-main">
+                  <h3>{decision.title}</h3>
+                  <p>{decision.detail}</p>
+                </div>
+                <p className="mk-index-why">
+                  <strong>Why you and not us.</strong> {decision.because}
+                </p>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </section>
+
+      <section className="mk-section">
+        <div className="container mk-stack">
+          <header className="mk-head">
+            <h2 className="mk-h2">Who does what</h2>
+            <p className="mk-lede">
+              {BRAND.name}&rsquo;s team is four jobs with names, each handing its work to the next.
+              They are not people pretending to be people: every message goes out under your own
+              name.
+            </p>
+          </header>
+          <ol className="mk-team">
+            {AGENTS.map((agent) => (
+              <li key={agent.name} className={agent.key ? "mk-team-card" : "mk-team-card is-you"}>
+                <div className="mk-team-head">
+                  <span className="hiw-avatar" aria-hidden="true">
+                    <NavIcon name={agent.icon} />
+                  </span>
+                  <div>
+                    <h3>{agent.name}</h3>
+                    <p className="mk-muted">{agent.job}</p>
+                  </div>
+                </div>
+                <p>{agent.detail}</p>
+                <dl className="mk-team-out">
+                  <div>
+                    <dt>Hands over</dt>
+                    <dd>{agent.output}</dd>
+                  </div>
+                  <div>
+                    <dt>Then</dt>
+                    <dd>{agent.then}</dd>
+                  </div>
+                </dl>
+              </li>
+            ))}
+          </ol>
+        </div>
+      </section>
+
+      <section className="mk-section">
+        <div className="container mk-stack">
+          <header className="mk-head">
+            <h2 className="mk-h2">Watch one campaign, day by day</h2>
+            <p className="mk-lede">
+              Step through one example. Each step names who acted, and the square markers are the
+              moments that wait for you.
+            </p>
+          </header>
+          <Reveal>
+            <AgentTimeline />
+          </Reveal>
+        </div>
+      </section>
+
+      <section className="mk-section">
+        <div className="container mk-stack">
+          <header className="mk-head">
+            <h2 className="mk-h2">It knows when to stop</h2>
+            <p className="mk-lede">
+              Anyone can draft a reply. What matters is what it refuses to answer. Type something a
+              prospect might send and watch which rule catches it.
+            </p>
+          </header>
+          <GateSimulator />
         </div>
       </section>
 
@@ -272,33 +288,32 @@ export default function HowItWorksPage() {
         <div className="container mk-stack">
           <header className="mk-head">
             <h2 className="mk-h2">Step by step, including the parts we cannot do</h2>
-            <p className="mk-lede">
-              Every stage from signing up to closing, marked with whose it is.
-            </p>
+            <p className="mk-lede">Every stage from signing up to closing, marked with whose it is.</p>
           </header>
 
-          <ol className="mk-stages">
-            {TOUR_STAGES.map((stage) => (
-              <li key={stage.id} className="mk-stage">
-                <div className="mk-stage-head">
+          <ol className="hiw-steps">
+            {TOUR_STAGES.map((stage, index) => (
+              <li key={stage.id} className="hiw-step">
+                <span className="hiw-step-n mk-num" aria-hidden="true">
+                  {index + 1}
+                </span>
+                <div className="hiw-step-body">
                   <h3>{stage.title}</h3>
-                  <span className="mk-stage-owner">{ownerLabel(stage.owner)}</span>
+                  <span className="hiw-step-owner">{ownerLabel(stage.owner)}</span>
+                  <p>{stage.owner === "decision" ? stage.youDo : stage.weDo}</p>
+                  <p className="hiw-step-caveat">
+                    <strong>Worth knowing.</strong> {stage.caveat}
+                  </p>
                 </div>
-                {stage.youDo ? <p>{stage.youDo}</p> : null}
-                <p className="mk-muted">{stage.weDo}</p>
-                <p className="mk-stage-caveat">
-                  <strong>Worth knowing.</strong> {stage.caveat}
-                </p>
               </li>
             ))}
           </ol>
 
-          <p className="mk-callout">
+          <p className="hiw-note">
             <strong>Sending is capped the whole way through.</strong> Whatever a campaign asks for,
             nothing leaves an account faster than {PUBLIC_LIMITS.invitesPerDayMax} invitations a day
             or {PUBLIC_LIMITS.invitesPerWeek} a week, and a new account starts at{" "}
-            {PUBLIC_LIMITS.invitesPerDayStart}.{" "}
-            <Link href="/linkedin-automation-limits">Why those numbers</Link>.
+            {PUBLIC_LIMITS.invitesPerDayStart}. <Link href="/linkedin-automation-limits">Why those numbers</Link>.
           </p>
         </div>
       </section>

@@ -180,7 +180,11 @@ export class MockLinkedInProvider implements LinkedInProvider {
 
   async sendMessage(input: { accountId: string; chatId?: string; providerId?: string; text: string }): Promise<ActionResult> {
     this.sentMessages.push(input);
-    return { ok: true, providerId: `msg_${this.sentMessages.length}` };
+    return {
+      ok: true,
+      providerId: `msg_${this.sentMessages.length}`,
+      chatId: input.chatId ?? (input.providerId ? `chat_${input.providerId}` : undefined),
+    };
   }
 
   /** Posts this mock was asked to publish, so a test can read them back. */

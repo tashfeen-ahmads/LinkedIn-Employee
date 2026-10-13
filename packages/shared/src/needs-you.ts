@@ -287,7 +287,7 @@ export function needsYou(facts: NeedsYouFacts): NeedsYouItem[] {
     items.push({
       kind: "pitch_unapproved",
       title: `${plural(facts.heldForCopy, "conversation")} ${isare(facts.heldForCopy)} held: the copy they need has not been approved.`,
-      why: "The message body is the offer, so it is held rather than sent half-written. Its schedule is untouched — approving one line sends it.",
+      why: "The message body is the offer, so it is held rather than sent half-written. Its schedule is untouched, so approving one line sends it.",
       href: "/app/agents",
       action: "Read and approve the offer",
       tone: "blocker",

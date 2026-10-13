@@ -26,7 +26,7 @@ async function raiseTicket(formData: FormData) {
   const subject = String(formData.get("subject") ?? "").trim();
   const body = String(formData.get("body") ?? "").trim();
   if (!subject || !body) {
-    redirect(errorQuery("/app/support", "A subject and a description, please — both get read."));
+    redirect(errorQuery("/app/support", "A subject and a description, please. Both get read."));
   }
 
   const session = await requireSession();
@@ -58,7 +58,7 @@ async function raiseTicket(formData: FormData) {
     context: {
       // The three questions an operator asks first, answered before they ask.
       stuckOn: next?.key ?? null,
-      stuckOnLabel: next?.label ?? "nothing — setup is complete",
+      stuckOnLabel: next?.label ?? "nothing, setup is complete",
       linkedInStatus: account?.status ?? "not connected",
       linkedInDetail: account?.status_detail ?? null,
       sendingLoopRunning: beatAge !== null && beatAge <= PACING_STALE_MS,
@@ -133,9 +133,9 @@ export default async function SupportPage({ searchParams }: { searchParams: Noti
         title="Support"
         lede={
           <>
-          Tell us what is not working. Every ticket carries what the product believed at the moment you
-          raised it — which step you are on, whether LinkedIn is connected, whether the sending loop is
-          running — so you do not have to go and check any of that first.
+          Tell us what is not working. Every ticket carries what the product could see at the moment
+          you raised it: which step you are on, whether LinkedIn is connected, and whether your agent
+          is sending. You do not have to go and check any of that first.
           </>
         }
       />
@@ -160,6 +160,7 @@ export default async function SupportPage({ searchParams }: { searchParams: Noti
                 name="body"
                 rows={5}
                 required
+                maxLength={8000}
                 placeholder="I approved a customer profile, pressed Find prospects, and the Prospects page is still empty ten minutes later."
               />
             </label>
@@ -177,14 +178,14 @@ export default async function SupportPage({ searchParams }: { searchParams: Noti
                   <strong>{ticket.subject}</strong>
                   <span className={`pill ${ticket.status === "open" ? "" : "positive"}`}>{label(ticket.status)}</span>
                 </div>
-                <p className="small muted">{ticket.body}</p>
+                <p className="small muted prewrap">{ticket.body}</p>
                 {ticket.reopened_at ? (
                   <p className="tiny subtle">
                     You said this did not help: &ldquo;{ticket.followup}&rdquo; A person from our team is on it.
                   </p>
                 ) : ticket.answer ? (
                   <>
-                    <p className="small panel">{ticket.answer}</p>
+                    <p className="small panel prewrap">{ticket.answer}</p>
                     <p className="tiny subtle">
                       {ticket.answered_by === "agent" ? `Answered by the ${BRAND.name} assistant` : "Answered by our team"}
                       {ticket.answered_at ? (
@@ -215,7 +216,8 @@ export default async function SupportPage({ searchParams }: { searchParams: Noti
                   <p className="tiny subtle">
                     Raised{" "}
                     <time dateTime={isoAttr(ticket.created_at)}>{formatDateTime(ticket.created_at, timezone)}</time>.
-                    No answer yet — usually within a few minutes.
+                    No answer yet. Most are answered within a few minutes; anything a person
+                    needs to look at can take longer.
                   </p>
                 )}
               </article>
@@ -223,9 +225,9 @@ export default async function SupportPage({ searchParams }: { searchParams: Noti
           </div>
         ) : (
           <Empty title="Nothing raised yet">
-            A ticket carries what the product could see at the moment you raised it — which step you
-            are on, whether LinkedIn is connected, whether the sending loop has run — so you do not
-            have to go and check first.
+            A ticket carries what the product could see at the moment you raised it: which step you
+            are on, whether LinkedIn is connected, and whether your agent has been sending. You do
+            not have to go and check first.
           </Empty>
         )}
       </Section>

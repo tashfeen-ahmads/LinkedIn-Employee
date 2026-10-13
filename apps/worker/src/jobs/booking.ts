@@ -32,6 +32,13 @@ export interface BookingInput {
  */
 export type BookingOutcome =
   | { status: "booked"; meetingId: string }
+  /**
+   * The time they named is the meeting they already have. Nothing to book and
+   * nothing wrong: "great, see you Thursday at 10" is the commonest message
+   * after a confirmation, and it used to come back as a hold telling the rep
+   * the time was "no longer free" — busy with this prospect's own meeting.
+   */
+  | { status: "already_booked"; meetingId: string }
   | { status: "no_match" }
   | { status: "held"; reason: string };
 
@@ -53,6 +60,9 @@ export async function bookAcceptedSlot(ctx: WorkerContext, input: BookingInput):
   const chosen = matchOfferedSlot(input.message, input.offeredSlots, input.binding.timezone);
   if (!chosen) return { status: "no_match" };
   const readable = formatSlot(chosen, input.binding.timezone);
+
+  const existing = await ownMeetingAt(ctx, input, chosen);
+  if (existing) return { status: "already_booked", meetingId: existing };
 
   /*
    * Asked again now, not trusted from the offer.
@@ -179,6 +189,28 @@ export async function bookAcceptedSlot(ctx: WorkerContext, input: BookingInput):
   });
 
   return { status: "booked", meetingId: meeting.id as string };
+}
+
+/**
+ * This prospect's own scheduled meeting with this rep at exactly this time.
+ *
+ * Asked before the calendar, because the calendar answers "busy" for it — with
+ * the very meeting being confirmed. Compared as instants, not strings: the
+ * database hands back `+00:00` where the offer stored `Z`.
+ */
+async function ownMeetingAt(ctx: WorkerContext, input: BookingInput, startsAt: string): Promise<string | null> {
+  const { data } = await ctx.db
+    .from("meetings")
+    .select("id, starts_at")
+    .eq("workspace_id", input.workspaceId)
+    .eq("prospect_id", input.prospectId)
+    .eq("rep_user_id", input.repUserId)
+    .is("cancelled_at", null)
+    .neq("status", "cancelled")
+    .limit(20);
+  const at = Date.parse(startsAt);
+  const match = (data ?? []).find((row) => Date.parse(row.starts_at as string) === at);
+  return match ? (match.id as string) : null;
 }
 
 /**

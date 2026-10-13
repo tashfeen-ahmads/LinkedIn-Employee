@@ -1,8 +1,10 @@
 import { cleanWebsiteText, runStrategyAgent } from "@le/agents";
 import { loadBusinessProfile } from "@le/db";
+import { MAX_STRATEGY_PRIORITY } from "@le/shared";
 import type { WorkerContext } from "../context.js";
 import { recordEvent } from "../context.js";
 import { seedWorkspaceAgent } from "./seed-agent.js";
+import { fetchVetted } from "../vetted-fetch.js";
 import type { StrategyJob } from "../queues.js";
 
 const PAGES_TO_READ = ["", "/about", "/pricing", "/customers", "/case-studies", "/product"];
@@ -103,22 +105,53 @@ async function strategy(ctx: WorkerContext, job: StrategyJob): Promise<string> {
   // rather than stored. Two strategies covering the same people put one person
   // on two lists, and the never-twice rule then means the second list finds
   // nobody — a strategy that can only ever report zero.
+  //
+  // "Already here" includes earlier in this same response. A model asked for
+  // four will sometimes write one of them twice with different capitals or a
+  // trailing space, and two rows called "Chamber leaders" are the same two
+  // lists over the same people as a repeat of an existing name.
   const taken = new Set((existing?.profiles ?? []).map((p) => p.name.trim().toLowerCase()));
-  const fresh = output.customerProfiles.filter((p) => !taken.has(p.name.trim().toLowerCase()));
+  const fresh = output.customerProfiles.filter((p) => claimName(taken, p.name));
 
   if (fresh.length) {
     // Priorities continue from the end of the list rather than restarting at
     // 1, or four new strategies would each claim to be the one to pursue first.
     const after = existing?.highestPriority ?? 0;
-    await ctx.db.from("customer_profiles").insert(
-      fresh.map((profile, i) => ({
-        workspace_id: job.workspaceId,
-        business_profile_id: businessProfileId,
-        name: profile.name,
-        spec: profile as never,
-        priority: existing ? after + i + 1 : profile.priority,
+    const rows = fresh.map((profile, i) => ({
+      workspace_id: job.workspaceId,
+      business_profile_id: businessProfileId,
+      name: profile.name,
+      priority: Math.min(MAX_STRATEGY_PRIORITY, existing ? after + i + 1 : profile.priority),
+    }));
+    const { error: insertError } = await ctx.db.from("customer_profiles").insert(
+      rows.map((row, i) => ({
+        ...row,
+        // The spec carries the same number as the column. The edit form reads
+        // the column and validates the spec, and two numbers for one strategy
+        // is a strategy whose own edit form refuses to save it.
+        spec: { ...fresh[i]!, priority: row.priority } as never,
       })),
     );
+    if (insertError) {
+      /*
+       * Thrown, never recorded as success. A run that reported four strategies
+       * stored while the database refused them leaves a workspace with a
+       * business profile and nothing under it — and an onboarding checklist
+       * that reads "strategies written" over an empty list.
+       *
+       * A business profile this run created is removed again first, because
+       * the retry would otherwise create a second one beside it: the split
+       * list rule 37 exists to prevent.
+       */
+      if (!existing) {
+        await ctx.db
+          .from("business_profiles")
+          .delete()
+          .eq("id", businessProfileId)
+          .eq("workspace_id", job.workspaceId);
+      }
+      throw new Error(`could not store the strategies: ${insertError.message}`);
+    }
   }
 
   /*
@@ -213,7 +246,31 @@ async function readExistingStrategies(
   };
 }
 
-/** Best-effort read of the pages that actually describe a business. */
+/**
+ * True the first time a name is seen, and false for every repeat of it.
+ *
+ * Compared trimmed and case-folded, because "Chamber leaders" and
+ * "chamber leaders " are one segment written twice.
+ */
+function claimName(taken: Set<string>, name: string): boolean {
+  const key = name.trim().toLowerCase();
+  if (taken.has(key)) return false;
+  taken.add(key);
+  return true;
+}
+
+/**
+ * Best-effort read of the pages that actually describe a business.
+ *
+ * The address is typed by whoever signs up, and the worker fetches it — which
+ * is server-side request forgery unless it is stopped (rule 19). The worker
+ * holds the service-role key and answers its own internal API on localhost, so
+ * "website: 127.0.0.1:4000" or a metadata address is not a broken website, it
+ * is a request made with our credentials to something no browser could reach,
+ * with the answer handed to a model and stored on a profile the customer
+ * reads. So every page goes through `fetchVetted`, the same GET the calendar
+ * feeds use: https only, DNS resolved and vetted, every redirect re-checked.
+ */
 async function fetchSite(baseUrl: string): Promise<string | undefined> {
   const origin = normalizeOrigin(baseUrl);
   if (!origin) return undefined;
@@ -221,13 +278,12 @@ async function fetchSite(baseUrl: string): Promise<string | undefined> {
   const pages = await Promise.all(
     PAGES_TO_READ.map(async (path) => {
       try {
-        const res = await fetch(`${origin}${path}`, {
-          redirect: "follow",
-          signal: AbortSignal.timeout(10_000),
+        const fetched = await fetchVetted(`${origin}${path}`, {
+          timeoutMs: 10_000,
           headers: { "user-agent": "LinkedInEmployee/1.0 (+strategy-agent)" },
         });
-        if (!res.ok) return "";
-        const html = await res.text();
+        if (!fetched.ok || !fetched.response.ok) return "";
+        const html = await fetched.response.text();
         return `\n\n--- ${path || "/"} ---\n${cleanWebsiteText(html, 6_000)}`;
       } catch {
         return "";
@@ -239,10 +295,20 @@ async function fetchSite(baseUrl: string): Promise<string | undefined> {
   return combined.length > 200 ? combined : undefined;
 }
 
+/**
+ * The site's origin, always as https.
+ *
+ * A plain `http://` address is upgraded rather than refused: nearly every
+ * company site answers on https, and the vetted fetch will not travel in the
+ * clear. Whatever the scheme, the host is checked by `fetchVetted` before
+ * anything is requested.
+ */
 function normalizeOrigin(input: string): string | null {
   try {
-    const url = new URL(input.startsWith("http") ? input : `https://${input}`);
-    return `${url.protocol}//${url.host}`;
+    const trimmed = input.trim();
+    const url = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`);
+    if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+    return `https://${url.host}`;
   } catch {
     return null;
   }

@@ -20,7 +20,7 @@ export function SetupRail() {
         <p className="eyebrow">What happens when you press it</p>
         <p className="prose muted">
           Sage, the team&rsquo;s strategist, reads what you publish and writes three to five
-          customer profiles — who to go after, why they would care, what to say. About a minute.
+          customer profiles: who to go after, why they would care, what to say. About a minute.
         </p>
       </div>
 
@@ -45,7 +45,7 @@ export function SetupRail() {
         matters; this says where it lands.
       */}
       <p className="small muted prose">
-        Nothing leaves your account until you press Launch — not while you are filling this in, and
+        Nothing leaves your account until you press Launch: not while you are filling this in, and
         not while the agent is writing. Every answer here lands on your profile, where you can
         change any of it later.
       </p>

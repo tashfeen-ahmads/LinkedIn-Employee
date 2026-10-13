@@ -9,7 +9,7 @@ import { useId, useState } from "react";
  * do not match is the most common way a signup is abandoned, and the fix is
  * older than this product: let people see what they typed. The toggle is a
  * real `<button type="button">` rather than an icon with a click handler, so
- * it is reachable by keyboard and announces its state — a screen-reader user
+ * it is reachable by keyboard and announces its state, a screen-reader user
  * otherwise gets an unlabelled control that appears to do nothing.
  *
  * It never leaves the browser. Switching `type` is the whole mechanism: the
@@ -34,7 +34,7 @@ export function PasswordField({
    *
    * `checkPassword` has always required a minimum and the input carried none,
    * so a short password was accepted by the form, refused by the server, and
-   * answered with a re-rendered empty page — the person losing their name,
+   * answered with a re-rendered empty page, the person losing their name,
    * their email and both passwords to a rule nothing had told them about
    * until after they pressed the button.
    */
@@ -48,7 +48,7 @@ export function PasswordField({
    * A `div`, not a wrapping `<label>`.
    *
    * Wrapped in the label, the toggle's text and the hint both became part of
-   * the input's accessible name — a screen reader announced "Password Show At
+   * the input's accessible name, a screen reader announced "Password Show At
    * least twelve characters, edit text". The label now names the input alone
    * through `htmlFor`, the hint is attached as a description, and the toggle
    * is its own control beside it. The label sits in a `span` so it keeps the

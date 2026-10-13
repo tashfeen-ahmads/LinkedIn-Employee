@@ -14,6 +14,7 @@ import { Section } from "@/components/page";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { readFunnelData } from "@/lib/funnel-data";
+import { countersForToday } from "@/lib/account-day";
 
 /**
  * How close this account is to the lines, and what it did each day.
@@ -33,13 +34,15 @@ export async function LimitsSection() {
   const session = await requireSession();
   const supabase = await createClient();
 
-  const { data: account } = await supabase
+  // The viewer's own account first. `.limit(1)` over every active account in
+  // the workspace drew whichever row came back first, so on a team the meters
+  // could be somebody else's allowance under "Today's allowance" on your screen.
+  const { data: active } = await supabase
     .from("linkedin_accounts")
     .select(ACCOUNT_USAGE_COLUMNS)
     .eq("workspace_id", session.workspaceId)
-    .eq("status", "active")
-    .limit(1)
-    .maybeSingle();
+    .eq("status", "active");
+  const account = (active ?? []).find((a) => a.user_id === session.userId) ?? (active ?? [])[0] ?? null;
 
   // No connected account is not "0 of 14". The overview's list already says the
   // account needs reconnecting, and a row of empty meters underneath it would
@@ -54,7 +57,9 @@ export async function LimitsSection() {
   const timezone = owner?.timezone ?? "UTC";
 
   const now = new Date();
-  const usage = toUsage(account as AccountRecord, timezone);
+  // Rolled over to the rep's today, as the worker does before its first send:
+  // read as it stood, every morning opened on yesterday's count.
+  const usage = toUsage(countersForToday(account as AccountRecord, timezone, now), timezone);
   const cap = dailyInviteCap(usage.firstActionAt, now);
 
   /*
@@ -97,7 +102,7 @@ export async function LimitsSection() {
         framed
         id="allowance"
         title="Today’s allowance"
-        description="Product rules rather than settings. They only ever move down."
+        description="Product rules rather than settings, so nobody can raise them. The invitation cap grows on its own during warm-up."
       >
         <div className="allowance-stack">
           <AllowanceMeter label="Invitations today" used={usage.invitesToday} cap={cap} />
@@ -113,7 +118,7 @@ export async function LimitsSection() {
             note="Warm-ups have their own allowance and never cost an invitation."
           />
           <AllowanceMeter
-            label="Invitations this week"
+            label="Invitations, last 7 days"
             used={usage.invitesThisWeek}
             cap={LINKEDIN_LIMITS.invitesPerWeek}
           />

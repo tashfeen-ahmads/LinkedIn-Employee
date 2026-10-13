@@ -6,6 +6,7 @@ import {
   onboardingProgress,
   type OnboardingState,
 } from "@le/shared";
+import { Section } from "./page";
 
 /**
  * What is left to set up.
@@ -37,7 +38,7 @@ export function SetupChecklist({ state }: { state: OnboardingState }) {
   if (isReadyToSend(state)) {
     return (
       <p className="small subtle">
-        {done} of {total} steps done — everything required is finished, so campaigns can send. The
+        {done} of {total} steps done. Everything required is finished, so campaigns can send. The
         rest is worth doing when you have a minute.
       </p>
     );
@@ -48,7 +49,12 @@ export function SetupChecklist({ state }: { state: OnboardingState }) {
   const next = nextStep(state);
 
   return (
-    <section className="card raised stack-4" aria-labelledby="setup-heading">
+    <Section
+      id="setup"
+      title="Finish setting up"
+      description={`${done} of ${total} done. Nothing sends until the required steps are.`}
+      surface={{ className: "card raised stack-4", headerClassName: "stack-1" }}
+    >
       {/*
         No button here, and that is the point.
 
@@ -59,13 +65,6 @@ export function SetupChecklist({ state }: { state: OnboardingState }) {
         which does not read as emphasis, it reads as a page that has lost track
         of itself. This is the reference list; the instruction is above.
       */}
-      <div className="stack-1">
-        <h2 id="setup-heading">Finish setting up</h2>
-        <p className="small muted">
-          {done} of {total} done. Nothing sends until the required steps are.
-        </p>
-      </div>
-
       <div className="step-meter" role="presentation">
         {ONBOARDING_STEPS.map((step) => (
           <span
@@ -115,6 +114,6 @@ export function SetupChecklist({ state }: { state: OnboardingState }) {
           );
         })}
       </ol>
-    </section>
+    </Section>
   );
 }

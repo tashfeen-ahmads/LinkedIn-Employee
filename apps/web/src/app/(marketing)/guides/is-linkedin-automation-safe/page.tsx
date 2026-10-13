@@ -1,7 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArticleLayout, articleMeta, Callout, CompareTable } from "@/components/article";
-import { PUBLIC_LIMITS, SITE } from "@/lib/site";
+import { PUBLIC_LIMITS } from "@/lib/site";
+import { CopyButton } from "@/components/copy-button";
+import { BURST_FIRST_MIN, BURST_LAST_MIN, DayTimeline, clock } from "@/components/seo/ga2-day-timeline";
+import { PrintListButton } from "@/components/seo/ga2-print-button";
 import { INVITE_NOTE_MAX_CHARS, LINKEDIN_LIMITS } from "@le/shared";
 import { backOff, classifyProviderError, invitePaceMs } from "@le/linkedin";
 
@@ -64,10 +67,23 @@ const SOURCES = [
   { label: "Cleverly: why LinkedIn automation tools get accounts banned (source of the 23% in-house test)", url: "https://cleverly.co/blog/why-linkedin-automation-tools-get-your-account-banned-and-what-to-do-instead" },
   { label: "Bearconnect on DEV Community: automation data post (source of the 83% figure)", url: "https://dev.to/bearconnectio/linkedin-automation-doesnt-break-your-account-the-real-data-5b53" },
   { label: "Indie Hackers: 'detection rates went up 40%' (an anecdote, not a restriction rate)", url: "https://www.indiehackers.com/post/my-linkedin-account-got-banned-3-times-heres-what-i-learned-about-safe-automation-d2447ed6c0" },
-  { label: "Salesflow: how safe is LinkedIn automation (studied for this page)", url: "https://salesflow.io/how-safe-is-linkedin-automation/" },
-  { label: "Valley: safe LinkedIn automation (studied for this page)", url: "https://joinvalley.co/blog/safe-linkedin-automation" },
-  { label: "Fuzzy: is LinkedIn automation safe (studied for this page)", url: "https://getfuzzy.ai/blog/is-linkedin-automation-safe-guide" },
 ];
+
+const CHECKLIST_TITLE = "LinkedIn automation safety checklist";
+const CHECKLIST_FOOTER = "From the guide at norasdr.com/guides/is-linkedin-automation-safe";
+const CHECKLIST = [
+  "Are the daily and weekly caps published, and set below the ceilings vendors report rather than at them?",
+  "Does the warm-up ramp start at the account's first send, not the day it was connected?",
+  "Is a day's allowance spread across working hours, with irregular gaps?",
+  "What happens on the first \"try again later\": hours of silence, or another attempt in five minutes?",
+  "Is acceptance rate watched, with a warning when it drops?",
+  "Does a human approve the target list and the copy before anything sends?",
+  "Can the same person be contacted by two campaigns?",
+  `Is each note written for the person, ${INVITE_NOTE_MAX_CHARS} characters or fewer, with no link?`,
+  "Are old pending invitations withdrawn on a schedule?",
+  "Does the tool pause the account and tell you when LinkedIn reports a problem?",
+] as const;
+const CHECKLIST_TEXT = [CHECKLIST_TITLE, "", ...CHECKLIST.map((item, i) => `${i + 1}. ${item}`), "", CHECKLIST_FOOTER].join("\n");
 
 const STATS = [
   {
@@ -114,7 +130,7 @@ export default function Page() {
           week, and an automated-activity restriction ends at the time in the notice once the software is off.
         </li>
         <li>
-          <strong>Behaviour decides the risk, not the brand of tool.</strong> Speed, acceptance and what happens after a refusal are
+          <strong>Behavior decides the risk, not the brand of tool.</strong> Speed, acceptance and what happens after a refusal are
           what LinkedIn can see.
         </li>
         <li>
@@ -137,15 +153,15 @@ export default function Page() {
       <h3 id="regular-timing">Timing that is too regular</h3>
       <p>
         A person does not send an invitation every 120 seconds for an hour. Fixed delays, or &quot;random&quot; delays drawn from a
-        narrow band, produce a rhythm no human makes. Nora puts at least {MIN_GAP_MIN} minutes between any two actions, adds up to{" "}
-        {MAX_GAP_MIN} minutes of jitter on top, and jitters retries too, so a backlog released at nine in the morning does not
-        drain like a metronome.
+        narrow band, produce a rhythm no human makes. Nora keeps any two actions at least {MIN_GAP_MIN} minutes apart, with a
+        random floor of {MIN_GAP_MIN} to {MAX_GAP_MIN} minutes, spreads the day across your working hours on top of that, and
+        jitters retries too, so a backlog released at 9 a.m. does not drain like a metronome.
       </p>
 
       <h3 id="bursts">Bursts inside a daily cap</h3>
       <p>
-        Most safety advice stops at &quot;stay under X a day&quot;. A cap says how many, not when. Ten invitations sent between 9:00 and
-        9:30 are inside a ten-a-day cap and still look like a machine emptying a queue. The next section is what that cost us.
+        Most safety advice stops at &quot;stay under X a day&quot;. A cap says how many, not when. Ten invitations sent between 9 a.m. and
+        9:30 a.m. are inside a ten-a-day cap and still look like a machine emptying a queue. The next section is what that cost us.
       </p>
 
       <h3 id="low-acceptance">Low acceptance rate</h3>
@@ -171,28 +187,54 @@ export default function Page() {
       </p>
 
       <h2 id="incident">A daily cap is not a pace: a real incident</h2>
+      <p>
+        This is the story of the first LinkedIn account Nora ever ran, told in full because it is the clearest lesson we have
+        about what a cap does not do.
+      </p>
 
       <h3 id="seven-in-27">Seven invitations in 27 minutes on day one</h3>
       <p>
-        The first LinkedIn account Nora ever ran had a first-day cap of {PUBLIC_LIMITS.invitesPerDayStart} invitations. Nothing
-        decided when they went out, so the sender placed each one a few minutes after the last. The account sent seven connection
-        requests between 16:52 and 17:19, the first seven actions it had ever taken through Nora. Every one was inside the
-        daily cap. Together they were a burst from an account with no history, which is the pattern a cap exists to prevent.
+        The account had never sent anything through Nora, so it sat at the starting cap of {PUBLIC_LIMITS.invitesPerDayStart}{" "}
+        invitations a day. The cap decided how many. Nothing decided when: the sender placed each invitation a few minutes
+        after the last, starting whenever the scheduler happened to run.
       </p>
+      <p>
+        That afternoon it sent seven connection requests between {clock(BURST_FIRST_MIN)} and {clock(BURST_LAST_MIN)}, the first seven
+        actions the account had ever taken through Nora. Every one was inside the daily cap. Together they were a burst from
+        an account with no history, which is exactly the pattern a cap is supposed to prevent.
+      </p>
+      <DayTimeline dailyCount={PUBLIC_LIMITS.invitesPerDayStart} />
 
       <h3 id="five-days">What the refusals looked like for five days</h3>
       <p>
-        LinkedIn began refusing invitations from the account, and was still refusing five days later, with seven sent and five
-        outstanding all week. Each refusal said, in substance, that the account had reached a temporary limit and should try again
-        later. Our sender at that point treated those as failed invitations and moved on to the next person, which meant more
-        refused attempts against an account LinkedIn had already decided to slow down.
+        LinkedIn began refusing invitations from the account. Each refusal said, in substance, that the account had reached a
+        temporary limit and should try again later.
       </p>
       <p>
-        Two things changed as a result. A day&apos;s allowance is now divided across the working time left in the day, so ten
-        invitations on an eight-hour day land roughly {FIRST_DAY_PACE_MIN} minutes apart on average rather than {MIN_GAP_MIN} to {MAX_GAP_MIN}. And a
-        &quot;try again later&quot; refusal now stops all invitations from the account for {FIRST_COOLDOWN_H} hours, then{" "}
-        {SECOND_COOLDOWN_H}, doubling up to {LONGEST_COOLDOWN_H}, with nobody marked as failed.
+        Our sender at that point read those as failed invitations and moved on to the next person. That meant more refused
+        attempts against an account LinkedIn had already decided to slow down.
       </p>
+      <p>
+        Five days later LinkedIn was still refusing. The account had sent seven invitations all week and had five of them
+        still pending.
+      </p>
+
+      <h3 id="what-changed">What we changed</h3>
+      <ul>
+        <li>
+          <strong>The day is spread.</strong> A day&apos;s allowance is divided across the working time left in the day. Ten
+          invitations on an eight-hour day now start about {FIRST_DAY_PACE_MIN} minutes apart and reach across most of the day,
+          as in the lower row above, never closer than {MIN_GAP_MIN} minutes.
+        </li>
+        <li>
+          <strong>A refusal stops the account.</strong> A &quot;try again later&quot; refusal now pauses all invitations from the
+          account for {FIRST_COOLDOWN_H} hours, then {SECOND_COOLDOWN_H}, doubling up to {LONGEST_COOLDOWN_H}.
+        </li>
+        <li>
+          <strong>Nobody is marked as failed.</strong> The people waiting stay on the campaign and are invited once the
+          account is sending again.
+        </li>
+      </ul>
       <Callout tone="safety">
         <p>
           <strong>The lesson for any tool:</strong> ask not only &quot;what is the daily cap?&quot; but &quot;how is a day spread?&quot;
@@ -243,7 +285,7 @@ export default function Page() {
       <h3 id="where-from">Where &quot;23%&quot;, &quot;40%&quot; and &quot;83%&quot; come from</h3>
       <CompareTable
         caption="Restriction-rate figures quoted online and where they come from, traced in October 2026"
-        columns={["Where it comes from", "Why it cannot be generalised"]}
+        columns={["Where it comes from", "Why it cannot be generalized"]}
         rows={STATS}
       />
       <p>
@@ -256,23 +298,25 @@ export default function Page() {
         Only LinkedIn knows how many accounts it restricts and why, and it does not publish a rate by cause. Every outside number
         is drawn from one vendor&apos;s own customers, who share that vendor&apos;s defaults, targeting habits and caps. Restrictions are
         also under-reported: a quiet one-week invitation restriction often goes unnoticed. The honest answer is that the rate
-        depends on behaviour, and nobody has measured it across the market.
+        depends on behavior, and nobody has measured it across the market.
       </p>
 
       <h2 id="checklist">A safety checklist you can use with any tool</h2>
-      <p>Hold any tool, including this one, to these questions before you connect an account.</p>
-      <ol>
-        <li>Are the daily and weekly caps published, and set below the ceilings vendors report rather than at them?</li>
-        <li>Does the warm-up ramp start at the account&apos;s first send, not the day it was connected?</li>
-        <li>Is a day&apos;s allowance spread across working hours, with irregular gaps?</li>
-        <li>What happens on the first &quot;try again later&quot;: hours of silence, or another attempt in five minutes?</li>
-        <li>Is acceptance rate watched, with a warning when it drops?</li>
-        <li>Does a human approve the target list and the copy before anything sends?</li>
-        <li>Can the same person be contacted by two campaigns?</li>
-        <li>Is each note written for the person, under the character limit, with no link?</li>
-        <li>Are old pending invitations withdrawn on a schedule?</li>
-        <li>Does the tool pause the account and tell you when LinkedIn reports a problem?</li>
-      </ol>
+      <p>
+        Hold any tool, including this one, to these questions before you connect an account. Copy the list into your own
+        notes, or print it (the print dialog can also save it as a PDF).
+      </p>
+      <div className="ga2-checklist">
+        <ol>
+          {CHECKLIST.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ol>
+        <div className="ga2-actions">
+          <CopyButton value={CHECKLIST_TEXT} label="Copy checklist" />
+          <PrintListButton title={CHECKLIST_TITLE} items={CHECKLIST} footer={CHECKLIST_FOOTER} />
+        </div>
+      </div>
       <p>
         Our guide to the <Link href="/guides/safest-linkedin-automation-tool">safest LinkedIn automation tool</Link> applies checks
         like these to the main tools, and{" "}
@@ -284,7 +328,7 @@ export default function Page() {
       </p>
 
       <h2 id="how-nora-handles-it">How Nora handles each risk</h2>
-      <p>Every number below is read from the code that sends, not typed into this page.</p>
+      <p>Each number below is the one Nora actually enforces on every account.</p>
       <ul>
         <li>
           <strong>Caps.</strong> {PUBLIC_LIMITS.invitesPerDayStart} invitations a day at the start, rising to{" "}
@@ -297,12 +341,13 @@ export default function Page() {
           however long ago it was connected.
         </li>
         <li>
-          <strong>A pace, not only a cap.</strong> The day&apos;s invitations are spread across the working time left, with a floor of{" "}
-          {MIN_GAP_MIN} to {MAX_GAP_MIN} minutes between actions and nothing outside your hours.
+          <strong>A pace, not only a cap.</strong> The day&apos;s invitations are spread across the working time left, never closer
+          than {MIN_GAP_MIN} minutes apart (a random floor of {MIN_GAP_MIN} to {MAX_GAP_MIN} minutes), and nothing goes out
+          outside your hours.
         </li>
         <li>
           <strong>Refusals.</strong> {FIRST_COOLDOWN_H} hours of silence on the first &quot;try again later&quot;, doubling up to{" "}
-          {LONGEST_COOLDOWN_H}. A refusal Nora does not recognise is treated as final rather than retried.
+          {LONGEST_COOLDOWN_H}. A refusal Nora does not recognize is treated as final rather than retried.
         </li>
         <li>
           <strong>Account health</strong> is read on every send and every night. A warning or restriction pauses the account at
@@ -322,11 +367,9 @@ export default function Page() {
         </li>
       </ul>
       <p>
-        The full sequence is on <Link href="/how-it-works">how Nora works</Link>, where your data lives is on the{" "}
-        <Link href="/security">security page</Link>, and more guides are in the{" "}
-        <Link href="/guides">LinkedIn outreach guides</Link>. Nora is free while it grows:{" "}
-        <a href={`${SITE.app}/signup`}>Sign up free</a>, or work out what your own account can send with the{" "}
-        <Link href="/tools/linkedin-limit-calculator">LinkedIn limit calculator</Link>.
+        To work out what your own account can send on any day, try the{" "}
+        <Link href="/tools/linkedin-limit-calculator">LinkedIn limit calculator</Link>. Where your data lives is on the{" "}
+        <Link href="/security">security page</Link>.
       </p>
     </ArticleLayout>
   );

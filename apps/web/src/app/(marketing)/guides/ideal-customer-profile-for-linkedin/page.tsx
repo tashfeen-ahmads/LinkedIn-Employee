@@ -1,14 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArticleLayout, articleMeta, Callout, CompareTable, type Faq, type Source } from "@/components/article";
-import { SITE } from "@/lib/site";
-import { YOUR_DECISIONS } from "@le/shared";
+import { CopyButton } from "@/components/copy-button";
 
 const PATH = "/guides/ideal-customer-profile-for-linkedin";
 
 export const metadata: Metadata = articleMeta(PATH);
-
-const APPROVE_STRATEGY = YOUR_DECISIONS[0];
 
 const FAQ: readonly Faq[] = [
   {
@@ -17,7 +14,7 @@ const FAQ: readonly Faq[] = [
   },
   {
     q: "Is an ICP the same as a buyer persona?",
-    a: "No. An ideal customer profile usually describes the kind of company worth selling to, and a buyer persona describes a person inside it: their goals, worries and how they talk. LinkedIn searches people, not companies, so for LinkedIn outreach you need both in one document: the company traits as filters and the person's role and pains as the reason to write.",
+    a: "No. An ideal customer profile usually describes the kind of company worth selling to, and a buyer persona describes a person inside it: their goals, worries and how they talk. Outreach targets people, not companies, so for LinkedIn outreach you need both in one document: the company traits as filters and the person's role and pains as the reason to write.",
   },
   {
     q: "Why are my outreach prospects my competitors?",
@@ -44,7 +41,7 @@ const SOURCES: readonly Source[] = [
 ];
 
 const PROFILE_VS_PERSONA = [
-  { label: "Describes", values: ["The kind of organisation worth selling to", "A person inside it"] },
+  { label: "Describes", values: ["The kind of organization worth selling to", "A person inside it"] },
   { label: "Made of", values: ["Industry, size, location, buying triggers", "Role, goals, worries, how they talk"] },
   { label: "Used to", values: ["Decide who to pursue and who to turn away", "Decide what to say"] },
   { label: "On LinkedIn it becomes", values: ["Filters: industry, headcount, location", "Filters: titles, seniority; and the note itself"] },
@@ -62,18 +59,25 @@ const SEARCH_MAP = [
 ];
 
 const TEMPLATE = [
-  { label: "Name", values: ["Short and memorable, named after the buyer", "Operations leads at mid-size logistics firms"] },
-  { label: "Job titles", values: ["The titles that own the problem, as written on LinkedIn", "Head of Operations; Operations Director; COO"] },
+  { label: "Name", values: ["Short and memorable, named after the buyer", "Operations leaders at mid-size US trucking and logistics firms"] },
+  { label: "Job titles", values: ["The titles that own the problem, as written on LinkedIn", "VP of Operations OR Director of Operations OR COO"] },
   { label: "Seniority", values: ["Who can say yes, not who would use it", "Director and above"] },
-  { label: "Industries", values: ["LinkedIn's own industry names, picked from its suggestions", "Whatever LinkedIn suggests when you type transportation or logistics"] },
+  { label: "Industries", values: ["LinkedIn's own industry names, picked from its suggestions", "Whatever LinkedIn suggests when you type truck transportation or logistics"] },
   { label: "Company size", values: ["A headcount band", "51 to 200"] },
-  { label: "Locations", values: ["Places as LinkedIn suggests them", "United Kingdom"] },
+  { label: "Locations", values: ["Places as LinkedIn suggests them", "Texas and Illinois, picked from LinkedIn's suggestions"] },
   { label: "What they buy", values: ["What they pay you for, in their words", "Someone to run carrier onboarding so the ops team does not"] },
   { label: "Instead today", values: ["What your offer replaces", "A shared spreadsheet and one coordinator's afternoons"] },
   { label: "Pains", values: ["Specific, and fine to name tools or rivals", "New carriers take two weeks to onboard; the spreadsheet is always out of date"] },
-  { label: "Trigger events", values: ["Observable moments of readiness", "New operations hire; a new depot; a hiring post for coordinators"] },
-  { label: "Disqualifiers", values: ["Who looks right and is not", "Freight software vendors; consultancies; existing customers"] },
+  { label: "Trigger events", values: ["Observable moments of readiness", "A new VP of Operations; a new distribution center; a job post for carrier coordinators"] },
+  { label: "Disqualifiers", values: ["Who looks right and is not", "Freight software vendors; logistics consultants; existing customers"] },
 ];
+
+/* What the copy button hands over: every field with its hint, ready to fill in a document. */
+const TEMPLATE_TEXT = [
+  "Ideal customer profile for LinkedIn outreach",
+  "",
+  ...TEMPLATE.flatMap((row) => [`${row.label}: (${row.values[0]})`, ""]),
+].join("\n");
 
 export default function Page() {
   return (
@@ -84,14 +88,16 @@ export default function Page() {
       faq={FAQ}
       sources={SOURCES}
     >
-      <p>In short:</p>
-      <ul>
-        <li>Write the profile about the buyer&rsquo;s problem, not about your company.</li>
-        <li>Add &ldquo;what they buy&rdquo; and &ldquo;what they do instead today&rdquo;. A competitor cannot fill either honestly.</li>
-        <li>Name competitors freely in the pains, never in who the segment is.</li>
-        <li>Write titles, industries and places as LinkedIn names them, and check which filters your tier can actually apply.</li>
-        <li>Before approving, open twenty profiles from the search and count the real buyers.</li>
-      </ul>
+      <Callout tone="info">
+        <p className="ga2-summary-title">In short</p>
+        <ul className="ga2-callout-list">
+          <li>Write the profile about the buyer&rsquo;s problem, not about your company.</li>
+          <li>Add &ldquo;what they buy&rdquo; and &ldquo;what they do instead today&rdquo;. A competitor cannot fill either honestly.</li>
+          <li>Name competitors freely in the pains, never in who the segment is.</li>
+          <li>Write titles, industries and places as LinkedIn names them, and check which filters your tier can actually apply.</li>
+          <li>Before approving, open twenty profiles from the search and count the real buyers.</li>
+        </ul>
+      </Callout>
 
       <h2 id="trap">The trap: a profile built from your own website describes your competitors</h2>
       <p>
@@ -106,6 +112,40 @@ export default function Page() {
         person then approved, was the leaders of those networking groups. Two fields of one answer
         contradicted each other, and nothing compared them.
       </p>
+      <figure className="ga2-contrast">
+        <div className="ga2-contrast-card is-peer">
+          <p className="ga2-contrast-title">Written from the company&rsquo;s own website</p>
+          <dl>
+            <div>
+              <dt>Segment</dt>
+              <dd>Leaders of networking groups: chapters, chambers, masterminds</dd>
+            </div>
+            <div>
+              <dt>What they buy</dt>
+              <dd>Left blank. They run the thing the platform competes with.</dd>
+            </div>
+          </dl>
+          <p className="ga2-contrast-result">The search returns competitors</p>
+        </div>
+        <div className="ga2-contrast-card is-buyer">
+          <p className="ga2-contrast-title">Written from what buyers pay for</p>
+          <dl>
+            <div>
+              <dt>Segment</dt>
+              <dd>Owners of small service firms that win most new clients by referral</dd>
+            </div>
+            <div>
+              <dt>What they buy</dt>
+              <dd>A way to ask for, track and thank referrals without a spreadsheet</dd>
+            </div>
+          </dl>
+          <p className="ga2-contrast-result">The search returns people with the problem</p>
+        </div>
+        <figcaption>
+          The same referral platform, two profiles. The left one matches the real case; the right one is how the same
+          business reads once &ldquo;what they buy&rdquo; has to be filled in honestly.
+        </figcaption>
+      </figure>
       <p>
         On LinkedIn, the mistake is invisible from the list. A competitor has the same titles, the
         same industry, the same company size, often the same headline. Any fit score, human or
@@ -117,7 +157,7 @@ export default function Page() {
 
       <h2 id="fields">The fields an ICP needs</h2>
       <p>
-        Five groups of fields. The first describes the person; the next three are why they would
+        An ICP for outreach has five groups of fields. The first describes the person; the next three are why they would
         talk to you; the last keeps the wrong people out.
       </p>
 
@@ -164,7 +204,7 @@ export default function Page() {
       <p>
         The usual distinction, which guides like Close&rsquo;s draw well, is that an ICP describes
         a company and a persona describes a person. LinkedIn changes the practical answer, because
-        LinkedIn searches people. For outreach you need one document holding both: company traits
+        outreach on LinkedIn targets people. For outreach you need one document holding both: company traits
         as filters, the person&rsquo;s role and pains as the reason to write.
       </p>
       <CompareTable caption="Ideal customer profile versus buyer persona for LinkedIn outreach" columns={["Ideal customer profile", "Buyer persona"]} rows={PROFILE_VS_PERSONA} />
@@ -181,7 +221,7 @@ export default function Page() {
         As of October 2026, free LinkedIn search filters by keywords, location, industry, current
         and past company, school and connection degree. It has no seniority filter, no company headcount filter and
         no way to exclude titles. Its keyword box does support Boolean operators, per LinkedIn&rsquo;s
-        help page: quotes, capitalised <code>OR</code>, <code>AND</code> and <code>NOT</code>, and
+        help page: quotes, capitalized <code>OR</code>, <code>AND</code> and <code>NOT</code>, and
         parentheses. Use <code>OR</code> between titles. Typed with spaces, several titles become
         a requirement that a profile contain all of them, which matches almost nobody.
       </p>
@@ -199,7 +239,7 @@ export default function Page() {
         but it is a text hint matching anyone with the word anywhere in their profile. A list built
         that way still looks like what you asked for. Nora searches on the tier your account
         actually has and writes the dropped filters onto the campaign (seniority, company size,
-        excluded titles), along with any location or industry LinkedIn did not recognise or searched
+        excluded titles), along with any location or industry LinkedIn did not recognize or searched
         under a different name, so you read them before you launch. Our guide to{" "}
         <Link href="/guides/linkedin-prospecting-without-sales-navigator">LinkedIn prospecting without Sales Navigator</Link>{" "}
         covers when the paid seat is worth it.
@@ -207,7 +247,7 @@ export default function Page() {
 
       <h2 id="approve-check">A check before you approve a profile</h2>
       <p>
-        Read it as the most sceptical person in your company would, then run these six checks.
+        Read it as the most skeptical person in your company would, then run these six checks.
       </p>
       <ol>
         <li>Can you write &ldquo;what they buy&rdquo; without describing your own product back to yourself?</li>
@@ -218,11 +258,13 @@ export default function Page() {
         <li>Of the first twenty people the search returns, how many would you be glad to hear back from?</li>
       </ol>
       <Callout tone="safety">
-        <strong>Approving a strategy is one of the three decisions Nora leaves to you.</strong>{" "}
-        {APPROVE_STRATEGY.because} So the approval screen compares each segment&rsquo;s name,
-        titles, industries and keywords against the competitors your business profile lists, and
-        says so when they match. It warns and never blocks: some companies really do sell to the
-        people they compete with, and that is your call to make knowingly.
+        <p>
+          <strong>Approving a strategy is one of the three decisions Nora leaves to you.</strong> Its
+          approval screen compares each segment&rsquo;s name, titles, industries and keywords against
+          the competitors your business profile lists, and says so when they match. It warns and
+          never blocks: some companies really do sell to the people they compete with, and that is
+          your call to make knowingly.
+        </p>
       </Callout>
       <p>
         Targeting quality shows up later as acceptance rate: a profile aimed at the wrong people is
@@ -234,18 +276,20 @@ export default function Page() {
 
       <h2 id="template">Free ideal customer profile template for LinkedIn outreach</h2>
       <p>
-        Copy the left column into a document and fill in the right. The example is an illustration,
-        not a customer: a company selling carrier onboarding as a service to logistics firms.
+        Eleven fields, each with what to write and a worked example. The example is an illustration,
+        not a customer: a US company selling carrier onboarding as a service to trucking and
+        logistics firms in Texas and Illinois. Copy the blank template into a document or a sheet
+        and fill in one per segment.
       </p>
       <CompareTable caption="Ideal customer profile template for LinkedIn outreach, with an example" columns={["What to write", "Example"]} rows={TEMPLATE} />
+      <div className="ga2-actions">
+        <CopyButton value={TEMPLATE_TEXT} label="Copy blank template" />
+      </div>
       <p>
         Nora writes three to five of these from your website, each asked to fill both buyer fields,
         and searches none of them until you approve one. Then it runs the rest of the process in
         our <Link href="/guides/linkedin-prospecting">step-by-step LinkedIn prospecting guide</Link>:
-        search, profile checks, one note per person, paced sending. See{" "}
-        <Link href="/how-it-works">how Nora works from strategy to booked meeting</Link>, browse
-        the other <Link href="/guides">LinkedIn outreach guides</Link>, or{" "}
-        <a href={`${SITE.app}/signup`}>Sign up free</a>.
+        search, profile checks, one note per person, paced sending.
       </p>
     </ArticleLayout>
   );

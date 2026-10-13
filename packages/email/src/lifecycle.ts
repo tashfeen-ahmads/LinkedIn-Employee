@@ -209,7 +209,7 @@ export function tipsEmail(input: MarketingInput): EmailMessage {
     `A daily cap that is a rule, not a setting: ${L.invitesPerDayStart} invitations a day at first, rising to ${L.invitesPerDayMax} over about ${weeks} weeks from your first send.`,
     "Each day's invitations are spread across your working hours, minutes apart — never fired off in a burst.",
     "A quick look at someone's profile before the invitation, so your name is familiar when it arrives.",
-    `A hard ceiling of ${L.invitesPerWeek} invitations a week across every campaign combined, so no week ever looks like a burst.`,
+    `A hard ceiling of ${L.invitesPerWeek} invitations in any seven days in a row, across every campaign combined, so no stretch of the week ever looks like a burst.`,
   ];
   const after = "If LinkedIn ever pushes back, Reese pauses on its own and I'll email you straight away.";
   return marketing(input, {

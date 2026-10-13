@@ -122,7 +122,7 @@ function tsx(dir: string): string[] {
 describe("nothing public quotes a price", () => {
   const PUBLIC = [
     ...tsx(join(here, "../src/app/(marketing)")),
-    ...["marketing", "schema", "auth-aside", "product-film", "gate-simulator", "agent-timeline"].map(
+    ...["marketing", "schema", "auth-aside", "gate-simulator", "agent-timeline"].map(
       (name) => join(here, `../src/components/${name}.tsx`),
     ),
     join(here, "../src/app/signup/page.tsx"),
@@ -189,9 +189,9 @@ describe("nothing public quotes a price", () => {
   });
 });
 
-/** Pages whose job is comparing Nora with priced tools. */
+/** Pages that quote what someone else charges (or was fined): other tools, LinkedIn's own plans, court judgments. */
 function isComparison(file: string): boolean {
-  return /\(marketing\)\/(alternatives\/|guides\/(ai-sdr-pricing|ai-sdr-vs-human-sdr|best-ai-sdr-for-linkedin|safest-linkedin-automation-tool)\/|free-linkedin-automation-tool\/)/.test(
+  return /\(marketing\)\/(alternatives\/|guides\/(ai-sdr-pricing|ai-sdr-vs-human-sdr|best-ai-sdr-for-linkedin|safest-linkedin-automation-tool|linkedin-prospecting-without-sales-navigator|is-linkedin-automation-legal)\/|free-linkedin-automation-tool\/)/.test(
     file,
   );
 }

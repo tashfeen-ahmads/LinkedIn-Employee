@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArticleLayout, articleMeta, Callout, CompareTable, type Faq, type Source } from "@/components/article";
-import { PUBLIC_LIMITS, SITE } from "@/lib/site";
+import { ArticleLayout, articleMeta, CompareTable, type Faq, type Source } from "@/components/article";
+import { PUBLIC_LIMITS } from "@/lib/site";
+import { SearchRecipe } from "@/components/seo/gb2-query";
 
 const PATH = "/guides/linkedin-prospecting-without-sales-navigator";
 
@@ -14,11 +15,11 @@ const FAQ: readonly Faq[] = [
   },
   {
     q: "What filters does free LinkedIn search lack?",
-    a: "As of October 2026, free LinkedIn search has no seniority filter, no company headcount filter and no way to exclude job titles, all of which Sales Navigator offers. It also lacks Sales Navigator's saved lead lists and alerts. Typing a seniority word like director into the keyword box is a text match, not a filter, so treat the results as a hint.",
+    a: "As of October 2026, free LinkedIn search has no seniority filter, no company headcount filter and no way to exclude job titles, all of which Sales Navigator offers. It also lacks Sales Navigator’s lead lists and job-change alerts, though a free account can save a few searches. Typing a seniority word like director into the keyword box is a text match, not a filter, so treat the results as a hint.",
   },
   {
     q: "Does LinkedIn search support OR?",
-    a: "Yes. LinkedIn's help page says the keyword box accepts quotes for exact phrases, OR, AND and NOT in capital letters, and parentheses for grouping, processed in that order: quotes, parentheses, NOT, AND, then OR. Use OR between alternative job titles. Without it, several words separated by spaces must all appear on a profile, which matches very few people.",
+    a: "Yes. LinkedIn’s help page says the keyword box accepts quotes for exact phrases, OR, AND and NOT in capital letters, and parentheses for grouping, processed in that order: quotes, parentheses, NOT, AND, then OR. Use OR between alternative job titles. Without it, several words separated by spaces must all appear on a profile, which matches very few people.",
   },
   {
     q: "Does Sales Navigator increase the connection limit?",
@@ -26,7 +27,7 @@ const FAQ: readonly Faq[] = [
   },
   {
     q: "When does the commercial use limit reset?",
-    a: "LinkedIn's help center says the commercial use limit is counted on your search activity since the start of the calendar month and resets on the first of the month. LinkedIn does not publish the number. As of October 2026, its Premium FAQ says Premium Business, Sales Navigator and Recruiter Lite browse without the limit.",
+    a: "LinkedIn’s help center says the commercial use limit is counted on your search activity since the start of the calendar month and resets on the first of the month. LinkedIn does not publish the number. As of October 2026, its Premium FAQ says Premium Business, Sales Navigator and Recruiter Lite browse without the limit.",
   },
 ];
 
@@ -37,16 +38,21 @@ const SOURCES: readonly Source[] = [
   { label: "LinkedIn Help: Choose the right Sales Navigator subscription", url: "https://www.linkedin.com/help/linkedin/answer/a104003" },
   { label: "LinkedIn Help: Invitation restrictions (answer 4800)", url: "https://www.linkedin.com/help/linkedin/answer/4800" },
   { label: "Microsoft Learn: LinkedIn industry codes V2", url: "https://learn.microsoft.com/en-us/linkedin/shared/references/reference-tables/industry-codes-v2" },
-  { label: "Valley: LinkedIn Sales Navigator cost explained (2026)", url: "https://www.joinvalley.co/blog/linkedin-sales-navigator-cost-explained-2026" },
-  { label: "Overloop: LinkedIn Sales Navigator pricing", url: "https://overloop.com/blog/linkedin-sales-navigator-pricing" },
+  { label: "LinkedIn: Sales Navigator compare plans and pricing (checked October 2026)", url: "https://business.linkedin.com/sell/sales-navigator/compare-plans" },
+  { label: "LinkedIn Help: Smart Links in Sales Navigator FAQ (Advanced plans only)", url: "https://www.linkedin.com/help/sales-navigator/answer/a130019" },
+  { label: "LinkedIn Help: Sales Navigator alerts (lead changed jobs)", url: "https://www.linkedin.com/help/sales-navigator/answer/a105133" },
+  { label: "LinkedIn Help: Save lead and account searches in Sales Navigator", url: "https://www.linkedin.com/help/sales-navigator/answer/a102024/" },
+  { label: "LinkedIn Help: InMail messages FAQ (monthly credits by plan)", url: "https://www.linkedin.com/help/linkedin/answer/a554514" },
+  { label: "LinkedIn Help: Difference between free LinkedIn and Premium accounts (saved searches and alerts)", url: "https://www.linkedin.com/help/linkedin/answer/a545596" },
+  { label: "LinkedIn Premium Business: plan page and pricing (checked October 2026)", url: "https://premium.linkedin.com/small-business/business" },
   { label: "Findymail: Sales Navigator search filters", url: "https://findymail.com/blog/sales-navigator-search-filters" },
 ];
 
 const FILTERS = [
   { label: "Keywords, with Boolean", values: ["Yes", "Yes"] },
   { label: "Job title", values: ["Title keyword field, include only", "Include and exclude filter"] },
-  { label: "Location", values: ["Yes, LinkedIn's names", "Yes, LinkedIn's names"] },
-  { label: "Industry", values: ["Yes, LinkedIn's names", "Yes, LinkedIn's names"] },
+  { label: "Location", values: ["Yes, LinkedIn’s names", "Yes, LinkedIn’s names"] },
+  { label: "Industry", values: ["Yes, LinkedIn’s names", "Yes, LinkedIn’s names"] },
   { label: "Current and past company, school", values: ["Yes", "Yes"] },
   { label: "Connection degree", values: ["Yes", "Yes"] },
   { label: "Seniority level", values: ["No", "Yes"] },
@@ -78,7 +84,7 @@ export default function Page() {
         row of filters. As of October 2026 the filters cover connection degree, locations, current
         company, past company, school, industry, profile language and a few others, and the keyword
         box accepts Boolean operators. That is enough to say &ldquo;operations leaders in
-        logistics, in the UK, not already connected to me&rdquo;:
+        logistics, in Texas, not already connected to me&rdquo;:
       </p>
       <ul>
         <li>Titles go into the keyword box, joined with <code>OR</code>.</li>
@@ -134,7 +140,7 @@ export default function Page() {
       <p>
         This is the trap most guides never mention. LinkedIn filters places and industries by its
         own list of entries, each with an internal id, not by the words you type. Choose
-        &ldquo;United Kingdom&rdquo; from the suggestions and it filters. Send the same words
+        &ldquo;Texas, United States&rdquo; from the suggestions and it filters. Send the same words
         anywhere a tool or an integration expects an id, and the search can return nobody at all,
         with no error. That is exactly how our own first live campaign found nobody, and why Nora
         now looks every location and industry up in LinkedIn&rsquo;s list before searching.
@@ -162,10 +168,10 @@ export default function Page() {
         and returns almost nobody. Write alternatives as alternatives:
       </p>
       <p>
-        <code>{'"managing director" OR founder OR owner OR CEO'}</code>
+        <code className="gb2-code">{'"managing director" OR founder OR owner OR CEO'}</code>
       </p>
       <p>
-        LinkedIn&rsquo;s help page says the operators must be capitalised and are processed in a
+        LinkedIn&rsquo;s help page says the operators must be capitalized and are processed in a
         fixed order: quotes, then parentheses, then NOT, then AND, then OR. When you mix AND and OR,
         wrap the alternatives in parentheses so the order is the one you meant.
       </p>
@@ -178,12 +184,15 @@ export default function Page() {
         drops a founder whose summary says they used to be one. Use it for words that only the
         wrong people use.
       </p>
-      <Callout tone="info">
-        <strong>A free search for the example above:</strong>{" "}
-        <code>{'("operations director" OR "head of operations" OR COO) NOT recruiter'}</code>, with
-        location and industry chosen from LinkedIn&rsquo;s suggestions and connection degree set to
-        second and third.
-      </Callout>
+      <SearchRecipe
+        title="A free search for operations leaders in logistics, in Texas"
+        keywords={'("operations director" OR "head of operations" OR COO) NOT recruiter'}
+        filters={[
+          { label: "Locations", value: "Texas, United States, picked from LinkedIn\u2019s suggestions" },
+          { label: "Industry", value: "A logistics industry, picked from LinkedIn\u2019s suggestions" },
+          { label: "Connections", value: "2nd and 3rd, because 1st-degree connections cannot be invited" },
+        ]}
+      />
 
       <h2 id="commercial-use-limit">The commercial use limit</h2>
       <p>
@@ -198,20 +207,65 @@ export default function Page() {
         daily job, expect to.
       </p>
 
+      <h3 id="saved-searches">Saved searches: the free substitute for alerts</h3>
+      <p>
+        Sales Navigator&rsquo;s alerts tell you when a saved lead changes jobs or a saved search finds
+        someone new. A free account has a smaller version: LinkedIn&rsquo;s help center says a basic
+        account can save up to three searches and get weekly alerts when new people match them. Some
+        users report the option missing from their search page, so check for it on yours. If it is not
+        there, bookmark the search address and run it again each week. Either way, save the one search
+        you would otherwise rebuild every Monday, and new people who fit arrive without spending your
+        monthly search allowance on finding the same ones again.
+      </p>
+
       <h2 id="worth-it">Is Sales Navigator worth it for a small business?</h2>
       <p>
         It depends on whether your buyer is defined by the filters only it has, and on how often
-        you search. Price as of October 2026: third-party 2026 pricing guides list the Core plan at
-        between about 100 and 120 US dollars a month for one person, depending on when they were written, with a
-        discount for paying annually. Prices vary by region, so check LinkedIn&rsquo;s own plan page
-        before you buy.
+        you search. LinkedIn sells it in three plans. Core is the one a small business needs; Advanced
+        adds features for a sales team; Advanced Plus is priced on request for teams connecting it to
+        a CRM. US prices, as listed on LinkedIn&rsquo;s plan page as of October 2026 (before tax, and
+        different in other regions):
+      </p>
+      <CompareTable
+        caption="Sales Navigator Core and Advanced, as listed by LinkedIn as of October 2026 (US prices, per seat)"
+        columns={["Core", "Advanced"]}
+        rows={[
+          { label: "Built for", values: ["One person selling", "A sales team"] },
+          { label: "Paid monthly", values: ["$119.99 a month", "$159.99 a month"] },
+          {
+            label: "Paid yearly",
+            values: ["$1,079.88 a year (about $90 a month)", "$1,799.88 a year (about $150 a month)"],
+          },
+          { label: "Seniority, headcount and excluded-title filters", values: ["Yes", "Yes"] },
+          { label: "Saved searches and lead alerts", values: ["Yes", "Yes"] },
+          { label: "TeamLink (who on your team knows a lead)", values: ["No", "Yes"] },
+          { label: "Smart Links (see who opened what you shared)", values: ["No", "Yes"] },
+          { label: "Trial", values: ["Yes, for eligible members", "Yes, for eligible members"] },
+        ]}
+      />
+      <p>
+        LinkedIn offers a trial at no charge on Core and Advanced to members who have no paid LinkedIn
+        plan and have not had a LinkedIn trial in the past 365 days. It asks for a card up front and
+        charges when the trial ends unless you cancel, so put the end date in your calendar the day
+        you start. A trial is a good way to run the comparison on this page with your own customer
+        profile: the same search on both tiers, side by side.
+      </p>
+
+      <h3 id="premium-business">The middle option: Premium Business</h3>
+      <p>
+        If the commercial use limit is your only problem, Premium Business is the cheaper fix.
+        LinkedIn&rsquo;s plan page lists it at $69.99 a month, or $539.88 a year, as of
+        October 2026. Its Premium FAQ says it browses without the commercial use limit, and its
+        InMail FAQ lists 15 InMail credits a month. What it does not bring, as far as we could find,
+        is Sales Navigator&rsquo;s lead filters: no seniority, no company headcount, no excluded titles.
+        So it fixes how much you can search, not what you can search for.
       </p>
 
       <h3 id="what-it-adds">What the seat adds</h3>
       <ul>
         <li>Seniority, company headcount and excluded-title filters, plus many more lead and account filters.</li>
         <li>Unlimited browsing instead of the monthly commercial use limit.</li>
-        <li>Saved lead and account lists with alerts, and 50 InMail credits a month on Core, per LinkedIn&rsquo;s plan comparison.</li>
+        <li>Saved lead and account lists with alerts, including when a saved lead changes jobs, and 50 InMail credits a month on Core, per LinkedIn&rsquo;s InMail FAQ.</li>
       </ul>
 
       <h3 id="what-it-does-not-change">What it does not change (the invitation cap)</h3>
@@ -240,9 +294,8 @@ export default function Page() {
         covers the rest, and the guide to an{" "}
         <Link href="/guides/ideal-customer-profile-for-linkedin">ideal customer profile for LinkedIn outreach</Link>{" "}
         covers what to search for in the first place. Nora works on either tier and tells you which
-        filters it could not apply: see <Link href="/how-it-works">how Nora runs a campaign</Link>,
-        browse all <Link href="/guides">LinkedIn outreach guides</Link>, or{" "}
-        <a href={`${SITE.app}/signup`}>Sign up free</a>.
+        filters it could not apply: see <Link href="/how-it-works">how Nora runs a campaign on either tier</Link>,
+        or browse all <Link href="/guides">LinkedIn outreach guides</Link>.
       </p>
     </ArticleLayout>
   );

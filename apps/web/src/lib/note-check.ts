@@ -14,7 +14,7 @@ import { INVITE_NOTE_MAX_CHARS, containsLink } from "@le/shared";
 
 /**
  * LinkedIn's own ceilings, from its Help Center as found in October 2026:
- * 200 characters for a personalised note on a free (basic) account, 300 on
+ * 200 characters for a personalized note on a free (basic) account, 300 on
  * Premium. A LinkedIn fact rather than a Nora rule, which is why it is not in
  * @le/shared; Nora's cap is `INVITE_NOTE_MAX_CHARS`.
  */

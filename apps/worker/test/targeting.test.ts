@@ -254,6 +254,37 @@ describe("runTargetingJob", () => {
     expect(scoreMock).not.toHaveBeenCalled();
   });
 
+  it("spends no profile lookup on somebody whose account is excluded", async () => {
+    // The search withheld this person's public address, so they would need a
+    // profile lookup (a request off a seat somebody pays for) before they could
+    // be checked. Their company is excluded already: nothing should be spent.
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    db.seed("exclusions", [
+      {
+        id: "excl-1",
+        workspace_id: WORKSPACE,
+        kind: "company",
+        value: normalizeExclusionValue("company", "Northwind Ltd."),
+        raw_value: "Northwind Ltd.",
+        reason: "existing customer",
+      },
+    ]);
+    linkedin.candidates = { items: [candidate("ACoAAX9", "https://www.linkedin.com/in/ACoAAX9")], cursor: null };
+    linkedin.profiles.set("ACoAAX9", {
+      providerId: "ACoAAX9",
+      linkedinUrl: "https://www.linkedin.com/in/jane-x9",
+      firstName: "Jane",
+      lastName: "X9",
+    });
+    const lookups = vi.spyOn(linkedin, "getProfile");
+
+    expect(await runTargetingJob(ctx, job)).toBeNull();
+
+    expect(lookups).not.toHaveBeenCalled();
+    expect(scoreMock).not.toHaveBeenCalled();
+  });
+
   it("drops disqualified and low-fit prospects before anyone is queued", async () => {
     const { db, ctx, linkedin } = harness();
     const { runTargetingJob } = await import("../src/jobs/targeting.js");
@@ -1519,5 +1550,333 @@ describe("continuing a campaign's search", () => {
 
     expect(await runTargetingJob(ctx, more)).toBeNull();
     expect(linkedin.searches).toHaveLength(0);
+  });
+});
+
+const OTHER_PROFILE = "77777777-7777-4777-8777-777777777777";
+const TEAMMATE = "88888888-8888-4888-8888-888888888888";
+const OWNED_CAMPAIGN = "66666666-6666-4666-8666-666666666666";
+
+/**
+ * Rules 24 and 26: somebody this workspace already has is never found again,
+ * and the first strategy to reach a person is the only one that ever can.
+ */
+describe("people already known, however they arrive", () => {
+  it("never re-attaches a contacted prospect who arrived without a public address", async () => {
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    // Found and contacted weeks ago by a different strategy.
+    db.seed("prospects", [
+      {
+        id: "known-prospect",
+        workspace_id: WORKSPACE,
+        customer_profile_id: OTHER_PROFILE,
+        linkedin_url: "linkedin.com/in/jane-doe-123",
+        provider_id: "ACoAAB1",
+        fit_score: 88,
+        owner_user_id: USER,
+        last_contacted_at: "2026-09-20T10:00:00Z",
+      },
+    ]);
+    // Today's search returns the same person from outside the viewer's
+    // network: no public address, only the provider id.
+    linkedin.candidates = {
+      items: [candidate("ACoAAB1", "https://www.linkedin.com/in/ACoAAB1")],
+      cursor: null,
+      droppedFilters: [],
+    };
+    linkedin.profiles.set("ACoAAB1", {
+      providerId: "ACoAAB1",
+      linkedinUrl: "https://www.linkedin.com/in/jane-doe-123",
+      firstName: "Jane",
+      lastName: "Doe",
+    });
+    scoreMock.mockResolvedValue([ranked("https://www.linkedin.com/in/jane-doe-123", "ACoAAB1", 90)]);
+    const lookups = vi.spyOn(linkedin, "getProfile");
+
+    await runTargetingJob(ctx, job);
+
+    expect(db.rows("campaign_prospects").filter((r) => r.prospect_id === "known-prospect")).toHaveLength(0);
+    expect(db.find("prospects", { id: "known-prospect" })?.customer_profile_id).toBe(OTHER_PROFILE);
+    expect(db.find("prospects", { id: "known-prospect" })?.fit_score).toBe(88);
+    // Recognised by provider id before a profile lookup — a request off a
+    // seat somebody pays for — was spent on somebody we already have.
+    expect(lookups).not.toHaveBeenCalled();
+    expect(scoreMock).not.toHaveBeenCalled();
+  });
+
+  it("recognises somebody known only once their real address is resolved", async () => {
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    // Stored before provider ids were kept, so only the address can match.
+    db.seed("prospects", [
+      {
+        id: "known-prospect",
+        workspace_id: WORKSPACE,
+        customer_profile_id: OTHER_PROFILE,
+        linkedin_url: "linkedin.com/in/jane-doe-123",
+        provider_id: null,
+        fit_score: 88,
+        owner_user_id: USER,
+      },
+    ]);
+    linkedin.candidates = {
+      items: [candidate("ACoAAB1", "https://www.linkedin.com/in/ACoAAB1")],
+      cursor: null,
+      droppedFilters: [],
+    };
+    linkedin.profiles.set("ACoAAB1", {
+      providerId: "ACoAAB1",
+      linkedinUrl: "https://www.linkedin.com/in/jane-doe-123",
+      firstName: "Jane",
+      lastName: "Doe",
+    });
+    scoreMock.mockResolvedValue([ranked("https://www.linkedin.com/in/jane-doe-123", "ACoAAB1", 90)]);
+
+    await runTargetingJob(ctx, job);
+
+    expect(db.rows("campaign_prospects")).toHaveLength(0);
+    expect(db.find("prospects", { id: "known-prospect" })?.customer_profile_id).toBe(OTHER_PROFILE);
+    expect(db.rows("prospects")).toHaveLength(1);
+    // Recognised before the scoring model, not only at the write: the write's
+    // refusal is the last line, and a person already contacted should cost no
+    // model spend on their way to being turned away.
+    expect(scoreMock).not.toHaveBeenCalled();
+  });
+
+  it("never overwrites a prospect row it did not create, and never attaches one", async () => {
+    // The dedupe read can be beaten — by another search writing between it and
+    // this one. The write itself is the last line: it creates, never updates.
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    linkedin.candidates = { items: [candidate("p1", "https://www.linkedin.com/in/jane-one")], cursor: null, droppedFilters: [] };
+    scoreMock.mockImplementation(async () => {
+      // Somebody else writes the same person while this run is scoring.
+      db.seed("prospects", [
+        { id: "theirs", workspace_id: WORKSPACE, customer_profile_id: OTHER_PROFILE, linkedin_url: "linkedin.com/in/jane-one", provider_id: "p1", fit_score: 70, owner_user_id: TEAMMATE },
+      ]);
+      return [ranked("https://www.linkedin.com/in/jane-one", "p1", 90)];
+    });
+
+    await runTargetingJob(ctx, job);
+
+    expect(db.find("prospects", { id: "theirs" })).toMatchObject({ customer_profile_id: OTHER_PROFILE, fit_score: 70, owner_user_id: TEAMMATE });
+    expect(db.rows("campaign_prospects")).toHaveLength(0);
+    // And no empty draft is left beside the search that won.
+    expect(db.rows("campaigns")).toHaveLength(0);
+    expect(db.rows("events").find((e) => e.name === "targeting.stopped")?.payload).toMatchObject({
+      reason: expect.stringContaining("another search"),
+    });
+  });
+
+  it("never puts one person on two strategies' campaigns when both search at once", async () => {
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    db.seed("customer_profiles", [
+      {
+        id: OTHER_PROFILE,
+        workspace_id: WORKSPACE,
+        business_profile_id: BUSINESS,
+        name: "Ops directors",
+        spec: { ...CUSTOMER_PROFILE, name: "Ops directors" },
+        priority: 2,
+        do_not_pursue: false,
+        approved_at: "2026-09-01T09:00:00Z",
+      },
+    ]);
+    // Overlapping audiences: the same person comes back for both.
+    linkedin.candidates = { items: [candidate("p1", "https://www.linkedin.com/in/jane-one")], cursor: null, droppedFilters: [] };
+    scoreMock.mockImplementation(async () => [ranked("https://www.linkedin.com/in/jane-one", "p1", 90)]);
+
+    await Promise.all([
+      runTargetingJob(ctx, job),
+      runTargetingJob(ctx, { ...job, customerProfileId: OTHER_PROFILE }),
+    ]);
+
+    expect(db.rows("prospects")).toHaveLength(1);
+    const prospectId = db.rows("prospects")[0]!.id;
+    const campaigns = new Set(
+      db.rows("campaign_prospects").filter((r) => r.prospect_id === prospectId).map((r) => r.campaign_id),
+    );
+    expect(campaigns.size).toBe(1);
+  });
+
+  it("pairs each created row with its person by provider id, whatever order the rows come back in", async () => {
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    // The database returns created rows in whatever order it likes.
+    const real = db.asDb() as unknown as { from: (t: string) => Record<string, unknown> };
+    (ctx as unknown as { db: unknown }).db = {
+      ...real,
+      from(table: string) {
+        const builder = real.from.call(db, table) as Record<string, (...args: unknown[]) => unknown>;
+        if (table !== "prospects") return builder;
+        const upsert = builder.upsert!.bind(builder);
+        return Object.assign(builder, {
+          upsert: (...args: unknown[]) => {
+            const chained = upsert(...args) as { select: (cols: string) => PromiseLike<{ data: unknown[] | null; error: unknown }> };
+            return {
+              select: (cols: string) =>
+                chained.select(cols).then((res) => ({ ...res, data: res.data ? [...res.data].reverse() : res.data })),
+            };
+          },
+        });
+      },
+    };
+    linkedin.candidates = {
+      items: [candidate("p1", "https://www.linkedin.com/in/jane-one"), candidate("p2", "https://www.linkedin.com/in/john-two")],
+      cursor: null,
+      droppedFilters: [],
+    };
+    scoreMock.mockResolvedValue([
+      ranked("https://www.linkedin.com/in/jane-one", "p1", 90),
+      ranked("https://www.linkedin.com/in/john-two", "p2", 85),
+    ]);
+    notesMock.mockImplementation(async (_agents: unknown, input: { prospects: Array<{ providerId: string }> }) =>
+      new Map(input.prospects.map((p) => [p.providerId, { providerId: p.providerId, note: `note for ${p.providerId}`, grounding: ["x"], tooThin: false, promptVersion: "v" }])),
+    );
+
+    await runTargetingJob(ctx, job);
+
+    const rows = db.rows("campaign_prospects");
+    expect(rows).toHaveLength(2);
+    for (const row of rows) {
+      const prospect = db.rows("prospects").find((p) => p.id === row.prospect_id);
+      expect(row.invite_note).toBe(`note for ${prospect?.provider_id}`);
+    }
+  });
+});
+
+describe("a search that builds no campaign still moves on", () => {
+  it("reads past the first page on the next press when nobody cleared the fit bar", async () => {
+    const { ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    linkedin.pages.set("", { items: [candidate("p1", "https://www.linkedin.com/in/a")], cursor: "page-2", droppedFilters: [] });
+    linkedin.pages.set("page-2", { items: [candidate("p2", "https://www.linkedin.com/in/b")], cursor: null, droppedFilters: [] });
+    scoreMock.mockResolvedValue([ranked("https://www.linkedin.com/in/a", "p1", 40)]);
+
+    expect(await runTargetingJob(ctx, job)).toBeNull();
+    await runTargetingJob(ctx, job);
+
+    // The first page was spent; the second press reads past it.
+    expect(linkedin.searches[1]?.cursor).toBe("page-2");
+  });
+
+  it("starts again from the first page once the strategy's filters change", async () => {
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    linkedin.pages.set("", { items: [candidate("p1", "https://www.linkedin.com/in/a")], cursor: "page-2", droppedFilters: [] });
+    scoreMock.mockResolvedValue([ranked("https://www.linkedin.com/in/a", "p1", 40)]);
+    await runTargetingJob(ctx, job);
+
+    const row = db.find("customer_profiles", { id: PROFILE })!;
+    row.spec = { ...CUSTOMER_PROFILE, salesNavFilters: { ...CUSTOMER_PROFILE.salesNavFilters, titles: ["COO"] } };
+    await runTargetingJob(ctx, job);
+
+    // A cursor into the old result set means nothing in the new one.
+    expect(linkedin.searches[1]?.cursor ?? null).toBeNull();
+  });
+
+  it("never tells somebody to use Find more on a campaign that does not exist", async () => {
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    // Everyone on the page was found by another strategy; this one has no campaign.
+    db.seed("prospects", [
+      { workspace_id: WORKSPACE, customer_profile_id: OTHER_PROFILE, linkedin_url: "linkedin.com/in/a" },
+    ]);
+    linkedin.candidates = { items: [candidate("p1", "https://www.linkedin.com/in/a")], cursor: "page-2", droppedFilters: [] };
+
+    await runTargetingJob(ctx, job);
+
+    const reason = String((db.rows("events").find((e) => e.name === "targeting.stopped")?.payload as { reason?: string })?.reason);
+    expect(db.rows("campaigns")).toHaveLength(0);
+    expect(reason).not.toMatch(/Find more/);
+    expect(reason).toMatch(/press again/);
+  });
+});
+
+describe("Find more pressed by a teammate", () => {
+  it("writes notes in the name of the campaign's owner, and gives them the people found", async () => {
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    db.seed("profiles", [{ id: TEAMMATE, full_name: "Bob Teammate", email: "bob@acme.test" }]);
+    db.seed("campaigns", [
+      {
+        id: OWNED_CAMPAIGN,
+        workspace_id: WORKSPACE,
+        customer_profile_id: PROFILE,
+        linkedin_account_id: ACCOUNT, // Sam's LinkedIn seat
+        owner_user_id: USER,
+        name: "Ops leaders — UK",
+        status: "running",
+        connection_note: "Hi {{first_name}}, we work with ops leaders.",
+        daily_invite_cap: 20,
+        search_cursor: "page-2",
+        search_exhausted: false,
+      },
+    ]);
+    linkedin.candidates = { items: [candidate("p9", "https://www.linkedin.com/in/jane-nine")], cursor: "page-3", droppedFilters: [] };
+    scoreMock.mockResolvedValue([ranked("https://www.linkedin.com/in/jane-nine", "p9", 90)]);
+
+    await runTargetingJob(ctx, { ...job, userId: TEAMMATE, campaignId: OWNED_CAMPAIGN });
+
+    const args = notesMock.mock.calls[0]?.[1] as { repName: string };
+    expect(args.repName).toBe("Sam Patel");
+    expect(db.rows("prospects")[0]?.owner_user_id).toBe(USER);
+  });
+});
+
+describe("a strategy-built campaign and its agent", () => {
+  it("starts on the workspace's default agent, so its approved offer and voice are used", async () => {
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    const { pitchFor } = await import("../src/pitch.js");
+    // What seedWorkspaceAgent writes at onboarding, after the rep approved the line.
+    db.seed("agents", [
+      { id: "agent-1", workspace_id: WORKSPACE, name: "Acme", from_name: "Sam", is_default: true, archived_at: null, model: null, system_prompt: "Plain.", playbook: {}, custom_fields: [] },
+    ]);
+    db.seed("pitches", [
+      { id: "pitch-1", workspace_id: WORKSPACE, agent_id: "agent-1", body: "We chase the follow-ups for you.", is_default: false, approved_at: "2026-10-01T00:00:00Z" },
+    ]);
+    linkedin.candidates = { items: [candidate("p1", "https://www.linkedin.com/in/jane-one")], cursor: null, droppedFilters: [] };
+    scoreMock.mockResolvedValue([ranked("https://www.linkedin.com/in/jane-one", "p1", 90)]);
+
+    const campaignId = await runTargetingJob(ctx, job);
+    const campaign = db.find("campaigns", { id: campaignId! });
+
+    expect(campaign?.agent_id).toBe("agent-1");
+    // The pitch the Reply Agent is handed for this campaign's prospects.
+    expect(await pitchFor(ctx.db, WORKSPACE, null, (campaign?.agent_id as string | null) ?? null)).toBe(
+      "We chase the follow-ups for you.",
+    );
+  });
+});
+
+describe("the follow-up sequence is stored or the campaign is not", () => {
+  it("fails, and leaves no campaign, when its sequence could not be stored", async () => {
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    const real = db.asDb() as unknown as { from: (t: string) => Record<string, unknown> };
+    (ctx as unknown as { db: unknown }).db = {
+      ...real,
+      rpc: (db as unknown as { rpc: unknown }).rpc,
+      from(table: string) {
+        const builder = real.from.call(db, table);
+        if (table !== "campaign_steps") return builder;
+        return Object.assign(builder, {
+          insert: () => Promise.resolve({ data: null, error: { message: "statement timeout" } }),
+        });
+      },
+    };
+    linkedin.candidates = { items: [candidate("p1", "https://www.linkedin.com/in/jane-one")], cursor: null, droppedFilters: [] };
+    scoreMock.mockResolvedValue([ranked("https://www.linkedin.com/in/jane-one", "p1", 90)]);
+
+    // A campaign with invitations and no follow-ups launches, collects
+    // acceptances, and then says nothing to anyone.
+    await expect(runTargetingJob(ctx, job)).rejects.toThrow(/follow-up sequence/);
+    expect(db.rows("campaign_steps")).toHaveLength(0);
+    expect(db.rows("campaigns")).toHaveLength(0);
+    // Nobody spent their exclusion on a campaign that never existed (rule 27).
+    expect(db.rows("prospects")).toHaveLength(0);
   });
 });

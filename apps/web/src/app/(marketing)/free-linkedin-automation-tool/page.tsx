@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { INVITE_NOTE_MAX_CHARS, YOUR_DECISIONS } from "@le/shared";
+import { INVITE_NOTE_MAX_CHARS } from "@le/shared";
 import { ArticleLayout, Callout, CompareTable, articleMeta, type Faq, type Source } from "@/components/article";
 import { SoftwareSchema } from "@/components/schema";
-import { FREE_LINE } from "@/components/marketing";
-import { PUBLIC_LIMITS, SITE } from "@/lib/site";
+import { AudStats, AudSteps } from "@/components/seo/aud-blocks";
+import { PUBLIC_LIMITS } from "@/lib/site";
 
 const PATH = "/free-linkedin-automation-tool";
 
@@ -16,18 +16,17 @@ const HEYREACH_TRIAL = "https://help.heyreach.io/en/articles/10462548-how-to-reg
 const DRIPIFY_PRICE = "https://leadhaste.com/blog/dripify-pricing-2026";
 const EXPANDI_PRICE = "https://derrick-app.com/en/pricing-expandi-2/";
 const PB_PRICING = "https://phantombuster.com/blog/ai-automation/phantombuster-pricing-explained";
-const SPHAXX = "https://chrome.google.com/webstore/detail/sphaxx/bofbclgnenhpggnjificbbidaenmophm";
 const LI_AGREEMENT = "https://www.linkedin.com/legal/user-agreement";
 const LI_PROHIBITED = "https://www.linkedin.com/help/linkedin/answer/a1341387";
 
 const FAQ: readonly Faq[] = [
   {
     q: "Is there a free LinkedIn automation tool?",
-    a: "Yes, but few run real campaigns for free. Most tools offer a trial of 7 to 14 days, or a free tier that lets you look around while sending is paid. As of October 2026 Nora is free for every workspace while it grows, with no time limit, no card and the whole product: prospect search, a note for each person, follow-ups, replies and booking.",
+    a: "Yes, but few run real campaigns for free. Most tools offer a trial of 7 to 14 days, or a free tier that lets you look around while sending is paid. As of October 2026 Nora is free while we grow, for every workspace, with no trial clock, no card and the whole product: prospect search, a note for each person, follow-ups, replies and booking.",
   },
   {
     q: "Are free LinkedIn automation tools safe?",
-    a: "Price has nothing to do with it; behaviour does. LinkedIn's User Agreement prohibits automated access, so no tool, free or paid, can promise zero risk. What lowers the risk is a slow ramp, a weekly ceiling, a day's sends spread across the day, personal notes and good targeting. Be most careful with old browser extensions that are no longer updated.",
+    a: "Price has nothing to do with it; behavior does. LinkedIn's User Agreement prohibits automated access, so no tool, free or paid, can promise zero risk. What lowers the risk is a slow ramp, a weekly ceiling, a day's sends spread across the day, personal notes and good targeting. Be most careful with old browser extensions that are no longer updated.",
   },
   {
     q: "Is Waalaxy free?",
@@ -35,7 +34,7 @@ const FAQ: readonly Faq[] = [
   },
   {
     q: "What is the cheapest safe LinkedIn automation?",
-    a: `The cheapest is free, and Nora is free while it grows. What makes it safe is not the price but the guardrails: every workspace gets the same caps, starting at ${PUBLIC_LIMITS.invitesPerDayStart} invitations a day from the first send, a weekly ceiling of ${PUBLIC_LIMITS.invitesPerWeek} across all campaigns, and approval before launch. A paid tool with a higher ceiling is not safer for costing more.`,
+    a: `The cheapest is free, and Nora is free while we grow. What makes it safe is not the price but the guardrails: every workspace gets the same caps, starting at ${PUBLIC_LIMITS.invitesPerDayStart} invitations a day from the first send, a weekly ceiling of ${PUBLIC_LIMITS.invitesPerWeek} across all campaigns, and approval before launch. A paid tool with a higher ceiling is not safer for costing more.`,
   },
   {
     q: "Do I need a credit card?",
@@ -45,94 +44,97 @@ const FAQ: readonly Faq[] = [
 
 const SOURCES: readonly Source[] = [
   { label: "Waalaxy help center: Waalaxy is now fully cloud-based, paid plan needed to launch (checked October 2026)", url: WAALAXY_CLOUD },
-  { label: "Supered: Waalaxy pricing 2026, reviewed 2 October 2026", url: WAALAXY_REVIEW },
+  { label: "Supered: Waalaxy pricing 2026, reviewed October 2, 2026", url: WAALAXY_REVIEW },
   { label: "HeyReach help center: registering for a free trial", url: HEYREACH_TRIAL },
   { label: "LeadHaste: Dripify pricing 2026, 7-day trial", url: DRIPIFY_PRICE },
   { label: "Derrick: Expandi pricing 2026, 7-day trial (a vendor in the same market)", url: EXPANDI_PRICE },
   { label: "PhantomBuster: pricing explained, including the free plan (2026)", url: PB_PRICING },
-  { label: "Chrome Web Store: Sphaxx, a free LinkedIn extension", url: SPHAXX },
   { label: "LinkedIn Help: Prohibited software and extensions", url: LI_PROHIBITED },
   { label: "LinkedIn User Agreement", url: LI_AGREEMENT },
-  { label: "Bardeen: best LinkedIn automation tools (studied for this page)", url: "https://www.bardeen.ai/best/linkedin-automation-tools" },
-  { label: "Gojiberry: free LinkedIn automation tools 2026 (studied for this page)", url: "https://blog.gojiberry.ai/blog/free-linkedin-automation-tools" },
 ];
 
 function Ext({ href, children }: { href: string; children: React.ReactNode }) {
   return (
-    <a href={href} rel="noopener nofollow" target="_blank">
+    <a className="free-src" href={href} rel="noopener nofollow" target="_blank">
       {children}
     </a>
   );
 }
 
 export default function Page() {
-  const signup = `${SITE.app}/signup`;
   return (
     <ArticleLayout
       path={PATH}
       h1="A free LinkedIn automation tool that runs real campaigns"
-      lede={`Nora is a free LinkedIn automation tool that runs whole campaigns: it finds your buyers, writes each one a personal note, follows up, answers replies and books meetings, with no card and no time limit. ${FREE_LINE} The sending limits are set for your account's safety and are the same for every workspace, so free never means a smaller quota.`}
+      lede={`Nora is a free LinkedIn automation tool that runs whole campaigns: it finds your buyers, writes each one a personal note, follows up, drafts your replies and books meetings, with no card and no trial clock. Free while we grow. The sending limits are set for your account's safety and are the same for every workspace, so free never means a smaller quota.`}
       faq={FAQ}
       sources={SOURCES}
     >
       <SoftwareSchema />
-      <p>
-        <Link href={signup} className="btn large aud-cta-link">
-          Sign up free
-        </Link>
-      </p>
+      <AudSteps
+        id="decisions"
+        title="Three decisions stay yours"
+        intro="Everything else runs without you, apart from the replies, which come to you as drafts until you switch on autopilot."
+        notes={[
+          "Who to go after and why they would care. Nora writes the strategies and approves none.",
+          "The opener and the offer, one line at a time, before anyone reads them.",
+          "The list and the notes are in front of you. Nothing is sent before you press Launch.",
+        ]}
+      />
 
       <h2 id="what-is-free">What you get for free</h2>
       <p>
         All of it, for every workspace. There is no free tier with the useful parts held back,
-        because there is no paid tier to hold them for:
+        because there is no paid tier to hold them for.
       </p>
-      <ul>
+      <ul className="free-grid">
         <li>
-          <strong>Strategy.</strong> Nora reads your website and writes a business profile and three
-          to five customer strategies, and more when you ask.
+          <strong>Strategy</strong>
+          <span>Nora reads your website and writes a business profile and three
+          to five customer strategies, and more when you ask.</span>
         </li>
         <li>
-          <strong>Prospecting.</strong> It searches LinkedIn on the tier your account has, checks every
-          profile can be opened, and scores each person against the strategy that found them.
+          <strong>Prospecting</strong>
+          <span>It searches LinkedIn on the tier your account has, checks every
+          profile can be opened, and scores each person against the strategy that found them.</span>
         </li>
         <li>
-          <strong>Personal notes.</strong> One connection note per person, written from their own
+          <strong>Personal notes</strong>
+          <span>One connection note per person, written from their own
           headline, role and company, capped at {INVITE_NOTE_MAX_CHARS} characters and never carrying
-          a link.
+          a link.</span>
         </li>
         <li>
-          <strong>Follow-ups and replies.</strong> Follow-ups after an acceptance, and replies answered
-          from your own documents under rules you set, with pricing, legal and negative replies held
-          for you by default.
+          <strong>Follow-ups and replies</strong>
+          <span>Follow-ups after an acceptance, and a reply drafted
+          from your own documents for each answer, for you to approve. Switch on autopilot and clean
+          replies go out on their own; pricing, legal and negative replies are still held for you by
+          default.</span>
         </li>
         <li>
-          <strong>Meetings.</strong> A booking page that offers only times you have not booked or
-          blocked out, or your own scheduling link.
+          <strong>Meetings</strong>
+          <span>A booking page that offers only times you have not booked or
+          blocked out, or your own scheduling link.</span>
         </li>
         <li>
-          <strong>Testing and reporting.</strong> Angles tested against each other with even groups,
-          and a funnel from invitation to meeting.
+          <strong>Testing and reporting</strong>
+          <span>Angles tested against each other with even groups,
+          and a funnel from invitation to meeting.</span>
         </li>
       </ul>
       <p>
-        You make three decisions and the rest runs on its own:{" "}
-        {YOUR_DECISIONS.map((d) => d.title.toLowerCase()).join(", ")}. Nothing is sent before you
-        press Launch. The detail is on <Link href="/how-it-works">how an AI SDR for LinkedIn works</Link>.
-      </p>
-      <p>
         Nora works with any LinkedIn account. Sales Navigator, which LinkedIn sells separately, makes
         the search more precise; without it, each campaign tells you which filters could not be
-        applied before you launch.
+        applied before you launch. The detail is on{" "}
+        <Link href="/how-it-works">how an AI SDR for LinkedIn works</Link>.
       </p>
 
       <h2 id="trials">Why most &lsquo;free&rsquo; LinkedIn automation tools are trials</h2>
       <p>
         Search for a free LinkedIn automation tool and most of what comes back is one of three
         things. Listicles that count a 7-day trial as free. Freemium plans where the free part is
-        the dashboard and the sending is paid. And browser extensions, some unmaintained: one free
-        extension still listed on the Chrome Web Store was{" "}
-        <Ext href={SPHAXX}>last updated in 2021</Ext>.
+        the dashboard and the sending is paid. And browser extensions, which vary widely in how
+        recently anyone has updated them, so check the last update date before you install one.
       </p>
       <p>
         A trial is a fair way to sell software. It is a poor way to judge LinkedIn outreach, for one
@@ -148,16 +150,15 @@ export default function Page() {
         immediately before each send, and an owner can lower them for an account or a campaign but
         nobody can raise them.
       </p>
-      <CompareTable
-        caption="Sending limits for every Nora workspace"
-        columns={["Limit"]}
-        rows={[
-          { label: "Invitations a day at the first send", values: [PUBLIC_LIMITS.invitesPerDayStart] },
-          { label: "Invitations a day after the warm-up", values: [PUBLIC_LIMITS.invitesPerDayMax] },
-          { label: "Warm-up length", values: [`About ${PUBLIC_LIMITS.warmupWeeks} weeks from the first send`] },
-          { label: "Invitations a week, all campaigns", values: [PUBLIC_LIMITS.invitesPerWeek] },
-          { label: "Messages a day", values: [PUBLIC_LIMITS.messagesPerDay] },
-          { label: "Acceptance rate that triggers a warning", values: [`Below ${PUBLIC_LIMITS.healthyAcceptance}%`] },
+      <AudStats
+        label="Sending limits for every Nora workspace"
+        items={[
+          { value: PUBLIC_LIMITS.invitesPerDayStart, label: "Invitations a day at the first send" },
+          { value: PUBLIC_LIMITS.invitesPerDayMax, label: "A day after the warm-up" },
+          { value: `${PUBLIC_LIMITS.warmupWeeks} weeks`, label: "Warm-up, from the first send" },
+          { value: PUBLIC_LIMITS.invitesPerWeek, label: "A week, all campaigns" },
+          { value: PUBLIC_LIMITS.messagesPerDay, label: "Messages a day" },
+          { value: `${PUBLIC_LIMITS.healthyAcceptance}%`, label: "Acceptance floor before a warning" },
         ]}
       />
       <p>
@@ -185,7 +186,7 @@ export default function Page() {
         caption="Free plans and trials for LinkedIn automation tools, as of October 2026"
         columns={["What is free", "Can you send for free?"]}
         rows={[
-          { label: "Nora", values: ["The whole product, no time limit, no card", "Yes, under the same caps as everyone"] },
+          { label: "Nora", values: ["The whole product, no trial clock, no card", "Yes, under the same caps as everyone"] },
           {
             label: "Waalaxy",
             values: [
@@ -259,11 +260,6 @@ export default function Page() {
         <Link href="/guides/best-ai-sdr-for-linkedin">guide to choosing an AI SDR for LinkedIn</Link>{" "}
         for the questions to ask any vendor. <Link href="/pricing">The pricing page</Link> says what
         happens if free ever ends.
-      </p>
-      <p>
-        <Link href={signup} className="btn large aud-cta-link">
-          Sign up free
-        </Link>
       </p>
     </ArticleLayout>
   );

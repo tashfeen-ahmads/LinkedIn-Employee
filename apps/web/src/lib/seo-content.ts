@@ -78,7 +78,7 @@ export const CONTENT: readonly ContentPage[] = [
     path: "/guides/linkedin-follow-up-after-connection",
     kind: "guide",
     title: "Follow-up message after a LinkedIn connection is accepted",
-    description: "What to send after someone accepts your LinkedIn request: within the hour, no pitch, continuing the thread your note started. With examples.",
+    description: "What to send after someone accepts your LinkedIn request: within a few hours, no pitch, continuing the thread your note started. With examples.",
     query: "follow up message after linkedin connection accepted",
     published: D,
     updated: D,
@@ -297,7 +297,7 @@ export const CONTENT: readonly ContentPage[] = [
   {
     path: "/guides/linkedin-automation-tool-bans",
     kind: "guide",
-    title: "HeyReach ban and LinkedIn's 2026 automation crackdown",
+    title: "HeyReach ban: what is verified about LinkedIn's 2026 action",
     description: "What is verified about LinkedIn's March 2026 action against HeyReach, what is not, the Apollo and Seamless precedent, and what it means for your account.",
     query: "heyreach ban",
     published: D,
@@ -319,8 +319,8 @@ export const CONTENT: readonly ContentPage[] = [
   {
     path: "/alternatives/phantombuster",
     kind: "alternative",
-    title: "PhantomBuster alternatives for safe LinkedIn outreach",
-    description: "PhantomBuster is built for scraping and workflows. If you need safe LinkedIn outreach with personal notes and booked meetings, see how Nora compares.",
+    title: "PhantomBuster alternatives for outreach, not scraping",
+    description: "PhantomBuster is built for scraping and workflows. If you need paced LinkedIn outreach with personal notes and booked meetings, see how Nora compares.",
     query: "phantombuster alternatives",
     published: D,
     updated: D,
@@ -330,7 +330,7 @@ export const CONTENT: readonly ContentPage[] = [
   {
     path: "/alternatives/heyreach",
     kind: "alternative",
-    title: "HeyReach alternatives: a safer pick for a single rep",
+    title: "HeyReach alternatives for a single rep on their own profile",
     description: "HeyReach suits agencies running many senders. If you are one rep who wants personal notes, human approval and published caps, here is how Nora compares.",
     query: "heyreach alternatives",
     published: D,
@@ -386,7 +386,7 @@ export const CONTENT: readonly ContentPage[] = [
     path: "/tools/linkedin-limit-calculator",
     kind: "tool",
     title: "LinkedIn connection limit calculator: safe daily and weekly",
-    description: "Work out how many connection requests your LinkedIn account can safely send today and this week, from how long it has been sending. Free, nothing stored.",
+    description: "Work out how many connection requests your LinkedIn account can safely send today, and when its rolling seven-day limit frees up. Free, nothing stored.",
     query: "linkedin connection limit calculator",
     published: D,
     updated: D,
@@ -451,8 +451,8 @@ export const CONTENT: readonly ContentPage[] = [
   {
     path: "/free-linkedin-automation-tool",
     kind: "landing",
-    title: "Free LinkedIn automation tool: an AI SDR, free for now",
-    description: "Nora is free while it grows: it finds buyers, writes each a personal note, follows up and books meetings on LinkedIn inside safe limits. No card needed.",
+    title: "Free LinkedIn automation tool: an AI SDR, free while we grow",
+    description: "Nora is free while we grow: it finds buyers, writes each a personal note, follows up and books meetings on LinkedIn inside safe limits. No card needed.",
     query: "free linkedin automation tool",
     published: D,
     updated: D,
@@ -463,6 +463,7 @@ export const CONTENT: readonly ContentPage[] = [
 
 /** The hub pages, which list the content above by kind. */
 export const HUBS = [
+  { path: "/for", kind: "audience", title: "LinkedIn lead generation by business type", description: "How agencies, consultants, SaaS founders, professional firms and small businesses use Nora to book meetings on LinkedIn without risking the account." },
   { path: "/guides", kind: "guide", title: "LinkedIn outreach guides: limits, notes and prospecting", description: "Guides to LinkedIn outreach, from the rules Nora enforces: limits and safety, connection notes, follow-ups, prospecting and choosing a tool." },
   { path: "/alternatives", kind: "alternative", title: "LinkedIn automation tools compared on safety and price", description: "LinkedIn automation tools compared on what they publish about caps, warm-up, pacing and do-not-contact rules, with dated prices. Who each tool suits." },
   { path: "/tools", kind: "tool", title: "Free LinkedIn outreach tools: limits and note checker", description: "Free calculators and checkers built on the same rules Nora runs: a safe connection-limit calculator and a connection note checker. Nothing stored." },
@@ -490,3 +491,60 @@ export function linkCard(path: string): { path: string; title: string; descripti
   };
   return core[path] ? { path, ...core[path] } : null;
 }
+
+/**
+ * How /guides groups its articles: the topic clusters from the keyword plan
+ * (docs/seo/seo-plan.json), pillar first. Twenty-four identical cards in one
+ * grid gave a reader no way in.
+ */
+export const GUIDE_GROUPS: ReadonlyArray<{ name: string; paths: readonly string[] }> = [
+  {
+    "name": "Prospecting and targeting",
+    "paths": [
+      "/guides/linkedin-prospecting",
+      "/guides/ideal-customer-profile-for-linkedin",
+      "/guides/linkedin-prospecting-without-sales-navigator"
+    ]
+  },
+  {
+    "name": "Connection notes and personalization",
+    "paths": [
+      "/guides/linkedin-connection-request-templates",
+      "/guides/linkedin-connection-note-character-limit",
+      "/guides/should-you-add-a-note-linkedin",
+      "/guides/ai-personalized-linkedin-messages",
+      "/guides/linkedin-acceptance-rate"
+    ]
+  },
+  {
+    "name": "Follow-ups, replies and meetings",
+    "paths": [
+      "/guides/book-meetings-from-linkedin",
+      "/guides/linkedin-follow-up-after-connection",
+      "/guides/linkedin-follow-up-sequence"
+    ]
+  },
+  {
+    "name": "Limits and account safety",
+    "paths": [
+      "/guides/is-linkedin-automation-safe",
+      "/guides/linkedin-account-restricted",
+      "/guides/linkedin-weekly-invitation-limit",
+      "/guides/linkedin-warm-up-schedule",
+      "/guides/linkedin-automation-tool-bans",
+      "/guides/is-linkedin-automation-legal",
+      "/guides/withdraw-pending-linkedin-invitations",
+      "/guides/best-time-to-send-linkedin-connection-requests"
+    ]
+  },
+  {
+    "name": "Choosing a tool",
+    "paths": [
+      "/guides/best-ai-sdr-for-linkedin",
+      "/guides/safest-linkedin-automation-tool",
+      "/guides/cloud-vs-browser-extension-linkedin-automation",
+      "/guides/ai-sdr-vs-human-sdr",
+      "/guides/ai-sdr-pricing"
+    ]
+  }
+];

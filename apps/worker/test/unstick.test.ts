@@ -1,7 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { FakeDb } from "./fake-db.js";
 import { LINKEDIN_LIMITS } from "@le/shared";
 import { recoverThrottledProspects, unstickProspects } from "../src/jobs/unstick.js";
+import { runLinkedInAction } from "../src/jobs/linkedin-action.js";
+import { HOUR, WORKSPACE, harness } from "./loop-harness.js";
 
 const NOW = new Date("2026-09-23T12:00:00Z");
 const CAMPAIGN = "44444444-4444-4444-8444-444444444444";
@@ -201,6 +203,17 @@ describe("a first message left on a rule the product no longer has", () => {
     expect(fake.find("campaign_prospects", { id: "cp1" })?.next_action_at).toBe(due);
   });
 
+  it("leaves an accepted row that already records a message sent", async () => {
+    // A crash between the send and the status write leaves exactly this shape:
+    // still `accepted`, but message 1 is out and the next delay is the rep's.
+    // The query cannot be relied on to keep it out; the rule itself must.
+    const due = new Date(NOW.getTime() + 7 * 86_400_000).toISOString();
+    const fake = db([accepted({ last_step_sent: 1, next_action_at: due })], [STEP2]);
+
+    expect(await unstickProspects(fake.asDb(), NOW)).toBe(0);
+    expect(fake.find("campaign_prospects", { id: "cp1" })?.next_action_at).toBe(due);
+  });
+
   it("leaves a row that never recorded when it was accepted", async () => {
     // Without accepted_at there is nothing to measure the stored time against,
     // and guessing would move a schedule on no evidence.
@@ -291,5 +304,104 @@ describe("prospects a temporary refusal wrote off", () => {
     );
 
     expect(await recoverThrottledProspects(fake.asDb(), NOW)).toBe(0);
+  });
+});
+
+describe("repair at scale", () => {
+  it("reaches a stuck prospect behind two hundred healthy mid-sequence rows", async () => {
+    /*
+     * The read was every live row, unordered, two hundred at a time, and only
+     * then asked which were stuck. Rows correctly waiting out a step delay
+     * filled the window, so a stuck row past them was never examined, on any
+     * run, ever.
+     */
+    const future = new Date(NOW.getTime() + 5 * 86_400_000).toISOString();
+    const healthy = Array.from({ length: 200 }, (_, i) => ({
+      id: `ok-${i}`,
+      campaign_id: CAMPAIGN,
+      variant_id: null,
+      status: "messaged_1",
+      last_step_sent: 1,
+      next_action_at: future,
+      accepted_at: null,
+    }));
+    const fake = db(
+      [
+        ...healthy,
+        { id: "stuck", campaign_id: CAMPAIGN, variant_id: null, status: "messaged_1", last_step_sent: 1, next_action_at: null, accepted_at: null },
+      ],
+      [STEP2],
+    );
+
+    await unstickProspects(fake.asDb(), NOW);
+
+    expect(fake.find("campaign_prospects", { id: "stuck" })?.next_action_at).toBe(NOW.toISOString());
+    // And nobody healthy was touched on the way.
+    expect(fake.rows("campaign_prospects").filter((r) => r.next_action_at === future)).toHaveLength(200);
+  });
+
+  it("recovers a throttled row behind five hundred permanent refusals", async () => {
+    const permanent = Array.from({ length: 500 }, (_, i) => ({
+      id: `dead-${String(i).padStart(3, "0")}`,
+      campaign_id: CAMPAIGN,
+      status: "failed",
+      status_reason: "422: Cannot send invitation to this member",
+      invited_at: null,
+    }));
+    const fake = db(
+      [
+        ...permanent,
+        {
+          id: "throttled",
+          campaign_id: CAMPAIGN,
+          status: "failed",
+          status_reason: "422 errors/cannot_resend_yet: temporary provider limit",
+          invited_at: null,
+        },
+      ],
+      [STEP2],
+    );
+
+    expect(await recoverThrottledProspects(fake.asDb(), NOW)).toBe(1);
+    expect(fake.find("campaign_prospects", { id: "throttled" })?.status).toBe("queued");
+  });
+});
+
+describe("a first follow-up the provider asked us to retry later", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  it("is never brought forward inside the provider's own cooldown", async () => {
+    /*
+     * A refused first follow-up goes back on the schedule after the provider's
+     * cooldown — two hours for a 429. That row is exactly the shape the stale
+     * acceptance window looks for (accepted, never messaged, due well after
+     * the acceptance), so the hourly run pulled it forward to twenty minutes
+     * and the provider was asked again inside its own cooldown.
+     */
+    vi.useFakeTimers();
+    const now = new Date("2026-10-07T13:00:00Z");
+    vi.setSystemTime(now);
+    const setup = harness(now);
+    for (const t of ["conversations", "pitches", "campaign_variants", "agents", "hooks", "ctas"]) setup.db.seed(t, []);
+    const id = setup.prospect({
+      status: "accepted",
+      invited_at: "2026-10-06T10:00:00Z",
+      accepted_at: "2026-10-07T11:30:00Z",
+      next_action_at: "2026-10-07T12:30:00Z",
+    });
+    vi.spyOn(setup.linkedin, "sendMessage").mockResolvedValue({ ok: false, error: "429 too many requests" });
+
+    await runLinkedInAction(setup.ctx, { kind: "follow_up", workspaceId: WORKSPACE, campaignProspectId: id, stepNumber: 1 });
+    const cooldownEnds = Date.parse(setup.db.find("campaign_prospects", { id })!.next_action_at as string);
+    expect(cooldownEnds).toBeGreaterThan(now.getTime() + 2 * HOUR - 1);
+
+    const later = new Date(now.getTime() + 10 * 60_000);
+    vi.setSystemTime(later);
+    await unstickProspects(setup.db.asDb(), later);
+
+    expect(Date.parse(setup.db.find("campaign_prospects", { id })!.next_action_at as string)).toBe(cooldownEnds);
   });
 });

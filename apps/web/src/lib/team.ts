@@ -96,7 +96,7 @@ export const TEAM: readonly TeamMember[] = [
   {
     key: "reese",
     name: "Reese",
-    role: "Outreach & booking",
+    role: "Outreach and booking",
     line: "Sends, follows up, answers replies and books the meeting.",
     does: [
       "Sends invitations and follow-ups under daily caps, spread across your working hours.",
@@ -154,7 +154,7 @@ export interface TeamStatus {
 }
 
 function plural(n: number, one: string, many = `${one}s`): string {
-  return `${n.toLocaleString("en-GB")} ${n === 1 ? one : many}`;
+  return `${n.toLocaleString("en-US")} ${n === 1 ? one : many}`;
 }
 
 export function teamStatus(f: TeamFacts): { lead: TeamStatus } & Record<MemberKey, TeamStatus> {
@@ -195,8 +195,8 @@ export function teamStatus(f: TeamFacts): { lead: TeamStatus } & Record<MemberKe
       : {
           status: [
             `${plural(f.campaignsTotal, "campaign")} written`,
-            f.campaignsRunning > 0 ? `${f.campaignsRunning.toLocaleString("en-GB")} running` : null,
-            f.campaignsDraft > 0 ? `${f.campaignsDraft.toLocaleString("en-GB")} waiting for launch` : null,
+            f.campaignsRunning > 0 ? `${f.campaignsRunning.toLocaleString("en-US")} running` : null,
+            f.campaignsDraft > 0 ? `${f.campaignsDraft.toLocaleString("en-US")} waiting for launch` : null,
           ]
             .filter(Boolean)
             .join(" · ") + ".",
@@ -217,7 +217,7 @@ export function teamStatus(f: TeamFacts): { lead: TeamStatus } & Record<MemberKe
   } else {
     const parts = [plural(f.invited, "invitation") + " sent", plural(f.replied, "reply", "replies")];
     if (f.meetingsCounted) parts.push(plural(f.meetings, "meeting"));
-    if (f.heldReplies > 0) parts.push(`${f.heldReplies.toLocaleString("en-GB")} held for you`);
+    if (f.heldReplies > 0) parts.push(`${f.heldReplies.toLocaleString("en-US")} held for you`);
     reese = {
       status: parts.join(" · ") + ".",
       state: f.heldReplies > 0 ? "waiting" : f.campaignsRunning > 0 ? "working" : "done",

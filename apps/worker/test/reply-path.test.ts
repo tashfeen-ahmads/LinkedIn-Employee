@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MockLinkedInProvider } from "@le/linkedin";
+import { MESSAGE_WEBHOOK_BEAT } from "@le/shared";
+import { runDiagnostics } from "../src/jobs/diagnostics.js";
+import { formatSlot } from "@le/calendar";
 import { FakeDb } from "./fake-db.js";
 import { handleInboundMessage } from "../src/jobs/inbound.js";
-import { runLinkedInAction } from "../src/jobs/linkedin-action.js";
+import { RescheduleError, runLinkedInAction } from "../src/jobs/linkedin-action.js";
 import { INBOUND_POLL_BEAT, pollInbound } from "../src/jobs/inbound-poll.js";
 import { runMaintenance } from "../src/jobs/maintenance.js";
 import { createServer } from "../src/server.js";
@@ -255,6 +258,32 @@ describe("a draft the gate held", () => {
     // Stamped, so the maintenance sweep can find it if its job never sends.
     expect(db.rows("reply_drafts")[0]?.resolved_at).toBeTruthy();
     expect(replyJobs(log)).toHaveLength(1);
+  });
+});
+
+describe("the knowledge a reply is written from", () => {
+  it("is read in the knowledge page's order, so the same documents fit every time", async () => {
+    /*
+     * `selectKnowledge` keeps whole documents until the budget runs out, so
+     * which ones the agent reads depends on which come first (rule 11). Read
+     * in no fixed order, the database's physical order decided it, and two
+     * replies in one conversation could be answered from different pages.
+     * Seeded out of order here so storage order and creation order disagree.
+     */
+    const { db, ctx, queues } = harness();
+    const docs = Array.from({ length: 22 }, (_, i) => ({
+      id: `doc-${String(i).padStart(2, "0")}`,
+      workspace_id: WORKSPACE,
+      title: `Doc ${String(i).padStart(2, "0")}`,
+      content: "Fact.",
+      created_at: new Date(NOW.getTime() - (30 - i) * 86_400_000).toISOString(),
+    }));
+    db.seed("knowledge_documents", [...docs].reverse());
+
+    await handleInboundMessage(ctx, queues, inboundJob("Sounds interesting"));
+
+    const titles = (classifyMock.mock.calls[0]![1] as { knowledgeTitles: string[] }).knowledgeTitles;
+    expect(titles).toEqual(docs.slice(0, 20).map((d) => d.title));
   });
 });
 
@@ -616,6 +645,13 @@ describe("the times a reply offers", () => {
     };
   }
 
+  /** A draft that offers what it was handed, naming each slot as written. */
+  const offeringDraft = () =>
+    draftMock.mockImplementation(async (_agents: unknown, input: { availableSlots: string[] }) => ({
+      ...draft(`Does one of these work? ${input.availableSlots.slice(0, 3).join(", ")}`, true),
+      proposedSlots: input.availableSlots.slice(0, 3),
+    }));
+
   const offeredHours = (db: FakeDb) =>
     ((db.rows("reply_drafts")[0]?.proposed_slots as string[]) ?? []).map((iso) => ({
       start: new Date(iso).getUTCHours() * 60 + new Date(iso).getUTCMinutes(),
@@ -627,7 +663,7 @@ describe("the times a reply offers", () => {
     const { db, ctx, queues } = harness();
     db.seed("availability", [availability()]);
     db.find("campaigns", { id: CAMPAIGN })!.reply_mode = "approval";
-    draftMock.mockResolvedValue(draft("Does one of these work?", true));
+    offeringDraft();
 
     await handleInboundMessage(ctx, queues, inboundJob("Sounds interesting"));
 
@@ -645,7 +681,7 @@ describe("the times a reply offers", () => {
     db.seed("availability", [availability()]);
     db.find("campaigns", { id: CAMPAIGN })!.rules = { workingHours: { start: 9, end: 11, days: [1, 2, 3, 4, 5] } };
     db.find("campaigns", { id: CAMPAIGN })!.reply_mode = "approval";
-    draftMock.mockResolvedValue(draft("Does one of these work?", true));
+    offeringDraft();
 
     await handleInboundMessage(ctx, queues, inboundJob("Sounds interesting"));
 
@@ -657,7 +693,7 @@ describe("the times a reply offers", () => {
     // The afternoon, so the default nine o'clock cannot pass for it.
     db.find("campaigns", { id: CAMPAIGN })!.rules = { workingHours: { start: 15, end: 17, days: [1, 2, 3, 4, 5] } };
     db.find("campaigns", { id: CAMPAIGN })!.reply_mode = "approval";
-    draftMock.mockResolvedValue(draft("Does one of these work?", true));
+    offeringDraft();
 
     await handleInboundMessage(ctx, queues, inboundJob("Sounds interesting"));
 
@@ -674,7 +710,7 @@ describe("the times a reply offers", () => {
       { workspace_id: WORKSPACE, rep_user_id: USER, prospect_id: "x", starts_at: "2026-09-10T09:00:00.000Z", ends_at: "2026-09-10T09:30:00.000Z", status: "scheduled", cancelled_at: null },
     ]);
     db.find("campaigns", { id: CAMPAIGN })!.reply_mode = "approval";
-    draftMock.mockResolvedValue(draft("Does one of these work?", true));
+    offeringDraft();
 
     await handleInboundMessage(ctx, queues, inboundJob("Sounds interesting"));
 
@@ -704,5 +740,261 @@ describe("a conversation opened by a reply", () => {
     await handleInboundMessage(ctx, queues, inboundJob("Sounds interesting"));
 
     expect(db.find("conversations", { id: "conv-1" })?.campaign_id).toBe("other-campaign");
+  });
+});
+
+describe("a prospect confirming the meeting they already booked", () => {
+  it("is not told to the rep as a time that is no longer free", async () => {
+    /*
+     * The meeting is in the diary (own calendar) and the confirmation went
+     * out. "Great, see you Thursday at 10!" is the commonest next message.
+     * The offer draft is still the latest one that proposed a meeting, the
+     * matcher reads it as accepting the same slot again, the calendar answers
+     * busy — with this prospect's own meeting — and the conversation is held
+     * as a *booking* telling the rep to "offer them another time". The warm
+     * sign-off reply is held with it.
+     */
+    const { db, ctx, queues, log } = harness();
+    (ctx.env as Record<string, unknown>).CALENDAR_PROVIDER = "own";
+    const SLOT = "2026-09-10T10:00:00.000Z"; // Thursday 10:00 UTC
+    db.find("campaign_prospects", { id: CP })!.status = "meeting_booked";
+    db.seed("conversations", [
+      { id: "conv-1", workspace_id: WORKSPACE, prospect_id: PROSPECT, linkedin_account_id: ACCOUNT, campaign_id: CAMPAIGN, needs_human: false, provider_chat_id: "chat_1" },
+    ]);
+    db.seed("reply_drafts", [
+      { workspace_id: WORKSPACE, conversation_id: "conv-1", proposes_meeting: true, proposed_slots: [SLOT], status: "sent", body: "Would Thursday at 10 work?", created_at: "2026-09-08T10:00:00.000Z" },
+      { workspace_id: WORKSPACE, conversation_id: "conv-1", proposes_meeting: false, proposed_slots: [], status: "sent", body: "Booked — see you then.", created_at: "2026-09-09T10:00:00.000Z" },
+    ]);
+    db.seed("meetings", [
+      { workspace_id: WORKSPACE, rep_user_id: USER, prospect_id: PROSPECT, conversation_id: "conv-1", starts_at: SLOT, ends_at: "2026-09-10T10:30:00.000Z", status: "scheduled", cancelled_at: null },
+    ]);
+    draftMock.mockResolvedValue(draft("Looking forward to it!"));
+
+    await handleInboundMessage(ctx, queues, inboundJob("Great, see you Thursday at 10!"));
+
+    expect(db.rows("meetings")).toHaveLength(1);
+    expect(conversation(db).needs_human_kind).not.toBe("booking");
+    expect(String(conversation(db).needs_human_reason ?? "")).not.toContain("no longer free");
+    expect(replyJobs(log)).toHaveLength(1);
+  });
+});
+
+describe("the slots a reply offered", () => {
+  it("are the ones the message named, so an ordinal books what the prospect read", async () => {
+    /*
+     * The agent is handed three free slots and told to offer "at most three".
+     * It reports which it used in `proposedSlots`, and the draft row stores
+     * every slot it was handed instead. When the message names the first and
+     * the third, "the second one" is matched against the stored list and
+     * books the slot the prospect was never shown.
+     */
+    const { db, ctx, queues } = harness();
+    let shown: string[] = [];
+    draftMock.mockImplementationOnce(async (_agents: unknown, input: { availableSlots: string[] }) => {
+      shown = [input.availableSlots[0]!, input.availableSlots[2]!];
+      return {
+        message: `Would ${shown[0]} or ${shown[1]} suit you?`,
+        proposesMeeting: true,
+        proposedSlots: shown,
+        usedKnowledge: [],
+        unansweredQuestions: [],
+      };
+    });
+
+    await handleInboundMessage(ctx, queues, inboundJob("Sounds interesting, happy to chat", "msg_1"));
+    expect(shown).toHaveLength(2);
+
+    draftMock.mockResolvedValue(draft("Booked, see you then."));
+    await handleInboundMessage(ctx, queues, inboundJob("The second one works for me", "msg_2"));
+
+    const meetings = db.rows("meetings");
+    expect(meetings).toHaveLength(1);
+    // The prospect picked the second time in the message they read.
+    expect(formatSlot(meetings[0]!.starts_at as string, "UTC")).toBe(shown[1]);
+  });
+});
+
+describe("a second message before the first held draft is answered", () => {
+  it("retires the draft written for the earlier message", async () => {
+    /*
+     * Approval mode: every draft waits for the rep. The prospect writes twice
+     * before the rep opens the inbox, so two drafts are pending on one
+     * conversation. The inbox keeps one draft per conversation (the newest,
+     * `draftByConversation` in inbox/page.tsx) and lists conversations that
+     * have *any* pending draft — so after the rep sends the newest, the
+     * conversation comes straight back with the stale answer to the first
+     * message, ready to be approved as a second reply.
+     */
+    const { db, ctx, queues } = harness();
+    db.find("campaigns", { id: CAMPAIGN })!.reply_mode = "approval";
+    draftMock.mockResolvedValueOnce(draft("Happy to explain — what does your team use today?"));
+    draftMock.mockResolvedValueOnce(draft("Sure — Thursday or Friday?"));
+
+    await handleInboundMessage(ctx, queues, inboundJob("What is this exactly?", "msg_1"));
+    await handleInboundMessage(ctx, queues, inboundJob("Actually, can we just talk this week?", "msg_2"));
+
+    const pending = db.rows("reply_drafts").filter((d) => d.status === "pending");
+    expect(pending).toHaveLength(1);
+  });
+});
+
+describe("a reply that names a time the calendar did not produce", () => {
+  it("is held for a person and stores no offer to book against", async () => {
+    // Rule 6: the model picks from the list, it never writes its own time.
+    const { db, ctx, queues, log } = harness();
+    draftMock.mockResolvedValue({
+      ...draft("Would Saturday at 7am work?", true),
+      proposedSlots: ["Saturday, September 12 at 7:00 AM"],
+    });
+
+    await handleInboundMessage(ctx, queues, inboundJob("Sounds interesting, happy to chat"));
+
+    const saved = db.rows("reply_drafts")[0]!;
+    expect(saved.status).toBe("pending");
+    expect(saved.proposed_slots).toEqual([]);
+    expect(conversation(db).needs_human).toBe(true);
+    expect(String(conversation(db).needs_human_reason)).toContain("not on your calendar");
+    expect(replyJobs(log)).toHaveLength(0);
+  });
+});
+
+describe("a reply from somebody on two prospect rows", () => {
+  it("is answered on the row that was contacted, not dropped", async () => {
+    // `provider_id` has no unique key. A `maybeSingle()` errored on the second
+    // row and the reply was read as coming from a stranger.
+    const { db, ctx, queues } = harness();
+    db.find("prospects", { id: PROSPECT })!.last_contacted_at = "2026-09-01T10:00:00.000Z";
+    db.seed("prospects", [
+      {
+        id: "99999999-9999-4999-8999-999999999999",
+        workspace_id: WORKSPACE,
+        linkedin_url: "linkedin.com/in/jane-doe-2",
+        provider_id: "prov_jane",
+        first_name: "Jane",
+        last_name: "Doe",
+        do_not_contact: false,
+        last_contacted_at: null,
+        created_at: "2026-09-08T10:00:00.000Z",
+      },
+    ]);
+
+    await handleInboundMessage(ctx, queues, inboundJob("Sounds interesting"));
+
+    expect(db.rows("reply_drafts")).toHaveLength(1);
+    expect(conversation(db).prospect_id).toBe(PROSPECT);
+  });
+});
+
+describe("an approved reply the provider refuses", () => {
+  type ReplyJob = { kind: "reply"; workspaceId: string; conversationId: string; draftId: string };
+  async function approvedReply(text = "Sounds interesting") {
+    const h = harness();
+    await handleInboundMessage(h.ctx, h.queues, inboundJob(text));
+    return { ...h, job: replyJobs(h.log)[0]!.data as ReplyJob };
+  }
+
+  it("is put in front of a person rather than finishing as if it were sent", async () => {
+    /*
+     * On autopilot the draft is approved by the gate, so nothing holds the
+     * conversation. The send path returned on a refusal with no flag, no event
+     * and the draft still `approved`: the job completed, the inbox showed
+     * nothing, and a prospect who replied warmly was never answered. The
+     * provider's own sentence went nowhere (rule 25).
+     */
+    const { db, ctx, linkedin, job } = await approvedReply();
+    (linkedin as unknown as { sendMessage: unknown }).sendMessage = async () => ({
+      ok: false,
+      error: "422: Recipient cannot be reached",
+    });
+
+    await runLinkedInAction(ctx, job);
+
+    expect(db.rows("reply_drafts")[0]?.status).toBe("failed");
+    expect(conversation(db).needs_human).toBe(true);
+    expect(conversation(db).needs_human_kind).toBe("reply");
+    expect(String(conversation(db).needs_human_reason)).toContain("422: Recipient cannot be reached");
+    const failed = db.rows("events").find((e) => e.name === "reply.failed");
+    expect(JSON.stringify(failed?.payload)).toContain("422: Recipient cannot be reached");
+  });
+
+  it("is tried again later when the provider said to try later", async () => {
+    const { db, ctx, linkedin, job } = await approvedReply();
+    (linkedin as unknown as { sendMessage: unknown }).sendMessage = async () => ({ ok: false, error: "429 too many requests" });
+
+    await expect(runLinkedInAction(ctx, job)).rejects.toBeInstanceOf(RescheduleError);
+    // Still approved, so the retry sends it; nobody was asked to rewrite it.
+    expect(db.rows("reply_drafts")[0]?.status).toBe("approved");
+  });
+});
+
+describe("the operator's kill switch and replies", () => {
+  it("holds an autopilot reply until outreach resumes", async () => {
+    // Rule 59: read on the send path every message takes. A reply nobody
+    // approved is the agent writing on its own, so it waits.
+    const { db, ctx, queues, log, linkedin } = harness();
+    await handleInboundMessage(ctx, queues, inboundJob("Sounds interesting"));
+    db.seed("platform_settings", [{ id: true, outreach_paused_at: NOW.toISOString(), outreach_paused_reason: "incident" }]);
+
+    const job = replyJobs(log)[0]!.data as { kind: "reply"; workspaceId: string; conversationId: string; draftId: string };
+    const refused = await runLinkedInAction(ctx, job).catch((err: unknown) => err);
+
+    expect(refused).toBeInstanceOf(RescheduleError);
+    expect((refused as RescheduleError).reason).toMatch(/^outreach_paused/);
+    expect(linkedin.sentMessages).toHaveLength(0);
+    expect(db.rows("reply_drafts")[0]?.status).toBe("approved");
+  });
+});
+
+describe("a reply a person approved during a pause", () => {
+  it("still goes: a human answering a human is not outreach (migration 0041)", async () => {
+    const { db, ctx, queues, log, linkedin } = harness();
+    await handleInboundMessage(ctx, queues, inboundJob("Sounds interesting"));
+    db.seed("platform_settings", [{ id: true, outreach_paused_at: NOW.toISOString(), outreach_paused_reason: "incident" }]);
+    const draft = db.rows("reply_drafts")[0]!;
+    draft.resolved_by = "rep-user";
+
+    const job = replyJobs(log)[0]!.data as { kind: "reply"; workspaceId: string; conversationId: string; draftId: string };
+    await runLinkedInAction(ctx, job);
+
+    expect(linkedin.sentMessages).toHaveLength(1);
+  });
+});
+
+describe("a sent message and its conversation", () => {
+  it("remembers the chat it opened and when it last moved", async () => {
+    /*
+     * Starting a chat returned `message_id ?? chat_id` as one id, so the
+     * conversation never learned its chat: every later message opened a new
+     * one by attendee. And `last_message_at` moved only on inbound messages.
+     */
+    const { db, ctx, queues, log } = harness();
+    await handleInboundMessage(ctx, queues, inboundJob("Sounds interesting"));
+    db.find("conversations", { id: conversation(db).id as string })!.provider_chat_id = null;
+    const job = replyJobs(log)[0]!.data as { kind: "reply"; workspaceId: string; conversationId: string; draftId: string };
+
+    await runLinkedInAction(ctx, job);
+
+    expect(conversation(db).provider_chat_id).toBe("chat_prov_jane");
+    expect(conversation(db).last_message_at).toBe(NOW.toISOString());
+  });
+});
+
+describe("a webhook delivery that was accepted", () => {
+  it("is written down, so the check can say replies are arriving", async () => {
+    // Only refusals were stamped, so a webhook that had worked for weeks read
+    // as "never called", and an old refusal stayed the last word (rule 46).
+    const { db, ctx, queues } = harness();
+    await createServer(ctx, queues).request("/webhooks/unipile/messages", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify([
+        { providerMessageId: "m-9", providerChatId: "c", providerAccountId: "acct_1", fromProviderId: "prov_jane", text: "hi", receivedAt: NOW.toISOString() },
+      ]),
+    });
+
+    const beat = db.find("worker_heartbeats", { name: MESSAGE_WEBHOOK_BEAT });
+    expect((beat?.detail as { ok?: boolean })?.ok).toBe(true);
+    const { checks } = await runDiagnostics(ctx, { workspaceId: WORKSPACE, userId: USER });
+    expect(checks.find((c) => c.key === "webhook-deliveries")?.state).toBe("ok");
   });
 });

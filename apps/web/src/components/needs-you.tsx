@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { NOTHING_NEEDS_YOU, type NeedsYouItem, type NeedsYouKind } from "@le/shared";
 import { NavIcon } from "./icons";
+import { Section } from "./page";
 
 /**
  * A glyph per kind, from the sidebar's own set, so a row points at the screen
@@ -40,10 +41,11 @@ const ICON: Record<NeedsYouKind, string> = {
 export function NeedsYou({ items }: { items: NeedsYouItem[] }) {
   if (items.length === 0) {
     return (
-      <section className="card needs-you-clear" aria-labelledby="needs-you-heading">
-        <p className="eyebrow">Nothing waiting</p>
-        <h2 id="needs-you-heading">{NOTHING_NEEDS_YOU}</h2>
-      </section>
+      <Section
+        id="needs-you"
+        title={NOTHING_NEEDS_YOU}
+        surface={{ className: "card needs-you-clear", eyebrow: "Nothing waiting" }}
+      />
     );
   }
 
@@ -58,13 +60,15 @@ export function NeedsYou({ items }: { items: NeedsYouItem[] }) {
    * cannot finish until it is done.
    */
   return (
-    <section className="needs-you" aria-labelledby="needs-you-heading">
-      <h2 id="needs-you-heading" className="needs-you-heading">
-        Needs you
-        <span className="needs-you-count">
-          {items.length === 1 ? "1 thing" : `${items.length} things`}
-        </span>
-      </h2>
+    <Section
+      id="needs-you"
+      title="Needs you"
+      surface={{
+        className: "needs-you",
+        headingClassName: "needs-you-heading",
+        aside: <span className="needs-you-count">{items.length === 1 ? "1 thing" : `${items.length} things`}</span>,
+      }}
+    >
 
       <ul className="needs-you-list">
         {items.map((item) => (
@@ -82,6 +86,6 @@ export function NeedsYou({ items }: { items: NeedsYouItem[] }) {
           </li>
         ))}
       </ul>
-    </section>
+    </Section>
   );
 }

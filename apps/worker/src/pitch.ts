@@ -76,3 +76,14 @@ export async function pitchFor(
   return data.body?.trim() || null;
 }
 
+
+/**
+ * What a follow-up held for a pitch says on its row (rule 40).
+ *
+ * One fixed sentence rather than the renderer's reason, because the pacing
+ * loop reads it: a held follow-up is still offered to the send path on every
+ * tick, so it goes the moment somebody approves a line, but it is not counted
+ * as work the loop did. Counted, every five minutes a message that never left
+ * was reported as the loop's last action (rule 45).
+ */
+export const HELD_FOR_PITCH = "waiting for an approved pitch";

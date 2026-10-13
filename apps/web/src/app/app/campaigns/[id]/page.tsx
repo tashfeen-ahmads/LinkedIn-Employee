@@ -31,6 +31,7 @@ import { ConfirmButton } from "@/components/confirm-button";
 import { formatDate, isoAttr } from "@/lib/format";
 import { label } from "@/lib/labels";
 import { daysToSendAll, launchBlockers } from "@/lib/campaign";
+import { isPlatformAdmin } from "@/lib/admin";
 
 /**
  * How many people one press of "Find more" reads.
@@ -450,7 +451,7 @@ async function findMore(formData: FormData) {
     limit: FIND_MORE_BATCH,
   });
   if (!queued.ok) {
-    redirect(errorQuery(`/app/campaigns/${campaignId}`, `Could not start the search: ${queued.error}`));
+    redirect(errorQuery(`/app/campaigns/${campaignId}`, `The search has not started. ${queued.error}`));
   }
 
   revalidatePath(`/app/campaigns/${campaignId}`);
@@ -631,7 +632,7 @@ async function sendOneNow(formData: FormData) {
 
   revalidatePath(`/app/campaigns/${campaignId}`);
   if (!result.ok) {
-    redirect(errorQuery(`/app/campaigns/${campaignId}`, `Could not reach the sender: ${result.error}`));
+    redirect(errorQuery(`/app/campaigns/${campaignId}`, `Nothing was sent. ${result.error}`));
   }
   // The worker's own sentence, verbatim. A paraphrase here is a second reading
   // of what happened, and this is the one screen where the exact words matter.
@@ -661,11 +662,13 @@ async function launchState(campaignId: string, workspaceId: string) {
     .maybeSingle();
   if (!campaign) return null;
 
-  const [{ data: steps }, { count }, { data: account }] = await Promise.all([
+  const [{ data: steps }, { data: queuedNotes, count }, { data: account }] = await Promise.all([
     supabase.from("campaign_steps").select("message, delay_days").eq("campaign_id", campaignId),
     supabase
       .from("campaign_prospects")
-      .select("id", { count: "exact", head: true })
+      // The notes as well as the count: launchBlockers holds each person's
+      // note to LinkedIn's cap, and the re-check must see what the page saw.
+      .select("invite_note", { count: "exact" })
       .eq("campaign_id", campaignId)
       .eq("status", "queued"),
     supabase
@@ -681,6 +684,7 @@ async function launchState(campaignId: string, workspaceId: string) {
     dailyInviteCap: campaign.daily_invite_cap,
     prospectCount: count ?? 0,
     accountStatus: account?.status ?? null,
+    inviteNotes: (queuedNotes ?? []).map((row) => row.invite_note),
   };
 }
 
@@ -759,7 +763,7 @@ export default async function CampaignPage({
       .maybeSingle(),
     // Whether the thing that sends the messages is running at all. Without it
     // a dead worker and a paced one are the same unchanged page.
-    supabase.from("worker_heartbeats").select("beat_at").eq("name", PACING_LOOP).maybeSingle(),
+    supabase.from("worker_heartbeats").select("beat_at, detail").eq("name", PACING_LOOP).maybeSingle(),
     // The worker's own account of itself, written as it started and without
     // going through the queue — which is what makes it readable in exactly the
     // failures that erase everything else.
@@ -786,6 +790,13 @@ export default async function CampaignPage({
     supabase.from("profiles").select("timezone").eq("id", session.userId).maybeSingle(),
   ]);
   const viewerTimezone = viewer?.timezone ?? null;
+  // Whether this reader may see the deployment's half of a fault (rule 54).
+  // False on error, because the privilege is the thing being asked about.
+  const operator = await isPlatformAdmin();
+  // What survives on this campaign's replies. Under autonomy pricing, legal
+  // and negative replies are answered rather than held (rule 41), so the
+  // sentence under the reply setting has to say which rules are in force.
+  const autonomous = (campaign.rules as { autonomy?: string } | null)?.autonomy === "autonomous";
 
   const rows = members ?? [];
   /*
@@ -815,6 +826,7 @@ export default async function CampaignPage({
     dailyInviteCap: campaign.daily_invite_cap,
     prospectCount: queued.length,
     accountStatus: account?.status ?? null,
+    inviteNotes: queued.map((row) => row.invite_note),
   });
   // The rate the loop will actually keep: the campaign's cap, or the account's
   // ramp if that is lower — a new account starts at ten whatever the campaign
@@ -884,6 +896,9 @@ export default async function CampaignPage({
     account: account ?? null,
     timezone: owner?.timezone ?? "UTC",
     lastBeatAt: heartbeat?.beat_at ?? null,
+    // The loop says in its own stamp when the operator's kill switch is
+    // holding every send; a fresh beat alone would read as "Sending".
+    outreachPaused: Boolean((heartbeat?.detail as { paused?: unknown } | null)?.paused),
     boot: boot ?? null,
     dailyCap: campaign.daily_invite_cap,
   });
@@ -1009,6 +1024,11 @@ export default async function CampaignPage({
           <div className="notice danger" role="status">
             <strong>{pacing.title}</strong>
             <p className="small">{pacing.body}</p>
+            {operator && pacing.operator ? (
+              <p className="tiny prewrap operator-note">
+                <strong>Operator:</strong> {pacing.operator}
+              </p>
+            ) : null}
           </div>
         ) : (
           <div className="pacing-strip" role="status">
@@ -1309,8 +1329,10 @@ export default async function CampaignPage({
             </SubmitButton>
           </div>
           <p className="small muted">
-            Pricing, legal and anything negative always waits for a person, on either setting. The
-            ceiling of {LINKEDIN_LIMITS.invitesPerDayMax} a day is a safety limit, not a preference.
+            {autonomous
+              ? "Your rules let the agent answer pricing, legal and negative replies itself. A message it could not read with confidence, or a prospect asking for a person, still waits for you on either setting."
+              : "Pricing, legal and anything negative always wait for a person, on either setting."}{" "}
+            The ceiling of {LINKEDIN_LIMITS.invitesPerDayMax} a day is a safety limit, not a preference.
             {running ? "" : " Launch campaign saves anything changed here first."}
           </p>
         </div>
@@ -1373,7 +1395,8 @@ export default async function CampaignPage({
                         */}
                         {standing.sent >= MIN_SENDS_TO_COMPARE && standing.acceptanceRate !== null ? (
                           <span className="tiny subtle block">
-                            {Math.round(standing.acceptanceRate * 100)}% ({Math.round(standing.low * 100)} to 
+                            {Math.round(standing.acceptanceRate * 100)}% ({Math.round(standing.low * 100)}
+                            {" to "}
                             {Math.round(standing.high * 100)}%)
                           </span>
                         ) : (

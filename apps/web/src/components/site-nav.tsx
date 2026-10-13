@@ -4,13 +4,31 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef } from "react";
 
-type NavLink = { href: string; label: string };
+type NavLink = { href: string; label: string; also?: ReadonlyArray<string> };
+
+/**
+ * Where a link stands relative to the page being read.
+ *
+ * `page` is the link's own page. `true` is a page inside its part of the site:
+ * a guide under Guides, or /security under Safety, which the footer and the
+ * limits page both treat as one subject. Marked, so the nav still says where
+ * somebody is, but not as `page`, because that would tell a screen reader they
+ * are on a page they are not.
+ */
+function currentFor(link: NavLink, pathname: string | null): "page" | "true" | undefined {
+  if (!pathname) return undefined;
+  if (pathname === link.href) return "page";
+  const within = (base: string) => pathname === base || pathname.startsWith(`${base}/`);
+  if (link.href !== "/" && within(link.href)) return "true";
+  if (link.also?.some(within)) return "true";
+  return undefined;
+}
 
 /**
  * The marketing nav, which has to know where you are.
  *
  * Five links of one weight tell a visitor nothing about which page they are
- * standing on — the application's sidebar has marked its current row since the
+ * standing on, the application's sidebar has marked its current row since the
  * first week and the public site never did. Knowing the path means reading it
  * in the browser, so this one piece is a client component rather than making
  * the whole header one.
@@ -24,7 +42,7 @@ export function SiteNav({ links }: { links: ReadonlyArray<NavLink> }) {
           key={link.href}
           href={link.href}
           className="site-nav-link"
-          aria-current={pathname === link.href ? "page" : undefined}
+          aria-current={currentFor(link, pathname)}
         >
           {link.label}
         </Link>
@@ -46,8 +64,8 @@ export function SiteNav({ links }: { links: ReadonlyArray<NavLink> }) {
  * A `<details>` rather than a scripted drawer: the summary is a real button to
  * the keyboard and to a screen reader, it announces expanded and collapsed by
  * itself, and it opens without any of this file's JavaScript having run. The
- * script only closes it again — on navigation, on Escape, and on a click
- * outside — because a menu left open over the page you just chose reads as
+ * script only closes it again, on navigation, on Escape, and on a click
+ * outside, because a menu left open over the page you just chose reads as
  * the click not having worked.
  */
 export function SiteMenu({ links, signInHref }: { links: ReadonlyArray<NavLink>; signInHref: string }) {
@@ -86,7 +104,7 @@ export function SiteMenu({ links, signInHref }: { links: ReadonlyArray<NavLink>;
             key={link.href}
             href={link.href}
             className="site-menu-link"
-            aria-current={pathname === link.href ? "page" : undefined}
+            aria-current={currentFor(link, pathname)}
           >
             {link.label}
           </Link>

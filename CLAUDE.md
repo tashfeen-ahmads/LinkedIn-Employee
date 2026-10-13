@@ -1388,6 +1388,43 @@ tests that were verified by deliberately breaking the code.
     product, so structured-data authorship stays the organisation; a named
     human reviewer is the next step once one exists.
 
+61. **The week is rolling, a refusal is a signal, and a send is claimed
+    before it is made.** The October audit walked the sending engine with the
+    random draws pinned at their extremes and the clock at every boundary, and
+    each of these was a real account's problem, not a hypothetical.
+
+    *The weekly cap is the last seven days, not the calendar week*
+    (`invites_by_day`, migration 0042, maintained inside
+    `record_linkedin_action` so rule 2 still holds). A Monday reset let a
+    Wednesday launch send 170 invitations in seven consecutive days, and
+    `docs/06-research.md` says LinkedIn counts a rolling window. Every screen
+    reads the same function the loop does.
+
+    *A day's placements end with the working day.* Invitations that do not fit
+    before close are left for tomorrow's first tick rather than queued after
+    hours, where they used to go out back to back at opening (rule 48's burst,
+    moved to the morning). The wait after a profile view is drawn so the
+    invitation can still be placed inside the warm-up window by the next tick
+    (`apps/worker/src/warm.ts`) and inside today's hours; views are budgeted
+    against the invitations still possible today across every campaign on the
+    account. A view the invitation cannot follow is a view spent twice.
+
+    *After a refusal, probe before spending.* While `invite_throttle_streak` is
+    one or more, the account gets one cold invitation in flight and no views,
+    and the next probe goes to somebody else. The first live account re-viewed
+    the same five people six times each, once per expired hold, before one
+    invitation was refused again. A person LinkedIn refuses twice as "invited
+    recently" is closed with LinkedIn's reason instead of retried daily.
+
+    *A send claims its row first* (`invite_claimed_at`, a ten-minute lease), and
+    the caps are counted after the claim, so two presses of Send one now, or a
+    press racing the loop, cannot invite one person twice or pass the cap at
+    cap minus one. Send one now picks exactly whom the loop would.
+
+    *The operator pause holds machine-written replies only.* A reply a person
+    approved (`resolved_by`) still goes: a human answering a human is not
+    outreach, as migration 0041 says. An autopilot reply waits.
+
 ## Conventions
 
 - Agent output is validated against a zod schema before it touches the
@@ -1440,10 +1477,11 @@ live campaign and record the number in its README.
 
 ## Known gaps
 
-- Acceptance is detected by polling connections nightly
-  (`apps/worker/src/jobs/acceptance.ts`), so a follow-up can be up to a day
-  later than its configured delay. Unipile exposes no acceptance webhook; if
-  one appears, that is where to use it.
+- Acceptance is detected by polling connections every hour
+  (`apps/worker/src/jobs/acceptance.ts`, paged), so the first message lands
+  20 to 90 minutes after the poll notices, usually within a couple of hours of
+  the acceptance. Unipile exposes no acceptance webhook; if one appears, that
+  is where to use it.
 
 - The email follow-up channel for prospects who accept an invitation then go
   quiet. Roadmap item for quarter two; the email layer it would need already

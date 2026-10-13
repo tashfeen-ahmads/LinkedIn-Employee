@@ -2,6 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MockEmailProvider } from "@le/email";
 import { FakeDb } from "./fake-db.js";
 import type { WorkerContext } from "../src/context.js";
+import { CustomerProfileSchema } from "@le/shared";
+
+// The website read resolves DNS and vets the address before it connects (rule
+// 19). Resolved here so no test touches the network; a test that needs a name
+// to land inside this network overrides it once.
+const lookupMock = vi.fn(async (_host: string, _options?: unknown) => [{ address: "93.184.216.34", family: 4 }]);
+vi.mock("node:dns/promises", () => ({ lookup: (host: string, options?: unknown) => lookupMock(host, options) }));
 
 const WORKSPACE = "11111111-1111-4111-8111-111111111111";
 const USER = "22222222-2222-4222-8222-222222222222";
@@ -472,5 +479,129 @@ describe("runStrategyJob across two businesses", () => {
     const added = db.rows("customer_profiles").find((r) => r.name === "Someone else");
     expect(added?.business_profile_id).toBe(first);
     expect(db.rows("business_profiles")).toHaveLength(2);
+  });
+});
+
+const BUSINESS = "44444444-4444-4444-8444-444444444444";
+
+/**
+ * The website address is typed by whoever signs up and fetched by a worker
+ * holding the service-role key, beside its own internal API on localhost
+ * (rule 19). It goes through the same vetted GET as calendar feeds.
+ */
+describe("runStrategyJob reads a website without reaching this network", () => {
+  const fetched = () =>
+    ((globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls ?? []).map((c) => String(c[0]));
+
+  it("never fetches a private or metadata address typed as the website", async () => {
+    const { ctx } = harness();
+    const { runStrategyJob } = await import("../src/jobs/strategy.js");
+
+    await runStrategyJob(ctx, { workspaceId: WORKSPACE, userId: USER, websiteUrl: "http://169.254.169.254" });
+    await runStrategyJob(ctx, { workspaceId: WORKSPACE, userId: USER, websiteUrl: "127.0.0.1:4000" });
+
+    expect(fetched().filter((u) => /169\.254\.169\.254|127\.0\.0\.1/.test(u))).toEqual([]);
+  });
+
+  it("never fetches a name that resolves inside this network", async () => {
+    const { ctx } = harness();
+    const { runStrategyJob } = await import("../src/jobs/strategy.js");
+    lookupMock.mockImplementation(async () => [{ address: "10.0.0.7", family: 4 }]);
+    try {
+      await runStrategyJob(ctx, { workspaceId: WORKSPACE, userId: USER, websiteUrl: "https://intranet.acme.test" });
+    } finally {
+      lookupMock.mockImplementation(async () => [{ address: "93.184.216.34", family: 4 }]);
+    }
+    expect(fetched()).toEqual([]);
+  });
+
+  it("does not follow a redirect into this network", async () => {
+    const { ctx } = harness();
+    const { runStrategyJob } = await import("../src/jobs/strategy.js");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: unknown) =>
+        String(url).includes("169.254")
+          ? new Response("instance credentials", { status: 200 })
+          : new Response(null, { status: 302, headers: { location: "http://169.254.169.254/latest/meta-data/" } }),
+      ),
+    );
+
+    await runStrategyJob(ctx, { workspaceId: WORKSPACE, userId: USER, websiteUrl: "https://acme.test" });
+
+    expect(fetched().filter((u) => u.includes("169.254"))).toEqual([]);
+  });
+});
+
+describe("runStrategyJob stores what it says it stored", () => {
+  it("gives an expanded strategy a priority its own edit form can save", async () => {
+    const { db, ctx } = harness();
+    const { runStrategyJob } = await import("../src/jobs/strategy.js");
+    db.seed("business_profiles", [{ id: BUSINESS, workspace_id: WORKSPACE, spec: OUTPUT.businessProfile }]);
+    db.seed(
+      "customer_profiles",
+      ["A", "B", "C"].map((name, i) => ({
+        workspace_id: WORKSPACE,
+        business_profile_id: BUSINESS,
+        name,
+        spec: profile(name, i + 1),
+        priority: i + 1,
+      })),
+    );
+    strategyMock.mockResolvedValue({
+      ...OUTPUT,
+      customerProfiles: [profile("D", 1), profile("E", 2), profile("F", 3), profile("G", 4)],
+    });
+
+    await runStrategyJob(ctx, { workspaceId: WORKSPACE, userId: USER, expand: true });
+
+    const added = db.rows("customer_profiles").filter((r) => ["D", "E", "F", "G"].includes(r.name as string));
+    expect(added).toHaveLength(4);
+    for (const row of added) {
+      // saveProfile validates with CustomerProfileSchema; the targeting job
+      // parses the spec with it too. A sixth strategy must pass both.
+      expect(CustomerProfileSchema.shape.priority.safeParse(row.priority).success, `priority ${row.priority}`).toBe(true);
+      // And the column and the spec say the same number.
+      expect((row.spec as { priority: number }).priority).toBe(row.priority);
+    }
+  });
+
+  it("fails rather than reporting strategies stored when the insert was refused", async () => {
+    const { db, ctx } = harness();
+    const { runStrategyJob } = await import("../src/jobs/strategy.js");
+    const real = db.asDb();
+    const failing = {
+      ...real,
+      from(table: string) {
+        const builder = (real as unknown as { from: (t: string) => unknown }).from(table) as Record<string, unknown>;
+        if (table !== "customer_profiles") return builder;
+        return { ...builder, insert: () => Promise.resolve({ data: null, error: { message: "permission denied" } }) };
+      },
+    };
+    (ctx as unknown as { db: unknown }).db = Object.assign(Object.create(Object.getPrototypeOf(real)), real, failing);
+
+    await expect(
+      runStrategyJob(ctx, { workspaceId: WORKSPACE, userId: USER, websiteUrl: "https://acme.test" }),
+    ).rejects.toThrow(/could not store the strategies/);
+
+    expect(db.rows("customer_profiles")).toHaveLength(0);
+    expect(db.rows("events").find((e) => e.name === "strategy.profile.created")).toBeUndefined();
+    // The retry must not find a business profile with nothing under it and
+    // create a second beside it.
+    expect(db.rows("business_profiles")).toHaveLength(0);
+  });
+
+  it("drops a strategy that repeats another name in the same response", async () => {
+    const { db, ctx } = harness();
+    const { runStrategyJob } = await import("../src/jobs/strategy.js");
+    db.seed("business_profiles", [{ id: BUSINESS, workspace_id: WORKSPACE, spec: OUTPUT.businessProfile }]);
+    strategyMock.mockResolvedValue({
+      ...OUTPUT,
+      customerProfiles: [profile("Chamber leaders", 1), profile("chamber leaders ", 2)],
+    });
+
+    await runStrategyJob(ctx, { workspaceId: WORKSPACE, userId: USER, expand: true });
+
+    expect(db.rows("customer_profiles")).toHaveLength(1);
   });
 });

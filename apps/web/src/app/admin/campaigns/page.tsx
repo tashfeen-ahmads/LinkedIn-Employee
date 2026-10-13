@@ -9,8 +9,10 @@ import { label } from "@/lib/labels";
 export const dynamic = "force-dynamic";
 
 const STATUSES = ["running", "paused", "draft", "completed", "archived"] as const;
-const CONTACTED = ["invited", "accepted", "messaged_1", "messaged_2", "messaged_3", "replied", "positive", "negative", "meeting_booked"];
-const REPLIED = ["replied", "positive", "negative", "meeting_booked"];
+const CONTACTED = ["invited", "accepted", "messaged_1", "messaged_2", "messaged_3", "replied", "positive", "negative", "meeting_booked", "opted_out"];
+// An opt-out is a reply ("remove me"), so somebody who opted out was contacted,
+// accepted and replied. Left out, every opt-out vanished from all three counts.
+const REPLIED = ["replied", "positive", "negative", "meeting_booked", "opted_out"];
 const ACCEPTED = ["accepted", "messaged_1", "messaged_2", "messaged_3", ...REPLIED];
 
 /**

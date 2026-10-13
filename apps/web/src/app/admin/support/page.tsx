@@ -65,25 +65,47 @@ export default async function AdminSupportPage({ searchParams }: { searchParams:
   const supabase = await createClient();
   const weekAgo = new Date(Date.now() - 7 * 86_400_000).toISOString();
 
-  const [{ data: workspaces }, { data: tickets }, { data: settings }, { data: users }] = await Promise.all([
-    supabase.from("workspaces").select("id, name"),
-    supabase
-      .from("support_tickets")
-      .select(
-        "id, workspace_id, raised_by, subject, body, status, answer, answered_by, answered_at, context, created_at, category, draft_answer, draft_confidence, draft_reason, drafted_at, reopened_at, followup",
-      )
-      .order("created_at", { ascending: false })
-      .limit(100),
-    supabase.from("platform_settings").select("support_autopilot").maybeSingle(),
-    supabase.rpc("platform_users"),
-  ]);
+  const columns =
+    "id, workspace_id, raised_by, subject, body, status, answer, answered_by, answered_at, context, created_at, category, drafted_at, reopened_at, followup";
+  /*
+   * Open tickets are read on their own and in full. They were cut from the
+   * newest hundred of every ticket, so once a hundred newer ones existed an
+   * old unanswered ticket fell off the queue and off this screen, which is
+   * precisely how a ticket waits four days. The answered list is history and
+   * keeps its limit.
+   */
+  const [{ data: workspaces }, { data: openRows }, { data: tickets }, { data: settings }, { data: users }] =
+    await Promise.all([
+      supabase.from("workspaces").select("id, name"),
+      supabase.from("support_tickets").select(columns).eq("status", "open").order("created_at", { ascending: true }),
+      supabase.from("support_tickets").select(columns).order("created_at", { ascending: false }).limit(100),
+      supabase.from("platform_settings").select("support_autopilot").maybeSingle(),
+      supabase.rpc("platform_users"),
+    ]);
+  /*
+   * The assistant's drafts live in their own table (migration 0044), readable
+   * only by a platform admin: on the ticket they were a column every customer
+   * could read off their own row. Fetched for the open tickets and matched by
+   * id, never embedded.
+   */
+  const openIds = (openRows ?? []).map((t) => t.id);
+  const { data: draftRows } = openIds.length
+    ? await supabase
+        .from("support_ticket_drafts")
+        .select("ticket_id, draft_answer, draft_confidence, draft_reason")
+        .in("ticket_id", openIds)
+    : { data: [] };
+  const drafts = new Map((draftRows ?? []).map((d) => [d.ticket_id, d]));
 
   const names = new Map((workspaces ?? []).map((w) => [w.id, w.name]));
   const who = new Map((users ?? []).map((u) => [u.user_id, u.full_name ? `${u.full_name} · ${u.email}` : u.email]));
   const autopilot = settings?.support_autopilot !== false;
 
-  const open = (tickets ?? []).filter((t) => t.status === "open");
+  const open = openRows ?? [];
   const closed = (tickets ?? []).filter((t) => t.status !== "open");
+  // The same reading as the sidebar's count: an open ticket the assistant has
+  // drafted and held. One it has not looked at yet is open, not waiting on you.
+  const held = open.filter((t) => t.drafted_at).length;
   const thisWeek = (tickets ?? []).filter((t) => t.created_at >= weekAgo);
   const byAssistant = thisWeek.filter((t) => t.answered_by === "agent").length;
   const byYou = thisWeek.filter((t) => t.answered_by === "operator").length;
@@ -99,9 +121,14 @@ export default async function AdminSupportPage({ searchParams }: { searchParams:
       />
       <PageNotice error={params.error} notice={params.notice} />
 
-      <Section title="This week">
+      <Section title="The queue, and this week">
         <div className="kpi-row">
-          <Kpi label="Waiting for you" value={String(open.length)} tone={open.length ? "warning" : "neutral"} />
+          <Kpi
+            label="Waiting for you"
+            value={String(held)}
+            tone={held ? "warning" : "neutral"}
+            note={`${open.length} open in total`}
+          />
           <Kpi label="Answered by the assistant" value={String(byAssistant)} />
           <Kpi label="Answered by you" value={String(byYou)} />
           <Kpi label="Said it did not help" value={String(reopened)} note="reopened with Still stuck" />
@@ -120,6 +147,9 @@ export default async function AdminSupportPage({ searchParams }: { searchParams:
           <div className="stack-3">
             {open.map((ticket) => {
               const category = categoryLabel(ticket.category);
+              const heldDraft = drafts.get(ticket.id);
+              const draftAnswer = heldDraft?.draft_answer ?? null;
+              const draftConfidence = heldDraft?.draft_confidence ?? null;
               return (
                 <article key={ticket.id} className="card">
                   <div className="between">
@@ -134,13 +164,13 @@ export default async function AdminSupportPage({ searchParams }: { searchParams:
                     <Link href={`/admin/workspaces/${ticket.workspace_id}`}>{names.get(ticket.workspace_id) ?? "—"}</Link>
                     {ticket.raised_by ? ` · ${who.get(ticket.raised_by) ?? ""}` : ""}
                   </p>
-                  <p className="small">{ticket.body}</p>
+                  <p className="small prewrap">{ticket.body}</p>
                   {ticket.reopened_at ? (
                     <div className="panel stack-1">
                       <p className="tiny subtle">We answered:</p>
-                      <p className="small muted">{ticket.answer ?? "—"}</p>
+                      <p className="small muted prewrap">{ticket.answer ?? "—"}</p>
                       <p className="tiny subtle">They said it did not help, {ago(ticket.reopened_at)}:</p>
-                      <p className="small">{ticket.followup}</p>
+                      <p className="small prewrap">{ticket.followup}</p>
                     </div>
                   ) : null}
                   <ul className="tiny subtle inline-list">
@@ -153,8 +183,8 @@ export default async function AdminSupportPage({ searchParams }: { searchParams:
                     <p className="small">
                       <span className="pill tiny warning">held</span>{" "}
                       <span className="muted">
-                        {ticket.draft_reason ?? "The assistant held this for you."}
-                        {ticket.draft_confidence !== null ? ` Confidence ${Math.round(ticket.draft_confidence * 100)}%.` : ""}
+                        {heldDraft?.draft_reason ?? "The assistant held this for you."}
+                        {draftConfidence !== null ? ` Confidence ${Math.round(draftConfidence * 100)}%.` : ""}
                       </span>
                     </p>
                   ) : (
@@ -164,11 +194,11 @@ export default async function AdminSupportPage({ searchParams }: { searchParams:
                   <form action={answerTicket} className="stack-2">
                     <input type="hidden" name="ticketId" value={ticket.id} />
                     <label className="field">
-                      <span className="tiny">{ticket.draft_answer ? "The assistant's draft — edit it or send it as it is" : "Answer"}</span>
+                      <span className="tiny">{draftAnswer ? "The assistant's draft — edit it or send it as it is" : "Answer"}</span>
                       <textarea
                         name="answer"
-                        rows={ticket.draft_answer ? 7 : 3}
-                        defaultValue={ticket.draft_answer ?? ""}
+                        rows={draftAnswer ? 7 : 3}
+                        defaultValue={draftAnswer ?? ""}
                         placeholder="What you found and what you did."
                       />
                     </label>

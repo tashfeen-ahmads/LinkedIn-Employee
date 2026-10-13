@@ -10,6 +10,7 @@ import {
   verifyStripeWebhook,
 } from "@le/billing";
 import type { ConnectedAccount } from "@le/linkedin";
+import { MESSAGE_WEBHOOK_BEAT } from "@le/shared";
 import { decryptJson, encryptJson } from "./crypto.js";
 import { recordBeat } from "./heartbeat.js";
 import type { MiddlewareHandler } from "hono";
@@ -1009,7 +1010,7 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
     try {
       messages = ctx.linkedin.parseWebhook({ body, signature, authHeader });
     } catch (err) {
-      await recordBeat(ctx.db, "webhook:messages", {
+      await recordBeat(ctx.db, MESSAGE_WEBHOOK_BEAT, {
         at: new Date().toISOString(),
         ok: false,
         reason: err instanceof Error ? err.message : String(err),
@@ -1058,6 +1059,20 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
       );
     }
 
+    /*
+     * Accepted deliveries are stamped too, exactly as the accounts webhook does.
+     *
+     * Only refusals used to write this row, so a deployment whose webhook had
+     * worked for weeks read as "never called" — and a refusal from a month ago
+     * stayed the last word on the subject however many replies had arrived
+     * since. Rule 46's check reads this row to answer "are deliveries
+     * arriving", which it can only do if arriving is written down.
+     */
+    await recordBeat(ctx.db, MESSAGE_WEBHOOK_BEAT, {
+      at: new Date().toISOString(),
+      ok: true,
+      received: messages.length,
+    });
     return c.json({ received: messages.length });
   });
 

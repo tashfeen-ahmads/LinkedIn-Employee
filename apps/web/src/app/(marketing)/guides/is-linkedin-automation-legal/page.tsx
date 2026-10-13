@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArticleLayout, articleMeta, Callout, CompareTable } from "@/components/article";
-import { PUBLIC_LIMITS, SITE } from "@/lib/site";
+import { ArticleLayout, articleMeta, Callout } from "@/components/article";
+import { PUBLIC_LIMITS } from "@/lib/site";
 import { OPT_OUT_PHRASES } from "@le/shared";
 
 const PATH = "/guides/is-linkedin-automation-legal";
@@ -13,7 +13,7 @@ const OPT_OUT_COUNT = OPT_OUT_PHRASES.length;
 const FAQ = [
   {
     q: "Is LinkedIn automation illegal?",
-    a: "In most places, no law makes it a crime to automate your own LinkedIn account. It does break LinkedIn's User Agreement, which is a contract, so the usual consequence is a restricted or closed account. Legal exposure comes from other things: scraping at scale, fake accounts, and how you handle people's personal data under laws such as GDPR. This is not legal advice.",
+    a: "Generally no. In the US and most other places, no law makes it a crime to automate your own LinkedIn account. It does break LinkedIn's User Agreement, which is a contract, so the usual consequence is a restricted or closed account. Legal exposure comes from other things: scraping at scale, fake accounts, and how you handle personal data under state privacy laws or, for EU and UK prospects, GDPR. This is not legal advice.",
   },
   {
     q: "Does LinkedIn ban automation tools?",
@@ -21,20 +21,21 @@ const FAQ = [
   },
   {
     q: "Is scraping LinkedIn legal?",
-    a: "It is against LinkedIn's terms, and the courts have not made it safe. In hiQ v LinkedIn the Ninth Circuit said scraping public profiles was likely not unauthorised access under the US anti-hacking statute, but the trial court later found hiQ breached the User Agreement and hiQ agreed to a judgment of 500,000 US dollars and a permanent injunction. Data protection law applies separately.",
+    a: "It is against LinkedIn's terms, and the courts have not made it safe. In hiQ v LinkedIn the Ninth Circuit said scraping public profiles was likely not unauthorized access under the US anti-hacking statute, but the trial court later found hiQ breached the User Agreement, and hiQ agreed to a $500,000 judgment and a permanent injunction. Privacy law applies separately.",
   },
   {
     q: "Do I need consent to message someone on LinkedIn under GDPR?",
-    a: "Not necessarily. Consent is one lawful basis; legitimate interests is another, and GDPR's Recital 47 says direct marketing may be regarded as a legitimate interest. You still have to pass a balancing test, tell the person who you are and where their details came from, and stop immediately if they object. Take advice for your own situation.",
+    a: "GDPR applies only if they are in the EU or UK, and even then consent is not the only route. Legitimate interests is another lawful basis, and GDPR's Recital 47 says direct marketing may be regarded as one. You still have to pass a balancing test, tell the person who you are and where their details came from, and stop immediately if they object. Take advice for your own situation.",
   },
   {
     q: "What is legitimate interest for B2B outreach?",
-    a: "It is the GDPR lawful basis that lets you process someone's data without consent when you have a genuine interest, the processing is necessary for it, and the person's interests do not override it. The UK regulator calls these the purpose, necessity and balancing tests. Relevant, low-volume messages to people in a matching role fit it far better than mass messaging.",
+    a: "It is the GDPR lawful basis, relevant when your prospects are in the EU or UK, that lets you process someone's data without consent when you have a genuine interest, the processing is necessary for it, and the person's interests do not override it. The UK regulator calls these the purpose, necessity and balancing tests. Relevant, low-volume messages to people in a matching role fit it far better than mass messaging.",
   },
 ];
 
 const SOURCES = [
-  { label: "LinkedIn User Agreement, section 8.2 (Don'ts)", url: "https://www.linkedin.com/legal/user-agreement" },
+  { label: "LinkedIn User Agreement, effective November 3, 2025, section 8.2 (Don'ts)", url: "https://www.linkedin.com/legal/user-agreement" },
+  { label: "LinkedIn Help: Updates to User Agreement and Privacy Policy", url: "https://www.linkedin.com/help/linkedin/answer/a1341216/updates-to-user-agreement-and-privacy-policy" },
   { label: "LinkedIn Help: Prohibited software and extensions", url: "https://www.linkedin.com/help/linkedin/answer/a1341387" },
   {
     label: "Jenner & Block: in hiQ v LinkedIn, the Ninth Circuit reaffirms a narrow reading of the CFAA (April 2022)",
@@ -52,6 +53,26 @@ const SOURCES = [
     label: "Social Media Today: LinkedIn wins legal case against data scrapers (Proxycurl, 2025)",
     url: "https://www.socialmediatoday.com/news/linkedin-wins-legal-case-data-scrapers-proxycurl/756101/",
   },
+  {
+    label: "Mintz: Facebook v. Vachani (Power Ventures), Ninth Circuit, user authorization can be revoked (July 2016)",
+    url: "https://www.mintz.com/insights-center/viewpoints/2826/2016-07-facebook-v-vachani-user-authorization-can-be-revoked",
+  },
+  {
+    label: "California Privacy Protection Agency: updated monetary thresholds in the CCPA (January 2025)",
+    url: "https://www.cppa.ca.gov/regulations/cpi_adjustment.html",
+  },
+  {
+    label: "Foley & Lardner: CCPA business-to-business and employment information exceptions ending (2022)",
+    url: "https://www.foley.com/en/insights/publications/2022/09/ccpa-b2b-employment-information-exceptions-ending",
+  },
+  {
+    label: "Association of Corporate Counsel: state data privacy laws compared, including the commercial-context exclusion (April 2023)",
+    url: "https://www.acc.com/sites/default/files/2023-04/4.11.23%20Data%20Privacy%20Slides.pdf",
+  },
+  {
+    label: "Eric Goldman, Technology & Marketing Law Blog: Facebook v. MaxBounty, Facebook posts are electronic mail messages under CAN-SPAM (April 2011)",
+    url: "https://blog.ericgoldman.org/archives/2011/04/facebook_v_maxbounty.htm",
+  },
   { label: "GDPR Article 6: lawfulness of processing", url: "https://gdpr-info.eu/art-6-gdpr/" },
   { label: "GDPR Recital 47: overriding legitimate interest", url: "https://gdpr-info.eu/recitals/no-47/" },
   { label: "GDPR Article 14: information where data was not obtained from the person", url: "https://gdpr-info.eu/art-14-gdpr/" },
@@ -60,14 +81,6 @@ const SOURCES = [
     label: "ICO: legitimate interests (the three-part test)",
     url: "https://ico.org.uk/for-organisations/uk-gdpr-guidance-and-resources/lawful-basis/a-guide-to-lawful-basis/legitimate-interests/",
   },
-];
-
-const SHORT = [
-  { label: "Is it a crime to automate my own account?", values: ["Generally no. No statute we know of makes it one in itself."] },
-  { label: "Is it against LinkedIn's rules?", values: ["Yes. Section 8.2 of the User Agreement prohibits it."] },
-  { label: "What usually happens if LinkedIn objects?", values: ["The account is restricted or closed. That is a contract remedy, not a prosecution."] },
-  { label: "Can LinkedIn sue?", values: ["Yes, and it has, over large-scale scraping and fake accounts, and won."] },
-  { label: "Does GDPR apply to LinkedIn outreach?", values: ["Yes, to people in the EU and UK, whatever tool sends the message."] },
 ];
 
 const HIQ = [
@@ -83,7 +96,7 @@ const HIQ = [
   },
   {
     label: "December 2022",
-    values: ["Settlement: a judgment of 500,000 US dollars against hiQ, a permanent injunction, and destruction of the scraped data and code."],
+    values: ["Settlement: a $500,000 judgment against hiQ, a permanent injunction, and destruction of the scraped data and code."],
   },
 ];
 
@@ -92,7 +105,7 @@ export default function Page() {
     <ArticleLayout
       path={PATH}
       h1="Is LinkedIn automation illegal, or only against the terms?"
-      lede="LinkedIn automation is generally not illegal in itself, but it is against LinkedIn's terms: section 8.2 of the User Agreement prohibits bots and automated methods for adding contacts and sending messages, so the usual consequence is a restricted account, not a court. The real legal risks sit elsewhere, in large-scale scraping and fake accounts, which LinkedIn has sued over and won, and in data protection law such as GDPR, which governs how you use people's details whichever tool sends the message."
+      lede="No, LinkedIn automation is generally not illegal, but it breaks LinkedIn's User Agreement (section 8.2), so the usual consequence is a restricted account, not a court case. The legal risks sit elsewhere: large-scale scraping and fake accounts, which LinkedIn has sued over and won, and privacy law, from US state laws such as California's to GDPR for prospects in the EU or UK."
       faq={FAQ}
       sources={SOURCES}
     >
@@ -104,47 +117,47 @@ export default function Page() {
         </p>
       </Callout>
 
-      <h2 id="short-answer">Is LinkedIn automation illegal? The short answer: contract versus law</h2>
+      <h2 id="short-answer">The short answer: contract versus law</h2>
       <p>
         Most of the confusion comes from treating two questions as one. &quot;Is it illegal?&quot; asks whether a law
-        forbids it. &quot;Is it allowed?&quot; asks whether LinkedIn permits it. The answers are different.
+        forbids it. &quot;Is it allowed?&quot; asks whether LinkedIn permits it. Generally, no law forbids automating your own
+        account; LinkedIn&apos;s contract does. A breach of contract is enforced by restricting or closing the account, and in
+        bigger cases by a lawsuit, not by a prosecution.
       </p>
-      <CompareTable
-        caption="LinkedIn automation: what is law and what is contract, as of October 2026"
-        columns={["Answer"]}
-        rows={SHORT}
-      />
       <p>
-        Pages that rank for this question tend to blur the two, usually in the direction of the product they
-        sell. A vendor of automation software stresses that nothing is illegal; a vendor of manual tools
-        stresses the terms. Both statements can be true at once, and the risk that matters most to a sales
-        team, losing the account they sell from, comes from the contract.
+        Articles on this question tend to blur the two, usually in the direction of the product they sell. A vendor of
+        automation software stresses that nothing is illegal; a vendor of manual tools stresses the terms. Both statements
+        can be true at once, and the risk that matters most to a sales team, losing the account they sell from, comes from
+        the contract. The questions people ask most are answered one by one at the end of this page.
       </p>
 
       <h2 id="user-agreement">What LinkedIn&apos;s user agreement says</h2>
       <p>
-        When you create a LinkedIn account you accept its User Agreement. Section 8 lists what members agree
-        to do and not do, and section 8.2, the &quot;Don&apos;ts&quot;, is the part that matters here.
+        When you create a LinkedIn account you accept its User Agreement. The version in force as of October 2026 is
+        effective November 3, 2025. Section 8 lists what members agree to do and not do, and section 8.2, the
+        &quot;Don&apos;ts&quot;, is the part that matters here.
       </p>
 
       <h3 id="section-8-2">Section 8.2, quoted</h3>
       <p>Two of its prohibitions cover almost every outreach tool. You agree that you will not:</p>
+      <p>On scraping:</p>
       <blockquote>
         <p>
           &quot;Develop, support or use software, devices, scripts, robots or any other means or processes ... to
           scrape or copy the Services, including profiles and other data from the Services&quot;
         </p>
+      </blockquote>
+      <p>On automation:</p>
+      <blockquote>
         <p>
           &quot;Use bots or other unauthorized automated methods to access the Services, add or download contacts,
           send or redirect messages ... or otherwise drive inauthentic engagement&quot;
         </p>
       </blockquote>
       <p>
-        We checked this wording against several independent copies of the agreement rather than the live
-        page, and the ellipses mark the parts we left out. LinkedIn updates the agreement from time to time,
-        so the link in the sources goes to the current text. The meaning is not in doubt. Sending connection requests or messages by
-        software, rather than by a person clicking, is an automated method of adding contacts and sending
-        messages.
+        The ellipses mark the parts we left out. LinkedIn updates the agreement from time to time, so the link in the
+        sources goes to the current text. The meaning is not in doubt: sending connection requests or messages by software,
+        rather than by a person clicking, is an automated method of adding contacts and sending messages.
       </p>
 
       <h3 id="prohibited-software">The prohibited software and extensions page</h3>
@@ -153,7 +166,7 @@ export default function Page() {
         third-party software, including crawlers, bots, browser plug-ins and browser extensions, that scrapes
         the site, changes its appearance or automates activity, and that all such tools violate the User
         Agreement. It does not name tools, and it does not distinguish between a browser extension and a
-        cloud service: what it describes is the behaviour.
+        cloud service: what it describes is the behavior.
       </p>
       <p>
         What the page does not say is what this means for a sales team. In practice: LinkedIn enforces its
@@ -168,17 +181,27 @@ export default function Page() {
       <p>
         hiQ Labs scraped public LinkedIn profiles to sell analytics to employers. LinkedIn sent a
         cease-and-desist letter, hiQ sued to be allowed to continue, and the case ran for five years. It is
-        the case every article on this topic mentions, and it is often summarised as &quot;scraping is legal&quot;.
+        the case every article on this topic mentions, and it is often summarized as &quot;scraping is legal&quot;.
         That is not what happened.
       </p>
-      <CompareTable caption="hiQ Labs v LinkedIn, in order" columns={["What happened"]} rows={HIQ} />
+      <figure className="ga1-figure">
+        <ol className="ga2-steps">
+          {HIQ.map((step, i) => (
+            <li key={step.label} className={i === HIQ.length - 1 ? "ga2-step is-outcome" : "ga2-step"}>
+              <span className="ga2-step-date">{step.label}</span>
+              <span className="ga2-step-text">{step.values[0]}</span>
+            </li>
+          ))}
+        </ol>
+        <figcaption>hiQ Labs v LinkedIn, 2019 to 2022, from the law firm summaries in the sources.</figcaption>
+      </figure>
       <p>What it decided:</p>
       <ul>
         <li>
           <strong>On the US anti-hacking law, a narrow point.</strong> The Ninth Circuit said that scraping
           pages anyone can see without logging in is likely not access &quot;without authorization&quot; under the
           Computer Fraud and Abuse Act. Law firm commentary read that as making anti-hacking claims unlikely
-          unless somebody gets round a technical barrier.
+          unless somebody gets around a technical barrier.
         </li>
         <li>
           <strong>On the contract, against hiQ.</strong> The trial court found hiQ breached the User Agreement,
@@ -193,7 +216,7 @@ export default function Page() {
         </li>
         <li>
           <strong>Anything about data protection.</strong> The case was about US computer and contract law.
-          GDPR and similar laws apply to the data whatever a US court says about how it was collected.
+          Privacy laws apply to the data whatever a court says about how it was collected.
         </li>
         <li>
           <strong>Anything about logged-in automation.</strong> Using bots inside an account, behind a login,
@@ -207,7 +230,47 @@ export default function Page() {
         these cases is consistent: the companies sued ran scraping or fake accounts at scale.
       </p>
 
-      <h2 id="gdpr">GDPR and B2B outreach on LinkedIn</h2>
+      <h2 id="us-law">US law: the CFAA, state privacy laws and CAN-SPAM</h2>
+      <p>
+        For a US sales team writing to US prospects, three bodies of law come up. None of them makes automating your own
+        account a crime, and each has an edge worth knowing.
+      </p>
+
+      <h3 id="cfaa">The Computer Fraud and Abuse Act after hiQ</h3>
+      <p>
+        After the Supreme Court&apos;s Van Buren decision in 2021 and the Ninth Circuit&apos;s second hiQ ruling in 2022, breaking a
+        website&apos;s terms is not, by itself, access &quot;without authorization&quot; under the CFAA, and reading pages anyone can
+        see is likely not either. The edge is revocation. In Facebook v. Power Ventures (2016), the Ninth Circuit held that a
+        company which kept accessing Facebook after a cease-and-desist letter, and switched IP addresses when it was blocked,
+        did violate the CFAA. So: never get around a block, and stop when a platform tells you in writing that your access
+        is revoked.
+      </p>
+
+      <h3 id="state-privacy">State privacy laws, starting with California</h3>
+      <p>
+        California&apos;s privacy law (the CCPA, as amended by the CPRA) has covered business contact details since January 1,
+        2023, when its temporary exemption for business-to-business data ran out. It applies to for-profit businesses that
+        meet one of its thresholds; the revenue test, as adjusted by California&apos;s privacy agency from January 2025, is
+        annual gross revenue above $26,625,000. If your company is covered, a California prospect you found on
+        LinkedIn has the same rights as any other consumer, including asking what you hold and having it deleted.
+      </p>
+      <p>
+        Most other state privacy laws, including Virginia&apos;s, Colorado&apos;s, Connecticut&apos;s, Utah&apos;s and Iowa&apos;s, define a
+        consumer so as to leave out people acting in a commercial or employment context, which generally puts a prospect
+        contacted in their work role outside them. States keep passing new laws, so check the ones you sell into.
+      </p>
+
+      <h3 id="can-spam">CAN-SPAM</h3>
+      <p>
+        CAN-SPAM was written for commercial email, and most people assume it stops there. It may not. In Facebook v.
+        MaxBounty (2011), a federal court in California held that messages sent through Facebook counted as &quot;electronic
+        mail messages&quot; under the Act, following earlier rulings about MySpace. We found no court that has ruled on
+        LinkedIn messages either way, and in Power Ventures the Ninth Circuit found no CAN-SPAM violation on its facts. The
+        safe reading is to follow its core rules anyway, which good outreach does regardless: say who you are, say nothing
+        misleading, and stop when someone asks.
+      </p>
+
+      <h2 id="gdpr">GDPR and B2B outreach on LinkedIn, for EU and UK prospects</h2>
       <p>
         A name, job title and employer are personal data, even when they describe somebody at work. If the
         people you contact are in the EU or the UK, GDPR or the UK GDPR applies to what you do with their
@@ -247,8 +310,8 @@ export default function Page() {
         Article 14 adds a transparency duty when, as on LinkedIn, the data did not come from the person
         directly: if you use it to contact them, they must be told who you are, what you are doing and what
         their rights are, at the latest at the first communication. How to do that well inside a short
-        LinkedIn message is worth agreeing with your adviser before a campaign starts. Firms that answer
-        to a regulator of their own, such as financial advisers, have record-keeping duties on top; our page
+        LinkedIn message is worth agreeing with your advisor before a campaign starts. Firms that answer
+        to a regulator of their own, such as financial advisors, have record-keeping duties on top; our page
         on <Link href="/for/professional-services">LinkedIn lead generation for professional services firms</Link>{" "}
         covers what to take to your compliance team.
       </p>
@@ -263,7 +326,7 @@ export default function Page() {
       </p>
       <p>
         Erasure and objection pull in slightly different directions. If somebody asks to be forgotten and to
-        be left alone, deleting every trace of them means the next import cannot recognise them. Nora&apos;s answer
+        be left alone, deleting every trace of them means the next import cannot recognize them. Nora&apos;s answer
         is to erase the person and everything derived from them, and keep a minimal do-not-contact marker so
         no campaign can contact them again.
       </p>
@@ -271,7 +334,7 @@ export default function Page() {
       <h3 id="never-twice">Never contacting someone twice</h3>
       <p>
         Repeated contact is where outreach stops looking like a reasonable business message and starts
-        looking like pressure. Nora treats it as a rule rather than a judgement: once anyone in a workspace has
+        looking like pressure. Nora treats it as a rule rather than a judgment: once anyone in a workspace has
         sent a person an invitation, no campaign in that workspace sends them another, checked immediately
         before every send. Messages after an accepted invitation continue that one conversation; they never
         open a second one. Read how the{" "}
@@ -329,7 +392,7 @@ export default function Page() {
           what keeps acceptance high enough that LinkedIn has no reason to look.
         </li>
         <li>
-          <strong>Honour objections instantly and permanently.</strong> Nora checks every reply against{" "}
+          <strong>Honor objections instantly and permanently.</strong> Nora checks every reply against{" "}
           {OPT_OUT_COUNT} fixed opt-out phrases, such as &quot;remove me&quot; and &quot;not interested&quot;, before any model
           reads it, and an opt-out applies to every campaign in the workspace.
         </li>
@@ -350,8 +413,7 @@ export default function Page() {
       </ul>
       <p>
         That is the approach Nora is built around; <Link href="/how-it-works">how Nora works</Link> walks
-        through it end to end, and more context is in our <Link href="/guides">LinkedIn outreach guides</Link>.
-        Nora is free while we grow, with no card: <a href={`${SITE.app}/signup`}>Sign up free</a>.
+        through it end to end.
       </p>
     </ArticleLayout>
   );

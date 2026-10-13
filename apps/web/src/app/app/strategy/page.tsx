@@ -8,7 +8,7 @@ import {
   parseCustomerProfile,
 } from "@le/shared";
 import { PageNotice } from "@/components/page-notice";
-import { PageHeader, Section } from "@/components/page";
+import { Empty, PageHeader, Section } from "@/components/page";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import {
@@ -20,7 +20,7 @@ import {
   startedNotice,
 } from "@/lib/worker";
 import { FILTER_FIELDS, applyProfileEdits, formatList } from "@/lib/profile-form";
-import { CTA_DEFINITIONS, CTA_KINDS, checkCtaUrl, type CtaKind } from "@le/shared";
+import { CTA_DEFINITIONS, CTA_KINDS, MAX_STRATEGY_PRIORITY, checkCtaUrl, type CtaKind } from "@le/shared";
 import { readStrategyState } from "@/lib/strategy-state";
 import { SEARCH_EVENTS, describeLastSearch } from "@/lib/last-search";
 import { StrategyStatus } from "@/components/strategy-status";
@@ -28,6 +28,7 @@ import { StrategyDetailsForm, StrategyRetryButton } from "@/components/strategy-
 import { hasStrategySource, readOnboardingStash } from "@/lib/onboarding-stash";
 import { SubmitButton } from "@/components/submit-button";
 import { formatDateTime, isoAttr } from "@/lib/format";
+import { fetchAllRows } from "@/lib/rows";
 
 /**
  * Where an action on this page returns to: the business tab it was pressed on.
@@ -120,11 +121,19 @@ async function approveProfile(formData: FormData) {
   const session = await requireSession();
   const supabase = await createClient();
 
-  await supabase
+  // Checked, because approving is the one decision this screen exists for
+  // (rule 9). A write that failed, or matched nothing, used to be followed by
+  // "Approved" and a search: the screen said yes and the row still said no.
+  const { data: approvedRows, error: approveError } = await supabase
     .from("customer_profiles")
     .update({ approved_at: new Date().toISOString(), do_not_pursue: false })
     .eq("id", id)
-    .eq("workspace_id", session.workspaceId);
+    .eq("workspace_id", session.workspaceId)
+    .select("id");
+  if (approveError || !approvedRows?.length) {
+    if (approveError) console.error(`[strategy] approve profile: ${approveError.message}`);
+    redirect(errorQuery("/app/strategy", "That strategy could not be approved, so nothing was searched for. Reload the page and try again."));
+  }
 
   const { data: already } = await supabase
     .from("campaigns")
@@ -137,7 +146,7 @@ async function approveProfile(formData: FormData) {
   revalidatePath("/app/campaigns");
 
   if (already?.length) {
-    redirect(noticeQuery("/app/strategy", "Approved. This strategy already has a campaign — use Find more to grow its list."));
+    redirect(noticeQuery("/app/strategy", "Approved. This strategy already has a campaign, so use Find more on it to grow its list."));
   }
 
   const started = await queueSearch(session.workspaceId, session.userId, supabase, id);
@@ -147,7 +156,7 @@ async function approveProfile(formData: FormData) {
       started.ok
         ? started.alreadyRunning
           ? `Approved. ${ALREADY_RUNNING}`
-          : "Approved — the agent is searching now and will build you a campaign to review. It takes about a minute."
+          : "Approved. The agent is searching now and will build you a campaign to review. It takes about a minute."
         : `Approved, but the search has not started: ${started.reason}`,
     ),
   );
@@ -240,7 +249,7 @@ async function saveProfile(formData: FormData) {
     .eq("workspace_id", session.workspaceId);
   if (saveError) {
     console.error(`[strategy] save profile: ${saveError.message}`);
-    redirect(errorQuery("/app/strategy", "The search could not be saved. Nothing changed — try again."));
+    redirect(errorQuery("/app/strategy", "The search could not be saved. Nothing changed. Try again."));
   }
 
   revalidatePath("/app/strategy");
@@ -284,7 +293,7 @@ async function writeMoreStrategies(formData: FormData) {
       businessProfileId ? `/app/strategy?business=${businessProfileId}` : "/app/strategy",
       startedNotice(
         queued.data,
-        "Writing four more. They arrive on this page in a minute or two, unapproved like the others — nothing is searched for until you read one.",
+        "Writing four more. They arrive on this page in a minute or two, unapproved like the others: nothing is searched for until you read one.",
       ),
     ),
   );
@@ -314,7 +323,7 @@ async function addBusiness(formData: FormData) {
   const description = String(formData.get("description") ?? "").trim();
   if (!websiteUrl && !description) {
     redirect(
-      errorQuery("/app/strategy", "Give the agent a website or a description — it will not invent a business."),
+      errorQuery("/app/strategy", "Give the agent a website or a description. It will not invent a business."),
     );
   }
 
@@ -332,7 +341,7 @@ async function addBusiness(formData: FormData) {
       "/app/strategy",
       startedNotice(
         queued.data,
-        "Reading that site now. The new business and its strategies appear here in a minute or two, unapproved — and they keep their own list, so nothing changes for the business you already run.",
+        "Reading that site now. The new business and its strategies appear here in a minute or two, unapproved, and they keep their own list, so nothing changes for the business you already run.",
       ),
     ),
   );
@@ -364,7 +373,7 @@ async function findProspects(formData: FormData) {
       "/app/strategy",
       started.alreadyRunning
         ? ALREADY_RUNNING
-        : "Searching LinkedIn now. It takes about a minute — the list appears under Prospects, and this page will say if it stops early.",
+        : "Searching LinkedIn now. It takes about a minute; the list appears under Prospects, and this page will say if it stops early.",
     ),
   );
 }
@@ -464,7 +473,7 @@ export default async function StrategyPage({
           <div className="notice">
             <p>
               <strong>Nothing here yet.</strong> Sage, your strategist, reads what you publish and drafts
-              your business profile and three to five customer profiles — it has not been asked to
+              your business profile and three to five customer profiles. It has not been asked to
               yet.
             </p>
             <StrategyRetryButton>Start Sage</StrategyRetryButton>
@@ -493,11 +502,17 @@ export default async function StrategyPage({
   // a different problem from the one that found nobody at all, and neither is
   // visible from a priority number. Read as two flat queries and reduced here —
   // a count per strategy would be one query per strategy.
-  const [{ data: prospectRows }, { data: campaignRows }] = await Promise.all([
-    supabase
-      .from("prospects")
-      .select("customer_profile_id, last_contacted_at")
-      .eq("workspace_id", session.workspaceId),
+  const [{ rows: prospectRows }, { data: campaignRows }] = await Promise.all([
+    // Paged: a plain select stops at the thousandth row without saying so, and
+    // a strategy past it reported fewer people found than it had.
+    fetchAllRows<{ customer_profile_id: string | null; last_contacted_at: string | null }>((from, to) =>
+      supabase
+        .from("prospects")
+        .select("customer_profile_id, last_contacted_at")
+        .eq("workspace_id", session.workspaceId)
+        .order("id", { ascending: true })
+        .range(from, to),
+    ),
     supabase
       .from("campaigns")
       .select("customer_profile_id, status")
@@ -511,7 +526,7 @@ export default async function StrategyPage({
     yieldByStrategy.set(id, existing);
     return existing;
   };
-  for (const row of prospectRows ?? []) {
+  for (const row of prospectRows) {
     const entry = bucket(row.customer_profile_id);
     if (!entry) continue;
     entry.found += 1;
@@ -558,7 +573,7 @@ export default async function StrategyPage({
       <PageHeader
         eyebrow="Pipeline"
         title="Strategies"
-        lede="Written by Sage, your strategist, from what you publish. Nothing is searched for until you approve one, and every message the writer sends is grounded in what is on this page — so it is worth reading properly once."
+        lede="Written by Sage, your strategist, from what you publish. Nothing is searched for until you approve one, and every message the writer sends is grounded in what is on this page, so it is worth reading properly once."
         actions={
           <form action={writeMoreStrategies}>
             <input type="hidden" name="businessProfileId" value={businessRow.id} />
@@ -651,6 +666,14 @@ export default async function StrategyPage({
         slightly differently, which is the whole reason `Section` exists.
       */}
       <Section title="Customer profiles">
+        {profiles.length === 0 ? (
+          // A business with no strategies rendered its heading over nothing,
+          // which reads as a list that failed to load.
+          <Empty title="No customer profiles for this business yet.">
+            Press Write more strategies above and Sage drafts some from this business profile. Nothing
+            is searched for until you approve one.
+          </Empty>
+        ) : null}
         <div className="grid">
         {profiles.map(({ row, spec }) => {
           if (!spec.success) {
@@ -775,12 +798,12 @@ export default async function StrategyPage({
               <div className="grid grid-2">
                 <Facts
                   label="What they buy"
-                  values={[profile.whatTheyBuy ?? "The agent did not say — written before this was asked for."]}
+                  values={[profile.whatTheyBuy ?? "The agent did not say. This was written before it was asked for."]}
                 />
                 <Facts
                   label="What they do today instead"
                   values={[
-                    profile.insteadOfToday ?? "The agent did not say — written before this was asked for.",
+                    profile.insteadOfToday ?? "The agent did not say. This was written before it was asked for.",
                   ]}
                 />
               </div>
@@ -801,8 +824,8 @@ export default async function StrategyPage({
                   <input type="hidden" name="profileId" value={row.id} />
                   <input type="hidden" name="business" value={businessRow.id} />
                   <p className="small muted">
-                    One per line. These go straight into the Sales Navigator search, so a title here is
-                    a title LinkedIn has to recognise.
+                    One per line. These go straight into the LinkedIn search, so a title here is a
+                    title LinkedIn has to recognize.
                   </p>
                   <div className="grid tight grid-3"
                   >
@@ -818,7 +841,7 @@ export default async function StrategyPage({
                     ))}
                     <label className="field">
                       <span>Priority · 1 goes first</span>
-                      <input type="number" name="priority" min={1} max={5} defaultValue={row.priority} />
+                      <input type="number" name="priority" min={1} max={MAX_STRATEGY_PRIORITY} defaultValue={row.priority} />
                     </label>
                     {/*
                       The ask, set here rather than on the campaign. Every
@@ -855,7 +878,7 @@ export default async function StrategyPage({
                         defaultValue={row.cta_url ?? ""}
                       />
                       <span className="tiny subtle">
-                        Never appears in the connection request — LinkedIn penalises links there and they
+                        Never appears in the connection request: LinkedIn penalizes links there and they
                         cut acceptance. It goes in the last message.
                       </span>
                     </label>
@@ -884,7 +907,7 @@ export default async function StrategyPage({
         <Section
           id="add-business"
           title="Another business"
-          description="Each business keeps its own profile, its own strategies and its own copy. A workspace running a cleaning company and an estate agency should not post one's claims in the other's voice — and a segment named for one must not be dropped as a duplicate of the other's."
+          description="Each business keeps its own profile, its own strategies and its own copy. A workspace running a cleaning company and a real estate agency should not post one's claims in the other's voice, and a segment named for one must not be dropped as a duplicate of the other's."
         >
           <div className="card">
             <form action={addBusiness} className="stack-3">
@@ -893,7 +916,7 @@ export default async function StrategyPage({
                 <input type="url" name="websiteUrl" placeholder="https://…" />
                 <span className="hint">
                   The agent reads the site and writes that business its own profile and three to five
-                  strategies, unapproved — exactly as it did the first time.
+                  strategies, unapproved, exactly as it did the first time.
                 </span>
               </label>
               <label className="field">

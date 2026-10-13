@@ -3,6 +3,7 @@ import { loadBusinessProfile } from "@le/db";
 import { BusinessProfileSchema } from "@le/shared";
 import type { WorkerContext } from "../context.js";
 import { recordEvent } from "../context.js";
+import { knowledgeQuery } from "../knowledge.js";
 
 export interface WritePitchInput {
   workspaceId: string;
@@ -63,11 +64,7 @@ export async function writeWorkspacePitch(
 
   const [{ data: knowledge }, { data: rep }, { data: existing }, { data: profiles }] =
     await Promise.all([
-      ctx.db
-        .from("knowledge_documents")
-        .select("title, content")
-        .eq("workspace_id", input.workspaceId)
-        .limit(20),
+      knowledgeQuery(ctx.db, input.workspaceId),
       ctx.db.from("profiles").select("full_name").eq("id", input.userId).maybeSingle(),
       mine(),
       // The opening angles a person already approved on /app/strategy. Written

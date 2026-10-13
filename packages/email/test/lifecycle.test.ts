@@ -66,7 +66,7 @@ describe("the onboarding sequence", () => {
   it("states the pacing numbers from the product rules rather than retyping them", () => {
     const message = tipsEmail(base);
     expect(message.text).toContain(`${LINKEDIN_LIMITS.invitesPerDayStart} invitations a day`);
-    expect(message.text).toContain(`${LINKEDIN_LIMITS.invitesPerWeek} invitations a week`);
+    expect(message.text).toContain(`${LINKEDIN_LIMITS.invitesPerWeek} invitations in any seven days in a row`);
     expect(message.text).toContain("Sales Navigator");
   });
 

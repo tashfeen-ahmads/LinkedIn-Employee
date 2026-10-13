@@ -80,7 +80,7 @@ async function generate(formData: FormData) {
   redirect(
     noticeQuery(
       "/app/pitch",
-      `Wrote ${result.data?.written ?? 0} ${kind.many}. Read them before approving — they go to real people.`,
+      `Wrote ${result.data?.written ?? 0} ${kind.many}. Read them before approving. They go to real people.`,
     ),
   );
 }
@@ -120,7 +120,7 @@ async function writeEdit(formData: FormData, action: string) {
     .update({ name })
     .eq("id", id)
     .eq("workspace_id", session.workspaceId);
-  if (nameError) redirect(errorQuery("/app/pitch", `That did not save: ${nameError.message}`));
+  if (nameError) redirect(errorQuery("/app/pitch", "That did not save. Please try again."));
 
   // Branched rather than given a union payload: `facts_used` exists on one
   // table and not the other, and a shared object would have to lie about that.
@@ -139,7 +139,7 @@ async function writeEdit(formData: FormData, action: string) {
           .eq("workspace_id", session.workspaceId)
           .neq("body", body);
 
-  if (error) redirect(errorQuery("/app/pitch", `That did not save: ${error.message}`));
+  if (error) redirect(errorQuery("/app/pitch", "That did not save. Please try again."));
   return { session, supabase, kind, id, body };
 }
 
@@ -172,7 +172,7 @@ async function approve(formData: FormData) {
     .eq("body", body)
     .select("id");
 
-  if (error) redirect(errorQuery("/app/pitch", `That did not save: ${error.message}`));
+  if (error) redirect(errorQuery("/app/pitch", "That did not save. Please try again."));
   if (!data?.length) {
     redirect(errorQuery("/app/pitch", "That line changed while you were reading it. Read it again, then approve."));
   }
@@ -188,12 +188,15 @@ async function unapprove(formData: FormData) {
   const id = String(formData.get("id") ?? "");
 
   const supabase = await createClient();
-  await supabase
+  const { error } = await supabase
     .from(kind.table)
     .update({ approved_at: null, approved_by: null })
     .eq("id", id)
     .eq("workspace_id", session.workspaceId);
 
+  // A pause that did not happen, reported as one, leaves a line going out to
+  // people that somebody believes is stopped.
+  if (error) redirect(errorQuery("/app/pitch", "That did not pause, so it is still in use. Please try again."));
   revalidatePath("/app/pitch");
   redirect(noticeQuery("/app/pitch", "Paused. It will not be used for anybody."));
 }
@@ -206,21 +209,36 @@ async function makeDefault(formData: FormData) {
   const id = String(formData.get("id") ?? "");
 
   const supabase = await createClient();
-  // Cleared first: the unique index allows one default per workspace, so
-  // setting a second without clearing the first is a constraint violation
-  // rendered to somebody as "that did not save".
-  await supabase
+  // Which default this row competes with. The index allows one default per
+  // agent, and one for the lines no agent owns (migration 0031); clearing every
+  // default in the workspace, as this did, wiped each agent's own default line
+  // whenever somebody set the workspace's here.
+  const { data: target } = await supabase
+    .from(kind.table)
+    .select("id, agent_id, approved_at")
+    .eq("id", id)
+    .eq("workspace_id", session.workspaceId)
+    .maybeSingle();
+  if (!target) redirect(errorQuery("/app/pitch", `That ${kind.one} is gone.`));
+  if (!target.approved_at) {
+    redirect(errorQuery("/app/pitch", `Approve that ${kind.one} before making it the default.`));
+  }
+
+  // Cleared first: setting a second default in the same scope without
+  // clearing the first is a constraint violation.
+  const clear = supabase
     .from(kind.table)
     .update({ is_default: false })
     .eq("workspace_id", session.workspaceId)
     .eq("is_default", true);
+  await (target.agent_id ? clear.eq("agent_id", target.agent_id) : clear.is("agent_id", null));
   const { error } = await supabase
     .from(kind.table)
     .update({ is_default: true })
     .eq("id", id)
     .eq("workspace_id", session.workspaceId);
 
-  if (error) redirect(errorQuery("/app/pitch", `That did not save: ${error.message}`));
+  if (error) redirect(errorQuery("/app/pitch", "That did not save. Please try again."));
 
   revalidatePath("/app/pitch");
   redirect(noticeQuery("/app/pitch", "That is now what anyone with no angle gets."));
@@ -330,7 +348,7 @@ function CopyCard({
           <span className="hint">
             Up to {max} characters. No links.
             {kind === "hooks"
-              ? " It is the shape of the note, not the whole of it — the writer still says one specific thing about the person."
+              ? " It is the shape of the note, not the whole of it: the writer still says one specific thing about the person."
               : " The destination is substituted per campaign at send time."}{" "}
             Editing un-approves it, because an approval is a statement about particular words.
           </span>
@@ -365,7 +383,7 @@ function CopyCard({
                 Save
               </SubmitButton>
               <SubmitButton className="btn small" pendingLabel="Approving…" formAction={approve}>
-                Save &amp; approve
+                Save and approve
               </SubmitButton>
             </>
           )}
@@ -460,7 +478,7 @@ export default async function PitchPage({ searchParams }: { searchParams: Promis
 
       <Section
         id="hooks"
-        title={hooks.length ? `Openers — ${hooks.filter((h) => h.approved_at).length} of ${hooks.length} approved` : "Openers"}
+        title={hooks.length ? `Openers: ${hooks.filter((h) => h.approved_at).length} of ${hooks.length} approved` : "Openers"}
         description="The first thing a stranger reads from you. These are shapes, never text to paste: the note is still written for the person receiving it, or everyone in the batch gets the same sentence."
       >
         {hooks.length ? (
@@ -498,7 +516,7 @@ export default async function PitchPage({ searchParams }: { searchParams: Promis
 
       <Section
         id="pitches"
-        title={pitches.length ? `Pitches — ${pitches.filter((p) => p.approved_at).length} of ${pitches.length} approved` : "Pitches"}
+        title={pitches.length ? `Pitches: ${pitches.filter((p) => p.approved_at).length} of ${pitches.length} approved` : "Pitches"}
         description="The offer itself, in one line. An angle owns its prospect end to end, so the pitch somebody hears belongs to the angle their invitation was written for."
       >
         {pitches.length ? (
@@ -517,7 +535,7 @@ export default async function PitchPage({ searchParams }: { searchParams: Promis
         ) : (
           <Empty title="Nobody has written your offer down">
             Right now a prospect who replies and asks what this is gets whatever the agent can
-            assemble from your business profile — a slightly different offer every time, and one
+            assemble from your business profile: a slightly different offer every time, and one
             nobody has read.
           </Empty>
         )}

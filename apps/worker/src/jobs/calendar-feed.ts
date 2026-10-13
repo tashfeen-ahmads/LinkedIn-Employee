@@ -1,7 +1,7 @@
-import { lookup } from "node:dns/promises";
-import { checkFeedUrl, isPrivateIp, normalizeFeedUrl, parseIcsBusy } from "@le/calendar";
+import { checkFeedUrl, normalizeFeedUrl, parseIcsBusy } from "@le/calendar";
 import type { WorkerContext } from "../context.js";
 import { decryptJson, encryptJson } from "../crypto.js";
+import { fetchVetted } from "../vetted-fetch.js";
 
 /** How far ahead we care about. Slots are never offered beyond two weeks. */
 const WINDOW_DAYS = 45;
@@ -173,45 +173,31 @@ async function storeBusy(
 type Fetched = { ok: true; body: string } | { ok: false; error: string };
 
 /**
- * A GET that cannot be aimed at this network.
- *
- * Every hop is checked, not just the first. DNS is resolved and the resulting
- * address vetted, because a hostname the caller controls can point anywhere;
- * redirects are followed by hand for the same reason, since a 302 to
- * `http://169.254.169.254/` would otherwise undo every check made before it.
+ * A calendar feed, fetched through the one GET that cannot be aimed at this
+ * network (`fetchVetted`, rule 19), with what went wrong said to the rep.
  */
-async function fetchIcs(startUrl: string, depth = 0): Promise<Fetched> {
-  if (depth > 3) return { ok: false, error: "That address redirects too many times." };
-
-  const verdict = checkFeedUrl(startUrl);
-  if (!verdict.ok) return { ok: false, error: verdict.reason };
-
-  const url = new URL(normalizeFeedUrl(startUrl));
-  try {
-    const addresses = await lookup(url.hostname, { all: true });
-    if (addresses.length === 0 || addresses.some((a) => isPrivateIp(a.address))) {
-      return { ok: false, error: "That address points inside a private network." };
+async function fetchIcs(startUrl: string): Promise<Fetched> {
+  const fetched = await fetchVetted(startUrl, {
+    headers: { accept: "text/calendar, text/plain;q=0.9, */*;q=0.1" },
+    timeoutMs: 15_000,
+  });
+  if (!fetched.ok) {
+    switch (fetched.kind) {
+      case "refused":
+        return { ok: false, error: fetched.reason ?? "That address cannot be used." };
+      case "private":
+        return { ok: false, error: "That address points inside a private network." };
+      case "unresolved":
+        return { ok: false, error: `No server answers at ${fetched.host}.` };
+      case "no_response":
+        return { ok: false, error: "That calendar did not respond." };
+      case "too_many_redirects":
+        return { ok: false, error: "That address redirects too many times." };
+      case "no_location":
+        return { ok: false, error: "That calendar redirected to nowhere." };
     }
-  } catch {
-    return { ok: false, error: `No server answers at ${url.hostname}.` };
   }
-
-  let response: Response;
-  try {
-    response = await fetch(url, {
-      redirect: "manual",
-      headers: { accept: "text/calendar, text/plain;q=0.9, */*;q=0.1" },
-      signal: AbortSignal.timeout(15_000),
-    });
-  } catch {
-    return { ok: false, error: "That calendar did not respond." };
-  }
-
-  if (response.status >= 300 && response.status < 400) {
-    const location = response.headers.get("location");
-    if (!location) return { ok: false, error: "That calendar redirected to nowhere." };
-    return fetchIcs(new URL(location, url).toString(), depth + 1);
-  }
+  const response = fetched.response;
 
   if (!response.ok) {
     // 401 and 404 are the two that actually happen: a rotated secret address,

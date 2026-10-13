@@ -18,7 +18,7 @@ const STATE_LABEL: Record<TeamState, string> = {
  *
  * Every line is computed by `teamStatus` from facts the overview already
  * loaded (plus one count of prospects), so the panel never says a teammate is
- * busy when nothing was queued — and the needs-you count is the same list at
+ * busy when nothing was queued, and the needs-you count is the same list at
  * the top of the page, not a second reading of it (rule 50).
  */
 export function TeamPanel({ facts }: { facts: TeamFacts }) {

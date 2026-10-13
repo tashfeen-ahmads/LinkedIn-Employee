@@ -933,7 +933,7 @@
     }
    ],
    "title": "Follow-up message after a LinkedIn connection is accepted",
-   "description": "What to send after someone accepts your LinkedIn request: within the hour, no pitch, continuing the thread your note started. With examples.",
+   "description": "What to send after someone accepts your LinkedIn request: within a few hours, no pitch, continuing the thread your note started. With examples.",
    "h1": "The first message after a LinkedIn connection is accepted",
    "outline": [
     {
@@ -2585,7 +2585,7 @@
      "misses": "Data-tool bias; outreach safety thin."
     }
    ],
-   "title": "PhantomBuster alternatives for safe LinkedIn outreach",
+   "title": "PhantomBuster alternatives for outreach, not scraping",
    "description": "PhantomBuster is built for scraping and workflows. If you need safe LinkedIn outreach with personal notes and booked meetings, see how Nora compares.",
    "h1": "PhantomBuster alternatives for LinkedIn outreach, not scraping",
    "outline": [
@@ -3226,7 +3226,7 @@
      "misses": "Unsourced figures (30,000 users, 40% restricted)."
     }
    ],
-   "title": "HeyReach ban and LinkedIn's 2026 automation crackdown",
+   "title": "HeyReach ban: what is verified about LinkedIn's 2026 action",
    "description": "What is verified about LinkedIn's March 2026 action against HeyReach, what is not, the Apollo and Seamless precedent, and what it means for your account.",
    "h1": "When LinkedIn acts against an automation tool: what happened in 2026",
    "outline": [
@@ -3313,7 +3313,7 @@
      "misses": "Multichannel bias; single-rep needs ignored."
     }
    ],
-   "title": "HeyReach alternatives: a safer pick for a single rep",
+   "title": "HeyReach alternatives for a single rep on their own profile",
    "description": "HeyReach suits agencies running many senders. If you are one rep who wants personal notes, human approval and published caps, here is how Nora compares.",
    "h1": "HeyReach alternatives for safe, personal LinkedIn outreach",
    "outline": [
@@ -3958,8 +3958,8 @@
      "misses": "Data tools, not outreach."
     }
    ],
-   "title": "Free LinkedIn automation tool: an AI SDR, free for now",
-   "description": "Nora is free while it grows: it finds buyers, writes each a personal note, follows up and books meetings on LinkedIn inside safe limits. No card needed.",
+   "title": "Free LinkedIn automation tool: an AI SDR, free while we grow",
+   "description": "Nora is free while we grow: it finds buyers, writes each a personal note, follows up and books meetings on LinkedIn inside safe limits. No card needed.",
    "h1": "A free LinkedIn automation tool that runs real campaigns",
    "outline": [
     {
@@ -4963,7 +4963,7 @@
   },
   "/guides/linkedin-automation-tool-bans": {
    "from": "When LinkedIn acts against an automation tool: ...",
-   "to": "HeyReach ban and LinkedIn's 2026 automation crackdown"
+   "to": "HeyReach ban: what is verified about LinkedIn's 2026 action"
   },
   "/guides/cloud-vs-browser-extension-linkedin-automation": {
    "from": "Cloud vs browser extension LinkedIn automation: which is safer?",
@@ -4975,7 +4975,7 @@
   },
   "/alternatives/heyreach": {
    "from": "HeyReach alternative for safe, personal LinkedIn outreach",
-   "to": "HeyReach alternatives: a safer pick for a single rep"
+   "to": "HeyReach alternatives for a single rep on their own profile"
   },
   "/alternatives/expandi": {
    "from": "Expandi alternative: an AI SDR that writes each note and books the meeting",

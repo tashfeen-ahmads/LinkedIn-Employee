@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireSession } from "@/lib/workspace";
-import { callWorker } from "@/lib/worker";
+import { callWorker, errorQuery } from "@/lib/worker";
+import { seeOther } from "@/lib/see-other";
 
 /**
  * Everything this workspace holds, as a file.
@@ -23,7 +24,7 @@ import { callWorker } from "@/lib/worker";
 export async function GET() {
   const session = await requireSession();
   if (!["owner", "admin"].includes(session.role)) {
-    return NextResponse.json({ error: "Only an owner or admin can export a workspace." }, { status: 403 });
+    return seeOther(`${errorQuery("/app/profile", "Only an owner or admin can export a workspace.")}`);
   }
 
   const result = await callWorker<{ exportedAt: string; complete: boolean }>("/jobs/export", {
@@ -33,15 +34,19 @@ export async function GET() {
     userId: session.userId,
   });
 
+  // Back to the page with the reason, rather than a JSON error body. The link
+  // was a download, so that body was saved to disk as the "export" or shown as
+  // raw braces in a tab, and either way nothing on screen said it failed.
   if (!result.ok) {
-    return NextResponse.json({ error: result.error }, { status: 502 });
+    return seeOther(`${errorQuery("/app/profile", `The export did not finish: ${result.error}`)}`);
   }
 
   const stamp = new Date().toISOString().slice(0, 10);
+  const slug = session.workspaceName.replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase() || "workspace";
   return new NextResponse(JSON.stringify(result.data, null, 2), {
     headers: {
       "content-type": "application/json",
-      "content-disposition": `attachment; filename="${session.workspaceName.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-${stamp}.json"`,
+      "content-disposition": `attachment; filename="${slug}-${stamp}.json"`,
       // Never cached anywhere: this is the most sensitive response the product
       // produces, and a shared cache holding it is a data leak with no bug.
       "cache-control": "no-store, private",

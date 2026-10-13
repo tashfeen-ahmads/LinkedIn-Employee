@@ -1,7 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase-server";
-import { requirePlatformAdmin, statsByWorkspace, formatUsd, when, type WorkspaceStats } from "@/lib/admin";
+import { requirePlatformAdmin, statsByWorkspace, when, type WorkspaceStats } from "@/lib/admin";
+import { formatSpend } from "@/lib/spend-display";
+import { countersForToday } from "@/lib/account-day";
+import type { AccountRecord } from "@le/linkedin";
 import { isoAttr } from "@/lib/format";
 import { label as statusLabel } from "@/lib/labels";
 import { dailyInviteCap } from "@le/linkedin";
@@ -49,7 +52,7 @@ export default async function AdminWorkspacePage({
       supabase.from("memberships").select("id, user_id, role, created_at").eq("workspace_id", id),
       supabase
         .from("linkedin_accounts")
-        .select("id, user_id, display_name, status, status_detail, provider_account_id, created_at, has_sales_navigator, invites_today, invites_this_week, messages_today, connected_at, first_action_at, last_action_at, invites_paused_until")
+        .select("id, user_id, display_name, status, status_detail, provider_account_id, created_at, has_sales_navigator, invites_today, invites_this_week, invites_by_day, messages_today, counters_reset_on, connected_at, first_action_at, last_action_at, invites_paused_until")
         .eq("workspace_id", id),
       supabase.from("campaigns").select("id, name, status, daily_invite_cap, reply_mode, launched_at, created_at").eq("workspace_id", id).order("created_at", { ascending: false }),
       supabase.rpc("platform_workspace_stats"),
@@ -140,6 +143,8 @@ export default async function AdminWorkspacePage({
                   const p = profileById.get(m.user_id);
                   const a = accountByUser.get(m.user_id);
                   const cap = a ? dailyInviteCap(a.first_action_at ? new Date(a.first_action_at) : null) : null;
+                  // Rolled over to this person's today, as the worker does.
+                  const counts = a ? countersForToday(a as unknown as AccountRecord, p?.timezone ?? "UTC") : null;
                   return (
                     <tr key={m.id}>
                       <td>
@@ -167,8 +172,8 @@ export default async function AdminWorkspacePage({
                           </>
                         )}
                       </td>
-                      <td className="num mono">{a ? a.invites_today : "—"}</td>
-                      <td className="num mono">{a ? a.invites_this_week : "—"}</td>
+                      <td className="num mono">{counts ? counts.invites_today : "—"}</td>
+                      <td className="num mono">{counts ? counts.invites_this_week : "—"}</td>
                       <td className="small subtle">
                         {a === undefined
                           ? "—"
@@ -248,7 +253,7 @@ export default async function AdminWorkspacePage({
 
       <Section title="Model spend">
         <div className="grid grid-4">
-          <Stat label="Total" value={formatUsd(totalSpend)} />
+          <Stat label="Total" value={formatSpend(totalSpend, callCount, unpriced)} />
           <Stat label="Calls" value={String(callCount)} />
           <Stat label="Failed" value={String(failedCalls ?? 0)} />
           <Stat label="Unpriced" value={String(unpriced)} />

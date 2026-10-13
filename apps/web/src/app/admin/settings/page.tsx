@@ -24,7 +24,7 @@ export default async function AdminSettingsPage({ searchParams }: { searchParams
   await requirePlatformAdmin();
   const supabase = await createClient();
 
-  const [{ data: settings }, { data: users }, { data: boot }] = await Promise.all([
+  const [{ data: settings, error: settingsError }, { data: users }, { data: boot }] = await Promise.all([
     supabase
       .from("platform_settings")
       .select("outreach_paused_at, outreach_paused_reason, outreach_paused_by, support_autopilot, updated_at")
@@ -44,6 +44,19 @@ export default async function AdminSettingsPage({ searchParams }: { searchParams
     <>
       <PageHeader eyebrow="Operator" title="Settings" lede="Switches that apply to every workspace on the platform." />
       <PageNotice error={params.error} notice={params.notice} />
+
+      {/* Rule 59: a settings row that cannot be read counts as paused on the
+          send path. This screen said "Sending" over the same failure, which is
+          the two readings disagreeing about the one switch that matters. */}
+      {settingsError ? (
+        <div className="notice danger" role="status">
+          <p>
+            <strong>The platform settings could not be read.</strong> The switches below may not
+            be what is in force. If the worker cannot read them either, it treats outreach as
+            paused until it can.
+          </p>
+        </div>
+      ) : null}
 
       <Section
         title="Outreach"

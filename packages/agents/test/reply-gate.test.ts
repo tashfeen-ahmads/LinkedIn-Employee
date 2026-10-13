@@ -91,6 +91,20 @@ describe("containsOptOut", () => {
     }
   });
 
+  it("catches what a phone types, not only what a keyboard does", () => {
+    // iOS and macOS turn ' into ’ by default, so this is how "don't contact
+    // me" arrives from an iPhone (rule 7).
+    for (const message of [
+      "Please don\u2019t contact me again",
+      "Please don\u2018t contact me again",
+      "Please remove\nme from this",
+      "Please remove\u00a0me",
+      "\uff35\uff4e\uff53\uff55\uff42\uff53\uff43\uff52\uff49\uff42\uff45", // full-width "Unsubscribe"
+    ]) {
+      expect(containsOptOut(message), JSON.stringify(message)).toBe(true);
+    }
+  });
+
   it("does not treat a soft no as an opt-out", () => {
     for (const message of ["Not right now, maybe next quarter", "Can you send more info?"]) {
       expect(containsOptOut(message), message).toBe(false);

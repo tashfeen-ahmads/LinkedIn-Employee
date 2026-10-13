@@ -205,6 +205,26 @@ describe("every row", () => {
     expect(new Set(seen).size).toBe(seen.length);
   });
 
+  it("carries no em or en dash in anything a person reads", () => {
+    // The product's copy uses no dashes; the pitch-hold row slipped one in.
+    // Every branch's wording, singular and plural, held and not held.
+    const variants: NeedsYouFacts[] = [
+      busy,
+      { ...busy, heldForCopy: 0, heldReplies: 1, heldBookings: 2, pitchesUnapproved: 2, hooksUnapproved: 2 },
+      { ...CALM, loopStalled: true },
+      { ...CALM, linkedInConnected: false },
+      { ...CALM, strategiesUnapproved: 2, campaignsUnlaunched: 2, campaignsWithThinNotes: 2, campaignsMissingCta: 2 },
+    ];
+    const visible = [NOTHING_NEEDS_YOU];
+    for (const facts of variants) {
+      for (const item of needsYou(facts)) {
+        visible.push(...Object.values(item).filter((v): v is string => typeof v === "string"));
+      }
+    }
+    expect(visible.length).toBeGreaterThan(20);
+    for (const text of visible) expect(text, text).not.toMatch(/[\u2013\u2014]/);
+  });
+
   it("counts one person in the singular", () => {
     expect(needsYou({ ...CALM, heldReplies: 1 })[0]?.title).toBe("1 reply is waiting for you.");
     expect(needsYou({ ...CALM, heldReplies: 2 })[0]?.title).toBe("2 replies are waiting for you.");

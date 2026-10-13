@@ -26,8 +26,8 @@ export const SITE = {
   app: appOrigin(process.env.APP_URL),
   tagline: BRAND.tagline,
   description:
-    "Nora is an AI SDR for LinkedIn. It finds your buyers, writes each one a note, answers the replies and books the meeting, inside daily limits built around your account's safety.",
-  locale: "en_GB",
+    "Nora is an AI SDR for LinkedIn. It finds your buyers, writes each one a note, answers replies and books meetings inside safe daily limits. Free, no card.",
+  locale: "en_US",
 } as const;
 
 export function canonical(path: string): string {

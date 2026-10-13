@@ -127,7 +127,10 @@ export default async function AgentTestPage({
   return (
     <>
       <PageHeader
-        eyebrow={agent.name}
+        crumbs={[
+          { href: "/app/agents", label: "Agents" },
+          { href: `/app/agents/${id}`, label: agent.name },
+        ]}
         title="Test this agent"
         lede="Runs the same writer a campaign runs, against a real person from your list. Nothing here is sent."
         actions={
@@ -142,7 +145,7 @@ export default async function AgentTestPage({
       <Section
         id="run"
         title="Write a connection note"
-        description="Pick somebody already on your list — that is where an unfillable merge field shows up."
+        description="Pick somebody already on your list. That is where an unfillable merge field shows up."
       >
         <form action={runTest} className="card">
           <input type="hidden" name="agent" value={id} />
@@ -153,7 +156,7 @@ export default async function AgentTestPage({
               {(prospects ?? []).map((p) => (
                 <option key={p.id} value={p.id}>
                   {[p.first_name, p.last_name].filter(Boolean).join(" ")}
-                  {p.company ? ` — ${p.company}` : ""}
+                  {p.company ? `, ${p.company}` : ""}
                 </option>
               ))}
             </select>
@@ -189,7 +192,7 @@ export default async function AgentTestPage({
             Run it against one of your own prospects and read what a stranger would receive.
           </Empty>
         ) : (
-          <ul className="list">
+          <ul className="agent-run-list">
             {(runs ?? []).map((run) => {
               const subject = (run.subject ?? {}) as { firstName?: string; company?: string };
               const missing = Array.isArray(run.fields_missing) ? (run.fields_missing as string[]) : [];

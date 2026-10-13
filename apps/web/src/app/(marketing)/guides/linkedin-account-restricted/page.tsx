@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArticleLayout, articleMeta, Callout, CompareTable } from "@/components/article";
-import { PUBLIC_LIMITS, SITE } from "@/lib/site";
+import { PUBLIC_LIMITS } from "@/lib/site";
+import { CopyButton } from "@/components/copy-button";
 import { LINKEDIN_LIMITS } from "@le/shared";
 import { backOff, classifyProviderError, dailyInviteCap } from "@le/linkedin";
 
@@ -56,39 +57,76 @@ const SOURCES = [
   { label: "LinkedIn Help: Invitation limit reached", url: "https://www.linkedin.com/help/billing/answer/a550555" },
   { label: "LinkedIn Help: Automated activity on LinkedIn", url: "https://www.linkedin.com/help/linkedin/answer/90586" },
   { label: "LinkedIn Help: Verify your identity to recover account access", url: "https://www.linkedin.com/help/learning/answer/a1342692" },
-  { label: "Waalaxy: LinkedIn account restricted, why and solutions (studied for this page)", url: "https://blog.waalaxy.com/en/restricted-linkedin-method/" },
-  { label: "Neal Schaffer: LinkedIn account restricted (studied for this page)", url: "https://nealschaffer.com/linkedin-account-restricted/" },
-  { label: "Snov.io: LinkedIn account restricted (studied for this page)", url: "https://snov.io/blog/linkedin-account-restricted/" },
 ];
+
+const DECISION = [
+  {
+    label: "\"You've reached the weekly invitation limit\"",
+    values: [
+      "Weekly invitation limit, not a restriction",
+      "Stop inviting. Messages, posts and replies still work.",
+      "Until the week's limit clears",
+    ],
+  },
+  {
+    label: "Invitations fail, or a notice says the account is temporarily restricted, and the rest of LinkedIn works",
+    values: ["Invitation restriction", "Pause every tool and send nothing. Do not mass-withdraw.", "A few hours to a few days; most within a week"],
+  },
+  {
+    label: "The notice names automation, third-party software or a browser extension",
+    values: ["Automated-activity restriction", "Disable the software, disconnect its access, and wait.", "Until the time printed in the notice"],
+  },
+  {
+    label: "You are asked to verify your identity before you can sign in",
+    values: ["Identity verification", "Verify from the notice inside LinkedIn's own app or site, never from an emailed link.", "Until you verify"],
+  },
+  {
+    label: "No end date and no verification step",
+    values: ["Indefinite or permanent restriction", "Use the review or appeal link in the notice. Do not open a second account.", "Not published"],
+  },
+];
+
+const APPEAL_TEMPLATE = [
+  "Hello,",
+  "",
+  "My LinkedIn account [your profile URL] was restricted on [date]. I use it for [your role, for example sales at your company].",
+  "",
+  "[Only if true:] Before the restriction I had connected [tool name] to send connection requests. I have disconnected it and removed its access, and I will send invitations myself, at a lower volume, from now on.",
+  "",
+  "I have read the User Agreement and I am not using any other software on the account. I would be grateful if you could review the restriction.",
+  "",
+  "Thank you,",
+  "[Your name]",
+].join("\n");
 
 const DURATIONS = [
   {
     label: "First invitation restriction",
-    values: ["A few hours", "LinkedIn help center", "Wait, then send far fewer invitations than before."],
+    values: ["A few hours", "Wait, then send far fewer invitations than before."],
   },
   {
     label: "Several invitation restrictions in one day",
-    values: ["A few days", "LinkedIn help center", "Treat it as a warning about the pattern, not bad luck."],
+    values: ["A few days", "Treat it as a warning about the pattern, not bad luck."],
   },
   {
     label: "Too many outstanding invitations",
-    values: ["Up to a month", "LinkedIn help center", "The longest one. The pending pile is the cause."],
+    values: ["Up to a month", "The longest one. The pending pile is the cause."],
   },
   {
     label: "Invitation restriction, in general",
-    values: ["Most lift within a week", "LinkedIn help center", "Support will not lift it on request."],
+    values: ["Most lift within a week", "Support will not lift it on request."],
   },
   {
     label: "Automated activity",
-    values: ["Until the time in the notice", "LinkedIn help center", "Re-enabled automatically once the software is disabled."],
+    values: ["Until the time in the notice", "Re-enabled automatically once the software is disabled."],
   },
   {
     label: "Identity verification",
-    values: ["Until you verify", "LinkedIn help center", "No published review time. Third-party estimates vary and are not reliable."],
+    values: ["Until you verify", "No published review time. Estimates from other sites vary and are not reliable."],
   },
   {
     label: "Indefinite or permanent",
-    values: ["Not published", "No official duration", "Nobody outside LinkedIn knows the criteria."],
+    values: ["Not published", "Nobody outside LinkedIn knows the criteria."],
   },
 ];
 
@@ -101,38 +139,39 @@ export default function Page() {
       faq={FAQ}
       sources={SOURCES}
     >
-      <p>In short:</p>
-      <ul>
-        <li>
-          <strong>Invitation restriction</strong> (the common one): the rest of the account works. Wait. LinkedIn says most lift
-          within a week and support cannot remove them.
-        </li>
-        <li>
-          <strong>Automated activity</strong>: disable the tool. The account comes back at the time printed in the notice.
-        </li>
-        <li>
-          <strong>Identity check</strong>: complete it from the notice inside LinkedIn, nowhere else.
-        </li>
-        <li>
-          <strong>Afterwards</strong>: restart at around {PUBLIC_LIMITS.invitesPerDayStart} invitations a day, not where you
-          stopped.
-        </li>
-      </ul>
-
-      <Callout tone="safety">
-        <p>
-          <strong>The one rule for the first hour:</strong> nothing sends. Pause every campaign in every tool connected to the
-          account, including the ones you think are idle. An invitation sent into a restriction is one more request logged against
-          an account LinkedIn has already decided to slow down.
-        </p>
+      <Callout tone="info">
+        <p className="ga2-summary-title">In short</p>
+        <ul className="ga2-callout-list">
+          <li>
+            <strong>Invitation restriction</strong> (the common one): the rest of the account works. Wait. LinkedIn says most
+            lift within a week and support will not remove them on request.
+          </li>
+          <li>
+            <strong>Automated activity</strong>: disable the tool. The account comes back at the time printed in the notice.
+          </li>
+          <li>
+            <strong>Identity check</strong>: complete it from the notice inside LinkedIn, nowhere else.
+          </li>
+          <li>
+            <strong>Afterwards</strong>: restart at around {PUBLIC_LIMITS.invitesPerDayStart} invitations a day, not where you
+            stopped.
+          </li>
+        </ul>
       </Callout>
 
       <h2 id="which-restriction">Which restriction do you have? Match the exact notice</h2>
       <p>
         &quot;Restricted&quot; covers several different things with different fixes, and most guides blend them together. The
         wording LinkedIn shows you, or the error you get when you try to invite someone, tells you which one you are dealing
-        with. Screenshot it before you do anything else.
+        with. Screenshot it before you do anything else, then find it in the table. The wording on screen varies, so match on
+        what the notice says rather than the exact words.
       </p>
+      <CompareTable
+        caption="Which LinkedIn restriction you have, by what the notice says, and what to do first (durations from LinkedIn's help center, as of October 2026)"
+        columns={["What it is", "First action", "Typical duration"]}
+        rows={DECISION}
+      />
+      <p>Each notice in more detail:</p>
 
       <h3 id="weekly-limit-notice">&quot;You&apos;ve reached the weekly invitation limit&quot;</h3>
       <p>
@@ -176,6 +215,13 @@ export default function Page() {
         The instinct is to do something fast: write to support, log in from another device, try one more invitation. Most of
         that makes things worse. Here is what helps, in order.
       </p>
+      <Callout tone="safety">
+        <p>
+          <strong>The one rule for the first hour:</strong> nothing sends. Pause every campaign in every tool connected to the
+          account, including the ones you think are idle. An invitation sent into a restriction is one more request logged against
+          an account LinkedIn has already decided to slow down.
+        </p>
+      </Callout>
 
       <h3 id="stop-everything">Stop every tool and every scheduled action</h3>
       <ol>
@@ -223,6 +269,18 @@ export default function Page() {
           already logged does not help you.
         </li>
       </ul>
+      <p>
+        If you do appeal, this is the shape that works: who you are, what happened, what you changed. Fill in the brackets and
+        delete any line that is not true for you.
+      </p>
+      <blockquote className="ga2-template">
+        {APPEAL_TEMPLATE.split("\n\n").map((para) => (
+          <p key={para}>{para}</p>
+        ))}
+      </blockquote>
+      <div className="ga2-actions">
+        <CopyButton value={APPEAL_TEMPLATE} label="Copy appeal template" />
+      </div>
 
       <h2 id="how-long">How long each restriction lasts (and what nobody knows)</h2>
       <p>
@@ -230,8 +288,8 @@ export default function Page() {
         more precise, such as &quot;24 to 48 hours&quot; for ID checks, is somebody&apos;s experience rather than a rule.
       </p>
       <CompareTable
-        caption="How long LinkedIn restrictions last, from LinkedIn's help center, as of October 2026"
-        columns={["How long", "Where it comes from", "What it means for you"]}
+        caption="How long LinkedIn restrictions last, as of October 2026. Every duration is from LinkedIn's help center; for the last row LinkedIn publishes none."
+        columns={["How long", "What it means for you"]}
         rows={DURATIONS}
       />
       <p>
@@ -286,7 +344,7 @@ export default function Page() {
       <h2 id="restart">Restarting safely</h2>
       <p>
         When the restriction lifts, do not resume where you stopped. Nothing about the account has changed except that it has now
-        been restricted once, and the behaviour that caused it will cause it again.
+        been restricted once, and the behavior that caused it will cause it again.
       </p>
 
       <h3 id="starting-cap">Back to the starting cap</h3>
@@ -309,7 +367,7 @@ export default function Page() {
         </li>
         <li>
           <strong>Week 2: hold, then climb slowly.</strong> If acceptance stays at or above {PUBLIC_LIMITS.healthyAcceptance}%,
-          move towards {CAP_DAY_7} a day, which is where Nora&apos;s ramp sits after one week of sending. If acceptance drops, stay at{" "}
+          move toward {CAP_DAY_7} a day, which is where Nora&apos;s ramp sits after one week of sending. If acceptance drops, stay at{" "}
           {PUBLIC_LIMITS.invitesPerDayStart}.
         </li>
         <li>
@@ -336,10 +394,9 @@ export default function Page() {
         weeks, which mostly tells you nobody knows.
       </p>
       <p>
-        Do not open a second account while you wait. It does not lift the restriction on the first one, it starts with no network
-        and no history, so it is the least trusted account you could send from, and a second profile for the same person is a
-        new problem on top of the old one. If the restriction is ever lifted, you would then have two accounts to explain. The
-        account you have, restarted slowly, is worth more than a new one restarted fast.
+        Do not open a second account while you wait. It does not lift the restriction on the first, and if the first is ever
+        restored you then have two profiles for one person to explain. The account you have, restarted slowly, is worth more
+        than a new one restarted fast.
       </p>
 
       <h2 id="what-nora-does">What Nora does if a connected account is restricted</h2>
@@ -369,9 +426,7 @@ export default function Page() {
       <p>
         No tool can promise an account is never restricted: LinkedIn&apos;s terms prohibit automation in the first place, and
         Nora is no exception. What a tool can do is keep the pattern far from the one that leads here.{" "}
-        <Link href="/how-it-works">How Nora paces and approves outreach</Link> explains the rest, and it is free while we grow:{" "}
-        <a href={`${SITE.app}/signup`}>Sign up free</a>. More on limits and safety in the{" "}
-        <Link href="/guides">LinkedIn outreach guides</Link>.
+        <Link href="/how-it-works">How Nora paces and approves outreach</Link> explains the rest.
       </p>
     </ArticleLayout>
   );

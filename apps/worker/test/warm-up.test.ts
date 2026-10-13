@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { MockLinkedInProvider } from "@le/linkedin";
 import { LINKEDIN_LIMITS } from "@le/shared";
 import { FakeDb } from "./fake-db.js";
@@ -27,6 +27,17 @@ const CP = "55555555-5555-4555-8555-555555555555";
 const USER = "66666666-6666-4666-8666-666666666666";
 
 const NOW = new Date("2026-09-25T10:00:00Z"); // A Friday, mid-morning.
+
+// The send path reads the real clock, and how much of the working day is left
+// decides whether a view is worth spending. Unpinned, this file passed in the
+// morning and failed after 11 p.m.
+beforeAll(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(NOW);
+});
+afterAll(() => {
+  vi.useRealTimers();
+});
 
 function harness(overrides: { prospect?: Record<string, unknown>; cp?: Record<string, unknown> } = {}) {
   const db = new FakeDb();

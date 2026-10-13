@@ -103,7 +103,11 @@ export default async function IssuesPage({
           </div>
         ) : null}
 
-        {result.ok && shown.length === 0 ? (
+        {!result.ok ? (
+          // Unread is not clean and not empty: an empty table under a red
+          // banner reads as "no issues" to anybody who scrolled past it.
+          <Empty title="Not checked.">The list appears when the worker answers. Reload to try again.</Empty>
+        ) : shown.length === 0 ? (
           <Empty title="No system faults.">Every check the worker runs came back clean.</Empty>
         ) : (
           <div className="table-scroll">

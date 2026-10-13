@@ -102,10 +102,10 @@ Waves: 1-6 fix titles and cannibalisation on live pages; 7-25 write the new page
 - `/guides/best-ai-sdr-for-linkedin`: 'Best AI SDR for LinkedIn in 2026: how to choose one' -> **'Best AI SDR tools for LinkedIn in 2026: how to choose'**
 - `/linkedin-automation-limits`: 'LinkedIn connection request limit and automation limits in 2026' -> **'LinkedIn connection request limit in 2026: every number'**
 - `/guides/linkedin-account-restricted`: 'LinkedIn account restricted after automation: what to do in the first 48 hours' -> **'LinkedIn account restricted? How to fix it and restart'**
-- `/guides/linkedin-automation-tool-bans`: 'When LinkedIn acts against an automation tool: ...' -> **'HeyReach ban and LinkedIn's 2026 automation crackdown'**
+- `/guides/linkedin-automation-tool-bans`: 'When LinkedIn acts against an automation tool: ...' -> **'HeyReach ban: what is verified about LinkedIn's 2026 action'**
 - `/guides/cloud-vs-browser-extension-linkedin-automation`: 'Cloud vs browser extension LinkedIn automation: which is safer?' -> **'Cloud vs Chrome extension LinkedIn automation: safer?'**
 - `/alternatives`: 'LinkedIn automation alternatives' -> **'LinkedIn automation tools compared on safety and price'**
-- `/alternatives/heyreach`: 'HeyReach alternative for safe, personal LinkedIn outreach' -> **'HeyReach alternatives: a safer pick for a single rep'**
+- `/alternatives/heyreach`: 'HeyReach alternative for safe, personal LinkedIn outreach' -> **'HeyReach alternatives for a single rep on their own profile'**
 - `/alternatives/expandi`: 'Expandi alternative: an AI SDR that writes each note and books the meeting' -> **'Expandi alternatives: an AI SDR that writes and books'**
 - `/alternatives/waalaxy`: 'Waalaxy alternative with a free plan that runs real campaigns' -> **'Waalaxy alternatives: free, with a note for every person'**
 - `/alternatives/dripify`: 'Dripify alternative: personal notes, human approval, no per-seat bill' -> **'Dripify alternatives: personal notes and human approval'**

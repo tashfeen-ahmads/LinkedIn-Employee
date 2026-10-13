@@ -101,6 +101,15 @@ export interface InboundMessage {
 export interface ActionResult {
   ok: boolean;
   providerId?: string;
+  /**
+   * The conversation a message landed in, when the provider says.
+   *
+   * Separate from `providerId`, which is the message. Starting a chat used to
+   * return `message_id ?? chat_id` as one value, so the conversation row never
+   * learned its chat id: every later message started a new chat by attendee,
+   * and an inbound reply could not be matched to the thread it answered.
+   */
+  chatId?: string;
   error?: string;
   /** Set when the provider reports the account is rate limited or flagged. */
   health?: AccountHealth;

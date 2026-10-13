@@ -89,9 +89,13 @@ export function standings(
     // only when both have sent enough to be compared at all. Overlapping
     // intervals are two angles this campaign cannot yet tell apart, and saying
     // otherwise is the failure this module exists to avoid.
-    const beaten = comparable.some(
-      (other) => other.id !== v.id && wilson(other.accepted, other.sent).low > high,
-    );
+    //
+    // Both, not only the other one: an angle three invitations old has an
+    // interval wide enough to look beaten by anything established, and calling
+    // it behind on that is reading its first three results as a verdict.
+    const beaten =
+      v.sent >= MIN_SENDS_TO_COMPARE &&
+      comparable.some((other) => other.id !== v.id && wilson(other.accepted, other.sent).low > high);
     return {
       id: v.id,
       name: v.name,

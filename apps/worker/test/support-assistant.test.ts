@@ -69,6 +69,11 @@ function harness(over: { autopilot?: boolean; createdAt?: string; reopened?: boo
 }
 
 const ticket = (db: FakeDb) => db.find("support_tickets", { id: TICKET })!;
+/** The held draft lives where only an operator can read it (migration 0044). */
+const heldDraft = (db: FakeDb) => db.find("support_ticket_drafts", { ticket_id: TICKET });
+/** What a member reading their own ticket over the API could see of the draft. */
+const draftOnTicket = (db: FakeDb) =>
+  Object.keys(ticket(db)).filter((k) => ["draft_answer", "draft_confidence", "draft_reason"].includes(k));
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -92,8 +97,19 @@ describe("answerSupportTicket", () => {
     expect(await answerSupportTicket(ctx, TICKET)).toBe("held");
     expect(ticket(db).status).toBe("open");
     expect(ticket(db).answer).toBeNull();
-    expect(ticket(db).draft_answer).toBe(HOW_TO.answer);
-    expect(ticket(db).draft_reason).toMatch(/Autopilot is off/);
+    expect(heldDraft(db)?.draft_answer).toBe(HOW_TO.answer);
+    expect(heldDraft(db)?.draft_reason).toMatch(/Autopilot is off/);
+    expect(heldDraft(db)?.workspace_id).toBe(ticket(db).workspace_id);
+  });
+
+  it("never writes the held draft or its reason onto the customer's own ticket", async () => {
+    // A member can read every column of their workspace's tickets, and RLS
+    // cannot hide a column. An unsent answer and the operator's reason for
+    // holding it belong in the table only a platform admin can read.
+    draft.mockResolvedValue(HOW_TO);
+    const { db, ctx } = harness({ autopilot: false });
+    expect(await answerSupportTicket(ctx, TICKET)).toBe("held");
+    expect(draftOnTicket(db)).toEqual([]);
   });
 
   it("gives a customer who said the last answer did not help a person", async () => {
@@ -135,7 +151,8 @@ describe("answerSupportTicket", () => {
     const { db, ctx } = harness();
     expect(await answerSupportTicket(ctx, TICKET)).toBe("failed");
     expect(ticket(db).status).toBe("open");
-    expect(ticket(db).draft_reason).toMatch(/could not answer/);
+    expect(heldDraft(db)?.draft_reason).toMatch(/could not answer/);
+    expect(draftOnTicket(db)).toEqual([]);
     // Stamped, so the hourly sweep does not pay for it again.
     expect(ticket(db).drafted_at).toBeTruthy();
   });

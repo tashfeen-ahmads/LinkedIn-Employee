@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { dailyInviteCap } from "@le/linkedin";
+import { dailyInviteCap, type AccountRecord } from "@le/linkedin";
+import { countersForToday } from "@/lib/account-day";
 import { LINKEDIN_LIMITS } from "@le/shared";
 import { createClient } from "@/lib/supabase-server";
 import { requirePlatformAdmin, ago, when } from "@/lib/admin";
@@ -23,16 +24,20 @@ export default async function AdminAccountsPage({ searchParams }: { searchParams
   await requirePlatformAdmin();
   const supabase = await createClient();
 
-  const [{ data: accounts }, { data: workspaces }, { data: users }] = await Promise.all([
+  const [{ data: accounts }, { data: workspaces }, { data: users }, { data: zones }] = await Promise.all([
     supabase
       .from("linkedin_accounts")
       .select(
-        "id, workspace_id, user_id, display_name, status, status_detail, provider_account_id, created_at, has_sales_navigator, invites_today, invites_this_week, messages_today, connected_at, first_action_at, last_action_at, invites_paused_until, invites_paused_reason",
+        "id, workspace_id, user_id, display_name, status, status_detail, provider_account_id, created_at, has_sales_navigator, invites_today, invites_this_week, invites_by_day, messages_today, counters_reset_on, connected_at, first_action_at, last_action_at, invites_paused_until, invites_paused_reason",
       )
       .order("connected_at", { ascending: false }),
     supabase.from("workspaces").select("id, name"),
     supabase.rpc("platform_users"),
+    supabase.from("profiles").select("id, timezone"),
   ]);
+  // Counters rolled over to each owner's today, as the worker does before its
+  // first send; read as stored, an idle account showed yesterday's sends.
+  const zoneOf = new Map((zones ?? []).map((p) => [p.id, p.timezone ?? "UTC"]));
 
   const workspaceName = new Map((workspaces ?? []).map((w) => [w.id, w.name]));
   const person = new Map((users ?? []).map((u) => [u.user_id, u.full_name ?? u.email]));
@@ -82,6 +87,7 @@ export default async function AdminAccountsPage({ searchParams }: { searchParams
               <tbody>
                 {accounts.map((a) => {
                   const cap = a.first_action_at ? dailyInviteCap(new Date(a.first_action_at)) : LINKEDIN_LIMITS.invitesPerDayStart;
+                  const today = countersForToday(a as unknown as AccountRecord, zoneOf.get(a.user_id) ?? "UTC");
                   const heldUntil = a.invites_paused_until && Date.parse(a.invites_paused_until) > now ? a.invites_paused_until : null;
                   return (
                     <tr key={a.id}>
@@ -99,9 +105,9 @@ export default async function AdminAccountsPage({ searchParams }: { searchParams
                         })()}
                         {a.status_detail ? <p className="tiny muted">{a.status_detail}</p> : null}
                       </td>
-                      <td className="num mono">{a.invites_today}</td>
-                      <td className="num mono">{a.invites_this_week}</td>
-                      <td className="num mono">{a.messages_today}</td>
+                      <td className="num mono">{today.invites_today}</td>
+                      <td className="num mono">{today.invites_this_week}</td>
+                      <td className="num mono">{today.messages_today}</td>
                       <td className="small subtle">
                         {cap}/day{a.first_action_at ? "" : ", not started"}
                       </td>

@@ -35,8 +35,21 @@ async function makeDefault(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   if (!id) redirect(errorQuery("/app/agents", "No agent was named."));
 
+  // Checked before the old default is cleared. Clearing first and then
+  // updating a retired agent, or an id from another workspace, matched
+  // nothing, left the workspace with no default at all, and still said "New
+  // campaigns will start with this agent".
+  const { data: target } = await supabase
+    .from("agents")
+    .select("id")
+    .eq("id", id)
+    .eq("workspace_id", session.workspaceId)
+    .is("archived_at", null)
+    .maybeSingle();
+  if (!target) redirect(errorQuery("/app/agents", "That agent is retired or gone, so it cannot be the default."));
+
   // Cleared first, because `agents_one_default` is a unique index and two
-  // defaults is a state the database will not hold — which is the point of it.
+  // defaults is a state the database will not hold, which is the point of it.
   await supabase
     .from("agents")
     .update({ is_default: false })
@@ -48,7 +61,7 @@ async function makeDefault(formData: FormData) {
     .eq("id", id)
     .eq("workspace_id", session.workspaceId);
 
-  if (error) redirect(errorQuery("/app/agents", error.message));
+  if (error) redirect(errorQuery("/app/agents", "That did not save. Please try again."));
   revalidatePath("/app/agents");
   redirect(noticeQuery("/app/agents", "New campaigns will start with this agent."));
 }
@@ -68,9 +81,11 @@ async function archiveAgent(formData: FormData) {
     .eq("id", id)
     .eq("workspace_id", session.workspaceId);
 
-  if (error) redirect(errorQuery("/app/agents", error.message));
+  if (error) redirect(errorQuery("/app/agents", "That did not retire. Please try again."));
   revalidatePath("/app/agents");
-  redirect(noticeQuery("/app/agents", "Retired. Campaigns that used it keep their history."));
+  // What retiring actually does (`agentById` in the worker): it stops the
+  // agent being chosen, and campaigns already running on it keep its voice.
+  redirect(noticeQuery("/app/agents", "Retired. New campaigns cannot pick it; campaigns already running on it keep using it."));
 }
 
 /**
@@ -94,7 +109,7 @@ async function restoreAgent(formData: FormData) {
     .eq("workspace_id", session.workspaceId)
     .not("archived_at", "is", null);
 
-  if (error) redirect(errorQuery("/app/agents", error.message));
+  if (error) redirect(errorQuery("/app/agents", "That did not restore. Please try again."));
   revalidatePath("/app/agents");
   redirect(noticeQuery("/app/agents", "Restored. Campaigns can pick it again."));
 }

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { FakeDb } from "./fake-db.js";
 import { runCampaignTick } from "../src/jobs/campaign-tick.js";
 import type { Queues } from "../src/queues.js";
@@ -149,12 +149,14 @@ describe("a day's invitations, across the day", () => {
     }
   });
 
-  it("falls back to the ordinary cadence late in the day", async () => {
+  it("falls back to the ordinary cadence late in the day, and places nothing after it", async () => {
     /*
      * A campaign launched at twenty past five with forty minutes of the day
-     * left. Ten invitations do not fit into forty minutes at any pace, and the
-     * answer is the cadence we always had rather than refusing to send — what
-     * runs past six is deferred by the send path, not fired in a burst.
+     * left. Ten invitations do not fit into forty minutes at any pace. What
+     * fits goes at the cadence we always had; the rest is not placed at all.
+     * Placed past six, the send path parked them overnight and they went out
+     * back to back at the next opening, on top of that day's own spread — the
+     * burst, one day late. Tomorrow's first tick places them across tomorrow.
      */
     const evening = new Date("2026-09-23T17:20:00Z");
     const db = harness(10, evening);
@@ -163,9 +165,28 @@ describe("a day's invitations, across the day", () => {
     await runCampaignTick(db.asDb(), queues, evening);
 
     const placed = delays(added);
-    expect(placed).toHaveLength(10);
-    // Still paced, and paced no wider than it ever was.
-    expect(placed[placed.length - 1]).toBeLessThanOrEqual(10 * 9 * 60_000);
+    expect(placed.length).toBeGreaterThan(0);
+    expect(placed.length).toBeLessThan(10);
+    // Never closer than the ordinary gap, and never past the end of the day.
+    for (let i = 1; i < placed.length; i += 1) expect(placed[i] - placed[i - 1]).toBeGreaterThanOrEqual(2 * 60_000);
+    expect(placed[placed.length - 1]).toBeLessThan(40 * 60_000);
+  });
+
+  it("places nothing past the end of the working day on a late-afternoon tick", async () => {
+    // The ordinary-gap fallback, half an hour before the end of the day, with
+    // a mid-range draw: ten at five and a half minutes apart is fifty-five
+    // minutes of invitations in thirty minutes of day.
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
+    const late = new Date("2026-09-23T17:30:00Z");
+    const db = harness(10, late);
+    const { queues, added } = fakeQueues();
+
+    await runCampaignTick(db.asDb(), queues, late);
+
+    const placed = delays(added);
+    expect(placed.length).toBeGreaterThan(0);
+    expect(placed.every((d) => late.getTime() + d < Date.parse("2026-09-23T18:00:00Z"))).toBe(true);
+    vi.restoreAllMocks();
   });
 
   it("paces one invitation as part of the day, not as the whole of it", async () => {

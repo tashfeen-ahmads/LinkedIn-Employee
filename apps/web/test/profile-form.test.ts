@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { applyProfileEdits, formatList, parseList } from "../src/lib/profile-form.js";
+import { MAX_STRATEGY_PRIORITY } from "@le/shared";
 
 const SPEC = {
   name: "Ops leaders",
@@ -86,8 +87,18 @@ describe("applyProfileEdits", () => {
     expect(result.ok).toBe(true);
   });
 
-  it("refuses a priority outside the range the agent uses", () => {
-    expect(applyProfileEdits(SPEC, edits({}, 9)).ok).toBe(false);
+  it("refuses a priority outside the range a strategy may carry", () => {
+    expect(applyProfileEdits(SPEC, edits({}, 0)).ok).toBe(false);
+    expect(applyProfileEdits(SPEC, edits({}, MAX_STRATEGY_PRIORITY + 1)).ok).toBe(false);
+  });
+
+  it("saves a strategy ranked past five, which is where an expanded list goes", () => {
+    // Strategies added after the first run are numbered from the end of the
+    // list (rule 37), so a ninth strategy is priority 9. Capped at five, its
+    // own edit form refused to save it.
+    const result = applyProfileEdits(SPEC, edits({}, 9));
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.spec.priority).toBe(9);
   });
 
   it("keeps everything it was not asked to change", () => {

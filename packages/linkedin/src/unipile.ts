@@ -586,7 +586,7 @@ export class UnipileProvider implements LinkedInProvider {
           method: "POST",
           body: JSON.stringify({ account_id: input.accountId, text: input.text }),
         });
-        return { ok: true, providerId: res.message_id };
+        return { ok: true, providerId: res.message_id, chatId: input.chatId };
       }
       if (!input.providerId) {
         return { ok: false, error: "sendMessage requires chatId or providerId" };
@@ -599,7 +599,9 @@ export class UnipileProvider implements LinkedInProvider {
           text: input.text,
         }),
       });
-      return { ok: true, providerId: res.message_id ?? res.chat_id };
+      // The message and the chat it opened are two ids, kept apart: the chat is
+      // what the conversation row needs so the next message continues it.
+      return { ok: true, providerId: res.message_id, chatId: res.chat_id };
     } catch (err) {
       return toActionError(err);
     }
@@ -635,12 +637,44 @@ export class UnipileProvider implements LinkedInProvider {
    * that never sends. Over-fetching a page is the cheaper mistake.
    */
   async listRelations(input: { accountId: string; since?: string; limit?: number }): Promise<ProviderRelation[]> {
-    const params = new URLSearchParams({ account_id: input.accountId, limit: String(input.limit ?? 100) });
-    const response = await this.request<{ items?: Array<Record<string, unknown>> }>(
-      `${ROUTES.relations}?${params.toString()}`,
-    );
+    /*
+     * Paged with the provider's cursor, as `listPendingInvitations` is.
+     *
+     * One page of a hundred was the whole answer, so an account that gained
+     * more than a hundred connections since the oldest outstanding invitation
+     * never saw the older acceptances: those prospects sat at `invited` and
+     * their follow-ups never sent. Newest first, so paging stops at the first
+     * page that reaches past `since`; bounded all the same, because every
+     * request comes off a seat somebody pays for.
+     */
+    const wanted = Math.min(Math.max(input.limit ?? PAGE_MAX * MAX_PAGES, 1), PAGE_MAX * MAX_PAGES);
+    const items: Array<Record<string, unknown>> = [];
+    let cursor: string | null = null;
 
-    const relations = (response.items ?? []).map((item) => ({
+    for (let page = 0; page < MAX_PAGES && items.length < wanted; page += 1) {
+      const params = new URLSearchParams({
+        account_id: input.accountId,
+        limit: String(Math.min(PAGE_MAX, wanted - items.length)),
+      });
+      if (cursor) params.set("cursor", cursor);
+      const response: { items?: Array<Record<string, unknown>>; cursor?: string | null } = await this.request<{
+        items?: Array<Record<string, unknown>>;
+        cursor?: string | null;
+      }>(`${ROUTES.relations}?${params.toString()}`);
+
+      const pageItems = Array.isArray(response?.items) ? response.items : [];
+      items.push(...pageItems);
+      cursor = response?.cursor ?? null;
+      if (!cursor || pageItems.length === 0) break;
+      // Everything older than `since` is filtered out below anyway, so a page
+      // that already reaches past it is the last one worth reading.
+      const dated = pageItems
+        .map((item) => (typeof item.created_at === "string" ? item.created_at : null))
+        .filter((value): value is string => Boolean(value));
+      if (input.since && dated.some((value) => value < input.since!)) break;
+    }
+
+    const relations = items.map((item) => ({
       providerId: String(item.member_id ?? item.provider_id ?? item.id ?? ""),
       connectedAt: typeof item.created_at === "string" ? item.created_at : null,
     }));

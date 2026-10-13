@@ -19,6 +19,7 @@ import {
   spreadGapMs,
   warmStillCounts,
   workingMsLeftToday,
+  workingMsAhead,
 } from "@le/linkedin";
 import type { Db } from "@le/db";
 import { enqueueOnce, jobId } from "../queues.js";
@@ -26,6 +27,8 @@ import type { Queues } from "../queues.js";
 import { resetCountersIfNeeded, toUsage, type AccountRecord, ACCOUNT_USAGE_COLUMNS } from "../accounts.js";
 import { recordBeat } from "../heartbeat.js";
 import { outreachPause } from "../platform.js";
+import { HELD_FOR_PITCH } from "../pitch.js";
+import { WARM_MARGIN_MS, viewFitsToday } from "../warm.js";
 
 /**
  * The pacing loop. Runs every few minutes and, for each running campaign, asks
@@ -149,7 +152,7 @@ async function tick(db: Db, queues: Queues, now: Date, linkedin?: unknown): Prom
      * prospects already familiar with the name, rather than with six hours of
      * nothing to show.
      */
-    const warmed = await enqueueWarmUps(db, queues, campaign, usage, loaded.account, now);
+    const warmed = await enqueueWarmUps(db, queues, campaign, usage, loaded.account, now, inFlight, campaigns as CampaignRow[]);
     enqueued += warmed.enqueued;
 
     const invites = await enqueueInvites(db, queues, campaign, usage, loaded.account, now, inFlight);
@@ -399,8 +402,24 @@ async function enqueueWarmUps(
   usage: ReturnType<typeof toUsage>,
   account: AccountRecord,
   now: Date,
+  inFlight: InFlight,
+  campaigns: CampaignRow[],
 ): Promise<{ enqueued: number; reason: string | null }> {
   if (!campaign.warm_up) return { enqueued: 0, reason: null };
+
+  /*
+   * After a refusal, one invitation before any view.
+   *
+   * Every time a hold ended the loop re-warmed the whole queue, then the first
+   * invitation after it was refused again and every one of those views was
+   * spent for nothing: five real people were looked at six times each, by an
+   * account LinkedIn had already decided to slow down. Whether LinkedIn will
+   * take an invitation again is a question one invitation answers. Until a
+   * send works the streak stands, and nothing is viewed.
+   */
+  if ((account.invite_throttle_streak ?? 0) >= 1) {
+    return { enqueued: 0, reason: "holding the warm-up: one invitation goes first to see whether LinkedIn accepts them again" };
+  }
 
   /*
    * A view is only worth its allowance if the invitation can follow it.
@@ -466,14 +485,65 @@ async function enqueueWarmUps(
     return { enqueued: 0, reason: `warm-up limiter: ${decision.reason}` };
   }
 
-  const budget = Math.max(0, LINKEDIN_LIMITS.profileViewsPerDay - usage.profileViewsToday);
-  if (budget === 0) return { enqueued: 0, reason: "warm-up allowance used up today" };
+  if (!inFlight.known) {
+    return { enqueued: 0, reason: `could not read what is already queued: ${inFlight.reason ?? "unknown"}` };
+  }
+
+  /*
+   * A view is bought for an invitation, so views are budgeted against the
+   * invitations that can still go out today — not only against the view
+   * allowance.
+   *
+   * Budgeted against forty views alone, a new account allowed ten invitations
+   * viewed forty people, invited ten, and the other thirty views went stale
+   * overnight; those same people were viewed again the next day, and the
+   * next. And each campaign read the account's allowance as its own, so two
+   * warm-up campaigns on one account queued eighty views against a ceiling of
+   * forty, and the second forty were refused and parked to the next morning
+   * as a backlog.
+   *
+   * So the budget is net of everything already bought and not yet spent,
+   * across every campaign on the account: views still waiting to run, and
+   * people viewed recently enough to count who have not been invited. The
+   * campaign's own cap is netted the same way, from its own share.
+   */
+  const room = await inviteRoom(db, campaign, usage, now, inFlight);
+  const viewed = await warmedWaiting(db, campaign.linkedin_account_id, campaigns, now, inFlight);
+  // Somebody whose invitation this run has since queued is in the invitation
+  // count already, not still waiting on one.
+  const pending = new Map<string, string>([...viewed].filter(([id]) => !inFlight.entries.has(id)));
+  for (const [id, job] of inFlight.warms) if (job.accountId === campaign.linkedin_account_id) pending.set(id, job.campaignId);
+  const pendingOnAccount = pending.size;
+  const pendingOnCampaign = [...pending.values()].filter((id) => id === campaign.id).length;
+  const viewJobsOnAccount = [...inFlight.warms.values()].filter((job) => job.accountId === campaign.linkedin_account_id).length;
+
+  const viewsLeft = LINKEDIN_LIMITS.profileViewsPerDay - usage.profileViewsToday - viewJobsOnAccount;
+  const budget = Math.max(
+    0,
+    Math.min(
+      viewsLeft,
+      Math.min(room.accountCap, room.weeklyLeft) - pendingOnAccount,
+      room.campaignLeft - pendingOnCampaign,
+    ),
+  );
+  if (budget === 0) {
+    return {
+      enqueued: 0,
+      reason:
+        viewsLeft <= 0
+          ? "warm-up allowance used up today"
+          : pendingOnAccount
+            ? `${pendingOnAccount} viewed and waiting for an invitation; no more views until they are invited`
+            : "no invitation left today for a view to lead to",
+    };
+  }
 
   const { data: pool } = await db
     .from("campaign_prospects")
-    .select("id, warmed_at")
+    .select("id, warmed_at, next_action_at")
     .eq("campaign_id", campaign.id)
     .eq("status", "queued")
+    .order("created_at")
     /*
      * Never viewed, or viewed so long ago the view is spent.
      *
@@ -488,16 +558,37 @@ async function enqueueWarmUps(
      * path gives: the in-memory double cannot model that filter faithfully,
      * and a query the tests cannot reproduce is a query nothing checks.
      */
-    .limit(budget * 4);
+    .limit((budget + pendingOnCampaign) * 4);
 
-  const waiting = (pool ?? []).filter((row) => !warmStillCounts(row.warmed_at, now)).slice(0, budget);
+  const waiting = (pool ?? [])
+    .filter((row) => !warmStillCounts(row.warmed_at, now))
+    // A view already waiting to run is already bought.
+    .filter((row) => !inFlight.warms.has(row.id))
+    // Somebody held back on their own refusal is not viewed for an invitation
+    // that cannot follow until the hold ends.
+    .filter((row) => !row.next_action_at || !(Date.parse(row.next_action_at) > now.getTime()))
+    .slice(0, budget);
   if (!waiting.length) return { enqueued: 0, reason: null };
 
+  /*
+   * Only views whose invitation still fits in today's working hours.
+   *
+   * The day's views are placed a few minutes apart, so the last of them run an
+   * hour or more after this tick. One that lands with too little of the day
+   * left has an invitation that falls due after hours, goes stale overnight,
+   * and is viewed again tomorrow — so placement stops where a view would stop
+   * being worth its allowance, by the same arithmetic the send path uses to
+   * draw the wait after it.
+   */
+  // Views ask whether the invitation can still follow inside working hours,
+  // which for around-the-clock hours carries on past midnight.
+  const dayLeft = workingMsAhead(now, usage.workingHours, usage.timezone);
   let delay = decision.allowed ? 0 : decision.retryAfterMs;
   let added = 0;
   let revived = 0;
   for (const row of waiting) {
     delay += nextGapMs();
+    if (!viewFitsToday(dayLeft - delay)) break;
     const outcome = await enqueueOnce(
       queues.linkedinAction,
       "warm-up",
@@ -506,6 +597,11 @@ async function enqueueWarmUps(
     );
     if (outcome === "added") added++;
     else if (outcome === "revived") revived++;
+    // Counted as bought, so the next campaign on this account — visited later
+    // in this same run — budgets against it.
+    if (outcome !== "already_pending") {
+      inFlight.warms.set(row.id, { campaignId: campaign.id, accountId: campaign.linkedin_account_id });
+    }
   }
 
   if (added + revived === 0) return { enqueued: 0, reason: null };
@@ -579,25 +675,29 @@ async function enqueueInvites(
   // window — will be spent from tomorrow's allowance, and counting it today
   // as well would charge the account twice for one invitation. The week is
   // charged for all of it, which can only ever err towards sending less.
-  const dayEnd = localDayStart(now, usage.timezone).getTime() + 86_400_000;
-  const onAccount = [...inFlight.entries.values()].filter((e) => e.accountId === campaign.linkedin_account_id);
-  const dueToday = onAccount.filter((e) => e.at < dayEnd);
-  const accountInFlight = dueToday.length;
-  const campaignInFlight = dueToday.filter((e) => e.campaignId === campaign.id).length;
-  const { count: sentToday } = await db
-    .from("campaign_prospects")
-    .select("id", { count: "exact", head: true })
-    .eq("campaign_id", campaign.id)
-    .gte("invited_at", localDayStart(now, usage.timezone).toISOString());
+  const { accountCap, weeklyLeft, campaignLeft, dueToday, accountInFlight, campaignInFlight, onAccount } =
+    await inviteRoom(db, campaign, usage, now, inFlight);
 
-  const accountCap = dailyInviteCap(usage.firstActionAt, now) - usage.invitesToday - accountInFlight;
-  const weeklyLeft = LINKEDIN_LIMITS.invitesPerWeek - usage.invitesThisWeek - onAccount.length;
-  const campaignLeft = campaign.daily_invite_cap - (sentToday ?? 0) - campaignInFlight;
-  const budget = Math.max(0, Math.min(accountCap, weeklyLeft, campaignLeft));
+  /*
+   * After a refusal, one invitation at a time, and nothing else beside it.
+   *
+   * The streak stands until LinkedIn accepts an invitation again, and the only
+   * way to learn whether it will is to ask once. A whole day's allowance placed
+   * the moment a hold lifted was a day's allowance walked into the same wall —
+   * and on a warm-up campaign, a queue of views spent first. So while the
+   * streak stands the account has one invitation in flight at most, and on a
+   * warm-up campaign that one is sent cold (the views wait for the answer).
+   */
+  const probing = (account.invite_throttle_streak ?? 0) >= 1;
+  const budget = probing
+    ? Math.max(0, Math.min(1 - onAccount.length, accountCap, weeklyLeft, campaignLeft))
+    : Math.max(0, Math.min(accountCap, weeklyLeft, campaignLeft));
   if (budget === 0) {
     return {
       enqueued: 0,
-      reason: `no allowance left today (account ${accountCap}, week ${weeklyLeft}, campaign ${campaignLeft} of ${campaign.daily_invite_cap}; ${accountInFlight} already queued on the account)`,
+      reason: probing && onAccount.length
+        ? "probing: one invitation is on its way to see whether LinkedIn accepts them again"
+        : `no allowance left today (account ${accountCap}, week ${weeklyLeft}, campaign ${campaignLeft} of ${campaign.daily_invite_cap}; ${accountInFlight} already queued on the account)`,
     };
   }
 
@@ -607,14 +707,17 @@ async function enqueueInvites(
     // warm-up window bought nothing that is still there to spend.
     .select("id, next_action_at, warmed_at")
     .eq("campaign_id", campaign.id)
-    .eq("status", "queued");
+    .eq("status", "queued")
+    // Oldest first, and the same order every run, so a person held back past
+    // a hold really does let the next one go first.
+    .order("created_at");
 
   // On a warm-up campaign, nobody is invited before they have been looked at.
   //
   // Without this the first tick after launch invites everybody cold and the
   // warm-up becomes a setting that changes nothing — the exact failure mode
   // every feature on this list has had at least once.
-  const { data: waiting } = await (campaign.warm_up ? warmFirst.not("warmed_at", "is", null) : warmFirst)
+  const { data: waiting } = await (campaign.warm_up && !probing ? warmFirst.not("warmed_at", "is", null) : warmFirst)
     // Read wider than the budget, because some of these are serving a hold of
     // their own and are filtered out below. Taking exactly `budget` rows first
     // would let a handful of held prospects fill the whole allowance and send
@@ -635,7 +738,7 @@ async function enqueueInvites(
    * worked. They are dropped here and re-warmed below, which costs one profile
    * view rather than one invitation.
    */
-  const stale = campaign.warm_up
+  const stale = campaign.warm_up && !probing
     ? (waiting ?? []).filter((row) => !warmStillCounts(row.warmed_at, now)).length
     : 0;
   const queued = (waiting ?? [])
@@ -643,7 +746,7 @@ async function enqueueInvites(
     // be declined anyway — but only after it had taken a slot in this run's
     // budget that a new invitation should have had.
     .filter((row) => !inFlight.entries.has(row.id))
-    .filter((row) => (campaign.warm_up ? warmStillCounts(row.warmed_at, now) : true))
+    .filter((row) => (campaign.warm_up && !probing ? warmStillCounts(row.warmed_at, now) : true))
     .filter((row) => {
       if (!row.next_action_at) return true;
       const due = Date.parse(row.next_action_at);
@@ -697,10 +800,23 @@ async function enqueueInvites(
     usage.timezone,
   );
 
+  /*
+   * Never past the end of the rep's day.
+   *
+   * The budget is the day's remaining allowance whether or not it fits in the
+   * working time left, and the spread falls back to the ordinary gap when it
+   * does not. So a tick at half past four placed ten invitations five minutes
+   * apart into a day with thirty minutes left: the send path parked the late
+   * ones overnight and they went out back to back at the next opening, on top
+   * of that day's own spread — the burst, one day late. What does not fit
+   * today is left for tomorrow's first tick to place across tomorrow.
+   */
+  const lastSlot = startDelay + windowMs - LINKEDIN_LIMITS.minGapMs;
   let delay = startDelay;
   let added = 0;
   let revived = 0;
   let pending = 0;
+  let deferred = 0;
   for (const row of queued) {
     /*
      * Paced against the day's whole allowance, not against however many
@@ -713,7 +829,7 @@ async function enqueueInvites(
      * nobody chose. Divided by the allowance, the rate is the same whether a
      * tick finds ten or one, which is what makes it a pace.
      */
-    delay += spreadGapMs({ remaining: budget, windowMs });
+    const next = delay + spreadGapMs({ remaining: budget, windowMs });
     /*
      * Never later than the warm-up still counts.
      *
@@ -724,12 +840,20 @@ async function enqueueInvites(
      * window allows (with a margin for the send path's own gap), and one
      * whose window has already gone is left for the loop to re-warm.
      */
-    let at = delay;
-    if (campaign.warm_up && row.warmed_at) {
+    let at = next;
+    if (campaign.warm_up && !probing && row.warmed_at) {
       const latest = Date.parse(row.warmed_at) + LINKEDIN_LIMITS.warmUpToInviteMaxMs - WARM_MARGIN_MS - now.getTime();
       if (!(latest > 0)) continue;
-      at = Math.min(delay, latest);
+      at = Math.min(next, latest);
     }
+    // A warmed prospect whose slot falls after hours is skipped rather than
+    // parked: the morning would send it on a view gone stale overnight. The
+    // loop re-warms them tomorrow.
+    if (at > lastSlot) {
+      deferred++;
+      continue;
+    }
+    delay = next;
     // The id is what stops a second tick queueing the same invitation five
     // minutes later — and what strands a prospect for ever when the job that
     // holds it has already finished without sending. enqueueOnce keeps the
@@ -760,6 +884,7 @@ async function enqueueInvites(
   const parts = [`queued ${added} invitation(s)`];
   if (revived) parts.push(`re-queued ${revived} stranded`);
   if (pending + campaignInFlight) parts.push(`${pending + campaignInFlight} already waiting`);
+  if (deferred) parts.push(`${deferred} left for tomorrow: no working time left today`);
   return { enqueued: added + revived, reason: parts.join(", ") };
 }
 
@@ -790,12 +915,98 @@ interface InFlight {
    * whose it is, and when it is due in epoch ms.
    */
   entries: Map<string, { campaignId: string; accountId: string; at: number }>;
+  /**
+   * Every profile view waiting to run, by campaign_prospect id. A view queued
+   * is a view bought: it comes off the day's view allowance and needs an
+   * invitation to follow it, before it has been counted anywhere else.
+   */
+  warms: Map<string, { campaignId: string; accountId: string }>;
+}
+
+/**
+ * What is left of today's invitations for this campaign, net of what has been
+ * sent and what is already on its way — the one reading both the invitation
+ * budget and the warm-up budget take, so the two cannot disagree about how
+ * many invitations a view could still lead to.
+ *
+ * Only what is due before the rep's midnight comes off today. A job parked
+ * until tomorrow morning will be spent from tomorrow's allowance, and counting
+ * it today as well would charge the account twice for one invitation. The
+ * week is charged for all of it, which can only ever err towards sending less.
+ */
+async function inviteRoom(
+  db: Db,
+  campaign: CampaignRow,
+  usage: ReturnType<typeof toUsage>,
+  now: Date,
+  inFlight: InFlight,
+) {
+  const dayEnd = localDayStart(now, usage.timezone).getTime() + 86_400_000;
+  const onAccount = [...inFlight.entries.values()].filter((e) => e.accountId === campaign.linkedin_account_id);
+  const dueToday = onAccount.filter((e) => e.at < dayEnd);
+  const accountInFlight = dueToday.length;
+  const campaignInFlight = dueToday.filter((e) => e.campaignId === campaign.id).length;
+  const { count: sentToday } = await db
+    .from("campaign_prospects")
+    .select("id", { count: "exact", head: true })
+    .eq("campaign_id", campaign.id)
+    .gte("invited_at", localDayStart(now, usage.timezone).toISOString());
+
+  const accountCap = dailyInviteCap(usage.firstActionAt, now) - usage.invitesToday - accountInFlight;
+  const weeklyLeft = LINKEDIN_LIMITS.invitesPerWeek - usage.invitesThisWeek - onAccount.length;
+  const campaignLeft = campaign.daily_invite_cap - (sentToday ?? 0) - campaignInFlight;
+  return { accountCap, weeklyLeft, campaignLeft, dueToday, accountInFlight, campaignInFlight, onAccount };
+}
+
+/**
+ * People on this account's warm-up campaigns who were viewed recently enough
+ * to count and are still waiting for their invitation, by campaign_prospect id
+ * to campaign id. Not those whose invitation is already queued: those are in
+ * the invitation count instead.
+ *
+ * Read per account and per run, then kept: every campaign on the account
+ * budgets its views against the same people.
+ */
+const warmedCache = new WeakMap<InFlight, Map<string, Map<string, string>>>();
+
+async function warmedWaiting(
+  db: Db,
+  accountId: string,
+  campaigns: CampaignRow[],
+  now: Date,
+  inFlight: InFlight,
+): Promise<Map<string, string>> {
+  let byAccount = warmedCache.get(inFlight);
+  if (!byAccount) {
+    byAccount = new Map();
+    warmedCache.set(inFlight, byAccount);
+  }
+  const cached = byAccount.get(accountId);
+  if (cached) return cached;
+
+  const ids = campaigns.filter((c) => c.warm_up && c.linkedin_account_id === accountId).map((c) => c.id);
+  const found = new Map<string, string>();
+  if (ids.length) {
+    const { data: rows } = await db
+      .from("campaign_prospects")
+      .select("id, campaign_id, warmed_at")
+      .in("campaign_id", ids)
+      .eq("status", "queued")
+      .gte("warmed_at", new Date(now.getTime() - LINKEDIN_LIMITS.warmUpToInviteMaxMs).toISOString())
+      .limit(1000);
+    for (const row of rows ?? []) {
+      if (!warmStillCounts(row.warmed_at, now) || inFlight.entries.has(row.id)) continue;
+      found.set(row.id, row.campaign_id);
+    }
+  }
+  byAccount.set(accountId, found);
+  return found;
 }
 
 const PENDING_STATES = ["active", "waiting", "delayed", "prioritized", "paused"] as const;
 
 async function invitesInFlight(db: Db, queues: Queues, campaigns: CampaignRow[], now: Date): Promise<InFlight> {
-  const state: InFlight = { known: true, entries: new Map() };
+  const state: InFlight = { known: true, entries: new Map(), warms: new Map() };
   const queue = queues.linkedinAction as unknown as {
     getJobs?: (types: readonly string[]) => Promise<
       Array<{ name?: string; data?: { kind?: string; campaignProspectId?: string }; timestamp?: number; delay?: number } | null | undefined>
@@ -811,15 +1022,21 @@ async function invitesInFlight(db: Db, queues: Queues, campaigns: CampaignRow[],
   }
 
   const dueAt = new Map<string, number>();
+  const views = new Set<string>();
   for (const job of jobs ?? []) {
-    if (job?.data?.kind !== "invite" || !job.data.campaignProspectId) continue;
+    if (!job?.data?.campaignProspectId) continue;
+    if (job.data.kind === "warm_up") {
+      views.add(job.data.campaignProspectId);
+      continue;
+    }
+    if (job.data.kind !== "invite") continue;
     const at = Number(job.timestamp ?? now.getTime()) + Number(job.delay ?? 0);
     dueAt.set(job.data.campaignProspectId, Number.isFinite(at) ? at : now.getTime());
   }
-  if (!dueAt.size) return state;
+  if (!dueAt.size && !views.size) return state;
 
   const accountOf = new Map(campaigns.map((c) => [c.id, c.linkedin_account_id]));
-  const ids = [...dueAt.keys()];
+  const ids = [...new Set([...dueAt.keys(), ...views])];
   for (let i = 0; i < ids.length; i += 200) {
     const { data: rows } = await db
       .from("campaign_prospects")
@@ -831,7 +1048,10 @@ async function invitesInFlight(db: Db, queues: Queues, campaigns: CampaignRow[],
       // jobs take nothing from today's allowance while it stays that way.
       const accountId = accountOf.get(row.campaign_id);
       if (!accountId) continue;
-      state.entries.set(row.id, { campaignId: row.campaign_id, accountId, at: dueAt.get(row.id) ?? now.getTime() });
+      if (views.has(row.id)) state.warms.set(row.id, { campaignId: row.campaign_id, accountId });
+      if (dueAt.has(row.id)) {
+        state.entries.set(row.id, { campaignId: row.campaign_id, accountId, at: dueAt.get(row.id) ?? now.getTime() });
+      }
     }
   }
   return state;
@@ -852,7 +1072,7 @@ async function enqueueFollowUps(
 
   const { data: due } = await db
     .from("campaign_prospects")
-    .select("id, status, last_step_sent")
+    .select("id, status, last_step_sent, status_reason")
     .eq("campaign_id", campaign.id)
     .in("status", ["accepted", "messaged_1", "messaged_2"])
     .lte("next_action_at", now.toISOString())
@@ -880,7 +1100,16 @@ async function enqueueFollowUps(
       },
       { delay, jobId: jobId("follow_up", row.id, nextStep) },
     );
-    if (outcome !== "already_pending") count++;
+    /*
+     * Offered again, but not counted as work.
+     *
+     * A follow-up held for a pitch (rule 40) is offered to the send path on
+     * every tick, so it goes the moment somebody approves a line. Each offer
+     * used to be counted, and every five minutes a message that never left was
+     * stamped as the loop's last action (rule 45) — the record that exists to
+     * say when something was last *sent*.
+     */
+    if (outcome !== "already_pending" && row.status_reason !== HELD_FOR_PITCH) count++;
   }
   return count;
 }
@@ -942,5 +1171,3 @@ async function loadAccount(
   return { account, timezone };
 }
 
-/** Room left before a warm-up stops counting, for the send path's own gap and retries. */
-const WARM_MARGIN_MS = 15 * 60_000;

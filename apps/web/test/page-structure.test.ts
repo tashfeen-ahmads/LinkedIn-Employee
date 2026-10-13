@@ -112,6 +112,31 @@ describe("application page structure", () => {
 });
 
 /**
+ * Components that render a whole section of a page, and so carry its heading.
+ *
+ * The overview's three opening cards each wrote their own `<h2>` and this file
+ * never read them, because it only looked under `src/app/app`. They are
+ * sections of the overview in every sense that matters to the heading scale,
+ * so their heading comes from `Section` like everybody else's.
+ */
+const componentsDir = join(dirname(fileURLToPath(import.meta.url)), "../src/components");
+const SECTION_COMPONENTS = ["needs-you.tsx", "next-step.tsx", "setup-checklist.tsx"];
+
+describe("components that render a page's section", () => {
+  it("leave the h2 to Section", () => {
+    for (const name of SECTION_COMPONENTS) {
+      const path = join(componentsDir, name);
+      expect(existsSync(path), `${name} is gone or renamed`).toBe(true);
+      const source = readFileSync(path, "utf8")
+        .replace(/\{?\/\*[\s\S]*?\*\/\}?/g, "")
+        .replace(/^\s*\/\/.*$/gm, "");
+      expect(source.match(/<h2[\s>]/g)?.length ?? 0, `${name} writes its own <h2>; Section owns that level`).toBe(0);
+      expect(source, `${name} does not render through Section`).toMatch(/<Section\b/);
+    }
+  });
+});
+
+/**
  * The one place an `<h2>` is still written by hand, and why.
  *
  * The tutorial is a numbered list of stages, each of which really is a section

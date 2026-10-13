@@ -11,6 +11,7 @@ import { ConfirmButton } from "@/components/confirm-button";
 import { formatDate, formatDateTime, isoAttr } from "@/lib/format";
 import { label } from "@/lib/labels";
 import { profileHref } from "@le/shared";
+import { recordManualBooking } from "@/lib/manual-booking";
 
 /** How many invitations the stage tabs read. Said on screen when reached. */
 const FUNNEL_LIMIT = 300;
@@ -26,7 +27,7 @@ const HELD_LIMIT = 100;
  * one thing that would send a prospect two replies, so it says the true half.
  */
 const SEND_DELAYED =
-  "Your reply is approved but has not gone out yet. It will be sent automatically in the next few minutes — there is no need to press Send again.";
+  "Your reply is approved but has not gone out yet. It will be sent automatically in the next few minutes, so there is no need to press Send again.";
 
 /**
  * Everything waiting on a person.
@@ -54,14 +55,32 @@ async function approveDraft(formData: FormData) {
   const supabase = await createClient();
 
   // The edited body is what gets sent; the worker reads the row, not the form.
-  const { error: saveError } = await supabase
+  //
+  // Pending drafts only. The worker sends whatever is `approved`, so an update
+  // that matched any status turned a draft already sent back into one waiting
+  // to send: a second Send from a stale tab, a colleague pressing it on the
+  // same conversation, or the back button resubmitting the form, and the
+  // prospect received the same reply twice. A dismissed draft came back to
+  // life the same way.
+  const { data: approved, error: saveError } = await supabase
     .from("reply_drafts")
     .update({ body, status: "approved", resolved_by: session.userId, resolved_at: new Date().toISOString() })
     .eq("id", draftId)
-    .eq("workspace_id", session.workspaceId);
+    .eq("workspace_id", session.workspaceId)
+    .eq("status", "pending")
+    .select("id");
   if (saveError) {
     console.error(`[inbox] approve draft: ${saveError.message}`);
     redirect(errorQuery("/app/inbox", "Your reply could not be saved, so nothing was sent. Try again."));
+  }
+  if (!approved?.length) {
+    revalidatePath("/app/inbox");
+    redirect(
+      errorQuery(
+        "/app/inbox",
+        "That reply was already sent or dismissed, so nothing more was sent. The inbox below is up to date.",
+      ),
+    );
   }
 
   // The draft is approved in the database either way, and the worker's
@@ -180,9 +199,20 @@ async function markBooked(formData: FormData) {
   "use server";
   const conversationId = String(formData.get("conversationId"));
   const session = await requireSession();
+  // Recorded as a booking, not only un-held, so the funnel and the reports
+  // count the meeting the rep booked by hand (`recordManualBooking`).
+  const booked = await recordManualBooking(await createClient(), {
+    workspaceId: session.workspaceId,
+    conversationId,
+    userId: session.userId,
+  });
+  if (!booked.ok) {
+    console.error(`[inbox] mark booked: ${booked.reason}`);
+    redirect(errorQuery("/app/inbox", "That booking could not be saved. Reload the inbox and try again."));
+  }
   await clearConversationHold(conversationId, session.workspaceId, "booking");
   revalidatePath("/app/inbox");
-  redirect(noticeQuery("/app/inbox", "Marked as booked."));
+  redirect(noticeQuery("/app/inbox", "Marked as booked. It counts toward this campaign's meetings."));
 }
 
 /**
@@ -253,20 +283,13 @@ export default async function InboxPage({
 
   const stage: StageKey = (STAGES.find((s) => s.key === params.stage)?.key ?? "waiting") as StageKey;
 
-  const [{ data: held }, { data: drafts }, { data: funnelRows }, { data: me }] = await Promise.all([
+  const [{ data: held }, { data: funnelRows }, { data: me }, { data: workspace }, { data: goals }] = await Promise.all([
     supabase
       .from("conversations")
       .select("id, prospect_id, needs_human_reason, needs_human_kind, last_message_at")
       .eq("workspace_id", session.workspaceId)
       .eq("needs_human", true)
       .order("last_message_at", { ascending: true })
-      .limit(HELD_LIMIT),
-    supabase
-      .from("reply_drafts")
-      .select("id, conversation_id, body, proposes_meeting, unanswered_questions, created_at")
-      .eq("workspace_id", session.workspaceId)
-      .eq("status", "pending")
-      .order("created_at", { ascending: true })
       .limit(HELD_LIMIT),
     // Everyone this workspace has actually contacted. `campaign_prospects` is
     // the record rather than `conversations`, because an invitation that has
@@ -281,15 +304,43 @@ export default async function InboxPage({
       .limit(FUNNEL_LIMIT),
     // Dates in the rep's own timezone, not the server's.
     supabase.from("profiles").select("timezone").eq("id", session.userId).maybeSingle(),
+    // What the agent is allowed to finish on its own, so the empty state below
+    // describes the holds this workspace actually has (rule 41).
+    supabase.from("workspaces").select("onboarding").eq("id", session.workspaceId).maybeSingle(),
+    // Whether any campaign here can reach a meeting. A "Meeting booked" tab
+    // that can only ever read zero reports a link campaign as failing at
+    // something it never asked for (rule 29).
+    supabase.from("campaigns").select("cta_kind").eq("workspace_id", session.workspaceId).eq("cta_kind", "meeting").limit(1),
   ]);
   const timezone = me?.timezone ?? null;
+  const autonomous =
+    (workspace?.onboarding as { autonomy?: string } | null)?.autonomy === "autonomous";
   const funnelCut = (funnelRows ?? []).length >= FUNNEL_LIMIT;
-  const heldCut = (held ?? []).length >= HELD_LIMIT || (drafts ?? []).length >= HELD_LIMIT;
+  const heldCut = (held ?? []).length >= HELD_LIMIT;
 
+  /*
+   * Held conversations, and only those (rules 10 and 50).
+   *
+   * This list used to be held conversations *plus* every conversation with a
+   * pending draft, which is not what the badge counts: a draft left pending on
+   * a conversation whose hold had been cleared was listed here and counted
+   * nowhere, with a Send button on a reply to a conversation that had moved on.
+   * And the drafts were the oldest hundred in the workspace rather than the
+   * ones for these conversations, so past a hundred stale drafts a held
+   * conversation that had one was shown as "the agent did not write a reply".
+   */
+  const conversationIds = (held ?? []).map((c) => c.id);
+  const { data: drafts } = conversationIds.length
+    ? await supabase
+        .from("reply_drafts")
+        .select("id, conversation_id, body, proposes_meeting, unanswered_questions, created_at")
+        .eq("workspace_id", session.workspaceId)
+        .eq("status", "pending")
+        .in("conversation_id", conversationIds)
+        .order("created_at", { ascending: true })
+    : { data: [] as Array<{ id: string; conversation_id: string; body: string; proposes_meeting: boolean; unanswered_questions: unknown; created_at: string }> };
+  // The newest pending draft per conversation, since they are read oldest first.
   const draftByConversation = new Map((drafts ?? []).map((d) => [d.conversation_id, d]));
-  const conversationIds = [
-    ...new Set([...(held ?? []).map((c) => c.id), ...(drafts ?? []).map((d) => d.conversation_id)]),
-  ];
 
   const heldById = new Map((held ?? []).map((c) => [c.id, c]));
   const [{ data: conversations }, { data: messages }] = await Promise.all([
@@ -324,7 +375,13 @@ export default async function InboxPage({
     (conversations ?? []).map((c) => [c.id, prospectById.get(c.prospect_id)]),
   );
 
-  const counts = STAGES.reduce<Record<string, number>>((acc, s) => {
+  const stages = STAGES.filter(
+    (s) =>
+      s.key !== "booked" ||
+      (goals ?? []).length > 0 ||
+      (funnelRows ?? []).some((r) => stageOf(r.status) === "booked"),
+  );
+  const counts = stages.reduce<Record<string, number>>((acc, s) => {
     acc[s.key] =
       s.key === "waiting"
         ? conversationIds.length
@@ -355,7 +412,7 @@ export default async function InboxPage({
         screen a rep opens more than any other.
       */}
       <nav className="tabs" aria-label="Funnel stage">
-        {STAGES.map((s) => (
+        {stages.map((s) => (
           <Link
             key={s.key}
             href={s.key === "waiting" ? "/app/inbox" : `/app/inbox?stage=${s.key}`}
@@ -384,9 +441,9 @@ export default async function InboxPage({
       {stage === "waiting" ? (
         conversationIds.length === 0 ? (
           <Empty title="Nothing is waiting for you.">
-            Anything Reese will not answer on its own — a price, a legal question, anything
-            negative, or simply low confidence — is held here rather than guessed at. Use the stages
-            above to see everyone you have written to.
+            {autonomous
+              ? "Reese answers on its own, so only a message it could not read with confidence, a prospect asking to speak to a person, or a booking that needs finishing by hand waits here. Use the stages above to see everyone you have written to."
+              : "Anything Reese will not answer on its own (a price, a legal question, anything negative, or simply low confidence) is held here rather than guessed at. Use the stages above to see everyone you have written to."}
           </Empty>
         ) : (
           <div className="grid">
@@ -463,8 +520,8 @@ export default async function InboxPage({
               {booking ? (
                 <>
                   <p className="small">
-                    They accepted a time and it could not be booked automatically, so this meeting is in
-                    nobody&apos;s diary. Put it in yours, or offer them another time, then mark it done.
+                    They accepted a time and it could not be booked automatically, so this meeting is on
+                    nobody&apos;s calendar. Put it on yours, or offer them another time, then mark it done.
                   </p>
                   <form action={markBooked}>
                     <input type="hidden" name="conversationId" value={conversationId} />
@@ -549,7 +606,7 @@ export default async function InboxPage({
         )
       ) : listed.length === 0 ? (
         <Empty title={`Nobody is at “${STAGES.find((s) => s.key === stage)?.label}” yet.`}>
-          This is history, not a queue — nothing here needs a decision from you.
+          This is history, not a queue. Nothing here needs a decision from you.
         </Empty>
       ) : (
         <div className="table-scroll">

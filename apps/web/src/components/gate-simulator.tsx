@@ -2,15 +2,16 @@
 
 import { useMemo, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { OPT_OUT_PHRASES } from "@le/shared";
+import { BRAND, findOptOutPhrase } from "@le/shared";
+import { ReplyGate } from "./reply-gate";
 
 /*
  * A playable version of the reply gate.
  *
- * The opt-out check here is the product's own: OPT_OUT_PHRASES is the same
- * constant the worker imports, and the same substring test runs before any
- * model is consulted. The other conditions are keyword stand-ins for what a
- * classifier decides — said so on the page rather than implied, because a demo
+ * The opt-out check here is the product's own: `findOptOutPhrase` reads the
+ * same OPT_OUT_PHRASES the worker does, through the same normalisation, before
+ * any model is consulted. The other conditions are keyword stand-ins for what a
+ * classifier decides, said so on the page rather than implied, because a demo
  * that overclaims is the thing this product is trying not to be.
  */
 
@@ -18,9 +19,16 @@ type Verdict = {
   rule: string;
   outcome: "stops" | "waits" | "sends";
   because: string;
+  /** The row of the drawn gate this verdict lands on. */
+  gate: string;
 };
 
 const HOLD_RULES: ReadonlyArray<{ rule: string; because: string; test: RegExp }> = [
+  {
+    rule: "Asks to speak to a person",
+    because: "Someone who asks for a person gets one. This hold stays on in every mode, autopilot included.",
+    test: /\b(who am i (talking|speaking)|are you a (bot|human|robot)|real person|speak to someone)\b/i,
+  },
   {
     rule: "Asks about price",
     because: "Pricing waits for a person by default. You can let Reese answer it; the facts still come only from what you gave it.",
@@ -28,17 +36,12 @@ const HOLD_RULES: ReadonlyArray<{ rule: string; because: string; test: RegExp }>
   },
   {
     rule: "Raises legal or security",
-    because: "Security, compliance and data questions are never answered by a machine.",
+    because: "Security, compliance and data questions wait for a person by default, like pricing.",
     test: /\b(gdpr|dpa|security|compliance|legal|soc ?2|privacy|contract terms|procurement)\b/i,
   },
   {
-    rule: "Asks to speak to a person",
-    because: "Someone who asks who they are talking to gets a person.",
-    test: /\b(who am i (talking|speaking)|are you a (bot|human|robot)|real person|speak to someone)\b/i,
-  },
-  {
     rule: "Sounds annoyed",
-    because: "Negative sentiment is handed over rather than smoothed over.",
+    because: "An annoyed reply waits for a person by default rather than being smoothed over by a machine.",
     test: /\b(spam|annoying|stop wasting|rude|unprofessional|how did you get|ridiculous)\b/i,
   },
 ];
@@ -49,45 +52,50 @@ function judge(message: string): Verdict | null {
   const text = message.trim();
   if (!text) return null;
 
-  const lower = text.toLowerCase();
-
-  // First, and deterministically. Rule 5 in CLAUDE.md: sending after "remove
+  // First, and deterministically. Rule 7 in CLAUDE.md: sending after "remove
   // me" is the one mistake this product cannot make, so it is never left to a
   // model's judgement.
-  const phrase = OPT_OUT_PHRASES.find((p) => lower.includes(p));
+  const phrase = findOptOutPhrase(text);
   if (phrase) {
     return {
       rule: `Matched “${phrase}”`,
       outcome: "stops",
       because: "Checked against a fixed list before any model runs. Nothing is ever sent after this.",
+      gate: "Asked to be removed",
     };
   }
 
   for (const rule of HOLD_RULES) {
-    if (rule.test.test(text)) return { rule: rule.rule, outcome: "waits", because: rule.because };
+    if (rule.test.test(text)) return { rule: rule.rule, outcome: "waits", because: rule.because, gate: rule.rule };
   }
 
   if (BOOKING.test(text)) {
     return {
       rule: "Reads as interest",
       outcome: "sends",
-      because: "A reply is drafted offering times you are genuinely free. On approval mode it waits for your click.",
+      because: "A reply is drafted offering times you have open. By default it waits for your approval; on autopilot it sends.",
+      gate: "else",
     };
   }
 
   return {
     rule: "Nothing caught it",
     outcome: "sends",
-    because: "A reply is drafted from your knowledge base only. Anything it cannot answer from there is handed to you.",
+    because: "A reply is drafted from your documents only. Anything it cannot answer from there is handed to you.",
+    gate: "else",
   };
 }
 
+/*
+ * Short enough to read whole on a chip at any width. They used to be sliced to
+ * fit, which put "What does this actu..." on the page as if the sentence broke.
+ */
 const EXAMPLES = [
-  "Interesting. What does this actually cost for a team of six?",
+  "What does it cost for six of us?",
   "Please remove me from your list.",
-  "Where is our data held? We need a DPA before anything else.",
-  "Sounds good, Tuesday works for me.",
-  "How did you even get my details? This is spam.",
+  "Can you send your DPA first?",
+  "Tuesday works for me.",
+  "This feels like spam.",
 ];
 
 const TONE = {
@@ -102,6 +110,7 @@ export function GateSimulator() {
   const reduced = useReducedMotion();
 
   return (
+    <div className="mk-pair sim-pair">
     <div className="sim card raised stack-4">
       <div className="stack-2">
         <label className="field" htmlFor="sim-message">
@@ -124,7 +133,7 @@ export function GateSimulator() {
               onClick={() => setMessage(example)}
               aria-pressed={message === example}
             >
-              {example.length > 34 ? `${example.slice(0, 32)}…` : example}
+              {example}
             </button>
           ))}
         </div>
@@ -155,11 +164,13 @@ export function GateSimulator() {
         </AnimatePresence>
       </div>
 
-      <p className="tiny subtle prose">
-        The opt-out check above is the product&rsquo;s own code running in your browser, against the
-        same phrase list the sender uses. The other conditions are keyword stand-ins here; in the
-        product a classifier decides them, and it errs toward handing over.
+      <p className="tiny subtle prose sim-note">
+        The opt-out check here uses the same phrase list {BRAND.name} checks before every send. The other
+        checks are simplified for this demo; in the product an AI model judges them, and when it is
+        unsure it hands the reply to you.
       </p>
+    </div>
+    <ReplyGate active={verdict?.gate ?? null} />
     </div>
   );
 }

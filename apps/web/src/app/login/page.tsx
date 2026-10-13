@@ -2,13 +2,16 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase-server";
 import { isAppConfigured } from "@/lib/config";
-import { SiteFooter, SiteHeader } from "@/components/marketing";
+import { AuthFooter, AuthHeader } from "@/components/marketing";
 import { AuthAside } from "@/components/auth-aside";
 import { PasswordField } from "@/components/password-field";
 import { SubmitButton } from "@/components/submit-button";
 import { PostButton } from "@/components/post-button";
 import { SITE } from "@/lib/site";
 import { CONFIRMED_ELSEWHERE, LINK_DID_NOT_WORK } from "@/lib/auth-callback";
+import type { Metadata } from "next";
+
+export const metadata: Metadata = { title: { absolute: "Sign in: Nora" } };
 
 /*
  * What `?error=` and `?notice=` may say, decided here rather than by the URL.
@@ -22,13 +25,13 @@ import { CONFIRMED_ELSEWHERE, LINK_DID_NOT_WORK } from "@/lib/auth-callback";
  * plain sentence that says nothing it was not told.
  */
 const ERRORS: Record<string, string> = {
-  email: "Enter your work email.",
+  email: "Enter your email.",
   "invalid-email": "That does not look like an email address. Check it and try again.",
   "rate-limit": "Too many sign-in emails for that address. Wait a few minutes, then try again.",
   "link-failed": "We could not send a sign-in link just now. Try again in a minute, or sign in with your password.",
   // Sent by /auth/sign-in.
   "Enter your email and password.": "Enter your email and password.",
-  "Open the confirmation link we emailed you first — it is what proves the address is yours.":
+  "Open the confirmation link we emailed you first \u2014 it is what proves the address is yours.":
     "Open the confirmation link we emailed you first. It is what proves the address is yours.",
   "That email and password do not match an account. Use Forgot password below if you are not sure.":
     "That email and password do not match an account. Use Forgot password below if you are not sure.",
@@ -95,8 +98,8 @@ export default async function LoginPage({
   if (!isAppConfigured()) {
     return (
       <>
-        <SiteHeader />
-        <div className="auth-split">
+        <AuthHeader />
+        <div className="auth-split auth-paired">
         <main className="auth-page" id="main" tabIndex={-1}>
           <header>
             <h1>Not open yet</h1>
@@ -112,15 +115,15 @@ export default async function LoginPage({
         </main>
         <AuthAside />
         </div>
-        <SiteFooter />
+        <AuthFooter />
       </>
     );
   }
 
   return (
     <>
-      <SiteHeader />
-      <div className="auth-split">
+      <AuthHeader />
+      <div className="auth-split auth-paired">
       <main className="auth-page" id="main" tabIndex={-1}>
         <header>
           <h1>Sign in</h1>
@@ -154,7 +157,7 @@ export default async function LoginPage({
         <form action="/auth/sign-in" method="post" className="card">
           {params.invite ? <input type="hidden" name="invite" value={params.invite} /> : null}
           <label className="field">
-            <span>Email or username</span>
+            <span>Email</span>
             <input
               name="email"
               required
@@ -174,7 +177,7 @@ export default async function LoginPage({
         {/*
           The two ways people get locked out, named where they are standing.
           Every login complaint so far was one of these: a forgotten password,
-          or a different address from the one the workspace was set up with —
+          or a different address from the one the workspace was set up with,
           which signs in fine and then asks them to start over.
         */}
         <p className="small">
@@ -184,7 +187,7 @@ export default async function LoginPage({
         {/*
           Kept, not replaced. It is the way back in for anybody who has
           forgotten a password, and the only way in for the accounts made
-          before passwords existed — several of which are real people using
+          before passwords existed, several of which are real people using
           this today.
         */}
         <details className="auth-alt">
@@ -192,7 +195,7 @@ export default async function LoginPage({
           <form action={sendMagicLink} className="card">
             {params.invite ? <input type="hidden" name="invite" value={params.invite} /> : null}
             <label className="field">
-              <span>Work email</span>
+              <span>Email</span>
               <input
                 type="email"
                 name="email"
@@ -212,7 +215,7 @@ export default async function LoginPage({
       </main>
       <AuthAside />
       </div>
-      <SiteFooter />
+      <AuthFooter />
     </>
   );
 }

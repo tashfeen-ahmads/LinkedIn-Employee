@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { BRAND, LINKEDIN_LIMITS } from "@le/shared";
+import { BRAND, DEFAULT_WORKING_HOURS, INVITE_NOTE_MAX_CHARS, LINKEDIN_LIMITS } from "@le/shared";
 import { SITE } from "@/lib/site";
 import {
   BOOKED_DAY_NAME,
@@ -15,8 +15,10 @@ import {
   EXAMPLE_SLOTS,
   EXAMPLE_TODAY,
   PEOPLE,
+  SLOT_TZ_LABEL,
   meetingLines,
   slotLabel,
+  twelveHour,
 } from "@/lib/marketing-examples";
 import { RampChart } from "./diagrams";
 import { NavIcon } from "./icons";
@@ -49,11 +51,11 @@ export function Hero() {
         <div className="mk-hero-copy">
           <h1 className="mk-display">
             <span className="mk-line">The AI SDR for LinkedIn</span>{" "}
-            <span className="mk-line">built to keep your account safe.</span>
+            <span className="mk-line">built around account safety.</span>
           </h1>
           <p className="mk-hero-sub">
-            {BRAND.name} finds the right people, writes each one a note, answers replies and books the
-            call, inside daily limits.
+            {BRAND.name} finds the right people, writes each one a note, drafts your replies and books
+            the call, all inside daily limits.
           </p>
           <div className="mk-actions">
             <Link href={SIGNUP} className="btn large">
@@ -101,11 +103,9 @@ function TodayPanel() {
               className="mk-avatar"
             />
             <div className="mk-today-who">
-              <p>
-                <strong>{person.name}</strong>
-                <span className="mk-muted">
-                  , {person.role} at {person.company}
-                </span>
+              <p className="mk-today-name">{person.name}</p>
+              <p className="mk-today-role">
+                {person.role}, {person.company}
               </p>
               <p className="mk-today-note">Note: {opener}</p>
             </div>
@@ -116,8 +116,7 @@ function TodayPanel() {
       <p className="mk-today-foot">
         <NavIcon name="clock" className="mk-icon" />
         <span>
-          Next invitation <strong className="mk-num">{EXAMPLE_NEXT}</strong>, spread across your
-          working hours
+          Next invitation at <strong className="mk-num">{EXAMPLE_NEXT}</strong>, inside your hours
         </span>
       </p>
     </figure>
@@ -146,7 +145,7 @@ const RAIL = [
   { icon: "profile", label: "Finds real people" },
   { icon: "posts", label: "Writes one note per person" },
   { icon: "campaigns", label: "Follows up" },
-  { icon: "support", label: "Answers replies" },
+  { icon: "support", label: "Drafts every reply" },
   { icon: "meetings", label: "Books the call" },
 ] as const;
 
@@ -180,7 +179,7 @@ export function Decisions() {
                 </div>
                 <span className="mk-fakebtn">Approve</span>
               </div>
-              <p className="mk-decide-note">The agent writes strategies. Only you approve one.</p>
+              <p className="mk-decide-note">{BRAND.name} drafts the strategies. Only you approve one.</p>
             </li>
 
             <li className="mk-decide-card">
@@ -191,28 +190,45 @@ export function Decisions() {
                   Hi Priya, saw you opened a <mark>second clinic</mark> in <mark>Austin</mark> this
                   spring. How are you handling recall across both?
                 </p>
+                <span className="mk-fakebtn">Approve</span>
               </div>
-              <p className="mk-decide-note">The opener and the offer, one line at a time.</p>
+              <p className="mk-decide-note">You approve the opener and the offer, line by line.</p>
             </li>
 
             <li className="mk-decide-card">
               <span className="mk-step-n" aria-hidden="true">3</span>
               <h3>Press Launch</h3>
               <div className="mk-decide-visual" aria-hidden="true">
-                <span className="mk-fakebtn is-wide">Launch</span>
+                <dl className="mk-launch">
+                  <div>
+                    <dt>Sends</dt>
+                    <dd>
+                      {twelveHour(DEFAULT_WORKING_HOURS.start, 0)} to{" "}
+                      {twelveHour(DEFAULT_WORKING_HOURS.end, 0)}, weekdays
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Starts at</dt>
+                    <dd>{LINKEDIN_LIMITS.invitesPerDayStart} invitations a day</dd>
+                  </div>
+                </dl>
+                <span className="mk-fakebtn">Launch</span>
               </div>
-              <p className="mk-decide-note">Nothing has left before this. It sends inside your working hours.</p>
+              <p className="mk-decide-note">Nothing sends until you press it, then only inside your hours.</p>
             </li>
           </ol>
 
-          <ol className="mk-rail" aria-label={`What ${BRAND.name} does after launch`}>
-            {RAIL.map((item) => (
-              <li key={item.label}>
-                <NavIcon name={item.icon} className="mk-rail-icon" />
-                <span>{item.label}</span>
-              </li>
-            ))}
-          </ol>
+          <div className="mk-after">
+            <p className="mk-after-label">After launch, {BRAND.name}:</p>
+            <ol className="mk-rail" aria-label={`What ${BRAND.name} does after launch`}>
+              {RAIL.map((item) => (
+                <li key={item.label}>
+                  <NavIcon name={item.icon} className="mk-rail-icon" />
+                  <span>{item.label}</span>
+                </li>
+              ))}
+            </ol>
+          </div>
         </div>
       </div>
     </section>
@@ -225,15 +241,30 @@ export function Notes() {
   return (
     <section className="mk-notes">
       <div className="container mk-notes-grid">
-        <Reveal>
-          <div className="mk-notes-copy">
-            <h2 className="mk-h2">One note per person, not one template for everyone.</h2>
-            <p className="mk-lede">
-              Each invitation is written from that person&rsquo;s own headline, role and company.
-            </p>
-            <p className="mk-lede">You read every one before launch, and none of them carries a link.</p>
-          </div>
-        </Reveal>
+        <div className="mk-notes-panel">
+          <Reveal>
+            <div className="mk-notes-copy">
+              <h2 className="mk-h2">One note per person, not one template for everyone.</h2>
+              <p className="mk-lede">
+                Each invitation is written from that person&rsquo;s own headline, role and company.
+              </p>
+              <ul className="mk-notes-facts">
+                <li>
+                  <NavIcon name="posts" className="mk-icon" />
+                  <span>Up to {INVITE_NOTE_MAX_CHARS} characters each</span>
+                </li>
+                <li>
+                  <NavIcon name="shield" className="mk-icon" />
+                  <span>No link and no pitch in a connection request</span>
+                </li>
+                <li>
+                  <NavIcon name="profile" className="mk-icon" />
+                  <span>You read every one before launch</span>
+                </li>
+              </ul>
+            </div>
+          </Reveal>
+        </div>
 
         <div className="mk-deck-wrap">
           <ul className="mk-deck">
@@ -250,8 +281,7 @@ export function Notes() {
                   <div>
                     <p className="mk-note-name">{person.name}</p>
                     <p className="mk-note-role">
-                      {person.role},<br />
-                      {person.company}
+                      {person.role}, {person.company}
                     </p>
                   </div>
                   <p className="mk-note-text">{note}</p>
@@ -319,8 +349,7 @@ export function SafetyBento() {
               <div>
                 <h3 className="mk-tile-title">Spread across your day</h3>
                 <p className="mk-tile-sub">
-                  Example day: {EXAMPLE_DAY.times.length} invitations, {EXAMPLE_DAY.start} to{" "}
-                  {EXAMPLE_DAY.end}
+                  {EXAMPLE_DAY.times.length} invitations, {EXAMPLE_DAY.start} to {EXAMPLE_DAY.end}
                 </p>
               </div>
             </figcaption>
@@ -349,15 +378,31 @@ export function SafetyBento() {
               <h3 className="mk-tile-title">Weekly ceiling</h3>
             </div>
             <p className="mk-big mk-num">{LINKEDIN_LIMITS.invitesPerWeek}</p>
-            <span className="mk-meter-track is-tall" aria-hidden="true">
-              <span className="mk-meter-fill" style={fill(LINKEDIN_LIMITS.invitesPerWeek, UNCAPPED_WEEK)} />
-            </span>
+            <div className="mk-meter">
+              <div className="mk-meter-row">
+                <span>Invitations a week</span>
+                <span className="mk-num">
+                  {LINKEDIN_LIMITS.invitesPerWeek} of a possible {UNCAPPED_WEEK}
+                </span>
+              </div>
+              <span className="mk-meter-track is-tall" aria-hidden="true">
+                <span className="mk-meter-fill" style={fill(LINKEDIN_LIMITS.invitesPerWeek, UNCAPPED_WEEK)} />
+              </span>
+            </div>
             <p className="mk-tile-sub">
               {LINKEDIN_LIMITS.invitesPerDayMax} a day for five days would be {UNCAPPED_WEEK}. The week
               stops at {LINKEDIN_LIMITS.invitesPerWeek}, shared by every campaign on the account.
             </p>
           </div>
         </div>
+
+        <p className="mk-trust">
+          No customer logos yet, and no borrowed ones. We publish the limits we enforce and no
+          results we have not measured.{" "}
+          <Link href="/about" className="mk-textlink small">
+            Why we built it this way <span aria-hidden="true">→</span>
+          </Link>
+        </p>
       </div>
     </section>
   );
@@ -392,8 +437,8 @@ export function Replies() {
       <div className="container mk-stack">
         <Reveal>
           <h2 className="mk-h2">
-            <span className="mk-line">Replies answered.</span>{" "}
-            <span className="mk-line">Meetings on your calendar.</span>
+            <span className="mk-line">Replies drafted for you.</span>{" "}
+            <span className="mk-line">Meetings booked for you.</span>
           </h2>
         </Reveal>
 
@@ -403,7 +448,7 @@ export function Replies() {
               <Image src={maya.photo} alt={`Example prospect ${maya.name}`} width={44} height={44} className="mk-avatar" />
               <div className="mk-msg-body">
                 <p className="mk-msg-who">
-                  {maya.name} <span className="mk-muted mk-num">09:41</span>
+                  {maya.name} <span className="mk-muted mk-num">{twelveHour(9, 41)}</span>
                 </p>
                 <p className="mk-bubble">This is timely. Could we find half an hour next week?</p>
               </div>
@@ -419,7 +464,7 @@ export function Replies() {
                   <p className="mk-draft-label">
                     Drafted by {BRAND.name}. Sends when you approve, or by itself on autopilot.
                   </p>
-                  <p>Glad it landed, Maya. Here are three times that work on my side:</p>
+                  <p>Glad it landed, Maya. Here are three times that work on my side ({SLOT_TZ_LABEL}):</p>
                   <ul className="mk-slots" aria-label="Times offered">
                     {EXAMPLE_SLOTS.map((slot) => (
                       <li key={slot} className={slot === BOOKED_SLOT ? "is-picked" : undefined}>
@@ -435,7 +480,7 @@ export function Replies() {
               <Image src={maya.photo} alt="" width={44} height={44} className="mk-avatar" />
               <div className="mk-msg-body">
                 <p className="mk-msg-who">{maya.name}</p>
-                <p className="mk-bubble">{BOOKED_DAY_NAME} works. Speak then.</p>
+                <p className="mk-bubble">{BOOKED_DAY_NAME} works. Talk then.</p>
               </div>
             </div>
           </div>
@@ -471,8 +516,9 @@ export function Replies() {
                 </li>
               </ul>
             ) : null}
-            <p className="mk-caption">Example conversation.</p>
           </div>
+
+          <p className="mk-caption mk-convo-caption">Example conversation.</p>
         </div>
 
         <ul className="mk-facts">

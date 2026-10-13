@@ -87,6 +87,13 @@ const PATHS: Record<string, React.ReactNode> = {
       <path d="M13.5 10.5a4 4 0 0 0-5.7 0l-3 3a4 4 0 1 0 5.7 5.7l1.2-1.2" />
     </>
   ),
+  /* Opener and pitch: a line said out loud, a speech bubble. */
+  pitch: (
+    <>
+      <path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-8l-4 3.5V16H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z" />
+      <path d="M8 9.5h8M8 12.5h5" />
+    </>
+  ),
   /* Do not contact — a name struck out. */
   exclusions: (
     <>

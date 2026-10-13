@@ -110,6 +110,22 @@ describe("which openers a campaign may use", () => {
     expect(await openersFor(db.asDb(), WORKSPACE, agent)).not.toContain("Not approved");
   });
 
+  it("never reads another workspace's openers under this agent's id", async () => {
+    // The worker uses the service role, so RLS cannot keep a row from another
+    // workspace out. A line carrying this agent id but a different workspace
+    // is somebody else's copy, and it must never reach this campaign's notes.
+    const db = harness({ withAgent: true });
+    db.seed("hooks", [
+      { id: "hx", workspace_id: "other-workspace", agent_id: AGENT, body: "Another company's line", approved_at: "2026-09-24T00:00:00Z" },
+      { id: "h3", workspace_id: WORKSPACE, agent_id: null, body: "Workspace line", approved_at: "2026-09-24T00:00:00Z" },
+    ]);
+    const agent = await agentForCampaign(db.asDb(), CAMPAIGN);
+
+    const openers = await openersFor(db.asDb(), WORKSPACE, agent);
+    expect(openers).not.toContain("Another company's line");
+    expect(openers).toEqual(["Workspace line"]);
+  });
+
   it("falls back to the workspace when the agent has none of its own", async () => {
     // Rather than sending nothing: an invitation with no note is still
     // delivered, so an empty list here would quietly turn a campaign into bare

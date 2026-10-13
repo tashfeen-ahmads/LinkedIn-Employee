@@ -43,12 +43,30 @@ export default async function MeetingsPage({
   const supabase = await createClient();
   const now = new Date();
 
-  const [{ data: meetings }, { data: me }] = await Promise.all([
+  /*
+   * Two reads, each from its own end of time.
+   *
+   * One read of the oldest two hundred, split afterwards, stopped showing the
+   * future once a workspace had two hundred meetings behind it: every row it
+   * read was in the past, and the Upcoming tab said "Nothing booked yet" on the
+   * morning of a call. The next ones and the last ones are different questions,
+   * so they are asked separately.
+   */
+  const MEETINGS = "id, prospect_id, starts_at, ends_at, meeting_url, brief, status, booked_via";
+  const [{ data: ahead }, { data: behind }, { data: me }] = await Promise.all([
     supabase
       .from("meetings")
-      .select("id, prospect_id, starts_at, ends_at, meeting_url, brief, status, booked_via")
+      .select(MEETINGS)
       .eq("workspace_id", session.workspaceId)
+      .gte("starts_at", now.toISOString())
       .order("starts_at", { ascending: true })
+      .limit(200),
+    supabase
+      .from("meetings")
+      .select(MEETINGS)
+      .eq("workspace_id", session.workspaceId)
+      .lt("starts_at", now.toISOString())
+      .order("starts_at", { ascending: false })
       .limit(200),
     supabase.from("profiles").select("booking_url, timezone").eq("id", session.userId).maybeSingle(),
   ]);
@@ -56,10 +74,12 @@ export default async function MeetingsPage({
   // Every time on this screen is on the rep's clock. Rendered on the server
   // these were UTC, so a 7pm New York call sat under tomorrow's heading.
   const timezone = me?.timezone || "UTC";
-  const all = meetings ?? [];
   // Cancelled meetings are never "upcoming", whatever their time says.
-  const upcoming = all.filter((m) => m.starts_at >= now.toISOString() && m.status !== "cancelled");
-  const past = all.filter((m) => m.starts_at < now.toISOString() || m.status === "cancelled").reverse();
+  const upcoming = (ahead ?? []).filter((m) => m.status !== "cancelled");
+  const past = [
+    ...(ahead ?? []).filter((m) => m.status === "cancelled").reverse(),
+    ...(behind ?? []),
+  ];
   const shown = tab === "past" ? past : upcoming;
 
   const { data: prospects } = shown.length
@@ -109,9 +129,9 @@ export default async function MeetingsPage({
           action="Set your hours"
           href="/app/meetings?tab=availability"
         >
-          Reese offers times from the hours you set and books the one a prospect accepts.
-          It never invents a time: the only slots that reach anybody are the ones this product
-          worked out you were free for.
+          {me?.booking_url
+            ? "Reese can send your own booking page when a prospect wants to meet. Meetings booked there happen on that page, so they cannot appear here or in your results; check that calendar for them."
+            : "Reese offers times from the hours you set and books the one a prospect accepts. It never invents a time: the only slots that reach anybody are the ones this product worked out you were free for."}
         </Empty>
       ) : (
         <>
@@ -150,7 +170,7 @@ export default async function MeetingsPage({
                       <div className="meeting-who">
                         <strong>{name}</strong>
                         <p className="small muted">
-                          {[prospect?.title, prospect?.company].filter(Boolean).join(" · ") || "—"}
+                          {[prospect?.title, prospect?.company].filter(Boolean).join(" · ") || "No title or company given"}
                         </p>
                         {/* Why they matched, right here. It is the one thing
                             worth reading in the thirty seconds before a call,
@@ -235,7 +255,7 @@ function groupByDay<T extends { starts_at: string }>(
           : // The key is already the rep's calendar day, so it is read back at
             // noon UTC and printed in UTC: that names the same date whatever
             // the server's own zone is.
-            new Date(`${key}T12:00:00Z`).toLocaleDateString("en-GB", {
+            new Date(`${key}T12:00:00Z`).toLocaleDateString("en-US", {
               weekday: "long",
               day: "numeric",
               month: "long",

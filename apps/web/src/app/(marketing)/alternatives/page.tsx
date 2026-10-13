@@ -3,7 +3,7 @@ import Link from "next/link";
 import { INVITE_NOTE_MAX_CHARS } from "@le/shared";
 import { HubLayout, hubMeta, CompareTable, Callout, type Faq, type Source } from "@/components/article";
 import { FaqSchema } from "@/components/schema";
-import { PUBLIC_LIMITS, SITE } from "@/lib/site";
+import { PUBLIC_LIMITS } from "@/lib/site";
 import { formatDate } from "@/lib/format";
 
 export const metadata: Metadata = hubMeta("alternative");
@@ -34,7 +34,7 @@ const ARTISAN_PRICE = "https://www.11x.ai/guides/artisan-pricing";
 const FAQ: readonly Faq[] = [
   {
     q: "What is the best LinkedIn automation tool?",
-    a: "There is no single best one, because the tools do different jobs. Agencies running many sender accounts want a multi-sender platform such as HeyReach. People who design their own LinkedIn and email sequences want Expandi or Dripify. Scrapers want PhantomBuster. A founder who wants the prospecting, writing and replies done, with a person approving each stage, wants an AI SDR such as Nora.",
+    a: "There is no single best one, because the tools do different jobs. Agencies running many sender accounts want a multi-sender platform such as HeyReach. People who design their own LinkedIn and email sequences want Expandi or Dripify. Scrapers want PhantomBuster. A founder who wants the prospecting, the writing and the reply drafts done, with a person approving each stage, wants an AI SDR such as Nora.",
   },
   {
     q: "Which LinkedIn automation tool is safest?",
@@ -42,7 +42,7 @@ const FAQ: readonly Faq[] = [
   },
   {
     q: "What is the cheapest LinkedIn automation tool?",
-    a: "As of October 2026, Nora is free for every workspace while it grows, with no card. Among paid tools in the table, the lowest listed entry prices are Waalaxy's, though sources disagree on its exact figures and on whether its free plan still runs campaigns. Per-seat tools such as Dripify, Expandi and HeyReach run from $59 to $99 a month per user or sender on monthly billing.",
+    a: "As of October 2026, Nora is free while we grow, with no card. Among paid tools in the table, the lowest listed entry prices are Waalaxy's, though sources disagree on its exact figures and on whether its free plan still runs campaigns. Per-seat tools such as Dripify, Expandi and HeyReach run from $59 to $99 a month per user or sender on monthly billing.",
   },
   {
     q: "Is LinkedIn automation legal?",
@@ -59,7 +59,7 @@ const SOURCES: readonly Source[] = [
   { label: "Waalaxy blog: LinkedIn maximum connections per day", url: WAALAXY_LIMITS },
   { label: "Waalaxy help center: Waalaxy is now fully cloud-based", url: WAALAXY_CLOUD },
   { label: "Waalaxy blog: how to create a blacklist", url: WAALAXY_BLACKLIST },
-  { label: "Supered: Waalaxy pricing 2026, reviewed 2 October 2026", url: WAALAXY_PRICE },
+  { label: "Supered: Waalaxy pricing 2026, reviewed October 2, 2026", url: WAALAXY_PRICE },
   { label: "Expandi help center: recommended limits", url: EXPANDI_LIMITS },
   { label: "Expandi help center: account warm-up", url: EXPANDI_WARMUP },
   { label: "Expandi help center: blacklists", url: EXPANDI_BLACKLIST },
@@ -70,9 +70,6 @@ const SOURCES: readonly Source[] = [
   { label: "PhantomBuster: pricing explained (2026)", url: PB_PRICING },
   { label: "PhantomBuster: LinkedIn automation safe limits 2026", url: PB_LIMITS },
   { label: "11x: Artisan pricing guide (a competitor of Artisan)", url: ARTISAN_PRICE },
-  { label: "Dripify: LinkedIn automation tools (studied for this page)", url: "https://dripify.com/linkedin-automation-tools/" },
-  { label: "Mailshake: top LinkedIn automation tools (studied for this page)", url: "https://mailshake.com/blog/top-linkedin-automation-tools/" },
-  { label: "Woodpecker: LinkedIn automation tools (studied for this page)", url: "https://woodpecker.co/blog/linkedin-automation-tools" },
 ];
 
 function Ext({ href, children }: { href: string; children: React.ReactNode }) {
@@ -83,13 +80,21 @@ function Ext({ href, children }: { href: string; children: React.ReactNode }) {
   );
 }
 
+/** A source named inside a table cell: a small tag with a thumb-sized target, not a word of the sentence. */
+function Src({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <a className="alt-src" href={href} rel="noopener nofollow" target="_blank">
+      {children}
+    </a>
+  );
+}
+
 export default function Page() {
   return (
     <>
-      <HubLayout kind="alternative" />
       <FaqSchema items={FAQ} />
-      <div className="article hub alt-hub-more">
-        <div className="article-body">
+      <HubLayout kind="alternative">
+        <div className="hub-body article-body">
           <p>
             LinkedIn automation tools all send invitations and messages for you; what separates them
             is what they refuse to do. Most comparisons rank features. This one compares the
@@ -111,122 +116,133 @@ export default function Page() {
           <p>
             Two warnings before the table. Vendors&rsquo; own pages often disagree with each other,
             and where they do we say so rather than pick the flattering number. And we make one of
-            the products in the table. Nora&rsquo;s figures are not read off a marketing page: they
-            are imported from the constants the sending code enforces, so this page cannot quote a
+            the products in the table. Nora&rsquo;s figures are not typed into this page: they are
+            read from the same rules the product enforces when it sends, so this page cannot quote a
             number the product does not keep.
           </p>
-          <Callout tone="safety">
-            <p>
-              LinkedIn&rsquo;s <Ext href={LI_AGREEMENT}>User Agreement</Ext> prohibits automated
-              access, and its <Ext href={LI_PROHIBITED}>help center</Ext> says accounts using
-              third-party automation can be restricted. No tool in this table, Nora included, can
-              promise an account will never be restricted.
-            </p>
-          </Callout>
+          <div className="alt-hub-note">
+            <Callout tone="safety">
+              <p>
+                LinkedIn&rsquo;s <Ext href={LI_AGREEMENT}>User Agreement</Ext> prohibits automated
+                access, and its <Ext href={LI_PROHIBITED}>help center</Ext> says accounts using
+                third-party automation can be restricted. No tool in this table, Nora included, can
+                promise an account will never be restricted.
+              </p>
+            </Callout>
+          </div>
 
+        </div>
+
+        <div className="article-body">
           <h2 id="comparison-table">The comparison table</h2>
-          <CompareTable
-            caption={`LinkedIn automation tools by published guardrails and price, checked ${formatDate(CHECKED)}`}
-            columns={["Daily and weekly caps", "Warm-up and pacing", "Do-not-contact rules", "Price (monthly billing)"]}
-            rows={[
-              {
-                label: "Nora",
-                values: [
-                  `${PUBLIC_LIMITS.invitesPerDayStart} to ${PUBLIC_LIMITS.invitesPerDayMax} a day, ${PUBLIC_LIMITS.invitesPerWeek} a week across all campaigns; can only be lowered`,
-                  `Automatic, about ${PUBLIC_LIMITS.warmupWeeks} weeks from the first send; a day's sends spread across working hours`,
-                  "Never invites anyone the workspace has contacted; exclusion list checked before every send",
-                  "Free while it grows, no card",
-                ],
-              },
-              {
-                label: "HeyReach",
-                values: [
-                  <>
-                    Default 25 a day per sender, settable to 40; 200 a week (<Ext href={HEYREACH_LIMITS}>help center</Ext>)
-                  </>,
-                  "Guidance on staying at the default once warmed up; no automatic ramp found",
-                  <>
-                    Filters to skip leads contacted by other campaigns, off unless chosen (<Ext href={HEYREACH_EXCLUDE}>help center</Ext>)
-                  </>,
-                  <>
-                    $79 per sender on Growth; agency bundles quoted differently by different sources (<Ext href={HEYREACH_PRICE}>review</Ext>)
-                  </>,
-                ],
-              },
-              {
-                label: "Waalaxy",
-                values: [
-                  <>
-                    80 to 100 a day on top plans; treats 200 a week as LinkedIn&rsquo;s ceiling (<Ext href={WAALAXY_LIMITS}>blog</Ext>)
-                  </>,
-                  "Invitations past the weekly ceiling wait for the next week; no warm-up ramp found",
-                  <>
-                    A prospect sits in one list only; a do-not-contact list you maintain (<Ext href={WAALAXY_BLACKLIST}>blog</Ext>)
-                  </>,
-                  <>
-                    Paid plans from about €19 a user; sources disagree on the prices and on whether a free plan remains (<Ext href={WAALAXY_PRICE}>review</Ext>)
-                  </>,
-                ],
-              },
-              {
-                label: "Expandi",
-                values: [
-                  <>
-                    Recommends staying under 100 connection requests a week (<Ext href={EXPANDI_LIMITS}>help center</Ext>)
-                  </>,
-                  <>
-                    Optional warm-up adding 2 a day every 1 to 3 days, off at 21 a day (<Ext href={EXPANDI_WARMUP}>help center</Ext>)
-                  </>,
-                  <>
-                    Duplicates blocked across a company&rsquo;s accounts by default; blacklists (<Ext href={EXPANDI_BLACKLIST}>help center</Ext>)
-                  </>,
-                  <>
-                    $99 per LinkedIn account (<Ext href={EXPANDI_PRICE}>review</Ext>)
-                  </>,
-                ],
-              },
-              {
-                label: "Dripify",
-                values: [
-                  <>
-                    Up to 75 a day, with a random range you set (<Ext href={DRIPIFY_LIMITS}>help center</Ext>)
-                  </>,
-                  "Randomised daily volume; no warm-up ramp found",
-                  <>
-                    Skip leads in your or teammates&rsquo; other campaigns; a blacklist (<Ext href={DRIPIFY_DUPES}>help center</Ext>)
-                  </>,
-                  <>
-                    $59, $79 or $99 per user; 7-day trial (<Ext href={DRIPIFY_PRICE}>review</Ext>)
-                  </>,
-                ],
-              },
-              {
-                label: "PhantomBuster",
-                values: [
-                  <>
-                    Suggests 15 to 25 a day for accounts over 90 days old, fewer for new ones (<Ext href={PB_LIMITS}>blog</Ext>)
-                  </>,
-                  "Pacing and scheduling controls; volume is yours to set",
-                  "Not published",
-                  <>
-                    $69, $159 or $439 a month; a small free plan (<Ext href={PB_PRICING}>pricing explainer</Ext>)
-                  </>,
-                ],
-              },
-              {
-                label: "Artisan",
-                values: [
-                  "Not published for LinkedIn",
-                  "Email warm-up published; LinkedIn pacing not published",
-                  "Not published",
-                  <>
-                    Self-serve plans or a quote; sources disagree (<Ext href={ARTISAN_PRICE}>guide</Ext>)
-                  </>,
-                ],
-              },
-            ]}
-          />
+          <div className="alt-table">
+            <CompareTable
+              caption={`LinkedIn automation tools by published guardrails and price, checked ${formatDate(CHECKED)}`}
+              columns={["Daily and weekly caps", "Warm-up and pacing", "Do-not-contact rules", "Price (monthly billing)"]}
+              rows={[
+                {
+                  label: "Nora",
+                  values: [
+                    <span key="nora" className="alt-nora">
+                      {`${PUBLIC_LIMITS.invitesPerDayStart} to ${PUBLIC_LIMITS.invitesPerDayMax} a day, ${PUBLIC_LIMITS.invitesPerWeek} a week; can only be lowered`}
+                    </span>,
+                    `Automatic, about ${PUBLIC_LIMITS.warmupWeeks} weeks from the first send; spread across working hours`,
+                    "Never invites anyone already contacted; exclusion list checked before every send",
+                    "Free while we grow, no card",
+                  ],
+                },
+                {
+                  label: "HeyReach",
+                  values: [
+                    <>
+                      25 a day by default, up to 40; 200 a week <Src href={HEYREACH_LIMITS}>help center</Src>
+                    </>,
+                    "Advice to stay at the default; no automatic ramp found",
+                    <>
+                      Optional filter to skip leads in other campaigns <Src href={HEYREACH_EXCLUDE}>help center</Src>
+                    </>,
+                    <>
+                      $79 per sender (Growth); agency bundles vary by source <Src href={HEYREACH_PRICE}>review</Src>
+                    </>,
+                  ],
+                },
+                {
+                  label: "Waalaxy",
+                  values: [
+                    <>
+                      80 to 100 a day on top plans; 200 a week <Src href={WAALAXY_LIMITS}>blog</Src>
+                    </>,
+                    "Overflow waits for the next week; no ramp found",
+                    <>
+                      One list per prospect; a do-not-contact list you keep <Src href={WAALAXY_BLACKLIST}>blog</Src>
+                    </>,
+                    <>
+                      From about €19 (roughly $22) per user; sources disagree <Src href={WAALAXY_PRICE}>review</Src>
+                    </>,
+                  ],
+                },
+                {
+                  label: "Expandi",
+                  values: [
+                    <>
+                      Under 100 a week recommended <Src href={EXPANDI_LIMITS}>help center</Src>
+                    </>,
+                    <>
+                      Optional ramp: 2 more a day every 1 to 3 days, up to 21 <Src href={EXPANDI_WARMUP}>help center</Src>
+                    </>,
+                    <>
+                      Duplicates blocked across a company&rsquo;s accounts by default; blacklists <Src href={EXPANDI_BLACKLIST}>help center</Src>
+                    </>,
+                    <>
+                      $99 per LinkedIn account <Src href={EXPANDI_PRICE}>review</Src>
+                    </>,
+                  ],
+                },
+                {
+                  label: "Dripify",
+                  values: [
+                    <>
+                      Up to 75 a day, in a random range you set <Src href={DRIPIFY_LIMITS}>help center</Src>
+                    </>,
+                    "Randomized daily volume; no ramp found",
+                    <>
+                      Skip leads in your or teammates&rsquo; campaigns; a blacklist <Src href={DRIPIFY_DUPES}>help center</Src>
+                    </>,
+                    <>
+                      $59 to $99 per user; 7-day trial <Src href={DRIPIFY_PRICE}>review</Src>
+                    </>,
+                  ],
+                },
+                {
+                  label: "PhantomBuster",
+                  values: [
+                    <>
+                      15 to 25 a day suggested for accounts over 90 days old <Src href={PB_LIMITS}>blog</Src>
+                    </>,
+                    "Scheduling controls; volume is yours to set",
+                    "Not published",
+                    <>
+                      $69, $159 or $439 a month; a small free plan <Src href={PB_PRICING}>pricing</Src>
+                    </>,
+                  ],
+                },
+                {
+                  label: "Artisan",
+                  values: [
+                    "Not published for LinkedIn",
+                    "Email warm-up only; LinkedIn pacing not published",
+                    "Not published",
+                    <>
+                      Self-serve plans or a quote; sources disagree <Src href={ARTISAN_PRICE}>guide</Src>
+                    </>,
+                  ],
+                },
+              ]}
+            />
+          </div>
+        </div>
 
+        <div className="hub-body article-body">
           <h3 id="caps">Published daily and weekly caps</h3>
           <p>
             The spread is wider than most people expect. Published daily maximums run from{" "}
@@ -259,16 +275,16 @@ export default function Page() {
             override, Waalaxy by keeping each prospect in one list. The difference in Nora is when the
             check runs. Its rule that nobody already contacted gets a second invitation, and its
             shared exclusion list, are both checked immediately before each send, so a name added to
-            the list at 10am stops a send queued for 10:05.
+            the list at 10 a.m. stops a send queued for 10:05 a.m.
           </p>
 
           <h3 id="price">Price as of the date shown</h3>
           <p>
             Prices are monthly-billing list prices from the sources linked in the table, checked on{" "}
             {formatDate(CHECKED)}. Annual billing is cheaper with every paid vendor here. Three pricing
-            models are in play: per user (Dripify), per LinkedIn sender or account (HeyReach,
-            Expandi), and per plan with usage credits (PhantomBuster, Artisan). Nora is free for every
-            workspace for now; <Link href="/pricing">the pricing page</Link> says what happens if that
+            models are in play: per user (Dripify, Waalaxy), per LinkedIn sender or account
+            (HeyReach, Expandi), and per plan with usage credits (PhantomBuster, Artisan). Nora is free
+            while we grow; <Link href="/pricing">the pricing page</Link> says what happens if that
             changes.
           </p>
 
@@ -276,8 +292,9 @@ export default function Page() {
           <ul>
             <li>
               <strong>Nora</strong> suits a founder or small team sending from their own profiles who
-              wants the prospects found, a note of under {INVITE_NOTE_MAX_CHARS} characters written for
-              each person, and replies answered, while approving the strategy, the copy and the launch.
+              wants the prospects found, a note of up to {INVITE_NOTE_MAX_CHARS} characters written for
+              each person, and each reply drafted for them to approve, with autopilot available once
+              they trust it. They approve the strategy, the copy and the launch.
               It works on LinkedIn only. See <Link href="/free-linkedin-automation-tool">what the free LinkedIn automation tool includes</Link>.
             </li>
             <li>
@@ -311,68 +328,41 @@ export default function Page() {
             lists the questions worth putting to any vendor, including us.
           </p>
 
-          <h2 id="one-page-per-tool">Alternatives, one page per tool</h2>
           <p>
-            Each page above compares one tool with Nora in detail: who it suits, its sourced pricing,
-            how it handles limits, and who should stay with it. Read the one for the tool you use now:
-          </p>
-          <ul>
-            <li>
-              <Link href="/alternatives/heyreach">HeyReach alternatives for a single rep</Link>, including
-              what LinkedIn&rsquo;s March 2026 action against the company does and does not mean.
-            </li>
-            <li>
-              <Link href="/alternatives/waalaxy">Waalaxy alternatives with a free plan that runs campaigns</Link>,
-              including what the sources say about its free plan now.
-            </li>
-            <li>
-              <Link href="/alternatives/expandi">Expandi alternatives that write and book</Link>, and why a
-              weekly cap is a feature.
-            </li>
-            <li>
-              <Link href="/alternatives/dripify">Dripify alternatives with personal notes</Link>, templates
-              against a note written for each person.
-            </li>
-            <li>
-              <Link href="/alternatives/phantombuster">PhantomBuster alternatives for outreach</Link> rather
-              than scraping.
-            </li>
-            <li>
-              <Link href="/alternatives/artisan">Artisan and 11x alternatives</Link> if your buyers answer
-              on LinkedIn rather than email.
-            </li>
-          </ul>
-          <p>
-            Before you connect an account to any of them, read{" "}
+            Each card at the top of this page compares one of these tools with Nora in detail: who it
+            suits, its sourced pricing, how it handles limits, and how to switch without contacting
+            anyone twice. Before you connect an account to any of them, read{" "}
             <Link href="/guides/is-linkedin-automation-legal">whether LinkedIn automation is legal</Link>.
-            Or <a href={`${SITE.app}/signup`}>Sign up free</a> and approve one customer profile; nothing
-            is sent until you launch.
           </p>
         </div>
 
-        <section className="article-faq" aria-labelledby="alt-hub-faq-heading">
-          <h2 id="alt-hub-faq-heading">Questions</h2>
-          {FAQ.map((item) => (
-            <details key={item.q}>
-              <summary>{item.q}</summary>
-              <p>{item.a}</p>
-            </details>
-          ))}
-        </section>
-
-        <section className="article-sources" aria-labelledby="alt-hub-sources-heading">
-          <h2 id="alt-hub-sources-heading">Sources</h2>
-          <ol>
-            {SOURCES.map((source) => (
-              <li key={source.url}>
-                <a href={source.url} rel="noopener nofollow" target="_blank">
-                  {source.label}
-                </a>
-              </li>
+        <div className="hub-body">
+          <section className="article-faq" aria-labelledby="alt-hub-faq-heading">
+            <h2 id="alt-hub-faq-heading">Questions about LinkedIn automation tools</h2>
+            {FAQ.map((item) => (
+              <details key={item.q}>
+                <summary>{item.q}</summary>
+                <p>{item.a}</p>
+              </details>
             ))}
-          </ol>
-        </section>
-      </div>
+          </section>
+        </div>
+
+        <div className="hub-body">
+          <section className="article-sources" aria-labelledby="alt-hub-sources-heading">
+            <h2 id="alt-hub-sources-heading">Sources</h2>
+            <ol>
+              {SOURCES.map((source) => (
+                <li key={source.url}>
+                  <a href={source.url} rel="noopener nofollow" target="_blank">
+                    {source.label}
+                  </a>
+                </li>
+              ))}
+            </ol>
+          </section>
+        </div>
+      </HubLayout>
     </>
   );
 }

@@ -238,15 +238,18 @@ function extent(days: DayPlan[], timezone: string, openHour: number, closeHour: 
   return { start: Math.max(0, start), end: Math.min(24, Math.max(end, start + 1)) };
 }
 
-const label = (hour: number) => `${String(hour % 24).padStart(2, "0")}:00`;
+const label = (hour: number) => {
+  const h = hour % 24;
+  return `${h % 12 === 0 ? 12 : h % 12} ${h < 12 ? "AM" : "PM"}`;
+};
 
 const time = (iso: string, timezone: string) =>
-  new Intl.DateTimeFormat("en-GB", { timeZone: timezone, hour: "2-digit", minute: "2-digit" }).format(
+  new Intl.DateTimeFormat("en-US", { timeZone: timezone, hour: "2-digit", minute: "2-digit" }).format(
     new Date(iso),
   );
 
 const weekdayName = (date: string) =>
-  new Intl.DateTimeFormat("en-GB", { weekday: "short", timeZone: "UTC" }).format(new Date(`${date}T12:00:00Z`));
+  new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone: "UTC" }).format(new Date(`${date}T12:00:00Z`));
 
 const dayNumber = (date: string) =>
-  new Intl.DateTimeFormat("en-GB", { day: "numeric", timeZone: "UTC" }).format(new Date(`${date}T12:00:00Z`));
+  new Intl.DateTimeFormat("en-US", { day: "numeric", timeZone: "UTC" }).format(new Date(`${date}T12:00:00Z`));

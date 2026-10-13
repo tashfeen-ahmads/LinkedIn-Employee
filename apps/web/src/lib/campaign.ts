@@ -14,6 +14,14 @@ export interface LaunchState {
   prospectCount: number;
   /** The status of the LinkedIn account the campaign sends from, if connected. */
   accountStatus: string | null;
+  /**
+   * The personalised note on each queued prospect, null where there is none.
+   *
+   * Optional so a caller that has not read them yet still gets every other
+   * check; a caller that has read them gets the one that matters most on a
+   * list the agent wrote.
+   */
+  inviteNotes?: ReadonlyArray<string | null>;
 }
 
 
@@ -35,6 +43,32 @@ export function launchBlockers(state: LaunchState): string[] {
     blockers.push(
       `The connection note is ${note.length} characters. LinkedIn allows ${INVITE_NOTE_MAX_CHARS}.`,
     );
+  }
+
+  /*
+   * The notes written per person, held to the same cap as the template.
+   *
+   * Checking only the campaign's template passed a live draft on which 11 of
+   * 18 personalised notes were over the limit. The send path does not send
+   * those — LinkedIn refuses the whole invitation — so each one silently fell
+   * back to the template: a list reviewed as personalised that would mostly
+   * have gone out generic, which is the silent degradation rule 27 forbids.
+   * Said here, with the count, so it is fixed (shortened by hand, or Rewrite
+   * notes) before anybody presses Launch.
+   */
+  const overLength = (state.inviteNotes ?? []).filter(
+    (personal) => (personal?.trim().length ?? 0) > INVITE_NOTE_MAX_CHARS,
+  ).length;
+  if (overLength > 0) {
+    blockers.push(
+      `${overLength} personalised ${overLength === 1 ? "note is" : "notes are"} over LinkedIn's ${INVITE_NOTE_MAX_CHARS}-character limit, so ${overLength === 1 ? "it" : "they"} would go out as the campaign template instead. Shorten ${overLength === 1 ? "it" : "them"} or rewrite the notes.`,
+    );
+  }
+
+  // No sequence at all is a campaign that invites people and then says
+  // nothing to anybody who accepts — the one outcome it exists to produce.
+  if (state.steps.length === 0) {
+    blockers.push("This campaign has no follow-up messages, so nobody who accepts would hear from you.");
   }
 
   // A blank follow-up would send an empty message to someone who accepted.

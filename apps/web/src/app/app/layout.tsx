@@ -72,6 +72,12 @@ function navGroups(waiting: number, marks: NavMarks): NavGroup[] {
         { href: "/app/strategy", label: "Strategies", icon: "strategies", ...next("/app/strategy", "Strategies") },
         { href: "/app/agents", label: "Agents", icon: "agents", ...next("/app/agents", "Agents") },
         { href: "/app/cta", label: "Calls to action", icon: "cta" },
+        // The workspace's own opener and offer lines, which every agent
+        // without lines of its own falls back to. Beside Calls to action
+        // because it is the same kind of thing: named once, approved once,
+        // read by every campaign. No mark of its own (rule 32): a held
+        // follow-up already surfaces on the overview's list.
+        { href: "/app/pitch", label: "Opener and pitch", icon: "pitch" },
         { href: "/app/exclusions", label: "Do not contact", icon: "exclusions" },
       ],
     },

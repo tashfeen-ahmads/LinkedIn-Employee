@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArticleLayout, articleMeta, Callout, CompareTable } from "@/components/article";
-import { PUBLIC_LIMITS, SITE } from "@/lib/site";
+import { PacingDayFigure, ZoneOverlap, hourLabel } from "@/components/seo/ga1-diagrams";
+import { PUBLIC_LIMITS } from "@/lib/site";
 import { DEFAULT_WORKING_HOURS, LINKEDIN_LIMITS } from "@le/shared";
 import { invitePaceMs, nextGapMs, spreadGapMs } from "@le/linkedin";
 
@@ -18,10 +19,13 @@ const END_HOUR = DEFAULT_WORKING_HOURS.end;
 const WORKING_DAYS = DEFAULT_WORKING_HOURS.days.map((d) => DAY_NAMES[d] ?? String(d));
 const FIRST_DAY = WORKING_DAYS[0] ?? "";
 const LAST_DAY = WORKING_DAYS[WORKING_DAYS.length - 1] ?? "";
-const FULL_DAY_MS = (END_HOUR - START_HOUR) * HOUR;
+const DAY_HOURS = END_HOUR - START_HOUR;
+const FULL_DAY_MS = DAY_HOURS * HOUR;
 const LATE_WINDOW_MS = 2 * HOUR;
+const HOURS_TEXT = `${hourLabel(START_HOUR)} to ${hourLabel(END_HOUR)}`;
+/** "an 8 a.m." but "a 9 a.m.": the article follows how the hour is said. */
+const A_HOURS = /^(8|11|18)\b/.test(HOURS_TEXT) ? "an" : "a";
 
-const pad = (h: number) => `${String(h).padStart(2, "0")}:00`;
 const mins = (ms: number) => Math.round(ms / MINUTE);
 
 /*
@@ -45,6 +49,21 @@ const BURST_MINUTES_LOW = FLOOR_LOW * (PUBLIC_LIMITS.invitesPerDayStart - 1);
 const BURST_MINUTES_HIGH = FLOOR_HIGH * (PUBLIC_LIMITS.invitesPerDayStart - 1);
 const VIEW_TO_INVITE_MIN = mins(LINKEDIN_LIMITS.warmUpToInviteMinMs);
 const VIEW_TO_INVITE_MAX_HOURS = Math.round(LINKEDIN_LIMITS.warmUpToInviteMaxMs / HOUR);
+const ACCEPT_MIN = mins(LINKEDIN_LIMITS.acceptFollowUpMinMs);
+const ACCEPT_MAX = mins(LINKEDIN_LIMITS.acceptFollowUpMaxMs);
+
+/*
+ * US time zones as hours behind Eastern. Standard and daylight time shift
+ * together, so the offsets hold all year everywhere except Arizona.
+ */
+const ZONES = [
+  { name: "ET", city: "New York", behind: 0 },
+  { name: "CT", city: "Chicago", behind: 1 },
+  { name: "MT", city: "Denver", behind: 2 },
+  { name: "PT", city: "Los Angeles", behind: 3 },
+] as const;
+const PT_BEHIND = 3;
+const OVERLAP_START = START_HOUR + PT_BEHIND;
 
 const FAQ = [
   {
@@ -53,15 +72,15 @@ const FAQ = [
   },
   {
     q: "What delay should I use between LinkedIn actions?",
-    a: `Long enough that a day's invitations are spread across the working day, not just a random pause of seconds. Nora divides the working time left by the day's allowance and jitters the result: about ${FIRST_DAY_PACE.low} to ${FIRST_DAY_PACE.high} minutes apart for ${PUBLIC_LIMITS.invitesPerDayStart} invitations over a ${END_HOUR - START_HOUR}-hour day, with ${FLOOR_LOW} to ${FLOOR_HIGH} minutes as the floor whatever the arithmetic says.`,
+    a: `Long enough that a day's invitations are spread across the working day, not a random pause of seconds. Nora divides the working time left by the day's allowance and jitters the result: about ${FIRST_DAY_PACE.low} to ${FIRST_DAY_PACE.high} minutes apart for ${PUBLIC_LIMITS.invitesPerDayStart} invitations over a ${DAY_HOURS}-hour day, and never closer than ${FLOOR_LOW} minutes, with a random floor of ${FLOOR_LOW} to ${FLOOR_HIGH} minutes whatever the arithmetic says.`,
   },
   {
     q: "Should LinkedIn automation run on weekends?",
-    a: `Generally no. People who work ${FIRST_DAY} to ${LAST_DAY} do not expect business invitations on Saturday, and activity at hours nobody works looks less like a person. Nora sends only inside the account's working hours, ${pad(START_HOUR)} to ${pad(END_HOUR)} ${FIRST_DAY} to ${LAST_DAY} by default, and you can change the hours and days.`,
+    a: `Generally no. People who work ${FIRST_DAY} to ${LAST_DAY} do not expect business invitations on Saturday, and activity at hours nobody works looks less like a person. Nora sends only inside the account's working hours, ${HOURS_TEXT} ${FIRST_DAY} to ${LAST_DAY} by default, and you can change the hours and days.`,
   },
   {
     q: "Should I send in my time zone or theirs?",
-    a: "Theirs, where you can. An invitation that arrives at 3am their time sits under everything that arrives after it. Nora paces each account in the rep's own time zone and working hours, so if most of your prospects are elsewhere, set the account's sending hours to overlap with their working day, or run that region from a colleague who lives there.",
+    a: `Theirs, where you can. A rep in New York who starts at ${hourLabel(START_HOUR)} ET is inviting Californians at ${hourLabel(START_HOUR - PT_BEHIND)} PT. Nora paces each account in the rep's own time zone and working hours, so for a West Coast list, start the sending hours at ${hourLabel(OVERLAP_START)} ET, or run that region from a colleague who lives there.`,
   },
 ];
 
@@ -70,24 +89,24 @@ const SOURCES = [
   { label: "Bardeen: best time to send LinkedIn messages (business hours versus evenings and weekends)", url: "https://bardeen.ai/answers/best-time-to-send-linkedin-messages" },
   { label: "PhantomBuster: best time to send a LinkedIn request", url: "https://phantombuster.com/blog/social-selling/best-time-to-send-linkedin-request/" },
   { label: "Fuzzy: best time to send LinkedIn messages (the crowded-window argument)", url: "https://getfuzzy.ai/blog/best-time-linkedin-messages" },
-  { label: "Overloop: LinkedIn outreach benchmarks (summarising Belkins and Botdog data)", url: "https://overloop.com/blog/linkedin-outreach-benchmarks" },
+  { label: "Overloop: LinkedIn outreach benchmarks (summarizing Belkins and Botdog data)", url: "https://overloop.com/blog/linkedin-outreach-benchmarks" },
   { label: "Expandi: LinkedIn outreach benchmarks 2026, acceptance by industry", url: "https://expandi.io/blog/linkedin-outreach-benchmarks-2026/" },
   { label: "LinkedIn Help: Types of restrictions for sending invitations", url: "https://www.linkedin.com/help/linkedin/answer/a551012" },
 ];
 
 const STUDIES = [
-  { label: "Bardeen", values: ["Tuesday to Thursday", "10:00 to 11:00 and 17:00 to 18:00, their time", "\"Recent studies\", not named"] },
-  { label: "PhantomBuster", values: ["Tuesday to Thursday; avoid Monday and Friday", "08:30 to 10:30 and 14:00 to 16:00, their time", "No figures published"] },
-  { label: "Fuzzy", values: ["Not the popular slot", "A less crowded time than Tuesday 10:00", "Argument, not a dataset"] },
+  { label: "Bardeen", values: ["Tuesday to Thursday", "10 to 11 a.m. and 5 to 6 p.m., their time", "\"Recent studies\", not named"] },
+  { label: "PhantomBuster", values: ["Tuesday to Thursday; avoid Monday and Friday", "8:30 to 10:30 a.m. and 2 to 4 p.m., their time", "No figures published"] },
+  { label: "Fuzzy", values: ["Not the popular slot", "A less crowded time than Tuesday at 10 a.m.", "Argument, not a dataset"] },
 ];
 
 const PACE_ROWS = [
   {
-    label: `First day of sending, a full ${END_HOUR - START_HOUR}-hour day`,
+    label: `First day of sending, a full ${DAY_HOURS}-hour day`,
     values: [PUBLIC_LIMITS.invitesPerDayStart, `${FIRST_DAY_PACE.low} to ${FIRST_DAY_PACE.high} minutes`],
   },
   {
-    label: `Fully warmed account, a full ${END_HOUR - START_HOUR}-hour day`,
+    label: `Fully warmed account, a full ${DAY_HOURS}-hour day`,
     values: [PUBLIC_LIMITS.invitesPerDayMax, `${WARMED_PACE.low} to ${WARMED_PACE.high} minutes`],
   },
   {
@@ -101,11 +120,11 @@ export default function Page() {
     <ArticleLayout
       path={PATH}
       h1="The best time to send LinkedIn connection requests is all day, slowly"
-      lede={`The best time to send LinkedIn connection requests is spread across your prospects' working day, Monday to Friday, not one slot that every request lands in. The day-of-week studies agree on little beyond "mid-week, working hours", and the differences they report are small; how evenly you pace a day's invitations matters more to the account than which hour you pick.`}
+      lede={`The best time to send LinkedIn connection requests is spread across your prospects' working day, Monday to Friday, not one slot that every request lands in. The day-of-week studies agree on little beyond "mid-week, working hours", and the gaps they report are small; how evenly you pace a day's invitations matters more to the account than which hour you pick.`}
       faq={FAQ}
       sources={SOURCES}
     >
-      <h2 id="short-answer">The short answer on the best time to send LinkedIn connection requests</h2>
+      <h2 id="short-answer">The short answer</h2>
       <ul>
         <li>
           <strong>Send on working days, inside working hours,</strong> in the time zone where most of your
@@ -118,18 +137,19 @@ export default function Page() {
         <li>
           <strong>Spread the day&apos;s allowance across the whole day.</strong> For a new account sending{" "}
           {PUBLIC_LIMITS.invitesPerDayStart} a day that means roughly one every {FIRST_DAY_PACE.target}{" "}
-          minutes, not ten in a row at 9:00.
+          minutes, not ten in a row at 9 a.m.
         </li>
         <li>
           <strong>Skip weekends and nights.</strong> Nobody is reading, and activity at hours nobody works is
           the easiest pattern to tell apart from a person.
         </li>
       </ul>
+      <PacingDayFigure />
 
       <h2 id="studies">What the day-of-week studies say, and why they disagree</h2>
       <p>
-        As of October 2026, the pages that rank for this question are mostly short answers from tools
-        that send LinkedIn invitations. Their recommendations overlap on mid-week and disagree on the hours.
+        As of October 2026, most published advice on this question comes from tools that send LinkedIn
+        invitations. Their recommendations overlap on mid-week and disagree on the hours.
       </p>
       <CompareTable
         caption="Best-time recommendations for LinkedIn connection requests and messages, as published by October 2026"
@@ -145,12 +165,13 @@ export default function Page() {
         <li>
           <strong>Small differences.</strong> Overloop&apos;s summary of a Belkins analysis of more than 20
           million outreach attempts puts the best day, Tuesday, at 6.90% replies and the worst, Saturday,
-          at 6.40%. By contrast, Expandi&apos;s 2026 benchmarks report acceptance ranging from 19.9% in one
-          industry to 36.5% in another. Who you write to moves the number far more than when.
+          at 6.40%. By contrast, across the 38 industries with at least 50 sending accounts,
+          Expandi&apos;s 2026 benchmarks report acceptance from 21.8% to 36.5%. Who you write to moves the
+          number far more than when.
         </li>
         <li>
           <strong>The advice changes the result.</strong> Fuzzy makes the fair point that when every sales
-          team sends at 10:00 on Tuesday, that becomes the most crowded hour in a prospect&apos;s inbox.
+          team sends at 10 a.m. on Tuesday, that becomes the most crowded hour in a prospect&apos;s inbox.
         </li>
       </ul>
       <p>
@@ -162,22 +183,20 @@ export default function Page() {
 
       <h2 id="burst">Why one &quot;best time&quot; becomes a burst</h2>
       <p>
-        The trouble with a single best slot is what it does to the sending pattern. If 10:00 on Tuesday is
-        the best time, the obvious move is to send everything at 10:00 on Tuesday. A whole day&apos;s
+        The trouble with a single best slot is what it does to the sending pattern. If 10 a.m. on Tuesday is
+        the best time, the obvious move is to send everything at 10 a.m. on Tuesday. A whole day&apos;s
         invitations in a few minutes is exactly what LinkedIn says it watches for: its help center lists
         sending many invitations in a short time among the reasons an account is restricted from sending
         more.
       </p>
       <p>
-        We learned this from the first live account that sent through Nora. Before Nora spread a day&apos;s allowance, it placed the day&apos;s
-        invitations one after another, {FLOOR_LOW} to {FLOOR_HIGH} minutes apart. On the first day a live
-        account sent through it, seven connection requests went out in under half an hour, from an account
-        whose first ever automated action was the first of them. LinkedIn throttled invitations from that
-        account and was still refusing them days later. The daily number was modest; the shape was a burst.
+        Our own first live account sent seven invitations in 27 minutes this way, inside its daily cap, and
+        LinkedIn refused its invitations for days; the full account is in{" "}
+        <Link href="/guides/is-linkedin-automation-safe#seven-in-27">whether LinkedIn automation is safe</Link>.
       </p>
       <Callout tone="warning">
         <p>
-          <strong>A daily cap is not pacing.</strong> At {FLOOR_LOW} to {FLOOR_HIGH} minutes apart,{" "}
+          <strong>A daily cap is not pacing.</strong> At the floor gap of {FLOOR_LOW} to {FLOOR_HIGH} minutes,{" "}
           {PUBLIC_LIMITS.invitesPerDayStart} invitations take between {BURST_MINUTES_LOW} and{" "}
           {BURST_MINUTES_HIGH} minutes. A ceiling with no spacing underneath it is a burst with a maximum
           size.
@@ -197,7 +216,7 @@ export default function Page() {
         can stretch, so even a day that draws long gaps every time still fits.
       </p>
       <CompareTable
-        caption={`Gap between invitations under Nora's pacing, working hours ${pad(START_HOUR)} to ${pad(END_HOUR)}`}
+        caption={`Gap between invitations under Nora's pacing, working hours ${HOURS_TEXT}`}
         columns={["Invitations to place", "Gap between them"]}
         rows={PACE_ROWS}
       />
@@ -213,23 +232,32 @@ export default function Page() {
       <p>
         When the day is short, the arithmetic can ask for invitations seconds apart. A campaign launched
         late in the afternoon is the usual case. Keep a floor: Nora never places two actions on one account
-        closer than {FLOOR_LOW} minutes, with a random {FLOOR_LOW} to {FLOOR_HIGH} minutes as the ordinary
-        gap. If that means part of today&apos;s allowance is not spent, it is not spent. It does not roll over
-        into tomorrow.
+        closer than {FLOOR_LOW} minutes apart, and each gap has a random floor somewhere between {FLOOR_LOW}{" "}
+        and {FLOOR_HIGH} minutes. On a full day the spread gap is far wider than that floor; the floor only
+        decides the spacing when little of the day is left. If that means part of today&apos;s allowance is
+        not spent, it is not spent. It does not roll over into tomorrow.
       </p>
 
       <h3 id="their-time-zone">Their time zone, not yours</h3>
       <p>
-        &quot;9:00&quot; only means something in a time zone. If you are in London and your buyers are in New York,
-        your morning is their middle of the night, and an invitation that arrives then sits under
-        everything that arrives after it.
+        &quot;9 a.m.&quot; only means something in a time zone. A rep in New York whose day starts at{" "}
+        {hourLabel(START_HOUR)} ET is reaching Los Angeles at {hourLabel(START_HOUR - PT_BEHIND)} PT, hours
+        before anyone there opens LinkedIn. Here is {A_HOURS} {HOURS_TEXT} ET sending day as it lands across the
+        country.
+      </p>
+      <ZoneOverlap zones={ZONES} start={START_HOUR} end={END_HOUR} />
+      <p>
+        For a list spread across the country, the hours every zone shares are {hourLabel(OVERLAP_START)} to{" "}
+        {hourLabel(END_HOUR)} ET, which is {hourLabel(OVERLAP_START - PT_BEHIND)} to{" "}
+        {hourLabel(END_HOUR - PT_BEHIND)} PT. Arizona does not change its clocks, so from March to November
+        it matches Pacific time rather than Mountain.
       </p>
       <p>
-        An honest note on how Nora does this: it paces each account in the rep&apos;s own time zone and working
-        hours, which default to {pad(START_HOUR)} to {pad(END_HOUR)}, {FIRST_DAY} to {LAST_DAY}. The day&apos;s
-        counters also roll over at the rep&apos;s midnight, so a Pacific rep&apos;s allowance does not reset at five
-        in the afternoon. If most of your prospects live elsewhere, change the account&apos;s sending hours to
-        overlap their working day, or split the region onto a colleague&apos;s account in that time zone.
+        How Nora handles it: it paces each account in the rep&apos;s own time zone and working hours, which
+        default to {HOURS_TEXT}, {FIRST_DAY} to {LAST_DAY}. The day&apos;s counters also roll over at the
+        rep&apos;s midnight, so a Pacific rep&apos;s allowance does not reset at 5 p.m. If most of your
+        prospects live elsewhere, change the account&apos;s sending hours to overlap their working day, or
+        split the region onto a colleague&apos;s account in that time zone.
       </p>
 
       <h2 id="random-delays">Random delays are not enough on their own</h2>
@@ -262,27 +290,45 @@ export default function Page() {
         </li>
       </ul>
 
+      <h2 id="follow-ups">When to send follow-up messages</h2>
+      <p>
+        An invitation is accepted when the person gets to it, so the clock for a follow-up starts at the
+        acceptance, not at the invitation. Two timings matter.
+      </p>
+      <ul>
+        <li>
+          <strong>The first message, soon after they accept.</strong> Someone who accepted ten minutes ago
+          remembers your name; someone who accepted three days ago does not. Nora checks for new
+          acceptances every hour and sends the first message {ACCEPT_MIN} to {ACCEPT_MAX} minutes after it
+          notices one, inside the rep&apos;s working hours, so it usually arrives within a couple of hours of
+          the acceptance. Somebody who accepts at 11 p.m. hears from you the next morning, not at midnight.
+        </li>
+        <li>
+          <strong>Later steps, days apart.</strong> A second and third message should wait a few working
+          days each, counted from the message before, and land inside the prospect&apos;s working hours like
+          the invitation did. Any reply stops the sequence; nobody wants a scheduled nudge after they have
+          already answered. Nora uses the delays you set for these steps and holds every account to{" "}
+          {PUBLIC_LIMITS.messagesPerDay} messages a day across all campaigns.
+        </li>
+      </ul>
+
       <h2 id="weekends">Weekends, holidays and evenings</h2>
       <p>
         Leave them out. Bardeen reports that for messages, response rates outside business hours are about
-        the same as inside them, so you lose little by waiting, and you gain an account whose activity
-        stops when working people stop. Invitations queued over a weekend should go out across Monday at
-        the normal pace, not all at 9:00; Nora places held invitations with a fresh random gap each so the
-        backlog does not drain in a row.
+        the same as inside them, so there is no reply benefit to sending at night, and an account whose
+        activity stops when working people stop looks more like one of them. Invitations queued over a
+        weekend should go out across Monday at the normal pace, not all at 9 a.m.; Nora places held
+        invitations with a fresh random gap each so the backlog does not drain in a row.
       </p>
       <p>
         Public holidays are the gap: Nora does not know your prospects&apos; holiday calendar. Before a holiday
-        that matters to your market, such as the week between Christmas and New Year, pause the campaign
-        from its page and resume it after.
+        that matters to your market, such as Thanksgiving week or the days between Christmas and New
+        Year&apos;s, pause the campaign from its page and resume it after.
       </p>
       <p>
-        For the wider picture of what keeps an account safe, read{" "}
-        <Link href="/guides/is-linkedin-automation-safe">whether LinkedIn automation is safe, and what reduces the risk</Link>.
-        LinkedIn&apos;s user agreement prohibits automated activity, so no pacing can promise zero risk; it can
-        only stop you sending the pattern LinkedIn names. To see how Nora runs the whole campaign around
-        these rules, read <Link href="/how-it-works">how Nora works</Link>, or browse more{" "}
-        <Link href="/guides">LinkedIn outreach guides</Link>. Nora is free while we grow:{" "}
-        <a href={`${SITE.app}/signup`}>Sign up free</a>.
+        No pacing makes automation risk-free, since LinkedIn&apos;s user agreement prohibits it; pacing stops you sending
+        the pattern LinkedIn names. <Link href="/how-it-works">How Nora works</Link> shows a whole campaign run on
+        these rules.
       </p>
     </ArticleLayout>
   );

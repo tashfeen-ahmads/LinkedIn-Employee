@@ -8,6 +8,7 @@ import {
 import { dailyInviteCap, parseWorkingHours, toUsage, type AccountRecord } from "@le/linkedin";
 import { ACCOUNT_USAGE_COLUMNS } from "@le/linkedin";
 import type { Db } from "@le/db";
+import { countersForToday } from "./account-day";
 
 /**
  * The facts behind the daily report, gathered for one workspace and one day.
@@ -164,8 +165,11 @@ export async function loadDailyReport(
   const stamped = beat?.beat_at ? Date.parse(beat.beat_at) : null;
   const loopStalled = stamped === null || now.getTime() - stamped > PACING_STALE_MS;
 
-  const allowance = account
-    ? { used: account.invites_today, cap: dailyInviteCap(toUsage(account as AccountRecord, timezone).firstActionAt, now) }
+  // Yesterday's count is not today's: the worker zeroes it on its first action
+  // of the rep's day, so until then the row has to be rolled over here too.
+  const today = account ? countersForToday(account as AccountRecord, timezone, now) : null;
+  const allowance = today
+    ? { used: today.invites_today, cap: dailyInviteCap(toUsage(today, timezone).firstActionAt, now) }
     : null;
 
   const facts: ReportFacts = {

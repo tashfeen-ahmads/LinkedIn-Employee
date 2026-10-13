@@ -46,7 +46,7 @@ export function TimezoneSelect({
 /** The wall-clock time in a zone right now, so a label can be checked. */
 function localTime(zone: string): string {
   try {
-    return new Intl.DateTimeFormat("en-GB", {
+    return new Intl.DateTimeFormat("en-US", {
       timeZone: zone,
       hour: "2-digit",
       minute: "2-digit",

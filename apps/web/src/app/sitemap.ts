@@ -31,7 +31,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
       url: canonical(page.path),
       lastModified: at(page.updated),
       // The article's drawn feature image, so image search can find it.
-      images: [`${SITE.url}/og/article?path=${encodeURIComponent(page.path)}`],
+      images: [`${SITE.url}/og/article${page.path}`],
       changeFrequency: "monthly" as const,
       priority: page.kind === "tool" || page.kind === "landing" ? 0.8 : 0.6,
     })),

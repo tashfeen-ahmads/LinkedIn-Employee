@@ -81,6 +81,23 @@ describe("launchBlockers", () => {
     expect(launchBlockers(state({ dailyInviteCap: 0 })).join(" ")).toContain("nothing would send");
   });
 
+  it("refuses a campaign with no follow-up sequence at all", () => {
+    // Invitations and then silence for everybody who accepts.
+    expect(launchBlockers(state({ steps: [] })).join(" ")).toContain("no follow-up messages");
+  });
+
+  it("counts personalised notes LinkedIn would refuse, not only the template", () => {
+    // A live draft had 11 of 18 per-person notes over the cap; every one would
+    // have fallen back to the template at send time, with nothing on screen.
+    const notes = ["a".repeat(INVITE_NOTE_MAX_CHARS + 1), "fine", null, "b".repeat(250)];
+    const blockers = launchBlockers(state({ inviteNotes: notes }));
+    expect(blockers.join(" ")).toContain("2 personalised notes are over");
+  });
+
+  it("passes personalised notes at exactly the limit, and people with none", () => {
+    expect(launchBlockers(state({ inviteNotes: ["a".repeat(INVITE_NOTE_MAX_CHARS), null, "  "] }))).toEqual([]);
+  });
+
   it("reports every problem at once, not the first one", () => {
     const blockers = launchBlockers(
       state({ prospectCount: 0, connectionNote: "", accountStatus: null }),

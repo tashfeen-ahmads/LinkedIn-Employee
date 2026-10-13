@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase-server";
 import { PageHeader } from "@/components/page";
-import { requirePlatformAdmin, statsByWorkspace, formatUsd, when, type WorkspaceStats } from "@/lib/admin";
+import { requirePlatformAdmin, statsByWorkspace, when, type WorkspaceStats } from "@/lib/admin";
+import { formatSpend } from "@/lib/spend-display";
 import { isoAttr } from "@/lib/format";
 import { MESSAGE_WEBHOOK_BEAT, WEBHOOKS_BEAT, standingWebhookRefusal } from "@le/shared";
 import { adminAccountPill, type AdminAccountRow } from "@/lib/admin-account";
@@ -56,11 +57,16 @@ export default async function AdminWorkspacesPage() {
   // A model missing from the price table costs null, never zero — so a null
   // here means "not priced", and adding it as zero would report a number that
   // is wrong in the flattering direction.
-  const costs = new Map<string, number>();
+  const costs = new Map<string, { spend: number; calls: number; unpriced: number }>();
   for (const row of spend ?? []) {
-    // The function already excludes calls with no workspace to charge — one
-    // made before a workspace exists has nowhere to go.
-    costs.set(row.workspace_id, Number(row.spend_usd));
+    // The function already excludes calls with no workspace to charge: one
+    // made before a workspace exists has nowhere to go. Unpriced calls are
+    // carried so the cell says "unpriced" rather than "$0.00".
+    costs.set(row.workspace_id, {
+      spend: Number(row.spend_usd),
+      calls: Number(row.calls),
+      unpriced: Number(row.calls) - Number(row.priced_calls),
+    });
   }
 
   const accountsByWorkspace = new Map<string, Array<AdminAccountRow & { invites_today: number }>>();
@@ -76,7 +82,9 @@ export default async function AdminWorkspacesPage() {
   const webhook = standingWebhookRefusal(delivery, registration);
   const webhookAt = delivery?.beat_at ?? null;
 
-  const totalSpend = [...costs.values()].reduce((sum, n) => sum + n, 0);
+  const totalSpend = [...costs.values()].reduce((sum, n) => sum + n.spend, 0);
+  const totalCalls = [...costs.values()].reduce((sum, n) => sum + n.calls, 0);
+  const totalUnpriced = [...costs.values()].reduce((sum, n) => sum + n.unpriced, 0);
   const everSent = (workspaces ?? []).filter((w) =>
     (accountsByWorkspace.get(w.id) ?? []).some((a) => a.first_action_at),
   ).length;
@@ -86,7 +94,7 @@ export default async function AdminWorkspacesPage() {
       <PageHeader
         eyebrow="Operator"
         title="Workspaces"
-        lede={`${workspaces?.length ?? 0} total · ${everSent} have ever sent · ${formatUsd(totalSpend)} of model spend`}
+        lede={`${workspaces?.length ?? 0} total · ${everSent} have ever sent · ${formatSpend(totalSpend, totalCalls, totalUnpriced)} of model spend`}
       />
 
       {/*
@@ -151,7 +159,12 @@ export default async function AdminWorkspacesPage() {
                     <td className="num">{s?.prospects ?? 0}</td>
                     <td className="num">{s?.messages_sent ?? 0}</td>
                     <td className="num">{s?.pending_drafts ?? 0}</td>
-                    <td className="num mono">{formatUsd(costs.get(w.id) ?? 0)}</td>
+                    <td className="num mono">
+                      {(() => {
+                        const c = costs.get(w.id);
+                        return c ? formatSpend(c.spend, c.calls, c.unpriced) : formatSpend(0, 0, 0);
+                      })()}
+                    </td>
                     <td className="small subtle">
                       <time dateTime={isoAttr(w.created_at)}>{when(w.created_at)}</time>
                     </td>

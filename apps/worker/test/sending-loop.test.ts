@@ -66,6 +66,13 @@ function memoryQueue() {
   return { queue, jobs, queues: { linkedinAction: queue } as unknown as Queues };
 }
 
+/** When the first pending job of a kind is due, as the queue would run it. */
+function dueAt(jobs: Map<string, StoredJob>, kind: LinkedInActionJob["kind"]): number {
+  const job = [...jobs.values()].find((j) => j.state === "delayed" && j.data.kind === kind);
+  if (!job) throw new Error(`no pending ${kind} job`);
+  return job.timestamp + job.delay;
+}
+
 /** Runs every pending job once, as the worker would, and marks it finished. */
 async function drain(ctx: WorkerContext, jobs: Map<string, StoredJob>, kind?: LinkedInActionJob["kind"]) {
   for (const job of jobs.values()) {
@@ -257,10 +264,39 @@ describe("a warm-up that has gone stale", () => {
     const due = Date.parse(db.find("campaign_prospects", { id })!.next_action_at as string);
     vi.setSystemTime(due + 60_000);
     expect(await runCampaignTick(db.asDb(), queues, new Date(due + 60_000))).toBe(1);
-    vi.setSystemTime(due + 60_000 + 12 * HOUR);
+    // Run when it is due, not "later": the send path refuses an invitation
+    // whose view has gone stale, so half a day on it would rightly not go.
+    vi.setSystemTime(dueAt(jobs, "invite"));
     await drain(ctx, jobs, "invite");
     expect(linkedin.sentInvitations).toHaveLength(1);
     expect(db.find("campaign_prospects", { id })?.status).toBe("invited");
+  });
+
+  it("still invites when the wait after the view is drawn at its very longest", async () => {
+    // The wait after a view is random. Drawn right up to the end of the
+    // window, the first tick after it was due could no longer place the
+    // invitation inside that window: the prospect was skipped, the view went
+    // stale, and they were viewed a second time. One in fourteen, every day.
+    vi.spyOn(Math, "random").mockReturnValue(0.9999);
+    const { db, ctx, linkedin, prospect } = harness({ warmUp: true });
+    const stale = new Date(NOW.getTime() - LINKEDIN_LIMITS.warmUpToInviteMaxMs - HOUR).toISOString();
+    const id = prospect({ warmed_at: stale, next_action_at: stale });
+    const { jobs, queues } = memoryQueue();
+
+    expect(await runCampaignTick(db.asDb(), queues, NOW)).toBe(1);
+    await drain(ctx, jobs);
+    expect(linkedin.viewedProfiles).toHaveLength(1);
+
+    // The loop notices on the tick after the wait ends, never exactly on it.
+    const due = Date.parse(db.find("campaign_prospects", { id })!.next_action_at as string);
+    const tick = due + 4 * 60_000;
+    vi.setSystemTime(tick);
+    expect(await runCampaignTick(db.asDb(), queues, new Date(tick))).toBe(1);
+    vi.setSystemTime(dueAt(jobs, "invite"));
+    await drain(ctx, jobs, "invite");
+    expect(linkedin.sentInvitations).toHaveLength(1);
+    expect(linkedin.viewedProfiles).toHaveLength(1);
+    vi.restoreAllMocks();
   });
 
   it("is not looked at twice while the first look still counts", async () => {

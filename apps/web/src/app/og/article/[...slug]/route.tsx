@@ -4,7 +4,21 @@ import { MARK } from "@/components/logo";
 import { SITE } from "@/lib/site";
 import { CONTENT, type ContentKind, type TeamKey } from "@/lib/seo-content";
 
-export const runtime = "edge";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
+
+/*
+ * Drawn once per article at build time and served as a static file, then
+ * resized and re-encoded by the image optimizer for each screen. Drawing it on
+ * every request made it the slowest thing on the page, and the first thing
+ * anybody sees under the headline.
+ */
+export const dynamic = "force-static";
+export const dynamicParams = false;
+
+export function generateStaticParams() {
+  return CONTENT.map((page) => ({ slug: page.path.slice(1).split("/") }));
+}
 
 /**
  * The feature image for one article: its header picture, its link preview and
@@ -37,19 +51,23 @@ const KIND_LABEL: Record<ContentKind, string> = {
   alternative: "Comparison",
   tool: "Free tool",
   audience: "Use case",
-  landing: "Nora",
+  landing: "Free plan",
 };
 
 /*
- * Geist, the site's own face (SIL Open Font License), bundled beside the route.
+ * Geist, the site's own face (SIL Open Font License), in src/assets/fonts.
  * Without it the renderer falls back to one regular weight, and a 600-weight
  * headline comes out thin and generic.
  */
-const regular = fetch(new URL("./Geist-Regular.ttf", import.meta.url)).then((r) => r.arrayBuffer());
-const semibold = fetch(new URL("./Geist-SemiBold.ttf", import.meta.url)).then((r) => r.arrayBuffer());
+const FONTS = join(process.cwd(), "src/assets/fonts");
 
-export async function GET(request: Request) {
-  const path = new URL(request.url).searchParams.get("path") ?? "";
+export async function GET(_request: Request, { params }: { params: Promise<{ slug: string[] }> }) {
+  const { slug } = await params;
+  const path = `/${slug.join("/")}`;
+  const [regular, semibold] = await Promise.all([
+    readFile(join(FONTS, "Geist-Regular.ttf")),
+    readFile(join(FONTS, "Geist-SemiBold.ttf")),
+  ]);
   const page = CONTENT.find((p) => p.path === path);
   const title = (page?.title ?? SITE.tagline).slice(0, 110);
   const owner = OWNER[page?.owner ?? "reese"];
@@ -123,8 +141,8 @@ export async function GET(request: Request) {
       width: 1200,
       height: 630,
       fonts: [
-        { name: "Geist", data: await regular, weight: 400, style: "normal" },
-        { name: "Geist", data: await semibold, weight: 600, style: "normal" },
+        { name: "Geist", data: regular, weight: 400, style: "normal" },
+        { name: "Geist", data: semibold, weight: 600, style: "normal" },
       ],
     },
   );

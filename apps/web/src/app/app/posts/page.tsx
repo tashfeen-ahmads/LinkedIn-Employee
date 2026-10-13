@@ -67,7 +67,7 @@ async function generate(formData: FormData) {
       "/app/posts",
       `Wrote ${result.data?.written ?? 0} drafts.${
         dropped ? ` ${dropped} were thrown away for carrying a link.` : ""
-      } Read them before approving — they go on your public profile.`,
+      } Read them before approving. They go on your public profile.`,
     ),
   );
 }
@@ -94,16 +94,27 @@ async function saveEdit(formData: FormData) {
   }
 
   const supabase = await createClient();
-  const { error } = await supabase
+  const { error, data: saved } = await supabase
     .from("linkedin_posts")
     // `facts_used` is cleared on purpose: the grounding named what the *agent*
     // wrote, and it is no longer a description of these words. Left in place it
     // would be a set of citations for a paragraph nobody checked them against.
     .update({ body, facts_used: [] as never })
     .eq("id", id)
-    .eq("workspace_id", session.workspaceId);
+    .eq("workspace_id", session.workspaceId)
+    // Only the rep's own posts, which is all this screen lists: a post goes out
+    // under one person's name, and nobody else's edit should be able to reach it.
+    .eq("user_id", session.userId)
+    // Never a published row. Its body is the record of what is on the
+    // profile, and the approval trigger deliberately leaves those alone, so an
+    // edit here would rewrite history rather than un-approve anything.
+    .neq("status", "published")
+    .select("id");
 
-  if (error) redirect(errorQuery("/app/posts", `That did not save: ${error.message}`));
+  if (error) redirect(errorQuery("/app/posts", "That did not save. Please try again."));
+  if (!saved?.length) {
+    redirect(errorQuery("/app/posts", "That post can no longer be edited here. It may already be on your profile."));
+  }
 
   revalidatePath("/app/posts");
   redirect(
@@ -163,9 +174,10 @@ async function approve(formData: FormData) {
     .update({ body, facts_used: [] as never })
     .eq("id", id)
     .eq("workspace_id", session.workspaceId)
+    .eq("user_id", session.userId)
     .in("status", ["draft", "failed"])
     .neq("body", body);
-  if (saveError) redirect(errorQuery("/app/posts", `That did not save: ${saveError.message}`));
+  if (saveError) redirect(errorQuery("/app/posts", "That did not save. Please try again."));
 
   const { error, data } = await supabase
     .from("linkedin_posts")
@@ -179,13 +191,14 @@ async function approve(formData: FormData) {
     })
     .eq("id", id)
     .eq("workspace_id", session.workspaceId)
+    .eq("user_id", session.userId)
     // Never a published row. Its body is the record of what went out, and
     // re-approving it would queue a second copy of the same post.
     .in("status", ["draft", "failed"])
     .eq("body", body)
     .select("id");
 
-  if (error) redirect(errorQuery("/app/posts", `That did not save: ${error.message}`));
+  if (error) redirect(errorQuery("/app/posts", "That did not save. Please try again."));
   if (!data?.length) {
     redirect(
       errorQuery("/app/posts", "That post changed while you were reading it. Read it again, then approve."),
@@ -222,7 +235,7 @@ async function approve(formData: FormData) {
       "/app/posts",
       published.ok && published.data && published.data.published > 0
         ? "Approved and published. It is on your profile now."
-        : "Approved. It goes out in your posting hours — within a quarter of an hour of them starting.",
+        : "Approved. It goes out in your posting hours, within a quarter of an hour of them starting.",
     ),
   );
 }
@@ -233,16 +246,23 @@ async function unapprove(formData: FormData) {
   const id = String(formData.get("id") ?? "");
 
   const supabase = await createClient();
-  await supabase
+  const { data: held } = await supabase
     .from("linkedin_posts")
     .update({ status: "draft", approved_at: null, approved_by: null })
     .eq("id", id)
     .eq("workspace_id", session.workspaceId)
+    .eq("user_id", session.userId)
     // A published post cannot be un-approved: it is already on the profile, and
-    // the only thing that removes it is deleting it on LinkedIn.
-    .eq("status", "approved");
+    // the only thing that removes it is deleting it on LinkedIn. A failed one
+    // can: it keeps its approval when LinkedIn refuses it, and Hold matched
+    // only `approved`, so it said "Held" over a row it had not touched.
+    .in("status", ["approved", "failed"])
+    .select("id");
 
   revalidatePath("/app/posts");
+  if (!held?.length) {
+    redirect(errorQuery("/app/posts", "That post was not held. It may already be on your profile."));
+  }
   redirect(noticeQuery("/app/posts", "Held. It will not go out until you approve it again."));
 }
 
@@ -252,17 +272,20 @@ async function discard(formData: FormData) {
   const id = String(formData.get("id") ?? "");
 
   const supabase = await createClient();
-  await supabase
+  const { data: gone } = await supabase
     .from("linkedin_posts")
     .delete()
     .eq("id", id)
     .eq("workspace_id", session.workspaceId)
+    .eq("user_id", session.userId)
     // Never a published row. That row is the record of what is on the profile,
     // and deleting it here would not delete the post — it would only stop this
     // product being able to say what went out.
-    .in("status", ["draft", "failed"]);
+    .in("status", ["draft", "failed"])
+    .select("id");
 
   revalidatePath("/app/posts");
+  if (!gone?.length) redirect(errorQuery("/app/posts", "That post was not thrown away. It may already be approved or published."));
   redirect(noticeQuery("/app/posts", "Thrown away."));
 }
 
@@ -292,7 +315,7 @@ function when(value: string | null, timezone: string): string {
   if (!value) return "";
   const at = new Date(value);
   if (Number.isNaN(at.getTime())) return value;
-  return new Intl.DateTimeFormat("en-GB", {
+  return new Intl.DateTimeFormat("en-US", {
     timeZone: timezone,
     weekday: "short",
     day: "numeric",
@@ -318,7 +341,12 @@ function PostCard({
   const facts = Array.isArray(row.facts_used) ? (row.facts_used as string[]) : [];
   const links = extractLinks(row.body);
   const published = row.status === "published";
+  const failed = row.status === "failed";
   const editable = manage && !published;
+  // A post LinkedIn refused keeps its approval, so reading `approved_at` alone
+  // offered only Save and Hold: no way to send it again short of changing a
+  // word. It is offered the approval controls, which is what "try again" is.
+  const awaitingApproval = !row.approved_at || failed;
 
   const details = (
     <>
@@ -332,13 +360,15 @@ function PostCard({
         */}
         {published
           ? `Published ${when(row.published_at, timezone)}`
-          : !row.approved_at
-            ? "Not approved"
-            : row.scheduled_for
-              ? `Approved — held until ${when(row.scheduled_for, timezone)}`
-              : verdict.send
-                ? "Approved — going out on the next sweep"
-                : `Approved — ${verdict.reason}`}
+          : failed
+            ? "Did not go out. Approve it again to retry."
+            : !row.approved_at
+              ? "Not approved"
+              : row.scheduled_for
+                ? `Approved, held until ${when(row.scheduled_for, timezone)}`
+                : verdict.send
+                  ? "Approved, going out within a quarter of an hour"
+                  : `Approved: ${verdict.reason}`}
       </p>
 
       {row.error ? (
@@ -359,7 +389,7 @@ function PostCard({
          */
         <p className="small muted">
           This carries {links.length === 1 ? "a link" : `${links.length} links`}. LinkedIn shows a
-          post with an outbound link to far fewer people — the usual move is to earn the question
+          post with an outbound link to far fewer people. The usual move is to earn the question
           and put the address in the reply.
         </p>
       ) : null}
@@ -430,7 +460,7 @@ function PostCard({
 
         {details}
 
-        {row.approved_at ? (
+        {!awaitingApproval ? (
           <div className="form-row">
             <SubmitButton className="btn secondary small" pendingLabel="Saving…">
               Save
@@ -456,7 +486,7 @@ function PostCard({
                 Save
               </SubmitButton>
               <SubmitButton className="btn small" pendingLabel="Approving…" formAction={approve}>
-                Save &amp; approve
+                {failed ? "Save and try again" : "Save and approve"}
               </SubmitButton>
               <ConfirmButton
                 confirmLabel="Throw it away for good"
@@ -523,13 +553,13 @@ export default async function PostsPage({ searchParams }: { searchParams: Promis
       {account?.status !== "active" ? (
         <div className="notice warning">
           Your LinkedIn account is not connected, so nothing here can be published. Approving a post
-          is still worth doing — it goes out on its own once the account is back.
+          is still worth doing: it goes out on its own once the account is back.
         </div>
       ) : null}
 
       <Section
-        title={drafts.length ? `Waiting for you — ${drafts.length}` : "Waiting for you"}
-        description={`Nobody has read these. A post goes to everyone who follows you and stays on your profile, and the only way to take one back is to delete it after people have seen it — which is why there is no autopilot on this screen.`}
+        title={drafts.length ? `Waiting for you (${drafts.length})` : "Waiting for you"}
+        description={`Nobody has read these. A post goes to everyone who follows you and stays on your profile, and the only way to take one back is to delete it after people have seen it. That is why there is no autopilot on this screen.`}
       >
         {drafts.length ? (
           <div className="stack-3">
@@ -574,8 +604,8 @@ export default async function PostsPage({ searchParams }: { searchParams: Promis
       </Section>
 
       <Section
-        title={queued.length ? `Approved — ${queued.length}` : "Approved"}
-        description={`These go out in your own working hours — a post appearing on your profile at four in the morning reads as software posting for you. One you gave a time to goes at that time instead. Yours: ${describeWorkingHours(hours, timezone)}.`}
+        title={queued.length ? `Approved (${queued.length})` : "Approved"}
+        description={`These go out in your own working hours, because a post appearing on your profile at four in the morning reads as software posting for you. One you gave a time to goes at that time instead. Yours: ${describeWorkingHours(hours, timezone)}.`}
       >
         {queued.length ? (
           <div className="stack-3">
@@ -599,8 +629,8 @@ export default async function PostsPage({ searchParams }: { searchParams: Promis
 
       {published.length ? (
         <Section
-          title={`Published — ${published.length}`}
-          description="What actually went out, and when. These are the record of what is on your profile, so they cannot be edited or deleted here — only on LinkedIn."
+          title={`Published (${published.length})`}
+          description="What actually went out, and when. These are the record of what is on your profile, so they cannot be edited or deleted here, only on LinkedIn."
         >
           <div className="stack-3">
             {published.map((row) => (

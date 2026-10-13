@@ -22,6 +22,8 @@ import { linkedInState } from "./linkedin-state";
 import { BillingSection } from "./billing-section";
 import { PageHeader, PageGroup, Panel, Section } from "@/components/page";
 import { AllowanceMeter } from "@/components/charts";
+import { countersForToday } from "@/lib/account-day";
+import { dailyInviteCap, type AccountRecord } from "@le/linkedin";
 import { hasStrategySource, mergeStash, readOnboardingStash, stashedAccountAnswers } from "@/lib/onboarding-stash";
 import { BUSINESS_DESCRIPTION_MAX, COMPANY_NAME_MAX, readBusinessForm } from "@/lib/profile-business";
 
@@ -346,7 +348,7 @@ async function saveProfile(formData: FormData) {
       "/app/profile",
       accountAnswersKept
         ? "Saved."
-        : "Saved — except your sending hours and Sales Navigator answer, which can be set once your LinkedIn account is connected.",
+        : "Saved, except your sending hours and Sales Navigator answer, which can be set once your LinkedIn account is connected.",
     ),
   );
 }
@@ -385,7 +387,7 @@ async function rebuildBusiness() {
     redirect(
       errorQuery(
         "/app/profile?edit=1",
-        "Add a website, a LinkedIn page or a description first — Sage will not invent a business from nothing.",
+        "Add a website, a LinkedIn page or a description first. Sage will not invent a business from nothing.",
       ),
     );
   }
@@ -406,7 +408,7 @@ async function rebuildBusiness() {
       "/app/strategy",
       startedNotice(
         queued.data,
-        "Sage is reading your business again. New strategies appear on this page in a few minutes, unapproved — nothing is searched for until you approve one.",
+        "Sage is reading your business again. New strategies appear on this page in a few minutes, unapproved. Nothing is searched for until you approve one.",
       ),
     ),
   );
@@ -491,7 +493,7 @@ export default async function ProfilePage({
     supabase
       .from("linkedin_accounts")
       .select(
-        "user_id, status, status_detail, provider_account_id, display_name, invites_today, invites_this_week, messages_today, has_sales_navigator, working_hours",
+        "user_id, status, status_detail, provider_account_id, display_name, invites_today, invites_this_week, invites_by_day, messages_today, profile_views_today, counters_reset_on, first_action_at, has_sales_navigator, working_hours",
       )
       .eq("workspace_id", session.workspaceId)
       .eq("user_id", session.userId)
@@ -510,6 +512,22 @@ export default async function ProfilePage({
   const found = account ?? undefined;
   const linkedIn = linkedInState(found);
   const mine = linkedIn.kind === "attached" ? found : undefined;
+  /*
+   * The allowance exactly as the overview draws it and the worker enforces it.
+   *
+   * This drew today's invitations against 35, the end of the ramp, for every
+   * account: a week-one account read "10 of 35" with room to spare on the day
+   * the limiter had already stopped it, and the overview beside it said "10 of
+   * 10". The cap is the ramp's day (rule 3), and the counters are rolled over
+   * to the rep's today first, or each morning opens on yesterday's sends.
+   */
+  const allowanceNow = new Date();
+  const counters = mine
+    ? countersForToday(mine as unknown as AccountRecord, me?.timezone ?? "UTC", allowanceNow)
+    : null;
+  const inviteCap = mine
+    ? dailyInviteCap(mine.first_action_at ? new Date(mine.first_action_at) : null, allowanceNow)
+    : LINKEDIN_LIMITS.invitesPerDayStart;
   const awaitingProvider = linkedIn.kind === "unfinished";
   const needsReconnect = linkedIn.kind === "attached" && (cannotSend(found?.status) || found?.status === "connecting");
   // What the form shows comes from wherever a save would write it: the account
@@ -676,13 +694,29 @@ export default async function ProfilePage({
             <Panel>
               <div className="stack-4">
                 <div className="form-row">
-                  <label className="field compact">
+                  {/* Hours said the way the reader says them. Two number boxes
+                      reading 8 and 18 asked an American customer to do
+                      24-hour arithmetic on the one setting that decides when
+                      their account may act; the values posted are unchanged. */}
+                  <label className="field compact-wide">
                     <span>From</span>
-                    <input type="number" name="start" min={0} max={23} defaultValue={hours.start} />
+                    <select name="start" defaultValue={String(hours.start)}>
+                      {HOURS.filter((h) => h < 24).map((h) => (
+                        <option key={h} value={h}>
+                          {hourLabel(h)}
+                        </option>
+                      ))}
+                    </select>
                   </label>
-                  <label className="field compact">
+                  <label className="field compact-wide">
                     <span>To</span>
-                    <input type="number" name="end" min={1} max={24} defaultValue={hours.end} />
+                    <select name="end" defaultValue={String(hours.end)}>
+                      {HOURS.filter((h) => h > 0).map((h) => (
+                        <option key={h} value={h}>
+                          {hourLabel(h)}
+                        </option>
+                      ))}
+                    </select>
                   </label>
                   {/* A group, so a screen reader says "Sending days" before
                       "Mon, checkbox" — seven bare checkboxes are seven
@@ -808,7 +842,7 @@ export default async function ProfilePage({
           >
             <Panel>
               <dl className="facts">
-                <Fact label="Name">{session.fullName || "—"}</Fact>
+                <Fact label="Name">{session.fullName || <span className="subtle">Not set</span>}</Fact>
                 <Fact label="Username">
                   {me?.username || <span className="subtle">Not set</span>}
                 </Fact>
@@ -822,7 +856,7 @@ export default async function ProfilePage({
                       {me.booking_url}
                     </a>
                   ) : (
-                    <span className="subtle">None — times are offered from this product&rsquo;s calendar.</span>
+                    <span className="subtle">None. Times are offered from your calendar here.</span>
                   )}
                 </Fact>
                 <Fact label="Timezone">{me?.timezone || "UTC"}</Fact>
@@ -868,8 +902,8 @@ export default async function ProfilePage({
                   {mine.status_detail ?? "It needs to be connected again."}
                 </p>
                 <p className="small">
-                  Sign in through this flow rather than in the provider&rsquo;s own dashboard — that
-                  is what attaches the account to you here.
+                  Use the button below rather than signing in somewhere else: it is what attaches the
+                  account to you here.
                 </p>
                 <form action={connectLinkedIn}>
                   <SubmitButton pendingLabel="Opening LinkedIn…">Connect LinkedIn again</SubmitButton>
@@ -891,20 +925,21 @@ export default async function ProfilePage({
                 against its cap now reaches this screen too.
               */
               <div className="allowance-row">
-                <AllowanceMeter
-                  label="Invites today"
-                  used={mine.invites_today}
-                  cap={LINKEDIN_LIMITS.invitesPerDayMax}
-                />
-                <AllowanceMeter
-                  label="Invites this week"
-                  used={mine.invites_this_week}
-                  cap={LINKEDIN_LIMITS.invitesPerWeek}
-                />
+                <AllowanceMeter label="Invitations today" used={counters?.invites_today ?? 0} cap={inviteCap} />
                 <AllowanceMeter
                   label="Messages today"
-                  used={mine.messages_today}
+                  used={counters?.messages_today ?? 0}
                   cap={LINKEDIN_LIMITS.messagesPerDay}
+                />
+                <AllowanceMeter
+                  label="Profile views today"
+                  used={counters?.profile_views_today ?? 0}
+                  cap={LINKEDIN_LIMITS.profileViewsPerDay}
+                />
+                <AllowanceMeter
+                  label="Invitations, last 7 days"
+                  used={counters?.invites_this_week ?? 0}
+                  cap={LINKEDIN_LIMITS.invitesPerWeek}
                 />
               </div>
             )}
@@ -938,8 +973,8 @@ export default async function ProfilePage({
                 </form>
               )}
               <span className="tiny subtle">
-                Asks LinkedIn&rsquo;s provider whether this account is still there. Worth doing if
-                campaigns are not finding anyone.
+                Checks that this account is still connected. Worth doing if campaigns are not
+                finding anyone.
               </span>
             </div>
           </>
@@ -974,8 +1009,8 @@ export default async function ProfilePage({
             ) : (
               <p className="small muted">
                 {awaitingProvider
-                  ? "Not connected — the LinkedIn sign-in was not finished. Press Connect LinkedIn to try again. It takes about a minute, and you sign in on LinkedIn’s own page, so we never see your password."
-                  : "Not connected yet. You will sign in to LinkedIn on their hosted page; we never see your password."}
+                  ? "Not connected: the LinkedIn sign-in was not finished. Press Connect LinkedIn to try again. It takes about a minute, and you sign in on a secure hosted page, so we never see your password."
+                  : "Not connected yet. You sign in to LinkedIn on a secure hosted page, so we never see your password."}
               </p>
             )}
             <div className="cluster">
@@ -985,7 +1020,7 @@ export default async function ProfilePage({
               {awaitingProvider ? (
                 <form action={refreshLinkedIn}>
                   <SubmitButton className="btn secondary" pendingLabel="Checking…">
-                    I already finished — check again
+                    I already finished, check again
                   </SubmitButton>
                 </form>
               ) : null}
@@ -1045,6 +1080,16 @@ function Fact({
       <dd>{children}</dd>
     </div>
   );
+}
+
+/** Every hour boundary a sending window can start or end on. */
+const HOURS = Array.from({ length: 25 }, (_, h) => h);
+
+/** "8 AM", "Noon", "6 PM", "Midnight": the hour as a US reader says it. */
+function hourLabel(hour: number): string {
+  if (hour === 0 || hour === 24) return "Midnight";
+  if (hour === 12) return "Noon";
+  return hour < 12 ? `${hour} AM` : `${hour - 12} PM`;
 }
 
 const DAYS = [

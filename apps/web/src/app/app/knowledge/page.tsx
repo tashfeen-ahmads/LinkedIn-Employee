@@ -27,10 +27,14 @@ async function saveDocument(formData: FormData) {
   const id = String(formData.get("id") ?? "");
   const title = String(formData.get("title") ?? "").trim();
   const content = String(formData.get("content") ?? "").trim();
-  if (!title || !content) return;
+  // Said, never a bare return: a Save that silently does nothing reads as a
+  // page that saved, and the agent then answers from the old words.
+  if (!title || !content) redirect(errorQuery("/app/knowledge", "A page needs a title and some content."));
 
   const session = await requireSession();
-  if (!canManage(session.role)) return;
+  if (!canManage(session.role)) {
+    redirect(errorQuery("/app/knowledge", "Only an owner, admin or manager can change the knowledge base."));
+  }
 
   const supabase = await createClient();
   const { error } = id
@@ -46,7 +50,7 @@ async function saveDocument(formData: FormData) {
         source: "written here",
       });
 
-  if (error) redirect(errorQuery("/app/knowledge", `That did not save: ${error.message}`));
+  if (error) redirect(errorQuery("/app/knowledge", "That did not save. Please try again."));
   revalidatePath("/app/knowledge");
   // Said out loud. It saved before this too — it just never told anybody, which
   // from the other side of the screen is the same as a button that does nothing.
@@ -55,9 +59,11 @@ async function saveDocument(formData: FormData) {
 
 async function deleteDocument(formData: FormData) {
   "use server";
-  const id = String(formData.get("id"));
+  const id = String(formData.get("id") ?? "");
   const session = await requireSession();
-  if (!canManage(session.role)) return;
+  if (!canManage(session.role)) {
+    redirect(errorQuery("/app/knowledge", "Only an owner, admin or manager can change the knowledge base."));
+  }
 
   const supabase = await createClient();
   const { error } = await supabase
@@ -66,7 +72,7 @@ async function deleteDocument(formData: FormData) {
     .eq("id", id)
     .eq("workspace_id", session.workspaceId);
 
-  if (error) redirect(errorQuery("/app/knowledge", `That did not delete: ${error.message}`));
+  if (error) redirect(errorQuery("/app/knowledge", "That did not delete. Please try again."));
   revalidatePath("/app/knowledge");
   redirect(noticeQuery("/app/knowledge", "Page deleted."));
 }
@@ -84,7 +90,10 @@ export default async function KnowledgePage({
     .from("knowledge_documents")
     .select("id, title, content, source, created_at")
     .eq("workspace_id", session.workspaceId)
-    .order("created_at", { ascending: true });
+    // The order the agent reads them in (`knowledgeQuery` in the worker), so
+    // the "left out" warning below names the documents it really leaves out.
+    .order("created_at", { ascending: true })
+    .order("id", { ascending: true });
 
   const docs = rows ?? [];
   const manage = canManage(session.role);
@@ -99,7 +108,7 @@ export default async function KnowledgePage({
       <PageHeader
         eyebrow="Pipeline"
         title="Knowledge base"
-        lede="The only things the agent may state. Anything a prospect asks that is not answered here is handed to you rather than guessed at — so this page is the difference between autopilot answering a question and forwarding it."
+        lede="The only things the agent may state. Anything a prospect asks that is not answered here is handed to you rather than guessed at, so this page is the difference between the agent answering a question and forwarding it to you."
       />
       <PageNotice error={params.error} notice={params.notice} />
 
@@ -115,13 +124,13 @@ export default async function KnowledgePage({
       {manage ? (
         <Section
           title="Add a page"
-          description="One subject per page: pricing, security, integrations, the objection you hear most. Short and factual beats long and persuasive — the agent quotes it, it does not summarise it."
+          description="One subject per page: pricing, security, integrations, the objection you hear most. Short and factual beats long and persuasive: the agent quotes it, it does not summarize it."
         >
           <div className="card">
             <form action={saveDocument}>
               <label className="field">
                 <span>Title</span>
-                <input name="title" required placeholder="Pricing" />
+                <input name="title" required maxLength={120} placeholder="Pricing" />
               </label>
               <label className="field">
                 <span>What the agent may say about it</span>
@@ -137,7 +146,7 @@ export default async function KnowledgePage({
           rather than by a bare `<section>` plus the sheet's post-h2 margin. */}
       <Section
         title={`${docs.length} ${docs.length === 1 ? "page" : "pages"}`}
-        description={`${Math.round((used / KNOWLEDGE_BUDGET_CHARS) * 100)}% of what fits in one prompt`}
+        description={`${Math.round((used / KNOWLEDGE_BUDGET_CHARS) * 100)}% of what the agent can read at once`}
       >
 
         {docs.length === 0 ? (
@@ -154,7 +163,7 @@ export default async function KnowledgePage({
                     <input type="hidden" name="id" value={doc.id} />
                     <label className="field">
                       <span>Title</span>
-                      <input name="title" defaultValue={doc.title} required />
+                      <input name="title" defaultValue={doc.title} required maxLength={120} />
                     </label>
                     <label className="field">
                       <span>Content</span>

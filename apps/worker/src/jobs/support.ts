@@ -50,11 +50,19 @@ export async function answerSupportTicket(ctx: WorkerContext, ticketId: string, 
     });
   } catch (err) {
     const reason = (err as { message?: string })?.message ?? "unknown";
-    await db
+    const { data: stamped } = await db
       .from("support_tickets")
-      .update({ drafted_at: stamp, draft_reason: `The assistant could not answer this one: ${reason.slice(0, 300)}` })
+      .update({ drafted_at: stamp })
       .eq("id", ticket.id)
-      .eq("status", "open");
+      .eq("status", "open")
+      .select("id");
+    if (stamped?.length) {
+      await saveDraft(ctx, ticket, {
+        draft_answer: null,
+        draft_confidence: null,
+        draft_reason: `The assistant could not answer this one: ${reason.slice(0, 300)}`,
+      });
+    }
     return "failed";
   }
 
@@ -85,12 +93,12 @@ export async function answerSupportTicket(ctx: WorkerContext, ticketId: string, 
         answered_by: "agent",
         answered_at: stamp,
         category: draft.category,
-        draft_answer: null,
-        draft_confidence: draft.confidence,
-        draft_reason: null,
         drafted_at: stamp,
     });
     if (!written?.length) return "skipped";
+    // The confidence it was sent with, for the operator; no draft, because
+    // the answer the customer is reading is the draft.
+    await saveDraft(ctx, ticket, { draft_answer: null, draft_confidence: draft.confidence, draft_reason: null });
     await recordEvent(db, {
       workspaceId: ticket.workspace_id,
       name: "support.answered",
@@ -103,12 +111,14 @@ export async function answerSupportTicket(ctx: WorkerContext, ticketId: string, 
 
   const { data: held } = await write({
       category: draft.category,
-      draft_answer: draft.answer.trim(),
-      draft_confidence: draft.confidence,
-      draft_reason: verdict.reason,
       drafted_at: stamp,
   });
   if (!held?.length) return "skipped";
+  await saveDraft(ctx, ticket, {
+    draft_answer: draft.answer.trim(),
+    draft_confidence: draft.confidence,
+    draft_reason: verdict.reason,
+  });
   await recordEvent(db, {
     workspaceId: ticket.workspace_id,
     name: "support.held",
@@ -117,6 +127,31 @@ export async function answerSupportTicket(ctx: WorkerContext, ticketId: string, 
     payload: { category: draft.category, confidence: draft.confidence, reason: verdict.reason },
   }).catch(() => undefined);
   return "held";
+}
+
+/**
+ * The assistant's draft, and why it was held, in the table only an operator
+ * can read (migration 0044). Never on the ticket itself: a member can read
+ * every column of their own ticket, and an unsent answer plus our reasoning
+ * about them is not theirs to read (rules 15, 33).
+ *
+ * Written after the guarded update on the ticket, never before, so a draft is
+ * only stored for a ticket the assistant actually still owned. A failure is
+ * logged rather than thrown: the ticket is already stamped and waiting for a
+ * person, and "Draft again" on the console writes a fresh one.
+ */
+async function saveDraft(
+  ctx: WorkerContext,
+  ticket: { id: string; workspace_id: string },
+  fields: { draft_answer: string | null; draft_confidence: number | null; draft_reason: string | null },
+): Promise<void> {
+  const { error } = await ctx.db
+    .from("support_ticket_drafts")
+    .upsert(
+      { ticket_id: ticket.id, workspace_id: ticket.workspace_id, ...fields, updated_at: new Date().toISOString() },
+      { onConflict: "ticket_id" },
+    );
+  if (error) console.error("support draft not stored", { ticket: ticket.id, reason: error.message });
 }
 
 /** Every open ticket the assistant has not looked at yet, oldest first. */

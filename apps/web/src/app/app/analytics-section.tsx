@@ -17,6 +17,7 @@ import {
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { readFunnelData } from "@/lib/funnel-data";
+import { canSeeTeamFunnel, scopeFunnel } from "@/lib/funnel-scope";
 import { Section, Empty } from "@/components/page";
 import { FunnelChart, RankedBars, TrendChart } from "@/components/charts";
 import { label } from "@/lib/labels";
@@ -49,7 +50,7 @@ export async function ResultsSection() {
   const supabase = await createClient();
   const now = Date.now();
 
-  const [funnel, { data: profiles }, { data: memberships }] = await Promise.all([
+  const [everything, { data: profiles }, { data: memberships }] = await Promise.all([
     readFunnelData(supabase, session.workspaceId),
     supabase
       .from("customer_profiles")
@@ -59,16 +60,13 @@ export async function ResultsSection() {
     supabase.from("memberships").select("user_id, role").eq("workspace_id", session.workspaceId),
   ]);
 
+  // Scoped once, before anything is counted: a rep reads their own campaigns
+  // in every figure on this page, not only in the total row.
+  const canSeeTeam = canSeeTeamFunnel(session.role);
+  const funnel = scopeFunnel(everything, { userId: session.userId, canSeeTeam });
   const report = funnelReport(funnel.rows, funnel.goals, now);
   const trend = dailySends(funnel.rows, now, 30);
-
-  const canSeeTeam = ["owner", "admin", "manager"].includes(session.role);
-  const mine = new Set(
-    funnel.campaigns.filter((c) => c.owner_user_id === session.userId).map((c) => c.id),
-  );
-  const visibleRows = canSeeTeam
-    ? funnel.rows
-    : funnel.rows.filter((r) => mine.has((r as DatedFunnelRow & { campaign_id: string }).campaign_id));
+  const visibleRows = funnel.rows;
 
   // Grouped by the strategy each campaign was built from. A fit score means
   // nothing without the strategy it was scored against, and neither does a
@@ -104,7 +102,6 @@ export async function ResultsSection() {
     .sort((a, b) => b.value - a.value);
 
   const campaignBars = funnel.campaigns
-    .filter((c) => canSeeTeam || c.owner_user_id === session.userId)
     .map((c) => {
       const counts = countFunnel(funnel.rowsByCampaign.get(c.id) ?? []);
       return {
@@ -148,7 +145,7 @@ export async function ResultsSection() {
       <Section
         id="sending"
         title="Invitations per day"
-        description="The one figure here that can fall. Totals only ever go up, so a campaign that stopped a fortnight ago and one sending today look identical without this."
+        description="The one figure here that can fall. Totals only ever go up, so a campaign that stopped two weeks ago and one sending today look identical without this."
       >
         <div className="card">
           <TrendChart points={trend} label="Invitations per day" />

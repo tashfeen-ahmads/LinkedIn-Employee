@@ -200,7 +200,7 @@ export const TEAM = [
   },
   {
     name: "Reese",
-    role: "Outreach & booking",
+    role: "Outreach and booking",
     detail: "Sends on your behalf at a safe pace, answers replies and books the meetings.",
   },
 ] as const;

@@ -60,10 +60,18 @@ const EXAMPLE_MINUTES: number[] = (() => {
   return out;
 })();
 
+/**
+ * A time of day the way an American reader writes it: "8 a.m.", "4:52 p.m.".
+ * Whole hours drop the minutes, so a working day reads "8 a.m. to 6 p.m.".
+ */
+export function twelveHour(hour: number, minute: number): string {
+  const h = hour % 12 || 12;
+  const suffix = hour % 24 < 12 ? "a.m." : "p.m.";
+  return minute === 0 ? `${h} ${suffix}` : `${h}:${String(minute).padStart(2, "0")} ${suffix}`;
+}
+
 function clock(minutes: number): string {
-  const h = Math.floor(minutes / 60);
-  const m = Math.floor(minutes % 60);
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+  return twelveHour(Math.floor(minutes / 60), Math.floor(minutes % 60));
 }
 
 export const EXAMPLE_DAY = {
@@ -86,13 +94,13 @@ export type ExamplePerson = {
 
 export const PEOPLE = {
   maya: { name: "Maya Chen", role: "Head of Growth", company: "Calder & Finch", photo: "/people/example-1.webp" },
-  daniel: { name: "Daniel Okafor", role: "Operations Director", company: "Brightwater Dental Group", photo: "/people/example-2.webp" },
-  ingrid: { name: "Ingrid Solberg", role: "Head of People", company: "Fjordline Logistics", photo: "/people/example-3.webp" },
+  daniel: { name: "Daniel Okafor", role: "Operations Director", company: "Brightwater Dental", photo: "/people/example-2.webp" },
+  ingrid: { name: "Ingrid Solberg", role: "Head of People", company: "Ridgeline Freight", photo: "/people/example-3.webp" },
   marco: { name: "Marco Bellini", role: "VP of Sales", company: "Peakstone Software", photo: "/people/example-4.webp" },
 } satisfies Record<string, ExamplePerson>;
 
 /*
- * Three invitations as the review screen shows them. Each is under the
+ * Three invitations as the review screen shows them. Each is within the
  * connection-note limit, carries no link and no pitch (rules 29 and 40), and
  * names the profile fields it was written from (rule 16's grounding).
  */
@@ -127,7 +135,9 @@ export const EXAMPLE_TODAY: ReadonlyArray<{ person: ExamplePerson; opener: strin
  * offers a date in the past; one weekday morning blocked, as a real calendar
  * would have, so the picture shows the agent working around something.
  */
-const SLOT_TZ = "Europe/London";
+const SLOT_TZ = "America/New_York";
+/** How the example's zone is written beside a time. */
+export const SLOT_TZ_LABEL = "ET";
 
 function nextMonday(from: Date): Date {
   const d = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate()));
@@ -146,19 +156,26 @@ export const EXAMPLE_SLOTS: string[] = findFreeSlots({
   timezone: SLOT_TZ,
   busy: [
     {
-      start: new Date(monday.getTime() + 1 * DAY_MS + 7 * 3_600_000).toISOString(),
-      end: new Date(monday.getTime() + 1 * DAY_MS + 13 * 3_600_000).toISOString(),
+      // Tuesday 12:00 to 18:00 UTC: the rep's morning in New York.
+      start: new Date(monday.getTime() + 1 * DAY_MS + 12 * 3_600_000).toISOString(),
+      end: new Date(monday.getTime() + 1 * DAY_MS + 18 * 3_600_000).toISOString(),
     },
   ],
 });
 
-const slotDay = new Intl.DateTimeFormat("en-GB", { timeZone: SLOT_TZ, weekday: "short", day: "numeric", month: "short" });
-const slotLong = new Intl.DateTimeFormat("en-GB", { timeZone: SLOT_TZ, weekday: "long", day: "numeric", month: "long" });
-const slotTime = new Intl.DateTimeFormat("en-GB", { timeZone: SLOT_TZ, hour: "2-digit", minute: "2-digit" });
+const slotDay = new Intl.DateTimeFormat("en-US", { timeZone: SLOT_TZ, weekday: "short", day: "numeric", month: "short" });
+const slotLong = new Intl.DateTimeFormat("en-US", { timeZone: SLOT_TZ, weekday: "long", day: "numeric", month: "long" });
+const slotClock = new Intl.DateTimeFormat("en-US", { timeZone: SLOT_TZ, hour: "numeric", minute: "numeric", hourCycle: "h23" });
+
+function slotTime(d: Date): string {
+  const parts = slotClock.formatToParts(d);
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0);
+  return twelveHour(get("hour"), get("minute"));
+}
 
 export function slotLabel(iso: string): string {
   const d = new Date(iso);
-  return `${slotDay.format(d)}, ${slotTime.format(d)}`;
+  return `${slotDay.format(d)}, ${slotTime(d)}`;
 }
 
 /** The slot the example prospect accepts, and the meeting it becomes. */
@@ -169,10 +186,10 @@ export function meetingLines(iso: string): { day: string; time: string } {
   const end = new Date(start.getTime() + SLOT_MINUTES * 60_000);
   return {
     day: slotLong.format(start),
-    time: `${slotTime.format(start)} to ${slotTime.format(end)} (${SLOT_MINUTES} min)`,
+    time: `${slotTime(start)} to ${slotTime(end)} ${SLOT_TZ_LABEL} (${SLOT_MINUTES} min)`,
   };
 }
 
 export const BOOKED_DAY_NAME = BOOKED_SLOT
-  ? new Intl.DateTimeFormat("en-GB", { timeZone: SLOT_TZ, weekday: "long" }).format(new Date(BOOKED_SLOT))
+  ? new Intl.DateTimeFormat("en-US", { timeZone: SLOT_TZ, weekday: "long" }).format(new Date(BOOKED_SLOT))
   : "Wednesday";

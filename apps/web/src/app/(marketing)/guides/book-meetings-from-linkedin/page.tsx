@@ -1,11 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArticleLayout, articleMeta, Callout, CompareTable } from "@/components/article";
-import { PUBLIC_LIMITS, SITE } from "@/lib/site";
+import { PUBLIC_LIMITS } from "@/lib/site";
 import {
   CTA_DEFINITIONS,
   CTA_KINDS,
-  FIRST_STEP_TIMING_LABEL,
   INVITE_NOTE_MAX_CHARS,
   LINKEDIN_LIMITS,
   OPT_OUT_PHRASES,
@@ -25,8 +24,11 @@ const FOLLOW_UP_MAX = Math.round(LINKEDIN_LIMITS.acceptFollowUpMaxMs / MINUTE);
 const OPT_OUTS = OPT_OUT_PHRASES.map((p) => `"${p}"`).join(", ");
 
 /* Proof, at build time, that the link rule is the one the send path runs. */
-const LINK_NOTE_EXAMPLE = "Saw your post on onboarding churn. We wrote up what fixed ours: example.com/churn";
+const LINK_NOTE_EXAMPLE = "Saw your post on onboarding churn. We wrote up what fixed ours: https://example.com/churn";
 const LINK_NOTE_BLOCKED = containsLink(LINK_NOTE_EXAMPLE);
+
+/* One set of example times, US Eastern, used everywhere on the page. */
+const TIMES = "Tue 10 a.m., Wed 2:30 p.m. or Thu 9:30 a.m. ET";
 
 const FAQ = [
   {
@@ -72,18 +74,18 @@ const PATH_ROWS = [
   {
     label: "Connection request",
     values: [
-      `Why you picked them, in under ${INVITE_NOTE_MAX_CHARS} characters`,
+      `Why you picked them, in ${INVITE_NOTE_MAX_CHARS} characters or fewer`,
       "A pitch or a link. Either turns a request to connect into an advert.",
     ],
   },
   {
     label: "Acceptance",
-    values: ["Nothing yet. Let a little time pass.", "A message in the same second, which reads as a machine."],
+    values: ["A short pause, so your first message does not land in the same minute.", "A message in the same second, which reads as a machine."],
   },
   {
     label: "First message",
     values: [
-      `Continue the note's thread, ${FOLLOW_UP_MIN} to ${FOLLOW_UP_MAX} minutes after they accept`,
+      "Continue the note's thread within a couple of hours, while they still remember accepting.",
       "Three days of silence, then an opener about a request they have forgotten.",
     ],
   },
@@ -93,16 +95,19 @@ const PATH_ROWS = [
   },
   {
     label: "The ask",
-    values: ["Two or three exact times, a length and a time zone", "\"Open to a quick call sometime?\""],
+    values: ["Two or three exact times, a length and a time zone.", "\"Open to a quick call sometime?\""],
   },
   {
     label: "Booking",
-    values: ["Confirm in the thread, send the invitation at once", "Booking a time nobody offered, or one already taken."],
+    values: ["Confirm in the thread and send the invitation at once.", "Booking a time nobody offered, or one already taken."],
   },
 ];
 
-/* The definitions are written for the app's screens; the page's own voice uses no dashes. */
-const plain = (text: string) => text.replace(/\s*[\u2013\u2014]\s*/g, ": ").replace(/this product/g, "Nora");
+/* The definitions are written for the app's screens; the page's own voice uses no dashes and starts cells with a capital. */
+const plain = (text: string) => {
+  const t = text.replace(/\s*[\u2013\u2014]\s*/g, ": ").replace(/this product/g, "Nora");
+  return `${t.charAt(0).toUpperCase()}${t.slice(1)}.`;
+};
 const GOAL_ROWS = CTA_KINDS.map((kind) => ({
   label: CTA_DEFINITIONS[kind].label,
   values: [plain(CTA_DEFINITIONS[kind].asks), plain(CTA_DEFINITIONS[kind].conversion)],
@@ -117,29 +122,30 @@ export default function Page() {
       faq={FAQ}
       sources={SOURCES}
     >
-      <p>In short:</p>
-      <ul>
-        <li>
-          <strong>Earn the reply first.</strong> The invitation and the first message after acceptance
-          start a conversation. Neither pitches, and neither asks for time.
-        </li>
-        <li>
-          <strong>Ask with times, not a question.</strong> &quot;Tuesday 10:00, Wednesday 14:30 or Thursday
-          09:30, UK time, 20 minutes&quot; can be accepted in one word. &quot;Open to a chat?&quot; needs three more
-          messages.
-        </li>
-        <li>
-          <strong>Only offer what is real.</strong> Every time must be free on your calendar, and every link
-          must be one you meant to send.
-        </li>
-        <li>
-          <strong>Hear the no.</strong> &quot;Not now&quot; is a date to come back. &quot;Remove me&quot; is the end, for every
-          campaign and every colleague.
-        </li>
-      </ul>
+      <Callout tone="info">
+        <p className="ga2-summary-title">In short</p>
+        <ul className="ga2-callout-list">
+          <li>
+            <strong>Earn the reply first.</strong> The invitation and the first message after acceptance start a
+            conversation. Neither pitches, and neither asks for time.
+          </li>
+          <li>
+            <strong>Ask with times, not a question.</strong> &quot;{TIMES}, 20 minutes&quot; can be accepted in one word.
+            &quot;Open to a chat?&quot; needs three more messages.
+          </li>
+          <li>
+            <strong>Only offer what is real.</strong> Every time must be free on your calendar, and every link must be one
+            you meant to send.
+          </li>
+          <li>
+            <strong>Hear the no.</strong> &quot;Not now&quot; is a date to come back. &quot;Remove me&quot; is the end, for every
+            campaign and every colleague.
+          </li>
+        </ul>
+      </Callout>
       <p>
-        This guide is written from the rules Nora follows when it answers replies and books meetings for
-        a sales team. Where a rule is ours rather than LinkedIn&apos;s, it says so.
+        This guide is written from the rules Nora follows when it answers replies and books meetings. Where a rule is ours
+        rather than LinkedIn&apos;s, it says so.
       </p>
 
       <h2 id="path">The path from acceptance to meeting</h2>
@@ -156,7 +162,7 @@ export default function Page() {
       />
       <p>
         The first two steps are covered in depth elsewhere: our{" "}
-        <Link href="/guides/linkedin-connection-request-templates">connection request templates under 200 characters</Link>{" "}
+        <Link href="/guides/linkedin-connection-request-templates">LinkedIn connection request templates</Link>{" "}
         and the guide to the{" "}
         <Link href="/guides/linkedin-follow-up-after-connection">follow-up message after a connection is accepted</Link>.
         This page starts where those stop, at the reply.
@@ -170,11 +176,12 @@ export default function Page() {
       </p>
       <p>
         So the order is: connect, open a conversation, and make the offer when they answer. In Nora this
-        is a written rule rather than a style tip. The connection note carries no pitch and no link. The
-        first message goes out {FIRST_STEP_TIMING_LABEL}, within {FOLLOW_UP_MIN} to {FOLLOW_UP_MAX}{" "}
-        minutes inside working hours, and its only job is to start a conversation. The pitch, a single
-        line of at most {PITCH_MAX_CHARS} characters that a person on your team approved, is sent when
-        they reply, adapted to what they actually said.
+        is a written rule rather than a style tip. The connection note carries no pitch and no link. Nora
+        checks for acceptances every hour and sends the first message {FOLLOW_UP_MIN} to {FOLLOW_UP_MAX}{" "}
+        minutes after it notices one, inside working hours, so usually within a couple of hours of the
+        acceptance. That message only starts a conversation. The pitch, a single line of at most{" "}
+        {PITCH_MAX_CHARS} characters that a person on your team approved, is sent when they reply, adapted to
+        what they actually said.
       </p>
       <p>Replies worth turning into a meeting usually look like one of these:</p>
       <ul>
@@ -208,15 +215,44 @@ export default function Page() {
       <blockquote>
         <p>
           That handover problem is the exact thing we fixed for ourselves. Easier to show than to type: I
-          could do Tuesday at 10:00, Wednesday at 14:30 or Thursday at 09:30 (UK time), 20 minutes. If
-          none of those suit, tell me a better week.
+          could do {TIMES}, 20 minutes. If none of those work, tell me a better week.
         </p>
       </blockquote>
       <p>
-        Three options on three different days is a useful default. Three consecutive half hours on one
-        afternoon is really one option. Always name the time zone, and the length, because &quot;a call&quot;
-        with no end time sounds like an hour.
+        Three options on three different days is a useful default; three back-to-back slots on one afternoon
+        are really one option. Always name the time zone and the length, because &quot;a call&quot; with no end
+        time sounds like an hour.
       </p>
+
+      <h3 id="ask-templates">LinkedIn messages to ask for a meeting</h3>
+      <p>Three templates for the three replies that most often lead to a meeting. Swap in your own times and details.</p>
+      <p>
+        <strong>When they ask what you do:</strong>
+      </p>
+      <blockquote className="ga2-template">
+        <p>
+          Short version: we [what you do] for [type of company], so [the result they care about]. Easier to show than to
+          type. I could do {TIMES}, 20 minutes. If none of those work, tell me a better week.
+        </p>
+      </blockquote>
+      <p>
+        <strong>When they describe the problem:</strong>
+      </p>
+      <blockquote className="ga2-template">
+        <p>
+          That is exactly the gap we close for [similar companies]. Worth 20 minutes to see whether it fits how your team
+          works? I have {TIMES}.
+        </p>
+      </blockquote>
+      <p>
+        <strong>When they ask for more information first:</strong>
+      </p>
+      <blockquote className="ga2-template">
+        <p>
+          Happy to. In two lines: [what it is and who it is for]. If it raises questions, I can walk you through it in 15
+          minutes, Wed at 11 a.m. or Thu at 3 p.m. ET.
+        </p>
+      </blockquote>
 
       <h3 id="keepable-times">Times you can actually keep</h3>
       <p>
@@ -227,16 +263,15 @@ export default function Page() {
         two different calls.
       </p>
       <p>
-        When a prospect picks a time, confirm it in the same thread in one line, and send the calendar
-        invitation at once. A booking that exists only in a LinkedIn chat is the one most likely to be
-        missed.
+        When a prospect picks a time, confirm it in the same thread and send the calendar invitation at once. A booking
+        that exists only in a LinkedIn chat is the one most likely to be missed; the next section has the messages for it.
       </p>
 
       <h3 id="never-invent">Never inventing a time or a link</h3>
       <p>
         This is where AI-written replies go wrong, and it is worth knowing even if you write every message
         yourself. A language model asked to propose a meeting will happily write &quot;How about Thursday at
-        3pm?&quot; with no idea whether Thursday at 3pm exists on anybody&apos;s calendar. Asked for a link, it will
+        3 p.m.?&quot; with no idea whether that hour is free on anybody&apos;s calendar. Asked for a link, it will
         write a plausible address that does not exist.
       </p>
       <p>Nora handles both the same way: the model never decides.</p>
@@ -244,9 +279,9 @@ export default function Page() {
         <li>
           <strong>Times come from the calendar, not the model.</strong> A separate, deterministic step
           works out the free times from the rep&apos;s availability. It treats meetings booked in Nora, times
-          the rep has blocked out and any calendar feed they connect as busy, and by default it sees nothing else,
-          so a busy diary elsewhere needs blocking out or a feed connected. The agent may only offer times from that list, and the times stored
-          against the conversation are the ones actually offered, not the model&apos;s wording of them.
+          the rep has blocked out and any calendar feed they connect as busy, and sees nothing else, so a busy
+          calendar elsewhere needs blocking out or a feed connected. The agent may only offer times from that
+          list, and the times stored are the ones actually offered, not the model&apos;s wording of them.
         </li>
         <li>
           <strong>An acceptance must match.</strong> When the prospect answers, the time they accept has to
@@ -263,6 +298,38 @@ export default function Page() {
           link cut out, because &quot;book here:&quot; followed by nothing reads worse than either.
         </li>
       </ul>
+
+      <h2 id="after-yes">After the yes: confirmation, reminder and no-shows</h2>
+      <p>
+        A meeting is not booked until it is on both calendars. Three short messages carry it the rest of the way.
+      </p>
+      <p>
+        <strong>Confirmation, in the thread, as soon as they pick:</strong>
+      </p>
+      <blockquote className="ga2-template">
+        <p>Great, Thu 9:30 a.m. ET it is, 20 minutes. What is the best email for the calendar invitation?</p>
+      </blockquote>
+      <p>
+        <strong>Reminder, the morning of the call:</strong>
+      </p>
+      <blockquote className="ga2-template">
+        <p>
+          Looking forward to our call at 9:30 a.m. ET today. The link is in the invitation. If something has come up, just
+          say and we will move it.
+        </p>
+      </blockquote>
+      <p>
+        <strong>No-show, about 15 minutes after the start:</strong>
+      </p>
+      <blockquote className="ga2-template">
+        <p>Looks like today did not work out, no problem. Want to pick another time? I could do Mon 1 p.m. or Tue 11 a.m. ET.</p>
+      </blockquote>
+      <p>
+        If the no-show message gets no answer, send one more a few days later and then stop: a missed call is often a busy
+        week, and two polite offers are enough. When a prospect books through Nora&apos;s own booking page, both of you are
+        emailed a calendar invitation that carries a 15-minute reminder. Nora does not send the morning-of message or chase
+        a no-show for you, so those two are yours.
+      </p>
 
       <h2 id="booking-links">Booking links: Calendly, Cal.com or your own page</h2>
       <p>
@@ -296,23 +363,18 @@ export default function Page() {
         Premium, which is why Nora writes to the lower number) and one job: a reason
         to accept. A URL from a stranger is what spam looks like, and it spends characters that should be
         about the person. Nora checks every note for a link in code, not just in the writing instructions.
-        A note such as &quot;{LINK_NOTE_EXAMPLE}&quot; {LINK_NOTE_BLOCKED ? "is caught by that check" : "would need checking"}, and
+        A note such as &quot;{LINK_NOTE_EXAMPLE}&quot; {LINK_NOTE_BLOCKED ? "is caught by that check" : "is the kind it looks for"}, and
         a note that is caught is sent with no note at all rather than with the address cut out of the
         middle of a sentence. A request with no note is ordinary on LinkedIn; a broken one is not.
       </p>
 
       <h3 id="reporting">What you lose in reporting</h3>
       <p>
-        A meeting booked on Calendly or Cal.com happens on their site. Unless you connect those tools to
-        your CRM, nothing in your LinkedIn outreach knows it happened. That is not a reason to avoid
-        them: a rep who has used one for years keeps their availability, buffers and reminders there.
-        It is a reason to know your numbers will undercount meetings.
-      </p>
-      <p>
-        Nora allows a rep&apos;s own scheduling link for exactly that reason, and says on screen that meetings
-        booked through it are not counted automatically, rather than showing a zero that reads as
-        failure. Meetings booked by accepting an offered time, or through Nora&apos;s own booking page, are
-        counted.
+        A meeting booked on Calendly or Cal.com happens on their site, so unless you connect it to your CRM, your LinkedIn
+        outreach never learns it happened. That is no reason to avoid them, since a rep who has used one for years keeps
+        their availability, buffers and reminders there, but your numbers will undercount meetings. Nora allows a rep&apos;s
+        own scheduling link and says on screen that meetings booked through it are not counted automatically. Meetings
+        booked by accepting an offered time, or through Nora&apos;s own booking page, are counted.
       </p>
 
       <h2 id="when-no">When the answer is no</h2>
@@ -332,6 +394,18 @@ export default function Page() {
         offer a lighter version, do not reply with a case study. One line acknowledging it is enough, and
         nothing at all is fine.
       </p>
+      <p>
+        <strong>A reply to &quot;not interested&quot;:</strong>
+      </p>
+      <blockquote className="ga2-template">
+        <p>Understood, thanks for letting me know. I will not follow up.</p>
+      </blockquote>
+      <p>
+        <strong>A reply to &quot;not now&quot;:</strong>
+      </p>
+      <blockquote className="ga2-template">
+        <p>Makes sense. Would it be useful if I checked back in [month], or is it a no for this year?</p>
+      </blockquote>
       <p>
         An honest note on Nora here: it drafts a polite reply to &quot;not now&quot;, but it does
         not yet set a reminder to come back on the date they named. If timing matters, note it in your
@@ -406,7 +480,7 @@ export default function Page() {
         <li>
           <strong>For a meeting campaign, it offers real times</strong> from your availability, or your own
           booking link if you set one. An accepted time is checked and booked, and the confirmation says it
-          is in the diary rather than offering the same times again.
+          is on the calendar rather than offering the same times again.
         </li>
         <li>
           <strong>Everything sends inside the account&apos;s limits:</strong> replies and follow-ups share a cap
@@ -415,11 +489,8 @@ export default function Page() {
         </li>
       </ul>
       <p>
-        Nothing here removes the risk that comes with automating a LinkedIn account; LinkedIn&apos;s user
-        agreement prohibits automated messaging, and no tool can promise otherwise. What it does is keep
-        the conversation honest: real times, real links, and a stop that means stop. Nora is free while we
-        grow, with no card: <a href={`${SITE.app}/signup`}>Sign up free</a>. More guides are in the{" "}
-        <Link href="/guides">LinkedIn outreach guides</Link> hub.
+        None of this makes automating a LinkedIn account risk-free, since LinkedIn&apos;s user agreement prohibits it.
+        It keeps the conversation honest: real times, real links, and a stop that means stop.
       </p>
     </ArticleLayout>
   );

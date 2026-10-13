@@ -81,7 +81,7 @@ async function sendToEveryone(formData: FormData) {
 
 function when(iso: string | null): string {
   if (!iso) return "—";
-  return new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }).format(
+  return new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" }).format(
     new Date(iso),
   );
 }

@@ -1,7 +1,8 @@
 import { requireSession } from "@/lib/workspace";
 import { PageHeader, Section, Empty } from "@/components/page";
 import { createClient } from "@/lib/supabase-server";
-import { normalizeExclusionValue, type ExclusionKind } from "@le/shared";
+import { type ExclusionKind } from "@le/shared";
+import { readExclusion } from "@/lib/exclusion-form";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { errorQuery, noticeQuery } from "@/lib/worker";
@@ -27,16 +28,17 @@ function canManage(role: string): boolean {
  */
 async function addExclusion(formData: FormData) {
   "use server";
-  const kind = String(formData.get("kind") ?? "") as ExclusionKind;
-  const raw = String(formData.get("value") ?? "").trim();
-  const reason = String(formData.get("reason") ?? "").trim();
-  if (!raw || (kind !== "company" && kind !== "person")) return;
-
-  const value = normalizeExclusionValue(kind, raw);
-  if (!value) return;
+  const reason = String(formData.get("reason") ?? "").trim().slice(0, 200);
+  // Every refusal is said. This returned quietly on an empty value, and stored
+  // a person typed by name, which matches nobody (`readExclusion`).
+  const input = readExclusion(formData.get("kind"), formData.get("value"));
+  if (!input.ok) redirect(errorQuery("/app/exclusions", input.reason));
+  const { kind, value, raw } = input;
 
   const session = await requireSession();
-  if (!canManage(session.role)) return;
+  if (!canManage(session.role)) {
+    redirect(errorQuery("/app/exclusions", "Only an owner, admin or manager can change this list."));
+  }
 
   const supabase = await createClient();
   const { error } = await supabase.from("exclusions").upsert(
@@ -51,16 +53,18 @@ async function addExclusion(formData: FormData) {
     { onConflict: "workspace_id,kind,value" },
   );
 
-  if (error) redirect(errorQuery("/app/exclusions", `That did not save: ${error.message}`));
+  if (error) redirect(errorQuery("/app/exclusions", "That did not save. Please try again."));
   revalidatePath("/app/exclusions");
-  redirect(noticeQuery("/app/exclusions", `Added ${raw}. Nobody here will contact it.`));
+  redirect(noticeQuery("/app/exclusions", `Added ${raw}. Nobody here will contact ${kind === "person" ? "them" : "it"}.`));
 }
 
 async function removeExclusion(formData: FormData) {
   "use server";
-  const id = String(formData.get("id"));
+  const id = String(formData.get("id") ?? "");
   const session = await requireSession();
-  if (!canManage(session.role)) return;
+  if (!canManage(session.role)) {
+    redirect(errorQuery("/app/exclusions", "Only an owner, admin or manager can change this list."));
+  }
 
   const supabase = await createClient();
   // Checked, and said by name. This said "Saved." whatever the database
@@ -74,7 +78,7 @@ async function removeExclusion(formData: FormData) {
     .eq("workspace_id", session.workspaceId)
     .select("raw_value");
 
-  if (error) redirect(errorQuery("/app/exclusions", `That did not remove: ${error.message}`));
+  if (error) redirect(errorQuery("/app/exclusions", "That did not remove, so it is still on the list. Please try again."));
   revalidatePath("/app/exclusions");
   const removed = data?.[0]?.raw_value;
   redirect(
@@ -142,8 +146,9 @@ export default async function ExclusionsPage({
                 </select>
               </label>
               <label className="field">
-                <span>Company name or profile URL</span>
+                <span>Company name, or a person&rsquo;s profile address</span>
                 <input name="value" required placeholder="Acme Corp." autoComplete="off" spellCheck={false} />
+                <span className="hint">A person needs their LinkedIn address, like linkedin.com/in/jane-doe.</span>
               </label>
               <label className="field">
                 <span>Why (optional)</span>
@@ -218,7 +223,7 @@ export default async function ExclusionsPage({
                           <form action={removeExclusion}>
                             <input type="hidden" name="id" value={row.id} />
                             <ConfirmButton
-                              confirmLabel="Remove — campaigns may contact them again"
+                              confirmLabel="Remove. Campaigns may contact them again"
                               pendingLabel="Removing…"
                             >
                               Remove

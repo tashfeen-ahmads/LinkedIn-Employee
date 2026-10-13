@@ -1,14 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { INVITE_NOTE_MAX_CHARS, LINKEDIN_LIMITS } from "@le/shared";
-import { ArticleLayout, articleMeta, Callout, CompareTable, type Faq, type Source } from "@/components/article";
-import { PUBLIC_LIMITS, SITE } from "@/lib/site";
+import { ArticleLayout, articleMeta, CompareTable, type Faq, type Source } from "@/components/article";
+import { PUBLIC_LIMITS } from "@/lib/site";
+import { Glance, NORA, Verdict, NOT_DOCUMENTED, withGlanceSources, type GlanceTool } from "../_glance";
 
 const PATH = "/alternatives/artisan";
 export const metadata: Metadata = articleMeta(PATH);
 
-const FIRST_MESSAGE_MIN = Math.round(LINKEDIN_LIMITS.acceptFollowUpMinMs / 60_000);
-const FIRST_MESSAGE_MAX = Math.round(LINKEDIN_LIMITS.acceptFollowUpMaxMs / 60_000);
+const GLANCE: readonly GlanceTool[] = ["nora", "artisan", "elevenx", "aisdr", "heyreach", "expandi", "waalaxy"];
 
 const ARTISAN_AGENT = "https://www.artisan.co/ai-sales-agent";
 const ARTISAN_PRICING = "https://artisan.co/pricing";
@@ -33,7 +32,7 @@ const FAQ: readonly Faq[] = [
   },
   {
     q: "Is there a cheaper alternative to Artisan?",
-    a: "Yes. LinkedIn sequencers often cost under $100 per sender a month. Nora is free for now, with no card and no contract. The trade-off is scope: Nora works on LinkedIn only and sends at a careful pace, while Artisan runs email at volume with its own contact database. If email is your channel, a cheaper email-first agent is the closer swap.",
+    a: "Yes. As of October 2026 LinkedIn sequencers often cost under $100 per sender a month. Nora is free while we grow, with no card and no contract. The trade-off is scope: Nora works on LinkedIn only and sends at a careful pace, while Artisan runs email at volume with its own contact database. If email is your channel, a cheaper email-first agent is the closer swap.",
   },
   {
     q: "How much does 11x cost?",
@@ -45,21 +44,22 @@ const FAQ: readonly Faq[] = [
   },
 ];
 
-const SOURCES: readonly Source[] = [
-  { label: "Artisan: AI sales agent product page (checked October 2026)", url: ARTISAN_AGENT },
-  { label: "Artisan: pricing page (checked October 2026)", url: ARTISAN_PRICING },
-  { label: "SalesRobot: Artisan AI review with plan prices (a vendor in the same market)", url: ARTISAN_REVIEW },
-  { label: "Valley: Artisan pricing explained, reporting quote-only plans (a vendor in the same market)", url: ARTISAN_PRIVATE },
-  { label: "ZoomInfo Pipeline: Artisan review 2026", url: ZOOMINFO_REVIEW },
-  { label: "TechCrunch: LinkedIn banned AI agent startup Artisan, but now it's back (7 January 2026)", url: TECHCRUNCH },
-  { label: "11x help center: pricing overview (checked October 2026)", url: ELEVENX_DOCS },
-  { label: "11x docs: Alice overview", url: ELEVENX_ALICE },
-  { label: "Landbase: 11x pricing breakdown (a vendor in the same market)", url: ELEVENX_THIRD },
-  { label: "ZoomInfo Pipeline: AiSDR pricing, verified May 2026", url: AISDR_ZOOMINFO },
-  { label: "LinkedIn User Agreement", url: LI_AGREEMENT },
-  { label: "Marketbetter: best Artisan alternatives (studied for this page)", url: "https://marketbetter.ai/blog/best-artisan-alternatives-2026" },
-  { label: "Tooljunction: Artisan AI alternatives (studied for this page)", url: "https://www.tooljunction.io/ai-tools/artisan-ai/alternatives" },
-];
+const SOURCES: readonly Source[] = withGlanceSources(
+  [
+    { label: "Artisan: AI sales agent product page (checked October 2026)", url: ARTISAN_AGENT },
+    { label: "Artisan: pricing page (checked October 2026)", url: ARTISAN_PRICING },
+    { label: "SalesRobot: Artisan AI review with plan prices (a vendor in the same market)", url: ARTISAN_REVIEW },
+    { label: "Valley: Artisan pricing explained, reporting quote-only plans (a vendor in the same market)", url: ARTISAN_PRIVATE },
+    { label: "ZoomInfo Pipeline: Artisan review 2026", url: ZOOMINFO_REVIEW },
+    { label: "TechCrunch: LinkedIn banned AI agent startup Artisan, but now it's back (January 7, 2026)", url: TECHCRUNCH },
+    { label: "11x help center: pricing overview (checked October 2026)", url: ELEVENX_DOCS },
+    { label: "11x docs: Alice overview", url: ELEVENX_ALICE },
+    { label: "Landbase: 11x pricing breakdown (a vendor in the same market)", url: ELEVENX_THIRD },
+    { label: "ZoomInfo Pipeline: AiSDR pricing, verified May 2026", url: AISDR_ZOOMINFO },
+    { label: "LinkedIn User Agreement", url: LI_AGREEMENT },
+  ],
+  GLANCE,
+);
 
 function Ext({ href, children }: { href: string; children: React.ReactNode }) {
   return (
@@ -73,15 +73,30 @@ export default function Page() {
   return (
     <ArticleLayout
       path={PATH}
-      h1="Artisan AI alternatives for teams whose buyers live on LinkedIn"
-      lede="The best Artisan AI alternatives depend on your channel: if you sell by email at volume, another email-first agent such as 11x or AiSDR is the closer swap, and if your buyers answer on LinkedIn, a LinkedIn-native AI SDR fits better. Nora is the second kind: it writes one note per person, a human approves the strategy, the copy and the launch, and it is free for now with no contract."
+      h1="Artisan AI alternatives: an AI SDR for buyers who answer on LinkedIn"
+      lede="The best Artisan AI alternative depends on your channel. If you sell by email at volume, another email-first agent such as 11x or AiSDR is the closer swap. If your buyers answer on LinkedIn, an AI SDR built for LinkedIn fits better: Nora writes a note for each person, and a human approves the strategy, the copy and the launch."
       faq={FAQ}
       sources={SOURCES}
     >
+      <h2 id="short-answer">Nora or Artisan: the short answer</h2>
+      <Verdict
+        rival="Artisan"
+        nora={["Your buyers answer on LinkedIn more readily than by email.", "You want to read every note and approve the launch before anything is sent.", "You want to start free, with no card and no contract."]}
+        them={["Your buyers reply to email, and you need volume in the thousands a month.", "You want contact data, sequencing and deliverability tools from one vendor.", "You are comfortable with an agent that runs largely on its own once configured."]}
+      />
+
+      <h2 id="at-a-glance">Artisan alternatives at a glance</h2>
+      <p>
+        Seven tools people weigh against Artisan, by who each suits, what it costs to start and what
+        it publishes about LinkedIn volume. &ldquo;Not published&rdquo; means we could not find it,
+        not that it does not exist.
+      </p>
+      <Glance tools={GLANCE} />
+
       <h2 id="why-alternative">Why people look for Artisan AI alternatives</h2>
       <p>
-        Artisan is one of the best-known AI SDRs, and plenty of teams are happy with it. The reasons people search
-        for an alternative are usually one of four:
+        Artisan is one of the best-known AI SDRs, and plenty of teams are happy with it. The reasons
+        people look elsewhere are usually one of four:
       </p>
       <ul>
         <li>
@@ -102,15 +117,11 @@ export default function Page() {
           valuable at volume and overhead for a founder sending a few dozen messages a week.
         </li>
       </ul>
-      <p>
-        The pages ranking for this search mostly list other email-first agents, or are directories.
-        This one is for people whose problem is the channel.
-      </p>
 
       <h2 id="artisan-in-brief">Artisan in brief, fairly</h2>
       <p>
         Artisan&rsquo;s agent, Ava, finds leads from a large B2B contact database Artisan provides,
-        researches them, writes personalised email sequences and follows up. Artisan&rsquo;s{" "}
+        researches them, writes personalized email sequences and follows up. Artisan&rsquo;s{" "}
         <Ext href={ARTISAN_AGENT}>product page</Ext> says Ava also sends LinkedIn connection requests
         and messages for your team. Its <Ext href={ARTISAN_PRICING}>pricing page</Ext> lists email
         deliverability tools: mailbox warm-up, health and placement monitoring and dynamic sending
@@ -131,7 +142,7 @@ export default function Page() {
         This is genuinely unclear, and we would rather say so than pick a number. A review checked in
         early October 2026 lists <Ext href={ARTISAN_REVIEW}>self-serve plans</Ext> at $250 and $600 a
         month billed annually, higher on monthly billing, each with a monthly credit allowance. Another
-        source reports that those plans were withdrawn mid-2026 in favour of{" "}
+        source reports that those plans were withdrawn mid-2026 in favor of{" "}
         <Ext href={ARTISAN_PRIVATE}>quote-only tiers</Ext>. Both are written by competitors. Ask
         Artisan for a written quote, and ask how many credits a full campaign to one person uses. Our{" "}
         <Link href="/guides/ai-sdr-pricing">AI SDR pricing guide</Link> sets these figures beside the
@@ -146,10 +157,10 @@ export default function Page() {
       </p>
       <p>
         One piece of history is worth knowing. In late 2025 LinkedIn removed Artisan&rsquo;s company
-        page and its staff&rsquo;s profiles, and reinstated them by early January 2026. Artisan&rsquo;s
-        CEO told <Ext href={TECHCRUNCH}>TechCrunch</Ext> that LinkedIn objected to the use of
-        LinkedIn&rsquo;s name on Artisan&rsquo;s website and to data brokers Artisan used that had
-        scraped LinkedIn, and that both were addressed. That was about the company&rsquo;s own
+        page and its employees&rsquo; profiles, and reinstated them by early January 2026.
+        Artisan&rsquo;s CEO told <Ext href={TECHCRUNCH}>TechCrunch</Ext> that LinkedIn objected to the
+        use of LinkedIn&rsquo;s name on Artisan&rsquo;s website and to data brokers Artisan used that
+        had scraped LinkedIn, and that both were addressed. That was about the company&rsquo;s own
         presence; we have seen no evidence about customers&rsquo; accounts and suggest none.
       </p>
 
@@ -159,68 +170,41 @@ export default function Page() {
         columns={["Nora", "Artisan (Ava)"]}
         rows={[
           { label: "Main channel", values: ["LinkedIn only", "Email, with LinkedIn touchpoints"] },
-          { label: "Where prospects come from", values: ["LinkedIn search on your own account's tier", "Artisan's own B2B contact database"] },
-          {
-            label: "Connection notes",
-            values: [`Written per person from their own profile, under ${INVITE_NOTE_MAX_CHARS} characters`, "Personalised emails; LinkedIn depth not published"],
-          },
-          { label: "Human approval", values: ["Strategy, copy and launch each approved by a person", "A largely autonomous agent you configure"] },
-          {
-            label: "LinkedIn pacing",
-            values: [
-              `${PUBLIC_LIMITS.invitesPerDayStart} rising to ${PUBLIC_LIMITS.invitesPerDayMax} a day from the first send, ${PUBLIC_LIMITS.invitesPerWeek} a week`,
-              "Not published",
-            ],
-          },
-          { label: "Replies", values: ["Answered from your documents, or held under your rules", "Email replies suggested for you to send"] },
-          { label: "Meeting booking", values: ["Times from the availability you set, or your own scheduling link", "Not covered by the sources we checked"] },
+          { label: "Who finds prospects", values: ["LinkedIn search on your own account's tier", "Artisan's own B2B contact database"] },
+          { label: "Connection notes", values: [NORA.notes, "Not published for LinkedIn"] },
+          { label: "Human approval", values: [NORA.approval, "A largely autonomous agent you configure"] },
+          { label: "Daily invitations", values: [NORA.daily, "Not published"] },
+          { label: "Weekly ceiling", values: [NORA.weekly, "Not published"] },
+          { label: "Replies", values: [NORA.replies, "Email replies suggested for you to send"] },
+          { label: "Meeting booking", values: [NORA.booking, NOT_DOCUMENTED] },
           { label: "Email deliverability tools", values: ["None: no email channel", "Warm-up, monitoring, sending limits"] },
-          { label: "Price", values: ["Free for now, no card", "Published tiers or a quote; sources disagree"] },
         ]}
       />
 
-      <h3 id="finding-prospects">Finding prospects</h3>
+      <h2 id="where-nora-differs">Where Nora differs from Artisan</h2>
       <p>
-        Artisan starts from its database. Nora starts from your website: it drafts three to five
-        customer profiles and waits until a person approves one. Then it searches LinkedIn on the tier
-        your account actually has, opens each profile before it reaches the list, and drops anyone
-        your workspace has already contacted. Without Sales Navigator some filters cannot be applied,
-        and the campaign names them before launch.
+        Nora drafts customer profiles from your website, searches LinkedIn through your own account
+        once you approve one, and writes each connection note from that person&rsquo;s profile.
+        Nothing reaches anyone until a person launches the campaign; the full flow is on{" "}
+        <Link href="/how-it-works">how Nora works</Link>.
       </p>
-
-      <h3 id="writing-notes">Writing notes</h3>
       <p>
-        Every connection note is written for one person from their own headline, role and company,
-        and the review screen shows which details it used. A note containing a link is sent with no
-        note at all, because links in invitations cut acceptance. You can test different angles side
-        by side, with prospects split evenly between them.
+        Against Artisan, the real difference is which channel the guardrails were built for.
+        Artisan&rsquo;s published safety work is email deliverability: mailbox warm-up, placement
+        monitoring, sending limits. Nora sends no email, so it has none of that. It has the LinkedIn
+        version instead, which we could not find for Ava: {PUBLIC_LIMITS.invitesPerDayStart}{" "}
+        invitations a day at the start, rising over about {PUBLIC_LIMITS.warmupWeeks} weeks from the
+        account&rsquo;s first send, a ceiling of {PUBLIC_LIMITS.invitesPerWeek} a week across every
+        campaign, and a day&rsquo;s invitations spread across your working hours instead of sent in a
+        burst. The reasoning is on <Link href="/linkedin-automation-limits">the limits page</Link>.
+        LinkedIn&rsquo;s <Ext href={LI_AGREEMENT}>User Agreement</Ext> prohibits automated access, so
+        no tool, Nora included, is risk-free.
       </p>
-
-      <h3 id="replies-booking">Replies and booking</h3>
       <p>
-        Nora checks for new acceptances every hour, and the first message goes out{" "}
-        {FIRST_MESSAGE_MIN} to {FIRST_MESSAGE_MAX} minutes after it sees one, inside your working
-        hours. Replies are answered only from the documents you
-        give Nora; pricing, legal and negative replies wait for you unless you choose otherwise, and a
-        prospect asking for a human always waits. Meeting times are picked from the availability you
-        set, minus meetings already booked and times you have blocked out, never invented by the
-        model.
-      </p>
-
-      <h3 id="safety">Safety guardrails</h3>
-      <p>
-        The caps above are product rules: an owner can lower them, nobody can raise them, and the
-        ramp counts from an account&rsquo;s first send, not the day it was connected. A day&rsquo;s
-        allowance is spread across working hours. Nobody contacted once is contacted again by another
-        campaign, the shared exclusion list is checked before every send, and opt-outs are matched by
-        rule as well as by the model. LinkedIn&rsquo;s <Ext href={LI_AGREEMENT}>User Agreement</Ext>{" "}
-        prohibits automated access, so no tool, Nora included, is risk-free.
-      </p>
-
-      <h3 id="price">Price</h3>
-      <p>
-        Nora is free for now for every workspace, with no card and no plan to choose; the{" "}
-        <Link href="/pricing">pricing page</Link> says what happens if that changes.
+        The other difference is where the prospects come from. A database gives Artisan reach a
+        LinkedIn account cannot match; a LinkedIn search gives Nora people whose profile it can open
+        and read before writing a word, and the review screen shows which of those details each note
+        used. If your buyers rarely open cold email, that trade usually favors the profile.
       </p>
 
       <h2 id="11x">If you were also looking at 11x</h2>
@@ -229,10 +213,10 @@ export default function Page() {
         <Ext href={ELEVENX_ALICE}>documentation</Ext> describes its outbound agent, Alice, working
         across email, phone, LinkedIn and SMS. Its <Ext href={ELEVENX_DOCS}>help center</Ext> says
         pricing comes in Growth, Pro and Enterprise tiers billed annually, with no setup fee, and a
-        third-party breakdown reports the <Ext href={ELEVENX_THIRD}>Growth tier at $3,750 a month</Ext>.
-        It suits larger teams who want one agent across many channels. The reasons to look elsewhere
-        are the same as for Artisan: contract size, and LinkedIn being one channel among several
-        rather than the one the product is built around.
+        third-party breakdown reports the <Ext href={ELEVENX_THIRD}>Growth tier at $3,750 a month</Ext>{" "}
+        as of 2026. It suits larger teams who want one agent across many channels. The reasons to
+        look elsewhere are the same as for Artisan: contract size, and LinkedIn being one channel
+        among several rather than the one the product is built around.
       </p>
 
       <h2 id="other-alternatives">Other alternatives worth a look</h2>
@@ -254,25 +238,36 @@ export default function Page() {
       <p>
         Every comparison is on the <Link href="/alternatives">LinkedIn automation tools</Link> page,
         and the <Link href="/guides/best-ai-sdr-for-linkedin">guide to choosing an AI SDR for LinkedIn</Link>{" "}
-        gives eight questions to put to any vendor, including us.
+        gives seven questions to put to any vendor, including us.
       </p>
 
-      <h2 id="stay-with-artisan">Who should stay with Artisan</h2>
-      <ul>
-        <li>Your buyers reply to email, and you need volume measured in thousands a month.</li>
-        <li>You want the contact data, the sequencing and the deliverability tooling from one vendor.</li>
-        <li>You are comfortable with an agent that runs largely on its own once configured.</li>
-      </ul>
+      <h2 id="switching">Switching without contacting anyone twice</h2>
       <p>
-        Nora does none of those. If your buyers are on LinkedIn and you want to read what goes out
-        before it does, it is worth an afternoon.
+        Moving from Artisan is less a migration than a split: email can stay where it is while
+        LinkedIn moves. The risk is one person hearing from both tools in the same week.
       </p>
-      <Callout tone="info">
-        <p>
-          <a href={`${SITE.app}/signup`}>Sign up free</a>, connect one LinkedIn account and approve one
-          customer profile. Nothing is sent until you launch.
-        </p>
-      </Callout>
+      <ol>
+        <li>
+          <strong>Stop Ava&rsquo;s LinkedIn actions on the account you will connect.</strong> If Ava
+          keeps sending connection requests from that profile, Nora&rsquo;s caps no longer describe
+          what the account is doing.
+        </li>
+        <li>
+          <strong>Exclude the people Ava is already working.</strong> Nora&rsquo;s rule against
+          contacting anyone twice only knows who Nora has contacted. Add open deals, current customers
+          and anyone mid-sequence in Artisan to Nora&rsquo;s exclusion list, by company or by profile
+          link.
+        </li>
+        <li>
+          <strong>Connect the account and approve one customer profile.</strong> It starts at{" "}
+          {PUBLIC_LIMITS.invitesPerDayStart} invitations a day whatever it sent before, because the
+          warm-up counts from its first send through Nora.
+        </li>
+        <li>
+          <strong>Read the notes, then launch.</strong> A campaign stays a draft until you do, so
+          nothing reaches anyone while you are still deciding.
+        </li>
+      </ol>
     </ArticleLayout>
   );
 }

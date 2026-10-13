@@ -120,11 +120,12 @@ export function Section({
   children,
   id,
   framed = false,
+  surface,
 }: {
   title?: string;
   description?: ReactNode;
   action?: ReactNode;
-  children: ReactNode;
+  children?: ReactNode;
   id?: string;
   /**
    * The section is its own panel: the title sits inside the surface, at a
@@ -133,8 +134,54 @@ export function Section({
    * between them.
    */
   framed?: boolean;
+  /**
+   * A section that is a card with a look of its own: the overview's NeedsYou,
+   * NextStep and SetupChecklist. Rule 34 gives the `<h2>` to this component
+   * and nobody else, and those three each wrote their own; this keeps the
+   * heading here while each keeps its own class, so the level is owned in one
+   * place and none of their looks changes. Replaces the frame's `section`
+   * class and header row, so `framed` and `action` do not apply.
+   */
+  surface?: {
+    /** The section element's class, in place of `section`. */
+    className: string;
+    /** A small label above the title. */
+    eyebrow?: ReactNode;
+    /** The heading's own class. */
+    headingClassName?: string;
+    /** Inside the heading, after the title: a count, say. */
+    aside?: ReactNode;
+    /** Wraps the heading and its description, when the card groups them. */
+    headerClassName?: string;
+  };
 }) {
   const headingId = id ? `${id}-heading` : undefined;
+  if (surface) {
+    const heading = title ? (
+      <h2 id={headingId} className={surface.headingClassName}>
+        {title}
+        {surface.aside}
+      </h2>
+    ) : null;
+    const said = description ? <p className="small muted">{description}</p> : null;
+    return (
+      <section className={surface.className} aria-labelledby={title ? headingId : undefined}>
+        {surface.eyebrow ? <p className="eyebrow">{surface.eyebrow}</p> : null}
+        {surface.headerClassName ? (
+          <div className={surface.headerClassName}>
+            {heading}
+            {said}
+          </div>
+        ) : (
+          <>
+            {heading}
+            {said}
+          </>
+        )}
+        {children}
+      </section>
+    );
+  }
   return (
     <section className={framed ? "section card is-framed" : "section"} aria-labelledby={headingId}>
       {title ? (

@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { DEFAULT_WORKING_HOURS, LINKEDIN_LIMITS } from "@le/shared";
-import { ArticleLayout, Callout, CompareTable, articleMeta, type Faq, type Source } from "@/components/article";
+import { ArticleLayout, Callout, articleMeta, type Faq, type Source } from "@/components/article";
 import { LimitCalculator } from "@/components/seo/tool-limit-calculator";
 import { capForDay } from "@/lib/limit-plan";
 import { buildCapTable } from "@/lib/limit-table";
-import { PUBLIC_LIMITS, SITE } from "@/lib/site";
+import { PUBLIC_LIMITS } from "@/lib/site";
 
 const PATH = "/tools/linkedin-limit-calculator";
 
@@ -27,7 +27,7 @@ const FULL_WEEK_AT_MAX = PUBLIC_LIMITS.invitesPerDayMax * WORKING_DAYS;
 const FAQ: readonly Faq[] = [
   {
     q: "How many connection requests can I send today?",
-    a: `LinkedIn publishes no daily number, so the calculator uses the ramp Nora enforces: ${PUBLIC_LIMITS.invitesPerDayStart} a day from an account's first send, rising to ${PUBLIC_LIMITS.invitesPerDayMax} over ${LINKEDIN_LIMITS.warmupDays} days, and never more than ${PUBLIC_LIMITS.invitesPerWeek} in a week. Today's answer is the smaller of the day's ramp and what the week has left. Spread whatever it gives you across your working hours.`,
+    a: `LinkedIn publishes no daily number, so the calculator uses the ramp Nora enforces: ${PUBLIC_LIMITS.invitesPerDayStart} a day from an account's first send, rising to ${PUBLIC_LIMITS.invitesPerDayMax} over ${LINKEDIN_LIMITS.warmupDays} days, and never more than ${PUBLIC_LIMITS.invitesPerWeek} in any seven days in a row. Today's answer is the smaller of what the day's ramp has left and what the last seven days have room for. Spread whatever it gives you across your working hours.`,
   },
   {
     q: "Why does a three-week-old account still sit at the starting cap?",
@@ -42,9 +42,6 @@ const FAQ: readonly Faq[] = [
 const SOURCES: readonly Source[] = [
   { label: "LinkedIn Help: Invitation restrictions (reasons and durations)", url: "https://www.linkedin.com/help/linkedin/answer/4800" },
   { label: "ContentIn: What is the LinkedIn weekly invitation limit? (rolling window)", url: "https://contentin.io/glossary/weekly-invitation-limit/" },
-  { label: "LinkedGrow: LinkedIn connection request limit tool (studied for this page)", url: "https://linkedgrow.ai/free-tools/linkedin-connection-request-limit" },
-  { label: "Paraform: how many connection requests can you send on LinkedIn (studied for this page)", url: "https://www.paraform.com/blog/how-many-connection-requests-can-you-send-on-linkedin" },
-  { label: "Bardeen: how many LinkedIn connections can you send per day (studied for this page)", url: "https://bardeen.ai/answers/how-many-linkedin-connections-can-you-send-per-day" },
 ];
 
 export default function Page() {
@@ -52,20 +49,28 @@ export default function Page() {
     <ArticleLayout
       path={PATH}
       h1="LinkedIn connection request limit calculator"
-      lede={`This LinkedIn connection limit calculator tells you how many connection requests your account can safely send today and this week, from how long it has been sending and what it has already sent. It uses the same ramp Nora enforces: ${PUBLIC_LIMITS.invitesPerDayStart} a day at the first send, rising to ${PUBLIC_LIMITS.invitesPerDayMax} over about ${PUBLIC_LIMITS.warmupWeeks} weeks, under a ceiling of ${PUBLIC_LIMITS.invitesPerWeek} a week; nothing you type is stored.`}
+      lede={`This LinkedIn connection limit calculator shows how many connection requests your account can safely send today, and when room comes back. It uses the limits Nora enforces: ${PUBLIC_LIMITS.invitesPerDayStart} a day at the first send, rising to ${PUBLIC_LIMITS.invitesPerDayMax} over about ${PUBLIC_LIMITS.warmupWeeks} weeks, never more than ${PUBLIC_LIMITS.invitesPerWeek} in any rolling seven days. Nothing you type is stored.`}
       faq={FAQ}
       sources={SOURCES}
+      aside={
+        <LimitCalculator
+          caps={caps}
+          neverSentCap={neverSentCap}
+          weeklyCeiling={PUBLIC_LIMITS.invitesPerWeek}
+          workingDays={DEFAULT_WORKING_HOURS.days}
+        />
+      }
     >
-      <h2 id="calculator">The LinkedIn connection limit calculator</h2>
+      <h2 id="inputs">What to enter</h2>
       <p>
-        Enter whole days since the account first sent an invitation through a tool (or tick the box if it has never sent one) and how many
-        invitations it has sent this week, including any by hand.
-      </p>
-      <LimitCalculator caps={caps} neverSentCap={neverSentCap} weeklyCeiling={PUBLIC_LIMITS.invitesPerWeek} />
-      <p>
-        Most calculators and tables that rank for this ask for your account age or your Social Selling Index and return a range.
-        LinkedIn has never said either changes the invitation limit, so this one asks only for the two things the sender itself
-        uses: where the account is on its warm-up, and how much of the week is spent.
+        Enter whole days since the account first sent an invitation through a tool (or check the box
+        if it has never sent one), then how many invitations it sent on each of the last seven days,
+        today so far in the last box, including any by hand. Many calculators ask for your account age
+        or your Social Selling Index and return a range. LinkedIn publishes no invitation limit tied to
+        either, so this one asks only for the two things Nora itself checks before each send: where the
+        account is on its warm-up, and what the last seven days already hold. The days are asked for
+        one at a time because the week rolls: tomorrow the oldest day stops counting, and what comes
+        back is exactly what that day held.
       </p>
 
       <h2 id="how">How the numbers are worked out</h2>
@@ -74,14 +79,26 @@ export default function Page() {
       <p>
         The daily cap ramps in a straight line from {PUBLIC_LIMITS.invitesPerDayStart} to {PUBLIC_LIMITS.invitesPerDayMax} over{" "}
         {LINKEDIN_LIMITS.warmupDays} days, counted in whole days from the account&apos;s first automated send. The figures below are
-        not a copy of that rule: the page asks Nora&apos;s own <code>dailyInviteCap</code> function for every day of the ramp, the
-        same function the sender checks before every invitation.
+        not a copy of that rule: they are computed for every day of the ramp by the same code Nora checks before every
+        invitation.
       </p>
-      <CompareTable
-        caption="Daily invitation cap through the warm-up, from Nora's sending code"
-        columns={["Daily cap"]}
-        rows={RAMP_ROWS.map((row) => ({ label: row.label, values: [row.cap] }))}
-      />
+      <figure className="tool-ramp">
+        <figcaption>Daily invitation cap through the warm-up, from Nora&apos;s sending code</figcaption>
+        <ol>
+          {RAMP_ROWS.map((row) => (
+            <li key={row.label}>
+              <span className="tool-ramp-day">{row.label}</span>
+              <span className="tool-ramp-track" aria-hidden="true">
+                <span
+                  className="tool-ramp-bar"
+                  style={{ width: `${(row.cap / PUBLIC_LIMITS.invitesPerDayMax) * 100}%` }}
+                />
+              </span>
+              <span className="tool-ramp-value">{row.cap} a day</span>
+            </li>
+          ))}
+        </ol>
+      </figure>
       <p>
         The clock starts at the first send because connecting a tool is not activity LinkedIn can see. An account wired up a month
         before its first campaign would otherwise go from nothing to the full allowance in one day, which is the sudden change a
@@ -91,18 +108,20 @@ export default function Page() {
 
       <h3 id="weekly">Weekly ceiling</h3>
       <p>
-        On top of the daily cap sits a ceiling of {PUBLIC_LIMITS.invitesPerWeek} invitations a week, all campaigns combined. What
-        you can send today is the smaller of the two. At the full daily cap, {WORKING_DAYS} working days would be {FULL_WEEK_AT_MAX}{" "}
+        On top of the daily cap sits a ceiling of {PUBLIC_LIMITS.invitesPerWeek} invitations in any seven days in a row, all
+        campaigns combined. What you can send today is the smaller of the two. At the full daily cap, {WORKING_DAYS} working days would be {FULL_WEEK_AT_MAX}{" "}
         invitations, far over the ceiling, so once the warm-up is done the week is almost always the limit you meet first.
       </p>
       <p>
         LinkedIn does not publish a weekly number. As of October 2026 third-party reports most often describe about 100 a week,
-        and most describe a rolling seven-day window rather than a calendar week. Nora counts its own week from Monday in the
-        account&apos;s time zone; if you are unsure how LinkedIn counts yours, enter what you sent in the last seven days, which can
-        only make the answer more cautious. Our{" "}
+        and most describe a rolling seven-day window rather than a calendar week. Nora counts the same way: before every
+        invitation it adds up today and the six days before it, in the account&apos;s time zone, and nothing resets on a Monday.
+        Each day&apos;s invitations stop counting once that day is seven days old, so room comes back a day at a time, and
+        the calculator tells you when the next of it does. Our{" "}
         <Link href="/guides/linkedin-weekly-invitation-limit">guide to the LinkedIn weekly invitation limit</Link> has a worked
         example.
       </p>
+      <div className="tool-callout">
       <Callout tone="info">
         <p>
           <strong>Why these numbers and not higher ones?</strong> They sit at the conservative end of what is reported, and they
@@ -110,13 +129,14 @@ export default function Page() {
           <Link href="/linkedin-automation-limits">LinkedIn automation limits page</Link> sets out every cap and where it comes from.
         </p>
       </Callout>
+      </div>
 
       <h2 id="what-to-do">What to do with the result</h2>
       <ul>
         <li>
           <strong>Spread it across the day.</strong> A daily cap says how many, not when; ten invitations in ten minutes is a burst
-          whatever the total. Nora divides the working time left in the day by the day&apos;s allowance, with a floor of{" "}
-          {LINKEDIN_LIMITS.minGapMs / 60_000} minutes between any two actions.
+          whatever the total. Nora divides the working time left in the day by the day&apos;s allowance, and never places two
+          invitations closer than {LINKEDIN_LIMITS.minGapMs / 60_000} minutes apart.
         </li>
         <li>
           <strong>Spend it on your best-fit people first.</strong> If fewer than {PUBLIC_LIMITS.healthyAcceptance}% of invitations
@@ -135,7 +155,7 @@ export default function Page() {
         The calculator cannot see your account, and LinkedIn&apos;s User Agreement prohibits automated access, so any automation
         carries a risk no limit removes. More free tools are on the <Link href="/tools">LinkedIn outreach tools</Link> page. If you
         would rather have the pacing done for you, Nora runs this ramp and ceiling from your first send:{" "}
-        <Link href="/how-it-works">see how Nora works</Link>, free while it grows. <a href={`${SITE.app}/signup`}>Sign up free</a>.
+        <Link href="/how-it-works">see how Nora works</Link>.
       </p>
     </ArticleLayout>
   );

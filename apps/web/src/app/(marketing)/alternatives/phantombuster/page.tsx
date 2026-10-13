@@ -1,14 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { INVITE_NOTE_MAX_CHARS, LINKEDIN_LIMITS } from "@le/shared";
-import { ArticleLayout, articleMeta, Callout, CompareTable, type Faq, type Source } from "@/components/article";
-import { PUBLIC_LIMITS, SITE } from "@/lib/site";
+import { LINKEDIN_LIMITS } from "@le/shared";
+import { ArticleLayout, articleMeta, CompareTable, type Faq, type Source } from "@/components/article";
+import { PUBLIC_LIMITS } from "@/lib/site";
+import { Glance, NORA, Verdict, NOT_DOCUMENTED, withGlanceSources, type GlanceTool } from "../_glance";
 
 const PATH = "/alternatives/phantombuster";
 export const metadata: Metadata = articleMeta(PATH);
 
-const FIRST_MESSAGE_MIN = Math.round(LINKEDIN_LIMITS.acceptFollowUpMinMs / 60_000);
-const FIRST_MESSAGE_MAX = Math.round(LINKEDIN_LIMITS.acceptFollowUpMaxMs / 60_000);
+const GLANCE: readonly GlanceTool[] = ["nora", "phantombuster", "waalaxy", "expandi", "heyreach", "dripify"];
+
 const MIN_GAP_MIN = Math.round(LINKEDIN_LIMITS.minGapMs / 60_000);
 
 const PB_PRICING = "https://phantombuster.com/blog/ai-automation/phantombuster-pricing-explained";
@@ -28,11 +29,11 @@ const FAQ: readonly Faq[] = [
   },
   {
     q: "What is the best PhantomBuster alternative for outreach?",
-    a: "If you need to extract data, PhantomBuster's real alternatives are other data and enrichment tools. If what you actually want is conversations on LinkedIn, an outreach tool is the better swap: a sequencer if you want to build campaigns yourself, or an AI SDR such as Nora if you want the people found, each one written to individually, and the replies handled, with you approving what goes out.",
+    a: "If you need to extract data, PhantomBuster's real alternatives are other data and enrichment tools. If what you actually want is conversations on LinkedIn, an outreach tool is the better swap: a sequencer if you want to build campaigns yourself, or an AI SDR such as Nora if you want the people found, each one written to individually and the replies drafted, with you approving what goes out.",
   },
   {
     q: "Why did PhantomBuster change its pricing?",
-    a: "We could not find a published reason. What changed, according to PhantomBuster's own pricing explainer as of 2026: paid plans named Start, Grow and Scale at $69, $159 and $439 a month, cheaper on annual billing, each with a monthly pool of AI and email credits, and a Free plan cut to 30 minutes of execution time a month from July 2026. Older reviews quoting other plan names are out of date.",
+    a: "We could not find a published reason. What changed, according to PhantomBuster's own pricing explainer as of October 2026: paid plans named Start, Grow and Scale at $69, $159 and $439 a month, cheaper on annual billing, each with a monthly pool of AI and email credits, and a Free plan cut to 30 minutes of execution time a month from July 2026. Older reviews quoting other plan names are out of date.",
   },
   {
     q: "Does Nora scrape LinkedIn?",
@@ -40,20 +41,20 @@ const FAQ: readonly Faq[] = [
   },
 ];
 
-const SOURCES: readonly Source[] = [
-  { label: "PhantomBuster: pricing explained, plans and credits (checked October 2026)", url: PB_PRICING },
-  { label: "PhantomBuster: LinkedIn automation safe limits 2026", url: PB_LIMITS },
-  { label: "PhantomBuster: fixing a disconnected LinkedIn session cookie", url: PB_COOKIE },
-  { label: "PhantomBuster: is PhantomBuster safe for LinkedIn automation", url: PB_SAFE },
-  { label: "ZoomInfo Pipeline: PhantomBuster review 2026", url: ZOOMINFO_REVIEW },
-  { label: "Cleverly: PhantomBuster review, April 2026 (an agency in the same market)", url: CLEVERLY_REVIEW },
-  { label: "Derrick: Dux-Soup vs PhantomBuster (a vendor in the same market)", url: DUX_COMPARE },
-  { label: "LinkedIn Help: Prohibited software and extensions", url: LI_PROHIBITED },
-  { label: "LinkedIn User Agreement", url: LI_AGREEMENT },
-  { label: "Waalaxy: PhantomBuster alternative (studied for this page)", url: "https://blog.waalaxy.com/en/phantombuster-alternative" },
-  { label: "Valley: PhantomBuster alternatives 2026 (studied for this page)", url: "https://www.joinvalley.co/blog/phantombuster-alternatives-2026" },
-  { label: "ZoomInfo Pipeline: PhantomBuster alternatives (studied for this page)", url: "https://pipeline.zoominfo.com/sales/phantombuster-alternatives" },
-];
+const SOURCES: readonly Source[] = withGlanceSources(
+  [
+    { label: "PhantomBuster: pricing explained, plans and credits (checked October 2026)", url: PB_PRICING },
+    { label: "PhantomBuster: LinkedIn automation safe limits 2026", url: PB_LIMITS },
+    { label: "PhantomBuster: fixing a disconnected LinkedIn session cookie", url: PB_COOKIE },
+    { label: "PhantomBuster: is PhantomBuster safe for LinkedIn automation", url: PB_SAFE },
+    { label: "ZoomInfo Pipeline: PhantomBuster review 2026", url: ZOOMINFO_REVIEW },
+    { label: "Cleverly: PhantomBuster review, April 2026 (an agency in the same market)", url: CLEVERLY_REVIEW },
+    { label: "Derrick: Dux-Soup vs PhantomBuster (a vendor in the same market)", url: DUX_COMPARE },
+    { label: "LinkedIn Help: Prohibited software and extensions", url: LI_PROHIBITED },
+    { label: "LinkedIn User Agreement", url: LI_AGREEMENT },
+  ],
+  GLANCE,
+);
 
 function Ext({ href, children }: { href: string; children: React.ReactNode }) {
   return (
@@ -67,15 +68,30 @@ export default function Page() {
   return (
     <ArticleLayout
       path={PATH}
-      h1="PhantomBuster alternatives for LinkedIn outreach, not scraping"
-      lede="The best PhantomBuster alternatives depend on the job: for extracting and enriching data, look at other data tools, but for LinkedIn outreach that ends in conversations, an outreach tool built around limits, personal notes and replies fits better than a scraping platform. Nora is that kind of tool: it finds people from a customer profile you approve, writes each one a note, follows up, answers replies and books meetings, free for now."
+      h1="PhantomBuster alternatives: for outreach, not scraping"
+      lede="The best PhantomBuster alternative depends on the job. For extracting and enriching data, look at other data tools. For LinkedIn outreach that ends in conversations, a tool built around limits, personal notes and replies fits better: Nora finds people from a customer profile you approve, writes each one a note and drafts the replies for you to approve."
       faq={FAQ}
       sources={SOURCES}
     >
+      <h2 id="short-answer">Nora or PhantomBuster: the short answer</h2>
+      <Verdict
+        rival="PhantomBuster"
+        nora={["You want conversations with buyers, not rows of data.", "You want each note written from the person’s own profile, inside fixed daily and weekly caps.", "You want replies drafted for you and meetings booked."]}
+        them={["You need structured data out of LinkedIn and other sites, on a schedule, into other tools.", "You enjoy building workflows and want control over every step.", "Outreach is handled elsewhere, and PhantomBuster feeds it."]}
+      />
+
+      <h2 id="at-a-glance">PhantomBuster alternatives at a glance</h2>
+      <p>
+        Six tools, most of them built for outreach rather than data, by who each suits, what it costs
+        to start and what each publishes about LinkedIn volume.
+      </p>
+      <Glance tools={GLANCE} />
+
       <h2 id="why-alternative">Why people look for PhantomBuster alternatives</h2>
       <p>
         PhantomBuster is a capable, long-established automation platform, and for data work it is
-        hard to beat. People searching for an alternative tend to have one of three reasons:
+        hard to beat. People looking for an alternative tend to have one of three reasons, and the
+        right alternative depends on which one it is:
       </p>
       <ul>
         <li>
@@ -93,11 +109,6 @@ export default function Page() {
           take some learning, and the plans changed during 2026.
         </li>
       </ul>
-      <p>
-        The pages ranking for this search mostly list other data tools, or are written by outreach
-        vendors ranking themselves first. This page separates the two jobs, because the right
-        alternative depends on which one you were doing.
-      </p>
 
       <h2 id="phantombuster-in-brief">PhantomBuster in brief, fairly</h2>
       <p>
@@ -144,63 +155,32 @@ export default function Page() {
         rows={[
           { label: "Built for", values: ["Conversations on LinkedIn that end in meetings", "Data extraction and workflow automation"] },
           { label: "Sites covered", values: ["LinkedIn only", "LinkedIn, Sales Navigator and several others"] },
-          {
-            label: "Connection notes",
-            values: [`Written per person from their own profile, under ${INVITE_NOTE_MAX_CHARS} characters`, "Your own message template"],
-          },
-          { label: "Human approval", values: ["Strategy, copy and launch each approved by a person", "You build and run each Phantom"] },
-          {
-            label: "Daily invitations",
-            values: [
-              `${PUBLIC_LIMITS.invitesPerDayStart} rising to ${PUBLIC_LIMITS.invitesPerDayMax} from the first send, ${PUBLIC_LIMITS.invitesPerWeek} a week, enforced`,
-              "Set by you; 15 to 25 suggested for aged accounts",
-            ],
-          },
-          { label: "Never contacting someone twice", values: ["Workspace-wide, checked before each invitation", "Up to how you build your workflows"] },
-          { label: "Replies", values: ["Answered from your documents, or held under your rules", "Not a reply inbox; output usually goes to other tools"] },
-          { label: "Meeting booking", values: ["Times from the availability you set, or your own scheduling link", "Not offered that we could find"] },
-          { label: "Price", values: ["Free for now, no card", "$69 to $439 a month, Free plan limited"] },
+          { label: "Who finds prospects", values: [NORA.prospects, "You, from a search URL or a list"] },
+          { label: "Connection notes", values: [NORA.notes, "Your own message template"] },
+          { label: "Human approval", values: [NORA.approval, "You build and run each Phantom"] },
+          { label: "Daily invitations", values: [NORA.daily, "Set by you; 15 to 25 suggested for aged accounts"] },
+          { label: "Weekly ceiling", values: [NORA.weekly, "Not published across several Phantoms"] },
+          { label: "Never contacting anyone twice", values: [NORA.twice, "Up to how you build your workflows"] },
+          { label: "Replies", values: [NORA.replies, "Not a reply inbox; output usually goes to other tools"] },
+          { label: "Meeting booking", values: [NORA.booking, NOT_DOCUMENTED] },
         ]}
       />
 
-      <h3 id="finding-prospects">Finding prospects</h3>
+      <h2 id="where-nora-differs">Where Nora differs from PhantomBuster</h2>
       <p>
-        With PhantomBuster you bring a search URL and export the results. Nora starts a step earlier:
-        it reads your website and drafts customer profiles, and nothing is searched for until you
-        approve one. It searches on the LinkedIn tier your account actually has, opens each profile
-        before it reaches the list, and drops anyone your workspace has already contacted.
+        Where PhantomBuster starts from a search URL you bring, Nora starts from your website: it
+        drafts customer profiles, searches only after you approve one, and opens each profile to write
+        that person a note. <Link href="/how-it-works">How Nora works</Link> covers the rest, from
+        follow-ups to booking.
       </p>
-
-      <h3 id="writing-notes">Writing notes</h3>
       <p>
-        Every connection note is written for one person from their own headline, role and company,
-        and the review screen shows which details it used. A note containing a link is sent with no
-        note at all, because links in invitations cut acceptance.
-      </p>
-
-      <h3 id="replies-booking">Replies and booking</h3>
-      <p>
-        Nora checks for new acceptances every hour, and the first message goes out{" "}
-        {FIRST_MESSAGE_MIN} to {FIRST_MESSAGE_MAX} minutes after it sees one, inside your working
-        hours. Replies are answered only from the documents you
-        give Nora, with pricing, legal and negative replies held for you unless you choose otherwise,
-        and opt-outs stop everything. Meeting times are picked from the availability you set, never
-        invented by the model.
-      </p>
-
-      <h3 id="safety">Safety guardrails</h3>
-      <p>
-        The caps are product rules that an owner can lower and nobody can raise. The ramp counts from
-        an account&rsquo;s first send. A day&rsquo;s allowance is spread across working hours with at
-        least {MIN_GAP_MIN} minutes between actions, and the daily and weekly limits cover every
-        campaign on the account together, so two campaigns cannot double the volume.
-      </p>
-
-      <h3 id="price">Price</h3>
-      <p>
-        Nora is free for now, with no card and no plan to choose. PhantomBuster charges for execution
-        time and credits, which is fair for data work and an odd fit for a few dozen personal notes a
-        day.
+        The difference that matters most against PhantomBuster is that the volume is not a setting
+        per automation. In PhantomBuster each Phantom has its own schedule, so two of them on one
+        account can each stay inside the suggested range while the account as a whole does not. In
+        Nora the daily and weekly limits belong to the account and cover every campaign on it
+        together, a day&rsquo;s allowance is spread across your working hours, and no two actions go
+        out closer than {MIN_GAP_MIN} minutes apart. Nothing you configure can add a second stream of
+        activity the caps do not see.
       </p>
 
       <h2 id="two-jobs">Two different jobs: scraping data versus having conversations</h2>
@@ -213,10 +193,10 @@ export default function Page() {
       <p>
         A tool built for the first measures success in rows, so volume is whatever you set. A tool
         built for the second caps volume and writes each note separately, because identical
-        invitations sent at volume are how acceptance drops and accounts get restricted. If you used PhantomBuster to
-        build lists that you then wrote to by hand, you may want both kinds of tool. If you used it
-        to send invitations, you wanted an outreach tool all along. The legal side of scraping is
-        covered in <Link href="/guides/is-linkedin-automation-legal">is LinkedIn automation legal</Link>.
+        invitations sent at volume are how acceptance drops and accounts get restricted. If you used
+        PhantomBuster to build lists that you then wrote to by hand, you may want both kinds of tool.
+        If you used it to send invitations, you wanted an outreach tool all along. The legal side of
+        scraping is covered in <Link href="/guides/is-linkedin-automation-legal">is LinkedIn automation legal</Link>.
       </p>
 
       <h2 id="cookies">Cookie-based sessions and suspension risk</h2>
@@ -224,17 +204,17 @@ export default function Page() {
         PhantomBuster connects to LinkedIn with your session cookie, the <code>li_at</code> value your
         browser stores when you sign in, and asks you to{" "}
         <Ext href={PB_COOKIE}>paste a fresh one</Ext> when the session expires. That is not unsafe in
-        itself, but it means LinkedIn sees your account acting from a
-        server, at whatever volume the Phantoms are set to. LinkedIn&rsquo;s help center says accounts
-        using <Ext href={LI_PROHIBITED}>third-party automation software</Ext> may be restricted, and
-        its <Ext href={LI_AGREEMENT}>User Agreement</Ext> prohibits automated access, so cookie or
-        not, the risk is real.
+        itself, but it means LinkedIn sees your account acting from a server, at whatever volume the
+        Phantoms are set to. LinkedIn&rsquo;s help center says accounts using{" "}
+        <Ext href={LI_PROHIBITED}>third-party automation software</Ext> may be restricted, and its{" "}
+        <Ext href={LI_AGREEMENT}>User Agreement</Ext> prohibits automated access, so cookie or not, the
+        risk is real.
       </p>
       <p>
         Nora connects differently: you sign in on a hosted page, your LinkedIn password never reaches
         us, and the token that comes back is encrypted before it is stored. The{" "}
         <Link href="/security">security page</Link> has the details. That changes how your session is
-        held, not LinkedIn&rsquo;s view of automation. What lowers the risk in practice is behaviour,
+        held, not LinkedIn&rsquo;s view of automation. What lowers the risk in practice is behavior,
         which our{" "}
         <Link href="/guides/cloud-vs-browser-extension-linkedin-automation">
           comparison of cloud and browser-extension automation
@@ -267,22 +247,36 @@ export default function Page() {
         lists the questions to ask any of them.
       </p>
 
-      <h2 id="stay-with-phantombuster">Who should stay with PhantomBuster</h2>
-      <ul>
-        <li>You need structured data out of LinkedIn and other sites, on a schedule, into other tools.</li>
-        <li>You enjoy building workflows and want control over every step.</li>
-        <li>Outreach is handled elsewhere, and PhantomBuster feeds it.</li>
-      </ul>
+      <h2 id="switching">Switching without contacting anyone twice</h2>
       <p>
-        Nora does none of that. If your goal is meetings from LinkedIn conversations, see{" "}
-        <Link href="/how-it-works">how Nora works</Link>.
+        You can keep PhantomBuster for data while Nora handles the conversations. Either way, the
+        history of who you contacted usually lives in exported sheets rather than in a campaign, so
+        it is easy to leave behind.
       </p>
-      <Callout tone="info">
-        <p>
-          <a href={`${SITE.app}/signup`}>Sign up free</a>, connect one account and approve one customer
-          profile. Nothing is sent until you launch.
-        </p>
-      </Callout>
+      <ol>
+        <li>
+          <strong>Turn off the scheduled launches of every Phantom that invites or messages</strong>{" "}
+          from the account, such as an auto-connect or a message sender. Data Phantoms on the same
+          account still act through it, so keep those light.
+        </li>
+        <li>
+          <strong>Remove the session cookie from Phantoms you no longer need,</strong> so nothing else
+          is acting as you once Nora is sending.
+        </li>
+        <li>
+          <strong>Turn your exports into an exclusion list.</strong> Nora only knows who Nora has
+          contacted. The people and companies in your sent-invitation sheets who must not hear from
+          you again go on Nora&rsquo;s exclusion list.
+        </li>
+        <li>
+          <strong>Connect the account and approve one customer profile.</strong> It starts at{" "}
+          {PUBLIC_LIMITS.invitesPerDayStart} invitations a day whatever the Phantoms sent, because
+          the warm-up counts from its first send through Nora.
+        </li>
+        <li>
+          <strong>Read the notes, then launch.</strong> Nothing is sent until you do.
+        </li>
+      </ol>
     </ArticleLayout>
   );
 }

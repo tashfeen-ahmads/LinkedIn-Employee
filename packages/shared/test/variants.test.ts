@@ -76,6 +76,17 @@ describe("standings", () => {
     expect(result.find((r) => r.id === "established")?.leading).toBe(true);
   });
 
+  it("never calls a barely-started angle behind an established one", () => {
+    // The mirror of the case above. 0/3 has an interval reaching well below an
+    // established 80%, so without the floor on *both* sides the new angle is
+    // called behind on its first three invitations. Rule 28: only once both
+    // have cleared MIN_SENDS_TO_COMPARE.
+    const fresh = 3;
+    expect(fresh).toBeLessThan(MIN_SENDS_TO_COMPARE);
+    const result = standings([v("established", 200, 160), v("new", fresh, 0)]);
+    expect(result.find((r) => r.id === "new")?.leading).toBe(true);
+  });
+
   it("does not separate two angles whose ranges overlap, even past the floor", () => {
     // 5/20 against 8/20 is 25% against 40% — the most persuasive table on this
     // screen, and still two angles this campaign cannot tell apart. Compared as

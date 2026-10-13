@@ -7,10 +7,12 @@ import { NeedsYou } from "@/components/needs-you";
 import { loadNeedsYou } from "@/lib/needs-you-data";
 import { PageHeader, PageGroup, Section, Empty } from "@/components/page";
 import { createClient } from "@/lib/supabase-server";
+import { fetchAllRows } from "@/lib/rows";
 import { PageNotice, type NoticeParams } from "@/components/page-notice";
 import { readStrategyState } from "@/lib/strategy-state";
 import { readSetupState } from "@/lib/setup-state";
 import { readFunnelData } from "@/lib/funnel-data";
+import { canSeeTeamFunnel, scopeFunnel } from "@/lib/funnel-scope";
 import { StrategyStatus } from "@/components/strategy-status";
 import { TeamPanel } from "@/components/team-panel";
 import type { TeamFacts } from "@/lib/team";
@@ -32,7 +34,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
   const session = await requireSession();
   const supabase = await createClient();
 
-  const [{ state: setup, next }, funnel, { data: profiles }, { count: prospectsFound }, { data: me }] = await Promise.all([
+  const [{ state: setup, next }, everything, { data: profiles }, { rows: found }, { data: me }] = await Promise.all([
     readSetupState(supabase, session.workspaceId),
     readFunnelData(supabase, session.workspaceId),
     supabase
@@ -40,12 +42,20 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
       .select("id, name, priority, approved_at, do_not_pursue")
       .eq("workspace_id", session.workspaceId)
       .order("priority", { ascending: true }),
-    // A count, not the rows: the team panel needs how many people Scout has
-    // found, and nothing about any of them.
-    supabase
-      .from("prospects")
-      .select("id", { count: "exact", head: true })
-      .eq("workspace_id", session.workspaceId),
+    // Which strategy found each person, and nothing else about them: the team
+    // panel needs how many Scout has found, and the Strategies table below
+    // needs how many each strategy found. Counted from `prospects` by
+    // `customer_profile_id`, the same reading the Strategy page and the
+    // Prospects tabs make (rules 26 and 32). Paged, because a plain select
+    // stops at a thousand rows without saying so.
+    fetchAllRows<{ customer_profile_id: string | null }>((from, to) =>
+      supabase
+        .from("prospects")
+        .select("customer_profile_id")
+        .eq("workspace_id", session.workspaceId)
+        .order("id", { ascending: true })
+        .range(from, to),
+    ),
     // For the greeting: "Morning" at four in the afternoon is a small thing
     // that tells somebody the product does not know where they are.
     supabase.from("profiles").select("timezone").eq("id", session.userId).maybeSingle(),
@@ -68,12 +78,30 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
   const { items: needs, facts: needsFacts } = await loadNeedsYou(supabase, session.workspaceId);
   const waiting = needsFacts.heldReplies + needsFacts.heldBookings + needsFacts.heldForCopy;
 
+  /*
+   * Scoped once, before anything is counted, exactly as Results below scopes
+   * it. The headline figures used to count the whole workspace for a rep while
+   * Results under them counted only the rep's campaigns, so "Invited, last 7
+   * days" and the funnel a few inches lower disagreed on the same screen.
+   */
+  const funnel = scopeFunnel(everything, {
+    userId: session.userId,
+    canSeeTeam: canSeeTeamFunnel(session.role),
+  });
   const report = funnelReport(funnel.rows, funnel.goals, Date.now());
+  /*
+   * People found per strategy.
+   *
+   * This used to add up campaign rows, which is a different number from the
+   * one the Strategy page shows for the same strategy: a person found and not
+   * yet on a campaign counted there and not here, and a person on two of a
+   * strategy's campaigns counted twice here. Two answers to one question, on
+   * two screens a rep moves between.
+   */
   const byProfile = new Map<string, number>();
-  for (const campaign of funnel.campaigns) {
-    if (!campaign.customer_profile_id) continue;
-    const rows = funnel.rowsByCampaign.get(campaign.id)?.length ?? 0;
-    byProfile.set(campaign.customer_profile_id, (byProfile.get(campaign.customer_profile_id) ?? 0) + rows);
+  for (const row of found) {
+    if (!row.customer_profile_id) continue;
+    byProfile.set(row.customer_profile_id, (byProfile.get(row.customer_profile_id) ?? 0) + 1);
   }
 
   // The team panel's facts, every one already on this page except the count
@@ -84,7 +112,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
     strategyPhase: strategy.phase,
     strategiesApproved: pursued.filter((profile) => profile.approved_at).length,
     strategiesAwaiting: pursued.filter((profile) => !profile.approved_at).length,
-    prospectsFound: prospectsFound ?? 0,
+    prospectsFound: found.length,
     campaignsTotal: funnel.campaigns.filter((campaign) => campaign.status !== "archived").length,
     campaignsRunning: funnel.campaigns.filter((campaign) => campaign.status === "running").length,
     campaignsDraft: funnel.campaigns.filter((campaign) => campaign.status === "draft").length,

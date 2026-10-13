@@ -37,6 +37,19 @@ export const SalesNavFiltersSchema = z.object({
 });
 export type SalesNavFilters = z.infer<typeof SalesNavFiltersSchema>;
 
+/**
+ * The highest priority a stored strategy may carry.
+ *
+ * A first run writes three to five, and the model ranks those 1 to 5. But a
+ * workspace grows to fifteen or twenty (rule 37), and every strategy added
+ * after the first run is numbered from the end of the list — so a sixth
+ * strategy is priority 6. Capped at 5, that strategy could not be read by the
+ * targeting job nor saved by its own edit form. The model's own answer is
+ * still held to 1–5 (`StrategyOutputSchema`), where ranking one response is
+ * the whole job.
+ */
+export const MAX_STRATEGY_PRIORITY = 99;
+
 export const CustomerProfileSchema = z.object({
   name: z.string().describe("Short memorable name, e.g. 'Seed-stage SaaS founders'."),
   summary: z.string(),
@@ -93,7 +106,7 @@ export const CustomerProfileSchema = z.object({
     .array(z.object({ delayDays: z.number().int().min(1).max(14), message: z.string().max(1200) }))
     .min(2)
     .max(3),
-  priority: z.number().int().min(1).max(5).describe("1 = pursue first."),
+  priority: z.number().int().min(1).max(MAX_STRATEGY_PRIORITY).describe("1 = pursue first."),
 });
 export type CustomerProfile = z.infer<typeof CustomerProfileSchema>;
 
@@ -123,7 +136,14 @@ export function parseCustomerProfile(
 
 export const StrategyOutputSchema = z.object({
   businessProfile: BusinessProfileSchema,
-  customerProfiles: z.array(CustomerProfileSchema).min(3).max(5),
+  customerProfiles: z
+    .array(
+      CustomerProfileSchema.extend({
+        priority: z.number().int().min(1).max(5).describe("1 = pursue first."),
+      }),
+    )
+    .min(3)
+    .max(5),
 });
 export type StrategyOutput = z.infer<typeof StrategyOutputSchema>;
 

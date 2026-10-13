@@ -88,3 +88,27 @@ export function workingMsLeftToday(now: Date, hours: WorkingHours, timezone: str
   // Before the window opens, the whole of it is ahead; inside it, what is left.
   return end - Math.max(intoDay, hours.start * 3_600_000);
 }
+
+/**
+ * How much unbroken working time is ahead, carrying on past midnight when the
+ * window does.
+ *
+ * `workingMsLeftToday` stops at midnight on purpose: it divides *today's*
+ * allowance. A profile view asks a different question, whether the invitation
+ * can still follow it inside working hours, and for a rep whose hours run
+ * around the clock that answer does not end at midnight. Read as if it did,
+ * nobody was viewed in the last hour of any day. Days are walked by local
+ * date, never by adding 24 hours, so a clock change cannot skip one.
+ */
+export function workingMsAhead(now: Date, hours: WorkingHours, timezone: string, maxDays = 7): number {
+  let total = workingMsLeftToday(now, hours, timezone);
+  if (total === 0 || hours.end < 24) return total;
+  let at = new Date(now.getTime() + msUntilNextLocalMidnight(now, timezone));
+  for (let day = 1; day < maxDays; day += 1) {
+    const { weekday } = zonedParts(at, timezone);
+    if (!hours.days.includes(weekday) || hours.start > 0) break;
+    total += hours.end * 3_600_000;
+    at = new Date(at.getTime() + msUntilNextLocalMidnight(new Date(at.getTime() + 60_000), timezone) + 60_000);
+  }
+  return total;
+}

@@ -73,11 +73,11 @@ export default async function CampaignsPage({
           }
         />
         {/* Without this, a refusal from the action above redirects here and
-            says nothing — a button that looks broken rather than one that
+            says nothing: a button that looks broken rather than one that
             explained itself. */}
         <PageNotice error={notice.error} notice={notice.notice} />
         <Empty title="No campaigns yet." action="Open strategies" href="/app/strategy">
-          Scout and Quinn build one from an approved strategy — the list, the copy, and a note
+          Scout and Quinn build one from an approved strategy: the list, the copy, and a note
           written for each person. Or press <strong>Set up a campaign</strong> above to build one now
           over everybody you already have. Either way it arrives as a draft.
         </Empty>

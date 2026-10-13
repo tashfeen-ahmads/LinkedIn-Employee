@@ -15,7 +15,7 @@ export const LINKEDIN_LIMITS = {
   invitesPerDayMax: 35,
   /** Days over which invitesPerDayStart ramps to invitesPerDayMax. */
   warmupDays: 35,
-  /** Hard weekly ceiling for connection requests, all campaigns combined. */
+  /** Hard ceiling for connection requests in any rolling seven days (the last seven, today included), all campaigns combined. */
   invitesPerWeek: 100,
   /** Messages per day (follow-ups + replies). */
   messagesPerDay: 50,

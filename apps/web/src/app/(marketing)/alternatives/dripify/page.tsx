@@ -1,14 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { INVITE_NOTE_MAX_CHARS, LINKEDIN_LIMITS, containsLink } from "@le/shared";
-import { ArticleLayout, articleMeta, CompareTable, Callout, type Faq, type Source } from "@/components/article";
-import { PUBLIC_LIMITS, SITE } from "@/lib/site";
+import { INVITE_NOTE_MAX_CHARS, containsLink } from "@le/shared";
+import { ArticleLayout, articleMeta, CompareTable, type Faq, type Source } from "@/components/article";
+import { PUBLIC_LIMITS } from "@/lib/site";
+import { Glance, NORA, Verdict, NOT_DOCUMENTED, withGlanceSources, type GlanceTool } from "../_glance";
 
 const PATH = "/alternatives/dripify";
 export const metadata: Metadata = articleMeta(PATH);
 
-const FIRST_MESSAGE_MIN = Math.round(LINKEDIN_LIMITS.acceptFollowUpMinMs / 60_000);
-const FIRST_MESSAGE_MAX = Math.round(LINKEDIN_LIMITS.acceptFollowUpMaxMs / 60_000);
+const GLANCE: readonly GlanceTool[] = ["nora", "dripify", "waalaxy", "expandi", "heyreach", "phantombuster"];
 
 /** Illustrations, invented for this page: no real person or company. */
 const TEMPLATE_NOTE =
@@ -35,7 +35,7 @@ const FAQ: readonly Faq[] = [
   },
   {
     q: "Is there a free Dripify alternative?",
-    a: "Yes. As of October 2026 Nora is free for every workspace while it grows, with no card, and the free version is the whole product: prospect search, a note written for each person, follow-ups, replies and booking, under the same caps for everyone. Dripify itself offers a 7-day trial rather than a permanent free plan.",
+    a: "Yes. As of October 2026 Nora is free while we grow, with no card, and the free version is the whole product: prospect search, a note written for each person, follow-ups, reply drafts and booking, under the same caps for everyone. Dripify itself offers a 7-day trial rather than a permanent free plan.",
   },
   {
     q: "Is Dripify legit?",
@@ -43,7 +43,7 @@ const FAQ: readonly Faq[] = [
   },
   {
     q: "Is Dripify better than Waalaxy?",
-    a: "They suit different people. Dripify is priced per user from $59 a month and is built for drip sequences with team features on its top plan. Waalaxy is quicker to start with ready-made campaigns and lists lower prices, though sources disagree on its exact figures. If you want neither builder, an AI SDR such as Nora does the targeting and writing for you.",
+    a: "They suit different people. As of October 2026 Dripify is priced per user from $59 a month and is built for drip sequences with team features on its top plan. Waalaxy is quicker to start with ready-made campaigns and lists lower prices, though sources disagree on its exact figures. If you want neither builder, an AI SDR does the targeting and writing for you.",
   },
   {
     q: "Can Dripify get you banned?",
@@ -51,22 +51,21 @@ const FAQ: readonly Faq[] = [
   },
 ];
 
-const SOURCES: readonly Source[] = [
-  { label: "Dripify: pricing page", url: DRIPIFY_PRICING },
-  { label: "LeadHaste: Dripify pricing 2026, plans from $39 to $99", url: LEADHASTE },
-  { label: "Valley: Dripify pricing explained 2026 (a vendor in the same market)", url: VALLEY },
-  { label: "Dripify help center: how daily limits safeguard your account (checked October 2026)", url: DRIPIFY_LIMITS },
-  { label: "Dripify FAQ: connection request cap", url: DRIPIFY_FAQ },
-  { label: "Dripify help center: avoiding the same leads within a team", url: DRIPIFY_DUPES },
-  { label: "Dripify help center: lead list filters", url: DRIPIFY_FILTERS },
-  { label: "Dripify help center: blacklisting LinkedIn users", url: DRIPIFY_BLACKLIST },
-  { label: "LinkedIn Help: Prohibited software and extensions", url: LI_PROHIBITED },
-  { label: "LinkedIn Help: Automated activity on LinkedIn", url: "https://www.linkedin.com/help/linkedin/answer/90586" },
-  { label: "LinkedIn User Agreement", url: LI_AGREEMENT },
-  { label: "Salesforge: Dripify alternatives (a competitor, studied for this page)", url: "https://www.salesforge.ai/fr/blog/dripify-alternatives" },
-  { label: "Expandi: a guide to Dripify alternatives (a competitor, studied for this page)", url: "https://expandi.io/?p=7876" },
-  { label: "La Growth Machine: best Dripify alternatives (a competitor, studied for this page)", url: "https://lagrowthmachine.com/de/beste-dripify-alternativen/" },
-];
+const SOURCES: readonly Source[] = withGlanceSources(
+  [
+    { label: "Dripify: pricing page", url: DRIPIFY_PRICING },
+    { label: "LeadHaste: Dripify pricing 2026, plans from $39 to $99", url: LEADHASTE },
+    { label: "Valley: Dripify pricing explained 2026 (a vendor in the same market)", url: VALLEY },
+    { label: "Dripify help center: how daily limits safeguard your account (checked October 2026)", url: DRIPIFY_LIMITS },
+    { label: "Dripify FAQ: connection request cap", url: DRIPIFY_FAQ },
+    { label: "Dripify help center: avoiding the same leads within a team", url: DRIPIFY_DUPES },
+    { label: "Dripify help center: lead list filters", url: DRIPIFY_FILTERS },
+    { label: "Dripify help center: blacklisting LinkedIn users", url: DRIPIFY_BLACKLIST },
+    { label: "LinkedIn Help: Prohibited software and extensions", url: LI_PROHIBITED },
+    { label: "LinkedIn User Agreement", url: LI_AGREEMENT },
+  ],
+  GLANCE,
+);
 
 function Ext({ href, children }: { href: string; children: React.ReactNode }) {
   return (
@@ -80,27 +79,29 @@ export default function Page() {
   return (
     <ArticleLayout
       path={PATH}
-      h1="Dripify alternatives: personal notes, human approval, no per-seat bill"
-      lede="The right Dripify alternatives depend on whether you want a better sequence builder or less building: for LinkedIn and email drips with team dashboards, another sequence tool is the closer swap, while an AI SDR such as Nora finds the prospects, writes each note and answers replies after a person approves the strategy, the copy and the launch. Nora is free while it grows, so there is no bill per seat."
+      h1="Dripify alternatives: personal notes and human approval"
+      lede="The right Dripify alternative depends on whether you want a better sequence builder or less building. For LinkedIn and email drips with team dashboards, another sequence tool is the closer swap; if you would rather approve the work than design it, an AI SDR such as Nora finds the prospects, writes each note and drafts the replies, with nothing billed per seat."
       faq={FAQ}
       sources={SOURCES}
     >
-      <CompareTable
-        caption="In short: Dripify and Nora, as of October 2026"
-        columns={["Dripify", "Nora"]}
-        rows={[
-          { label: "What it is", values: ["A cloud drip sequence builder", "An AI SDR you approve"] },
-          { label: "Price", values: ["$59 to $99 per user a month; 7-day trial", "Free while it grows, no card"] },
-          { label: "Messages", values: ["Templates with variables", "A note written for each person"] },
-          { label: "Email steps", values: ["Yes, with an email finder", "No, LinkedIn only"] },
-        ]}
+      <h2 id="short-answer">Nora or Dripify: the short answer</h2>
+      <Verdict
+        rival="Dripify"
+        nora={["You would rather approve the work than build the sequence.", "You want a note written for each person, not a template with a first name swapped in.", "You want replies drafted for you, with nothing billed per seat."]}
+        them={["You want LinkedIn and email steps in one drip, with an email finder.", "You manage several sales teams and need dashboards and permissions per team.", "You have your lists and copy, and want a cloud sender that runs your sequence as built."]}
       />
+
+      <h2 id="at-a-glance">Dripify alternatives at a glance</h2>
+      <p>
+        Six tools people compare with Dripify, by who each suits, the cheapest way in and what each
+        publishes about LinkedIn volume.
+      </p>
+      <Glance tools={GLANCE} />
 
       <h2 id="why-alternative">Why people look for a Dripify alternative</h2>
       <p>
-        Dripify suits people who like to design a sequence once and let it run. The pages ranking for
-        this search are mostly written by competitors ranking themselves, and they rarely mention
-        LinkedIn safety at all. The usual reasons to look elsewhere are simpler:
+        Dripify suits people who like to design a sequence once and let it run. The usual reasons to
+        look elsewhere are simple:
       </p>
       <ul>
         <li>
@@ -147,7 +148,7 @@ export default function Page() {
       <p>
         Dripify&rsquo;s <Ext href={DRIPIFY_LIMITS}>help center</Ext> describes daily limits that vary
         by account type, up to 75 connection requests a day for Sales Navigator accounts, with a
-        range setting that randomises each day&rsquo;s number around the one you choose. Its{" "}
+        range setting that randomizes each day&rsquo;s number around the one you choose. Its{" "}
         <Ext href={DRIPIFY_FAQ}>FAQ</Ext> calls 75 a hard ceiling. We could not find a weekly ceiling
         or an automatic warm-up ramp. To avoid double contact, lead list filters can{" "}
         <Ext href={DRIPIFY_FILTERS}>skip leads already in other campaigns</Ext>, a team setting can{" "}
@@ -161,67 +162,33 @@ export default function Page() {
         columns={["Nora", "Dripify"]}
         rows={[
           { label: "Who builds the campaign", values: ["The agent drafts it; you approve and launch", "You design the drip"] },
-          { label: "Who finds prospects", values: ["The agent, from a customer profile you approved", "You, from searches or imported lists"] },
-          {
-            label: "Connection notes",
-            values: [`Written per person, under ${INVITE_NOTE_MAX_CHARS} characters, never with a link`, "Templates with variables"],
-          },
-          {
-            label: "Daily invitations",
-            values: [
-              `${PUBLIC_LIMITS.invitesPerDayStart} rising to ${PUBLIC_LIMITS.invitesPerDayMax} from the first send; can only be lowered`,
-              "Up to 75, with a random range",
-            ],
-          },
-          { label: "Weekly ceiling", values: [`${PUBLIC_LIMITS.invitesPerWeek}, across all campaigns`, "Not published"] },
-          { label: "Not contacting anyone twice", values: ["Always on, checked before each send", "Filters and a blacklist you apply"] },
-          { label: "Replies", values: ["Answered from your documents under your rules, or held", "Inbox; you reply"] },
-          { label: "Meeting booking", values: ["Booking page or your own scheduling link", "Not covered by the sources we checked"] },
+          { label: "Who finds prospects", values: [NORA.prospects, "You, from searches or imported lists"] },
+          { label: "Connection notes", values: [NORA.notes, "Templates with variables"] },
+          { label: "Daily invitations", values: [NORA.daily, "Up to 75, with a random range you set"] },
+          { label: "Weekly ceiling", values: [NORA.weekly, "Not published"] },
+          { label: "Never contacting anyone twice", values: [NORA.twice, "Filters and a blacklist you apply"] },
+          { label: "Replies", values: [NORA.replies, "Inbox; you reply"] },
+          { label: "Meeting booking", values: [NORA.booking, NOT_DOCUMENTED] },
           { label: "Team roles", values: ["Owner, admin, manager and rep in one workspace", "Team management on Advanced"] },
-          { label: "Price", values: ["Free while it grows, no seats", "$59 to $99 per user a month"] },
         ]}
       />
 
-      <h3 id="finding-prospects">Finding prospects</h3>
+      <h2 id="where-nora-differs">Where Nora differs from Dripify</h2>
       <p>
-        Nora reads your website and proposes three to five customer profiles, and searches for nobody
-        until a person approves one. It searches on the LinkedIn tier your account has, and any filter
-        that tier cannot apply is named on the campaign before launch rather than silently dropped. It
-        opens each profile before it reaches the list, and leaves out anyone your workspace has
-        already contacted.
+        Instead of a drip you design, Nora proposes who to reach from your website, writes to each
+        person and drafts each reply, and you approve the strategy, the copy and the launch.{" "}
+        <Link href="/how-it-works">How Nora works</Link> walks through every step.
       </p>
-
-      <h3 id="writing-notes">Writing notes</h3>
       <p>
-        Every note is written for one person from their own headline, role and company, and the review
-        screen shows which details it used. A note containing a link is sent with no note at all,
-        because links in invitations cut acceptance. The section below shows the difference.
-      </p>
-
-      <h3 id="replies-booking">Replies and booking</h3>
-      <p>
-        Nora checks for acceptances through the day and sends the first message {FIRST_MESSAGE_MIN} to{" "}
-        {FIRST_MESSAGE_MAX} minutes after it notices one, inside your working hours; later follow-ups
-        keep the delays you set. Replies are answered only from the documents you gave it. Pricing,
-        legal and negative replies wait for you unless you choose otherwise, and a prospect who asks
-        for a person always waits. Meetings are offered from its booking page or through your own
-        scheduling link.
-      </p>
-
-      <h3 id="safety">Safety guardrails</h3>
-      <p>
-        You approve three things before anything reaches a real person: the strategy, the copy and
-        the launch. A campaign is a draft until you press the button, and nobody, including our own
-        support, can launch it for you. The caps are product rules, an owner can lower them, and the
-        ramp runs about {PUBLIC_LIMITS.warmupWeeks} weeks from an account&rsquo;s first send. An
-        opt-out is matched by a fixed rule as well as by the model.
-      </p>
-
-      <h3 id="price">Price</h3>
-      <p>
-        Nora has no seats to buy. Each teammate connects their own LinkedIn account, each account
-        keeps its own caps, and the workspace is free while Nora grows. Details are on{" "}
-        <Link href="/pricing">the pricing page</Link>.
+        Against Dripify, the first difference is who picks the daily number. Dripify lets you choose
+        one up to 75 and varies it around your choice. Nora chooses it for you: it starts at{" "}
+        {PUBLIC_LIMITS.invitesPerDayStart} on an account&rsquo;s first sending day, climbs over about{" "}
+        {PUBLIC_LIMITS.warmupWeeks} weeks, and an owner can lower it but not raise it. The second is
+        the bill. Dripify charges per user; in Nora each teammate connects their own LinkedIn account
+        to one workspace, nothing is charged per seat, and each account keeps its own caps.{" "}
+        <Link href="/pricing">The pricing page</Link> says what free includes. LinkedIn&rsquo;s{" "}
+        <Ext href={LI_AGREEMENT}>User Agreement</Ext> prohibits automated access, so neither tool is
+        risk-free.
       </p>
 
       <h2 id="templates-vs-notes">Templates versus a note written for each person</h2>
@@ -251,17 +218,10 @@ export default function Page() {
         This also changes what testing means. Comparing two fixed phrasings tells you little when
         every note is different, so Nora tests angles instead: the pain a note names, or the reason
         for reaching out. People are split evenly, each angle keeps its own follow-ups, and no angle
-        is called behind until another's whole confidence range sits above its own. Our guide to{" "}
+        is called behind until another&rsquo;s whole confidence range sits above its own. Our guide to{" "}
         <Link href="/guides/ai-personalized-linkedin-messages">AI personalized LinkedIn messages</Link>{" "}
-        covers how to check personalisation in any tool.
+        covers how to check personalization in any tool.
       </p>
-      <Callout tone="safety">
-        <p>
-          LinkedIn&rsquo;s <Ext href={LI_AGREEMENT}>User Agreement</Ext> prohibits automated access. No
-          tool can promise zero risk, and neither do we. Conservative caps and notes people actually
-          accept are what reduce it.
-        </p>
-      </Callout>
 
       <h2 id="other-alternatives">Other Dripify alternatives worth a look</h2>
       <ul>
@@ -274,8 +234,12 @@ export default function Page() {
           <Link href="/alternatives/expandi">Expandi compared</Link>.
         </li>
         <li>
-          <strong>HeyReach</strong>, if you run many sender accounts for clients. See{" "}
+          <strong>HeyReach</strong>, if your team sends from many accounts on behalf of clients. See{" "}
           <Link href="/alternatives/heyreach">HeyReach compared</Link>.
+        </li>
+        <li>
+          <strong>PhantomBuster</strong>, if you used Dripify mostly to pull lists and want a data
+          tool instead. See <Link href="/alternatives/phantombuster">PhantomBuster compared</Link>.
         </li>
       </ul>
       <p>
@@ -285,17 +249,31 @@ export default function Page() {
         lists the questions to ask any vendor, ours included.
       </p>
 
-      <h2 id="stay-with-dripify">Who should stay with Dripify</h2>
-      <ul>
-        <li>You want LinkedIn and email steps in one drip, with an email finder.</li>
-        <li>You manage several sales teams and need dashboards and permissions per team.</li>
-        <li>You have your lists and copy, and want a cloud sender that runs your sequence as built.</li>
-      </ul>
+      <h2 id="switching">Switching without contacting anyone twice</h2>
       <p>
-        If instead you want the targeting, writing and replies done with your approval on each, read{" "}
-        <Link href="/how-it-works">how Nora works</Link> or{" "}
-        <a href={`${SITE.app}/signup`}>Sign up free</a>.
+        A drip keeps working after you stop looking at it, which is what makes leaving one carefully
+        worth a few minutes.
       </p>
+      <ol>
+        <li>
+          <strong>Pause the drips, do not just stop adding leads.</strong> Invitations Dripify already
+          sent can still be accepted next week, and a running drip will message whoever accepts.
+        </li>
+        <li>
+          <strong>Carry the history across by hand.</strong> Nora only knows who Nora has contacted.
+          Put the companies and people you must not hear from twice, from your Dripify lists and your
+          blacklist, on Nora&rsquo;s exclusion list.
+        </li>
+        <li>
+          <strong>Move one teammate at a time.</strong> Each connects their own LinkedIn account and
+          starts at {PUBLIC_LIMITS.invitesPerDayStart} invitations a day, whatever the account sent
+          through Dripify, because the warm-up counts from the first send through Nora.
+        </li>
+        <li>
+          <strong>Approve one customer profile, read the notes, then launch.</strong> Nothing is sent
+          before you do.
+        </li>
+      </ol>
     </ArticleLayout>
   );
 }

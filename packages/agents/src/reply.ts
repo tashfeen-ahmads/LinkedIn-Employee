@@ -1,6 +1,7 @@
 import {
   type ReplyIntent,
   OPT_OUT_PHRASES,
+  normalizeForOptOut,
   ReplyClassificationSchema,
   ReplyDraftSchema,
   type BusinessProfile,
@@ -69,8 +70,13 @@ export async function classifyReply(
   return classification;
 }
 
+/**
+ * Normalised first: "don’t contact me" typed on a phone carries a curly
+ * apostrophe, and a byte comparison against "don't contact" left the one
+ * check meant to work without a model to the model alone.
+ */
 export function containsOptOut(message: string): boolean {
-  const normalized = message.toLowerCase();
+  const normalized = normalizeForOptOut(message);
   return OPT_OUT_PHRASES.some((phrase) => normalized.includes(phrase));
 }
 

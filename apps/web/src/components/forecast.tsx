@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type CSSProperties } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { LINKEDIN_LIMITS, RATE_TARGETS } from "@le/shared";
 
@@ -9,7 +9,7 @@ import { LINKEDIN_LIMITS, RATE_TARGETS } from "@le/shared";
  *
  * The interesting thing about this widget is what it will not let you do. The
  * daily slider stops at the cap the sender enforces, and the weekly ceiling
- * clamps the total underneath it — so someone dragging for a bigger number
+ * clamps the total underneath it, so someone dragging for a bigger number
  * runs into the product's actual safety limit rather than reading about it.
  * A constraint you can feel is worth more than a paragraph explaining one.
  */
@@ -52,7 +52,7 @@ export function Forecast() {
 
   return (
     <div className="forecast card raised">
-      <div className="stack-4">
+      <div className="forecast-inputs">
         <Slider
           id="seats"
           label="Reps sending"
@@ -96,8 +96,8 @@ export function Forecast() {
 
       <div className="forecast-output stack-4">
         <div className="stack-1">
-          <span className="eyebrow">In a month</span>
-          <p className="small muted">
+          <p className="forecast-heading">In a month</p>
+          <p className="small muted nums">
             {seats} {seats === 1 ? "rep" : "reps"} · {result.weeklyPerSeat} invitations each per week
           </p>
         </div>
@@ -111,11 +111,11 @@ export function Forecast() {
               <li key={stage}>
                 <div className="between">
                   <span className="small">{LABELS[stage]}</span>
-                  <span className="mono">{value.toLocaleString()}</span>
+                  <span className="nums forecast-value">{value.toLocaleString("en-US")}</span>
                 </div>
                 <div className="forecast-track">
                   <motion.div
-                    className={`forecast-fill${stage === "meetings" ? " is-outcome" : ""}`}
+                    className="forecast-fill"
                     animate={{ width: `${width}%` }}
                     initial={false}
                     transition={reduced ? { duration: 0 } : { duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
@@ -169,7 +169,7 @@ function Slider({
         <label htmlFor={id} className="small">
           {label}
         </label>
-        <output htmlFor={id} className="mono slider-value">
+        <output htmlFor={id} className="nums slider-value">
           {display}
         </output>
       </div>
@@ -180,6 +180,9 @@ function Slider({
         max={max}
         value={value}
         onChange={(event) => onChange(Number(event.target.value))}
+        // The filled part of the track runs to the thumb, so the control reads
+        // as set to a value rather than as a disabled grey bar.
+        style={{ "--fill": `${((value - min) / (max - min)) * 100}%` } as CSSProperties}
       />
       {note ? <p className={`tiny ${warn ? "warn-text" : "subtle"}`}>{note}</p> : null}
     </div>

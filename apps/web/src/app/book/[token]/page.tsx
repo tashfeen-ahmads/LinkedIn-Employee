@@ -59,7 +59,7 @@ const UNAVAILABLE = "This link cannot be used right now. Reply to the message an
  */
 function readableZone(timeZone: string): string {
   try {
-    const long = new Intl.DateTimeFormat("en-GB", { timeZone, timeZoneName: "long" })
+    const long = new Intl.DateTimeFormat("en-US", { timeZone, timeZoneName: "long" })
       .formatToParts(new Date())
       .find((part) => part.type === "timeZoneName")?.value;
     const city = timeZone.includes("/") ? timeZone.split("/").pop()!.replace(/_/g, " ") : null;

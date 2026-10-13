@@ -89,8 +89,13 @@ export function planDays(options: PlanOptions): DayPlan[] {
   } = options;
 
   const durationMs = durationMinutes * 60_000;
+  // One midnight per local calendar date, never `start + n × 24h`: on the
+  // day the clocks go back that day is 25 hours long, a fixed step lands at
+  // 23:00 on the same date, and the week draws Sunday twice and loses its last
+  // day — with every time the agent would have offered on it.
   const start = startOfDay(from, timezone);
-  const end = new Date(start.getTime() + days * 86_400_000);
+  const dayStarts = Array.from({ length: days + 1 }, (_, index) => addLocalDays(start, index, timezone));
+  const end = dayStarts[days]!;
 
   // One call for the whole range rather than one per day: the notice period is
   // measured from now, so a per-day call would recompute the same cutoff seven
@@ -112,7 +117,8 @@ export function planDays(options: PlanOptions): DayPlan[] {
   const plans: DayPlan[] = [];
 
   for (let index = 0; index < days; index++) {
-    const dayStart = new Date(start.getTime() + index * 86_400_000);
+    const dayStart = dayStarts[index]!;
+    const dayEnd = dayStarts[index + 1]!;
     const date = dayKey(dayStart, timezone);
     const weekday = weekdayIn(dayStart, timezone);
     const working = workingHours.days.includes(weekday);
@@ -121,7 +127,7 @@ export function planDays(options: PlanOptions): DayPlan[] {
       .filter((m) => dayKey(new Date(m.start), timezone) === date)
       .sort((a, b) => a.start.localeCompare(b.start));
     const dayBlocked = mergeIntervals(blocked)
-      .filter((b) => overlapsDay(b, dayStart, timezone))
+      .filter((b) => overlapsDay(b, dayStart, dayEnd))
       .map((b) => ({ start: b.start, end: b.end }));
 
     let dayFree = freeByDay.get(date) ?? [];
@@ -153,17 +159,51 @@ export function planDays(options: PlanOptions): DayPlan[] {
 
 /** Midnight in the rep's zone, which is where their day actually starts. */
 function startOfDay(date: Date, timezone: string): Date {
-  const key = dayKey(date, timezone);
-  // Walk back from the instant to the first minute that still reads as this
-  // date locally. Cheaper and more honest than assuming a fixed offset, which
-  // is wrong twice a year.
-  let cursor = new Date(date.getTime());
-  cursor.setUTCHours(0, 0, 0, 0);
-  for (let i = 0; i < 48; i++) {
-    const probe = new Date(cursor.getTime() + i * 3_600_000);
-    if (dayKey(probe, timezone) === key) return probe;
-  }
-  return cursor;
+  const [y, m, d] = dayKey(date, timezone).split("-").map(Number);
+  return zonedMidnight(y!, m!, d!, timezone);
+}
+
+/** Midnight `count` local calendar dates after `dayStart`, however long the days between. */
+function addLocalDays(dayStart: Date, count: number, timezone: string): Date {
+  const [y, m, d] = dayKey(dayStart, timezone).split("-").map(Number);
+  return zonedMidnight(y!, m!, d! + count, timezone);
+}
+
+/**
+ * The first instant of a local date. Computed from the zone's real offset on
+ * that date rather than assumed, which is wrong twice a year, and rather than
+ * probed hour by hour from UTC midnight, which lands on 09:00 east of
+ * Greenwich and on the half hour in a +5:30 zone. `day` may overflow the
+ * month: `Date.UTC` carries it.
+ */
+function zonedMidnight(year: number, month: number, day: number, timezone: string): Date {
+  const wall = Date.UTC(year, month - 1, day);
+  const key = new Date(wall).toISOString().slice(0, 10);
+  let t = wall - offsetMs(new Date(wall), timezone);
+  // Once more at the guess, because the offset at UTC midnight can differ from
+  // the offset at local midnight across a change.
+  t = wall - offsetMs(new Date(t), timezone);
+  // A zone that changes its clocks at midnight has no 00:00 that day; the day
+  // then starts at the first instant that reads as it.
+  for (let i = 0; i < 4 && dayKey(new Date(t), timezone) < key; i++) t += 30 * 60_000;
+  return new Date(t);
+}
+
+/** How far the zone's wall clock is ahead of UTC at this instant. */
+function offsetMs(date: Date, timezone: string): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? 0);
+  const asUtc = Date.UTC(get("year"), get("month") - 1, get("day"), get("hour") % 24, get("minute"), get("second"));
+  return asUtc - Math.floor(date.getTime() / 1000) * 1000;
 }
 
 function dayKey(date: Date, timezone: string): string {
@@ -186,13 +226,12 @@ function groupByDay(starts: string[], timezone: string): Map<string, string[]> {
   return byDay;
 }
 
-function overlapsDay(interval: BusyInterval, dayStart: Date, timezone: string): boolean {
+function overlapsDay(interval: BusyInterval, dayStart: Date, dayEnd: Date): boolean {
   const from = dayStart.getTime();
-  const to = from + 86_400_000;
+  const to = dayEnd.getTime();
   const s = Date.parse(interval.start);
   const e = Date.parse(interval.end);
   if (!Number.isFinite(s) || !Number.isFinite(e)) return false;
-  void timezone;
   // Overlapping the day, not contained by it: a block that began yesterday
   // evening and runs into this morning still makes this morning busy.
   return s < to && e > from;

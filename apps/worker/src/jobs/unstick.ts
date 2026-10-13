@@ -44,15 +44,50 @@ export async function unstickProspects(db: Db, now: Date = new Date(), limit = 2
   // finished and must never be restarted.
   const LIVE = ["accepted", "messaged_1", "messaged_2", "messaged_3"] as const;
 
-  const { data: rows } = await db
-    .from("campaign_prospects")
-    .select("id, campaign_id, variant_id, status, last_step_sent, next_action_at, accepted_at")
-    .in("status", LIVE)
-    .limit(limit);
-
   // An hour of slack: a row whose time has just passed is not stuck, it is
   // waiting for the next tick, and re-arming it would move it backwards.
   const overdueBefore = now.getTime() - 60 * 60_000;
+
+  /*
+   * Only rows that could be stuck are read, and in a fixed order.
+   *
+   * This read every live row, unordered, two hundred at a time, and only then
+   * asked which were stuck. Healthy rows waiting out a configured step delay
+   * filled the window — a campaign a few hundred deep is mostly those — so a
+   * stuck row past the first two hundred was never examined, on any run, ever.
+   * Three narrow questions instead, each in the database: no schedule at all,
+   * a schedule long overdue, and a first message pushed further out than the
+   * acceptance window allows. Oldest first, so whatever is not reached this
+   * hour is reached next.
+   */
+  const COLUMNS = "id, campaign_id, variant_id, status, last_step_sent, next_action_at, accepted_at, status_reason";
+  const [{ data: unscheduled }, { data: overdue }, { data: distant }] = await Promise.all([
+    db
+      .from("campaign_prospects")
+      .select(COLUMNS)
+      .in("status", LIVE)
+      .is("next_action_at", null)
+      .order("updated_at")
+      .limit(limit),
+    db
+      .from("campaign_prospects")
+      .select(COLUMNS)
+      .in("status", LIVE)
+      .lt("next_action_at", new Date(overdueBefore).toISOString())
+      .order("next_action_at")
+      .limit(limit),
+    db
+      .from("campaign_prospects")
+      .select(COLUMNS)
+      .eq("status", "accepted")
+      // Mid-sequence rows come back too and are turned away by
+      // staleAcceptWindow, the one place that rule lives: filtered here as
+      // well, a broken copy of it there could never be noticed by a test.
+      .gte("next_action_at", new Date(now.getTime() + LINKEDIN_LIMITS.acceptFollowUpMaxMs).toISOString())
+      .order("next_action_at")
+      .limit(limit),
+  ]);
+  const rows = [...(unscheduled ?? []), ...(overdue ?? []), ...(distant ?? [])];
 
   let repaired = 0;
   for (const row of rows ?? []) {
@@ -60,7 +95,7 @@ export async function unstickProspects(db: Db, now: Date = new Date(), limit = 2
     const stuck = due === null || (Number.isFinite(due) && (due as number) < overdueBefore);
 
     if (!stuck) {
-      if (!staleAcceptWindow(row, due)) continue;
+      if (!staleAcceptWindow(row, due, now)) continue;
       await db
         .from("campaign_prospects")
         // Into the window the rule gives it, counted from now rather than from
@@ -108,13 +143,29 @@ export async function unstickProspects(db: Db, now: Date = new Date(), limit = 2
  * delays are the rep's to set.
  */
 function staleAcceptWindow(
-  row: { status: string; last_step_sent: number | null; accepted_at: string | null },
+  row: { status: string; last_step_sent: number | null; accepted_at: string | null; status_reason?: string | null },
   due: number | null,
+  now: Date,
 ): boolean {
   if (row.status !== "accepted" || (row.last_step_sent ?? 0) !== 0) return false;
   if (due === null || !Number.isFinite(due)) return false;
   const acceptedAt = row.accepted_at ? Date.parse(row.accepted_at) : NaN;
   if (!Number.isFinite(acceptedAt)) return false;
+  /*
+   * ...and not a cooldown LinkedIn asked for.
+   *
+   * A first follow-up refused with "try later" is put back on the schedule
+   * after the provider's own cooldown — two hours for a 429, six for a limit —
+   * and that row is exactly this shape: accepted, never messaged, due well
+   * after the acceptance window. Pulled forward, the provider was asked again
+   * inside its own cooldown, every hour. The send path writes the provider's
+   * words on the row, and a time no later than that cooldown from now is the
+   * provider's schedule, not an old rule's.
+   */
+  const refusal = classifyProviderError(row.status_reason);
+  if (refusal.kind === "retry_later" && due <= now.getTime() + refusal.cooldownMs + LINKEDIN_LIMITS.maxGapMs) {
+    return false;
+  }
   return due > acceptedAt + LINKEDIN_LIMITS.acceptFollowUpMaxMs;
 }
 
@@ -146,17 +197,31 @@ export async function recoverThrottledProspects(
   now: Date = new Date(),
   limit = 500,
 ): Promise<number> {
-  const { data: rows } = await db
-    .from("campaign_prospects")
-    .select("id, status, status_reason, invited_at")
-    .eq("status", "failed")
-    .limit(limit);
+  /*
+   * Walked in pages, oldest first, past the rows it can never recover.
+   *
+   * One unordered read of five hundred `failed` rows meant permanent refusals
+   * — which accumulate and are never touched again — filled the window, and a
+   * recoverable row behind them was never examined. The ones that ever went
+   * out are filtered in the query, and the rest are read until the end.
+   */
+  const rows: Array<{ id: string; status_reason: string | null; invited_at: string | null }> = [];
+  for (let page = 0; page < RECOVER_MAX_PAGES; page++) {
+    const { data } = await db
+      .from("campaign_prospects")
+      .select("id, status, status_reason, invited_at")
+      .eq("status", "failed")
+      // An invitation that really went out is not a refusal, whatever the row
+      // says: re-queueing it would invite somebody twice.
+      .is("invited_at", null)
+      .order("id")
+      .range(page * limit, page * limit + limit - 1);
+    rows.push(...(data ?? []));
+    if ((data ?? []).length < limit) break;
+  }
 
   let recovered = 0;
-  for (const row of rows ?? []) {
-    // An invitation that really went out is not a refusal, whatever the row
-    // says: re-queueing it would invite somebody twice.
-    if (row.invited_at) continue;
+  for (const row of rows) {
     if (classifyProviderError(row.status_reason).kind !== "retry_later") continue;
 
     await db
@@ -172,3 +237,6 @@ export async function recoverThrottledProspects(
   if (recovered) console.log("returned throttled prospects to the queue", { recovered, at: now.toISOString() });
   return recovered;
 }
+
+/** How many pages of failed rows one recovery run reads at most. */
+const RECOVER_MAX_PAGES = 20;

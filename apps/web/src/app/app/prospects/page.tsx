@@ -9,6 +9,7 @@ import { redirect } from "next/navigation";
 import { PageNotice } from "@/components/page-notice";
 import { ConfirmButton } from "@/components/confirm-button";
 import { formatDate, formatDateTime, isoAttr } from "@/lib/format";
+import { fetchAllRows } from "@/lib/rows";
 
 /** How many rows the list reads at once. Said on screen when there are more. */
 const PAGE_LIMIT = 200;
@@ -81,7 +82,7 @@ async function eraseProspect(formData: FormData) {
       withMessage(
         back,
         "error",
-        `${who} was not erased — nothing was deleted. Try again, and tell us through Support if it keeps happening.`,
+        `${who} was not erased, and nothing was deleted. Try again, and tell us through Support if it keeps happening.`,
       ),
     );
   }
@@ -196,15 +197,22 @@ export default async function ProspectsPage({
     return strategy ? q.eq("customer_profile_id", strategy.id) : q;
   }
 
-  const [{ count: contactedCount }, { count: totalCount }, { data: perStrategy }] = await Promise.all([
+  const [{ count: contactedCount }, { count: totalCount }, { rows: perStrategy }] = await Promise.all([
     scopeCount((q) => q.not("last_contacted_at", "is", null)),
     scopeCount((q) => q),
     // One row per prospect, reduced below. A count per strategy would be one
     // query per strategy, and a business is expected to run twenty of them.
-    supabase
-      .from("prospects")
-      .select("customer_profile_id")
-      .eq("workspace_id", session.workspaceId),
+    // Paged, because a plain select stops at the thousandth row without
+    // saying so, and every tab then read 1,000 against a header that said
+    // more.
+    fetchAllRows<{ customer_profile_id: string | null }>((from, to) =>
+      supabase
+        .from("prospects")
+        .select("customer_profile_id")
+        .eq("workspace_id", session.workspaceId)
+        .order("id", { ascending: true })
+        .range(from, to),
+    ),
   ]);
 
   const countByStrategy = new Map<string, number>();
@@ -235,7 +243,7 @@ export default async function ProspectsPage({
    * was the browser's Back button.
    */
   const filtered = Boolean(strategy || words.length || showing !== "all");
-  if (!prospects?.length && !filtered && (perStrategy?.length ?? 0) === 0) {
+  if (!prospects?.length && !filtered && perStrategy.length === 0) {
     return (
       <>
         <PageHeader
@@ -264,8 +272,8 @@ export default async function ProspectsPage({
           <>
             {totalCount ?? 0} {strategy ? `found by "${strategy.name}"` : "in this workspace"},{" "}
             {contactedCount ?? 0} of whom have been contacted. Once somebody has been reached out to
-            they are never added to another campaign — checked again in the moment before every
-            send, not only when a list is built.
+            they are never added to another campaign, and that is checked again in the moment before
+            every send, not only when a list is built.
           </>
         }
       />
@@ -290,7 +298,7 @@ export default async function ProspectsPage({
               href={listHref({ show: showing, q: search })}
               aria-current={strategy ? undefined : "page"}
             >
-              All strategies ({perStrategy?.length ?? 0})
+              All strategies ({perStrategy.length})
             </Link>
             {strategyList.map((s) => (
               <Link

@@ -3,9 +3,9 @@ import { BRAND } from "@le/shared";
 /**
  * The mark's geometry, in one place.
  *
- * The favicon and the link-preview card have to redraw it — they render
+ * The favicon and the link-preview card have to redraw it, they render
  * through Satori, which cannot run a React component from this app or resolve
- * a class name — so without this the same letter would be typed out in three
+ * a class name, so without this the same letter would be typed out in three
  * files and would fall out of step in two of them.
  */
 export const MARK = {
@@ -25,7 +25,7 @@ export const MARK = {
  * same thing: more, faster. This one's whole argument is the opposite. A third
  * of one competitor's reviewers report having their LinkedIn account restricted
  * inside ninety days, because a tool sent as much as it could as fast as it
- * could. What Nora sells is a ceiling — a daily cap that is a product rule and
+ * could. What Nora sells is a ceiling, a daily cap that is a product rule and
  * not a setting, a ramp that starts at an account's first action, a day's
  * allowance spread across the day rather than fired off in an hour.
  *
@@ -57,26 +57,28 @@ export function LogoMark({ size = 28 }: { size?: number }) {
 }
 
 /**
- * The name carries the weight and its qualifier sits back, which is the shape
- * the type scale was already set for.
+ * What the app's sidebar sets in a quieter weight after the name.
  *
- * Sliced off `BRAND.full` rather than retyped, because the wordmark is the one
- * place the name is broken in two for typesetting — and therefore the one
- * place a rename leaves half the old name behind, on the most looked-at
- * element in the product.
+ * Sliced off `BRAND.full` rather than retyped, so a rename cannot leave half
+ * the old name behind.
  */
 export const BRAND_QUALIFIER = BRAND.full.startsWith(BRAND.name)
   ? BRAND.full.slice(BRAND.name.length).trim()
   : "";
 
+/**
+ * The public lockup: the mark and the name, and nothing after it.
+ *
+ * It used to read "Nora SDR" on a laptop and "Nora" on a phone, because the
+ * header hid the qualifier below 480px. One product with two names depending
+ * on the width of the screen is two products to somebody comparing
+ * screenshots, so the site writes the name the way the copy does, everywhere.
+ */
 export function Wordmark({ size = 28 }: { size?: number }) {
   return (
     <span className="wordmark">
       <LogoMark size={size} />
-      <span className="wordmark-text">
-        {BRAND.name}
-        {BRAND_QUALIFIER ? <span className="wordmark-thin">&nbsp;{BRAND_QUALIFIER}</span> : null}
-      </span>
+      <span className="wordmark-text">{BRAND.name}</span>
     </span>
   );
 }

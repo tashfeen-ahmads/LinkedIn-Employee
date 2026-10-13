@@ -37,6 +37,8 @@ export class FakeDb {
     // `email_sends_once` in migration 0040: the never-twice guarantee for
     // every email this product sends its own users.
     email_sends: ["user_id", "step"],
+    // Migration 0044: one held draft per ticket.
+    support_ticket_drafts: ["ticket_id"],
   };
 
   seed(table: string, rows: Row[]): void {
@@ -78,6 +80,18 @@ export class FakeDb {
     const view = args.p_kind === "profile_view" ? 1 : 0;
     account.invites_today = (account.invites_today as number) + invite;
     account.invites_this_week = (account.invites_this_week as number) + invite;
+    // The rolling week's per-day record, on the rep's date the row is stamped
+    // with, pruned to eight days — as the SQL function keeps it (rule 2).
+    if (invite) {
+      const day = (account.counters_reset_on as string | null) ?? new Date().toISOString().slice(0, 10);
+      const floor = new Date(`${day}T00:00:00Z`);
+      floor.setUTCDate(floor.getUTCDate() - 7);
+      const keep = floor.toISOString().slice(0, 10);
+      const byDay = { ...((account.invites_by_day as Record<string, number> | null | undefined) ?? {}) };
+      for (const key of Object.keys(byDay)) if (key < keep) delete byDay[key];
+      byDay[day] = (byDay[day] ?? 0) + 1;
+      account.invites_by_day = byDay;
+    }
     account.messages_today = (account.messages_today as number) + message;
     account.profile_views_today = ((account.profile_views_today as number) ?? 0) + view;
     // A view moves the gap clock, because the minimum gap is between any two
@@ -106,10 +120,12 @@ export class FakeDb {
 
 class QueryBuilder implements PromiseLike<{ data: Row[] | null; error: null | { message: string } }> {
   private filters: Filter[] = [];
+  private ignoreDuplicates = false;
   private pending: { kind: "select" } | { kind: "insert" | "upsert" | "update"; payload: Row | Row[] } | { kind: "delete" } =
     { kind: "select" };
   private returning = false;
-  private orderBy: { column: string; ascending: boolean } | null = null;
+  /** Every `.order()` call, in order: PostgREST appends them as tie-breaks. */
+  private orderBy: Array<{ column: string; ascending: boolean }> = [];
   private limitTo: number | null = null;
   private rangeTo: { from: number; to: number } | null = null;
   private countMode: "exact" | null = null;
@@ -144,8 +160,9 @@ class QueryBuilder implements PromiseLike<{ data: Row[] | null; error: null | { 
     return this;
   }
 
-  upsert(payload: Row | Row[], _options?: { onConflict?: string }): this {
+  upsert(payload: Row | Row[], options?: { onConflict?: string; ignoreDuplicates?: boolean }): this {
     this.pending = { kind: "upsert", payload };
+    this.ignoreDuplicates = Boolean(options?.ignoreDuplicates);
     return this;
   }
 
@@ -222,7 +239,7 @@ class QueryBuilder implements PromiseLike<{ data: Row[] | null; error: null | { 
   }
 
   order(column: string, options?: { ascending?: boolean; nullsFirst?: boolean }): this {
-    this.orderBy = { column, ascending: options?.ascending ?? true };
+    this.orderBy.push({ column, ascending: options?.ascending ?? true });
     return this;
   }
 
@@ -257,6 +274,11 @@ class QueryBuilder implements PromiseLike<{ data: Row[] | null; error: null | { 
   async maybeSingle(): Promise<{ data: Row | null; error: null | { message: string } }> {
     const { data, error } = await this.run();
     if (error) return { data: null, error };
+    // PostgREST refuses `maybeSingle()` over more than one row (PGRST116), and
+    // returning the first one here hid a reply dropped for exactly that reason.
+    if (data && data.length > 1) {
+      return { data: null, error: { message: `expected at most one row, got ${data.length}` } };
+    }
     return { data: data?.[0] ?? null, error: null };
   }
 
@@ -286,6 +308,10 @@ class QueryBuilder implements PromiseLike<{ data: Row[] | null; error: null | { 
           if (this.pending.kind === "insert") {
             return { data: null, error: { message: `duplicate key on ${this.table}` } };
           }
+          // ON CONFLICT DO NOTHING: the existing row is left exactly as it
+          // was and is not returned, which is what PostgREST does. Returning
+          // it would let a caller attach somebody it never created.
+          if (this.ignoreDuplicates) continue;
           Object.assign(existing, row, { id: existing.id });
           written.push(existing);
         } else {
@@ -309,15 +335,17 @@ class QueryBuilder implements PromiseLike<{ data: Row[] | null; error: null | { 
     }
 
     let result = [...matched];
-    if (this.orderBy) {
-      const { column, ascending } = this.orderBy;
+    if (this.orderBy.length) {
       result.sort((a, b) => {
-        const left = a[column] as string | number | null;
-        const right = b[column] as string | number | null;
-        if (left === right) return 0;
-        if (left === null || left === undefined) return 1;
-        if (right === null || right === undefined) return -1;
-        return (left < right ? -1 : 1) * (ascending ? 1 : -1);
+        for (const { column, ascending } of this.orderBy) {
+          const left = a[column] as string | number | null;
+          const right = b[column] as string | number | null;
+          if (left === right) continue;
+          if (left === null || left === undefined) return 1;
+          if (right === null || right === undefined) return -1;
+          return (left < right ? -1 : 1) * (ascending ? 1 : -1);
+        }
+        return 0;
       });
     }
     if (this.limitTo !== null) result = result.slice(0, this.limitTo);
