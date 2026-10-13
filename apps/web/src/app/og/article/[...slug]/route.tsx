@@ -61,7 +61,10 @@ const KIND_LABEL: Record<ContentKind, string> = {
  */
 const FONTS = join(process.cwd(), "src/assets/fonts");
 
-export async function GET(_request: Request, { params }: { params: Promise<{ slug: string[] }> }) {
+export async function GET(
+  _request: Request,
+  { params }: { params: Promise<{ slug: string[] }> },
+) {
   const { slug } = await params;
   const path = `/${slug.join("/")}`;
   const [regular, semibold] = await Promise.all([
@@ -74,69 +77,126 @@ export async function GET(_request: Request, { params }: { params: Promise<{ slu
   const kind = page?.kind ?? "landing";
 
   return new ImageResponse(
-    (
-      <div style={{ height: "100%", width: "100%", display: "flex", background: GROUND, padding: 64, gap: 48, fontFamily: "Geist" }}>
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-            <svg width="40" height="40" viewBox="0 0 32 32" fill="none">
-              <rect width="32" height="32" rx={MARK.plateRadius} fill={BRAND.color.accent} />
-              <path d={MARK.letter} stroke="#FFFFFF" strokeWidth={MARK.stroke} strokeLinecap="round" />
-              <rect {...MARK.limit} fill={BRAND.color.limit} />
-            </svg>
-            <div style={{ color: INK, fontSize: 24, fontWeight: 600, letterSpacing: "-0.02em" }}>{SITE.name}</div>
-            <div style={{ color: MUTED, fontSize: 22, marginLeft: 8 }}>{KIND_LABEL[kind]}</div>
-          </div>
+    <div
+      style={{
+        height: "100%",
+        width: "100%",
+        display: "flex",
+        background: GROUND,
+        padding: 64,
+        gap: 48,
+        fontFamily: "Geist",
+      }}
+    >
+      <div
+        style={{
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "space-between",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <svg width="40" height="40" viewBox="0 0 32 32" fill="none">
+            <rect
+              width="32"
+              height="32"
+              rx={MARK.plateRadius}
+              fill={BRAND.color.accent}
+            />
+            <path
+              d={MARK.letter}
+              stroke="#FFFFFF"
+              strokeWidth={MARK.stroke}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <circle
+              cx={MARK.start.cx}
+              cy={MARK.start.cy}
+              r={MARK.start.r}
+              stroke="#FFFFFF"
+              strokeWidth={MARK.start.stroke}
+            />
+            <circle
+              cx={MARK.goal.cx}
+              cy={MARK.goal.cy}
+              r={MARK.goal.r}
+              fill={BRAND.color.goal}
+            />
+          </svg>
           <div
             style={{
               color: INK,
-              fontSize: title.length > 80 ? 46 : title.length > 55 ? 54 : 62,
+              fontSize: 24,
               fontWeight: 600,
-              lineHeight: 1.1,
-              letterSpacing: "-0.035em",
-              display: "flex",
+              letterSpacing: "-0.02em",
             }}
           >
-            {title}
+            {SITE.name}
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-            <div
-              style={{
-                width: 44,
-                height: 44,
-                borderRadius: 22,
-                background: owner.colour,
-                color: "#FFFFFF",
-                fontSize: 22,
-                fontWeight: 600,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              {owner.name[0]}
-            </div>
-            <div style={{ display: "flex", flexDirection: "column" }}>
-              <div style={{ color: INK, fontSize: 22, fontWeight: 600 }}>{owner.name}</div>
-              <div style={{ color: MUTED, fontSize: 18, display: "flex" }}>{`${owner.role} on Nora's team`}</div>
-            </div>
+          <div style={{ color: MUTED, fontSize: 22, marginLeft: 8 }}>
+            {KIND_LABEL[kind]}
           </div>
         </div>
         <div
           style={{
-            width: 360,
+            color: INK,
+            fontSize: title.length > 80 ? 46 : title.length > 55 ? 54 : 62,
+            fontWeight: 600,
+            lineHeight: 1.1,
+            letterSpacing: "-0.035em",
             display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            background: CARD,
-            border: `1px solid ${LINE}`,
-            borderRadius: 24,
-            padding: 32,
           }}
         >
-          <Motif kind={kind} owner={page?.owner ?? "reese"} accent={owner.colour} />
+          {title}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <div
+            style={{
+              width: 44,
+              height: 44,
+              borderRadius: 22,
+              background: owner.colour,
+              color: "#FFFFFF",
+              fontSize: 22,
+              fontWeight: 600,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            {owner.name[0]}
+          </div>
+          <div style={{ display: "flex", flexDirection: "column" }}>
+            <div style={{ color: INK, fontSize: 22, fontWeight: 600 }}>
+              {owner.name}
+            </div>
+            <div
+              style={{ color: MUTED, fontSize: 18, display: "flex" }}
+            >{`${owner.role} on Nora's team`}</div>
+          </div>
         </div>
       </div>
-    ),
+      <div
+        style={{
+          width: 360,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          background: CARD,
+          border: `1px solid ${LINE}`,
+          borderRadius: 24,
+          padding: 32,
+        }}
+      >
+        <Motif
+          kind={kind}
+          owner={page?.owner ?? "reese"}
+          accent={owner.colour}
+        />
+      </div>
+    </div>,
     {
       width: 1200,
       height: 630,
@@ -149,17 +209,41 @@ export async function GET(_request: Request, { params }: { params: Promise<{ slu
 }
 
 /** One picture per kind of page, built from the shapes the product itself draws. */
-function Motif({ kind, owner, accent }: { kind: ContentKind; owner: TeamKey; accent: string }) {
-  const teal = BRAND.color.limit;
+function Motif({
+  kind,
+  owner,
+  accent,
+}: {
+  kind: ContentKind;
+  owner: TeamKey;
+  accent: string;
+}) {
+  const teal = BRAND.color.goal;
   const indigo = BRAND.color.accent;
 
   // Limits, pacing and safety: the warm-up ramp, a day's allowance rising.
   if (owner === "reese" && kind !== "alternative") {
     const heights = [40, 58, 76, 94, 112, 130, 148, 166, 184, 200];
     return (
-      <div style={{ display: "flex", alignItems: "flex-end", gap: 10, height: 220 }}>
+      <div
+        style={{
+          display: "flex",
+          alignItems: "flex-end",
+          gap: 10,
+          height: 220,
+        }}
+      >
         {heights.map((h, i) => (
-          <div key={i} style={{ width: 18, height: h, background: teal, opacity: 0.35 + i * 0.065, borderRadius: 4 }} />
+          <div
+            key={i}
+            style={{
+              width: 18,
+              height: h,
+              background: teal,
+              opacity: 0.35 + i * 0.065,
+              borderRadius: 4,
+            }}
+          />
         ))}
       </div>
     );
@@ -168,20 +252,66 @@ function Motif({ kind, owner, accent }: { kind: ContentKind; owner: TeamKey; acc
   // Writing: a connection note, its lines and the facts it was written from.
   if (owner === "quinn") {
     return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 14, width: "100%" }}>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 14,
+          width: "100%",
+        }}
+      >
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div style={{ width: 44, height: 44, borderRadius: 22, background: LINE }} />
+          <div
+            style={{
+              width: 44,
+              height: 44,
+              borderRadius: 22,
+              background: LINE,
+            }}
+          />
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <div style={{ width: 120, height: 12, borderRadius: 6, background: INK }} />
-            <div style={{ width: 90, height: 10, borderRadius: 5, background: LINE }} />
+            <div
+              style={{
+                width: 120,
+                height: 12,
+                borderRadius: 6,
+                background: INK,
+              }}
+            />
+            <div
+              style={{
+                width: 90,
+                height: 10,
+                borderRadius: 5,
+                background: LINE,
+              }}
+            />
           </div>
         </div>
         {[260, 240, 200].map((w, i) => (
-          <div key={i} style={{ width: w, height: 12, borderRadius: 6, background: i === 1 ? accent : LINE, opacity: i === 1 ? 0.55 : 1 }} />
+          <div
+            key={i}
+            style={{
+              width: w,
+              height: 12,
+              borderRadius: 6,
+              background: i === 1 ? accent : LINE,
+              opacity: i === 1 ? 0.55 : 1,
+            }}
+          />
         ))}
         <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
           {[70, 96, 80].map((w, i) => (
-            <div key={i} style={{ width: w, height: 22, borderRadius: 11, border: `2px solid ${indigo}`, opacity: 0.6 }} />
+            <div
+              key={i}
+              style={{
+                width: w,
+                height: 22,
+                borderRadius: 11,
+                border: `2px solid ${indigo}`,
+                opacity: 0.6,
+              }}
+            />
           ))}
         </div>
       </div>
@@ -191,12 +321,38 @@ function Motif({ kind, owner, accent }: { kind: ContentKind; owner: TeamKey; acc
   // Comparisons: two columns, rows of checks.
   if (kind === "alternative") {
     return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 16, width: "100%" }}>
+      <div
+        style={{
+          display: "flex",
+          flexDirection: "column",
+          gap: 16,
+          width: "100%",
+        }}
+      >
         {[0, 1, 2, 3, 4].map((row) => (
-          <div key={row} style={{ display: "flex", alignItems: "center", gap: 16 }}>
-            <div style={{ flex: 1, height: 12, borderRadius: 6, background: LINE }} />
-            <div style={{ width: 26, height: 26, borderRadius: 13, background: teal }} />
-            <div style={{ width: 26, height: 26, borderRadius: 13, border: `3px solid ${LINE}` }} />
+          <div
+            key={row}
+            style={{ display: "flex", alignItems: "center", gap: 16 }}
+          >
+            <div
+              style={{ flex: 1, height: 12, borderRadius: 6, background: LINE }}
+            />
+            <div
+              style={{
+                width: 26,
+                height: 26,
+                borderRadius: 13,
+                background: teal,
+              }}
+            />
+            <div
+              style={{
+                width: 26,
+                height: 26,
+                borderRadius: 13,
+                border: `3px solid ${LINE}`,
+              }}
+            />
           </div>
         ))}
       </div>
@@ -205,13 +361,44 @@ function Motif({ kind, owner, accent }: { kind: ContentKind; owner: TeamKey; acc
 
   // Finding people: a list of profiles, the top ones matched.
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 14, width: "100%" }}>
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: 14,
+        width: "100%",
+      }}
+    >
       {[1, 0.85, 0.7, 0.45].map((o, i) => (
-        <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, opacity: o }}>
-          <div style={{ width: 40, height: 40, borderRadius: 20, background: i < 2 ? accent : LINE }} />
+        <div
+          key={i}
+          style={{ display: "flex", alignItems: "center", gap: 12, opacity: o }}
+        >
+          <div
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: 20,
+              background: i < 2 ? accent : LINE,
+            }}
+          />
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <div style={{ width: 150 - i * 12, height: 11, borderRadius: 6, background: INK }} />
-            <div style={{ width: 110 - i * 8, height: 9, borderRadius: 5, background: LINE }} />
+            <div
+              style={{
+                width: 150 - i * 12,
+                height: 11,
+                borderRadius: 6,
+                background: INK,
+              }}
+            />
+            <div
+              style={{
+                width: 110 - i * 8,
+                height: 9,
+                borderRadius: 5,
+                background: LINE,
+              }}
+            />
           </div>
         </div>
       ))}

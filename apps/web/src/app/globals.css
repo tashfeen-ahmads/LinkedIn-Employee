@@ -2337,7 +2337,7 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
 
 /* ------------------------------------------------------- brand furniture */
 
-/* The mark. Plate in the accent, bars in white, the outcome bar in the second
+/* The mark. Plate in the accent, the path in white, its arrival in the second
    hue — the same story the funnel on the page tells. */
 .logo-mark { flex: none; display: block; }
 .logo-plate { fill: var(--accent); }
@@ -2345,9 +2345,9 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
    mode, so the letter follows the inverse ink: white on indigo, near-black on
    lavender. A literal white was 2.3:1 there. */
 .logo-stroke { stroke: var(--logo-ink); }
-/* The line the letter stops short of. The second hue, which is exactly what
+/* Where the path arrives. The second hue, which is exactly what
    `--accent-2` is reserved for — somewhere the first hue can travel to. */
-.logo-limit { fill: var(--accent-2); }
+.logo-goal { fill: var(--accent-2); }
 
 .wordmark {
   display: inline-flex;
@@ -3780,43 +3780,246 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
 
 /* --------------------------------------------------------------- the hero */
 
-.mk-hero { padding-block: clamp(2.5rem, 6vw, 4.5rem) clamp(2.5rem, 5vw, 4rem); }
+/*
+ * One idea per side: the promise on the left, the product doing it on the
+ * right. The right side is a layered scene rather than one card, because the
+ * product is two things at once (one note written for one person, inside a
+ * day paced across working hours) and a single panel can only show one.
+ */
+.mk-hero {
+  padding-block: clamp(3rem, 7vw, 5.5rem) clamp(2.5rem, 5vw, 4rem);
+  overflow: clip;
+}
+/* A fine dot field behind the scene, fading out before any edge. */
+.mk-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: radial-gradient(color-mix(in srgb, var(--text) 13%, transparent) 1px, transparent 1.2px);
+  background-size: 22px 22px;
+  -webkit-mask-image: radial-gradient(60% 70% at 72% 45%, #000 0%, transparent 75%);
+  mask-image: radial-gradient(60% 70% at 72% 45%, #000 0%, transparent 75%);
+  opacity: 0.55;
+}
 .mk-hero-grid {
   display: grid;
-  grid-template-columns: minmax(0, 1.3fr) minmax(0, 0.85fr);
-  gap: clamp(2rem, 5vw, 4.5rem);
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: clamp(2.5rem, 5vw, 5rem);
   align-items: center;
 }
 .mk-hero-copy { display: flex; flex-direction: column; gap: var(--space-5); }
+.mk-hero-badge {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.35rem 0.8rem 0.35rem 0.65rem;
+  border-radius: var(--radius-pill);
+  font-size: 0.875rem;
+  font-weight: 550;
+  color: color-mix(in srgb, var(--accent-2) 55%, var(--text));
+  background: color-mix(in srgb, var(--accent-2) 10%, var(--surface-raised));
+  border: 1px solid color-mix(in srgb, var(--accent-2) 24%, transparent);
+}
+.mk-hero-badge-dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--accent-2); }
+.mk-hero .mk-display { font-size: clamp(2.25rem, 1.4rem + 2.3vw, 3.25rem); line-height: 1.05; max-width: none; }
+.mk-hero-em { color: var(--accent); }
 .mk-hero-sub {
   font-size: clamp(1.0625rem, 1rem + 0.35vw, 1.25rem);
-  line-height: 1.55;
+  line-height: 1.6;
   color: var(--text-muted);
-  max-width: 46ch;
+  max-width: 44ch;
+  text-wrap: pretty;
 }
-.mk-hero-copy .mk-actions { margin-top: var(--space-2); }
-@media (max-width: 960px) {
-  .mk-hero-grid { grid-template-columns: minmax(0, 1fr); }
-}
-
-/* The "Today" panel: a real component on example data. */
-.mk-today {
-  margin: 0;
-  justify-self: end;
-  width: 100%;
-  max-width: 30rem;
+.mk-hero-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-2); }
+.mk-hero-second { gap: 0.5rem; border-color: var(--accent-border); color: var(--accent); }
+.mk-hero-second > span { transition: transform 160ms ease; }
+.mk-hero-second:hover > span { transform: translateX(3px); }
+.mk-hero-proof {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
   display: flex;
-  flex-direction: column;
-  gap: var(--space-5);
-  padding: clamp(1.25rem, 2.5vw, 1.75rem);
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+.mk-hero-proof li { display: inline-flex; align-items: center; gap: 0.45rem; }
+.mk-hero-proof .mk-icon { color: var(--accent); width: 1.05rem; height: 1.05rem; }
+
+/* The scene: the day card sits back and right, the note card forward and
+   left over it, the warm-up chip under both. */
+.mk-scene {
+  position: relative;
+  margin: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  isolation: isolate;
+}
+.mk-scene::before {
+  content: "";
+  position: absolute;
+  inset: 8% 0 4% 6%;
+  z-index: -1;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--accent) 16%, transparent), transparent);
+  filter: blur(8px);
+}
+.mk-scene-day,
+.mk-scene-note {
   background: var(--surface-raised);
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-lg);
+  border-radius: 16px;
+  box-shadow:
+    0 1px 2px color-mix(in srgb, var(--accent) 6%, transparent),
+    0 18px 40px -16px color-mix(in srgb, var(--accent) 26%, transparent);
 }
-.mk-today-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-1) var(--space-3); }
-.mk-today-title { font-size: 1.625rem; font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; }
-.mk-today-tag { font-size: 0.8125rem; color: var(--text-subtle); }
+.mk-scene-day {
+  justify-self: end;
+  width: min(25rem, 84%);
+  /* The bottom padding is the strip the note card laps over. */
+  padding: 1.25rem 1.4rem 2.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  animation: mk-rise 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both;
+}
+.mk-scene-day-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
+.mk-scene-title { font-size: 1.125rem; font-weight: 600; letter-spacing: -0.01em; }
+.mk-scene-count { font-size: 0.875rem; color: var(--text-muted); }
+.mk-scene-track {
+  position: relative;
+  height: 14px;
+  margin-inline: 7px;
+  background: linear-gradient(var(--border), var(--border)) center / 100% 2px no-repeat;
+}
+.mk-scene-dot {
+  position: absolute;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  border-radius: 50%;
+  background: var(--surface-raised);
+  border: 2px solid var(--border-strong);
+}
+.mk-scene-dot.is-sent { background: var(--accent); border-color: var(--accent); }
+.mk-scene-dot.is-next { border-color: var(--accent); box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 16%, transparent); }
+.mk-scene-tick {
+  position: absolute;
+  top: 100%;
+  width: 1px;
+  height: 10px;
+  margin-top: 3px;
+  background: var(--accent-border);
+}
+.mk-scene-axis { display: flex; justify-content: space-between; font-size: 0.8125rem; color: var(--text-subtle); }
+.mk-scene-next {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+.mk-scene-next .mk-icon { color: var(--accent-2); }
+.mk-scene-next strong { color: var(--text); font-weight: 600; }
+
+/* Laps the day card's lower edge, over its divider and never its text. */
+.mk-scene-note {
+  position: relative;
+  justify-self: start;
+  margin-top: -1.75rem;
+  width: min(27rem, 90%);
+  padding: 1.4rem 1.5rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  animation: mk-rise 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.25s both;
+}
+.mk-scene-person {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+.mk-scene-avatar { width: 56px; height: 56px; border-radius: 50%; object-fit: cover; flex: none; }
+.mk-scene-name { font-weight: 600; font-size: 1.0625rem; }
+.mk-scene-role { font-size: 0.875rem; color: var(--text-muted); }
+.mk-scene-text { font-size: 1rem; line-height: 1.75; color: var(--text); text-wrap: pretty; }
+/* The highlight is drawn with a shadow, not padding, so the words around it
+   keep their natural spacing ("this spring." never "this spring ."). */
+.mk-scene-mark {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 4px;
+  box-shadow: 0 0 0 2px var(--accent-soft);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+.mk-scene-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.875rem;
+  color: var(--text-subtle);
+}
+.mk-scene-ok {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.65rem;
+  border-radius: 8px;
+  font-weight: 550;
+  color: color-mix(in srgb, var(--accent-2) 55%, var(--text));
+  background: color-mix(in srgb, var(--accent-2) 11%, var(--surface-raised));
+}
+.mk-scene-ok .mk-icon { width: 1rem; height: 1rem; }
+
+.mk-scene-chip {
+  position: relative;
+  justify-self: start;
+  margin: -0.9rem 0 0 10%;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.65rem 0.95rem;
+  border-radius: 12px;
+  font-size: 0.9375rem;
+  color: var(--text);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  box-shadow: 0 12px 28px -14px color-mix(in srgb, var(--accent) 30%, transparent);
+  animation: mk-rise 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.4s both;
+}
+.mk-scene-chip .mk-icon { color: var(--accent-2); }
+
+@keyframes mk-rise { from { opacity: 0; transform: translateY(10px); } }
+@media (prefers-reduced-motion: reduce) {
+  .mk-scene-day, .mk-scene-note, .mk-scene-chip { animation: none; }
+}
+
+/* Below the split, the scene stops layering: three blocks in reading order,
+   so nothing overlaps on a narrow screen. */
+@media (max-width: 960px) {
+  .mk-hero-grid { grid-template-columns: minmax(0, 1fr); }
+  .mk-scene { gap: var(--space-3); }
+  .mk-scene-day, .mk-scene-note { justify-self: stretch; width: auto; margin: 0; }
+  .mk-scene-day { padding-bottom: 1.1rem; }
+  .mk-scene-note { order: -1; }
+  .mk-scene-chip { margin: 0; }
+  .mk-hero-actions .btn { flex: 1 1 14rem; justify-content: center; }
+}
+
 .mk-meters { display: flex; flex-direction: column; gap: var(--space-4); }
 .mk-meter { display: flex; flex-direction: column; gap: var(--space-2); }
 .mk-meter-row { display: flex; justify-content: space-between; gap: var(--space-3); font-size: 0.9375rem; }
@@ -3842,52 +4045,6 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
   animation: mk-fill 1.1s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both;
 }
 @keyframes mk-fill { from { transform: scaleX(0); } }
-
-.mk-today-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--border); }
-.mk-today-row {
-  display: grid;
-  grid-template-columns: 44px minmax(0, 1fr);
-  gap: var(--space-3);
-  align-items: center;
-  padding-block: var(--space-3);
-}
-.mk-today-row + .mk-today-row { border-top: 1px solid var(--border); }
-.mk-today-row:last-child { padding-bottom: 0; }
-.mk-avatar { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; flex: none; }
-.mk-today-who { min-width: 0; display: flex; flex-direction: column; gap: 0.1rem; font-size: 0.9375rem; line-height: 1.4; }
-.mk-today-name { font-weight: 600; }
-/* Name, role and note each keep one line, so every row is the same height. */
-.mk-today-role {
-  font-size: 0.875rem;
-  color: var(--text-muted);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-/* A note may take a second line on a phone rather than stop mid-word. */
-.mk-today-note {
-  font-size: 0.8125rem;
-  color: var(--text-subtle);
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  line-clamp: 2;
-  overflow: hidden;
-}
-.mk-today-foot {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--border);
-  font-size: 0.875rem;
-  color: var(--text-muted);
-}
-.mk-today-foot .mk-icon { color: var(--accent-2); }
-.mk-today-foot strong { color: var(--text); font-weight: 600; }
-@media (max-width: 960px) {
-  .mk-today { justify-self: stretch; max-width: none; }
-}
 
 /* ----------------------------------------------------- three decisions */
 

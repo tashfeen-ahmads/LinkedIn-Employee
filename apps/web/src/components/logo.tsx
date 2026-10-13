@@ -9,37 +9,42 @@ import { BRAND } from "@le/shared";
  * files and would fall out of step in two of them.
  */
 export const MARK = {
-  /** Left stem full height; shoulder arcs over to a right leg that stops early. */
-  letter: "M9.4 25.2V11.4M9.4 15a6.6 6.6 0 0 1 12.8 2.3v4.3",
-  stroke: 3.5,
+  /** One stroke: up from you, across to them, up to the meeting. */
+  letter: "M10 20.6V8.8L22 21.6V11.8",
+  /** The same stroke where the start ring is dropped: the stem reaches down instead. */
+  letterSmall: "M10 23.4V8.8L22 21.6V11.8",
+  stroke: 3.2,
   plateRadius: 9,
-  limit: { x: 14.6, y: 26.4, width: 9.8, height: 1.8, rx: 0.9 },
-  /** Below this the line is dropped; see above. */
-  limitMinSize: 20,
+  /** Where the path starts: a hollow ring, the rep before anyone is contacted. */
+  start: { cx: 10, cy: 23.6, r: 2.2, stroke: 1.8 },
+  /** Where the path arrives: the second hue, the booked meeting. */
+  goal: { cx: 22, cy: 8.6, r: 2.9 },
+  /** Below this the start ring is dropped; see above. */
+  detailMinSize: 20,
 } as const;
 
 /**
- * The mark is a lowercase `n` whose right leg stops short of a line.
+ * The mark is an N drawn as the route a conversation takes.
  *
  * Every product in this category draws a funnel or a rocket, and both say the
- * same thing: more, faster. This one's whole argument is the opposite. A third
- * of one competitor's reviewers report having their LinkedIn account restricted
- * inside ninety days, because a tool sent as much as it could as fast as it
- * could. What Nora sells is a ceiling, a daily cap that is a product rule and
- * not a setting, a ramp that starts at an account's first action, a day's
- * allowance spread across the day rather than fired off in an hour.
+ * same thing: more, faster. What Nora does is narrower and more careful: it
+ * starts from one person, crosses to exactly one other person with a note
+ * written for them, and keeps going until there is a meeting. So the letter is
+ * one unbroken stroke with a start and an end. A hollow ring at the foot of
+ * the left stem is the rep, before anyone has been contacted; the stem rises,
+ * the diagonal crosses to the other side, the person on the other end; the
+ * right stem rises again and arrives at a solid dot in the second hue, which
+ * is the booked call. Read left to right it is the initial of the name; read
+ * as a line it is the product's whole job, one controlled path from you to a
+ * meeting, never a spray.
  *
- * So the letter approaches its limit and deliberately does not reach it, and
- * the limit is drawn. That is the entire pitch in one glyph, and it is the
- * initial of the name, which means the mark cannot be lifted by anyone whose
- * product does something else.
- *
- * Drawn from two strokes of one weight so it survives a browser tab. Below
- * 20px the line is dropped: at that size it is two pixels of teal that read as
- * a smudge under the letter rather than as a limit above it, and a detail
- * nobody can resolve is worse than one that is not there.
+ * Drawn from one stroke weight so it survives a browser tab. Below 20px the
+ * start ring is dropped and the stem reaches down instead: at that size a ring
+ * is a white smudge, and a detail nobody can resolve is worse than one that is
+ * not there. The arrival dot stays at every size, because it is the point.
  */
 export function LogoMark({ size = 28 }: { size?: number }) {
+  const detailed = size >= MARK.detailMinSize;
   return (
     <svg
       width={size}
@@ -50,8 +55,23 @@ export function LogoMark({ size = 28 }: { size?: number }) {
       className="logo-mark"
     >
       <rect width="32" height="32" rx={MARK.plateRadius} className="logo-plate" />
-      <path d={MARK.letter} strokeWidth={MARK.stroke} strokeLinecap="round" className="logo-stroke" />
-      {size >= MARK.limitMinSize ? <rect {...MARK.limit} className="logo-limit" /> : null}
+      <path
+        d={detailed ? MARK.letter : MARK.letterSmall}
+        strokeWidth={MARK.stroke}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className="logo-stroke"
+      />
+      {detailed ? (
+        <circle
+          cx={MARK.start.cx}
+          cy={MARK.start.cy}
+          r={MARK.start.r}
+          strokeWidth={MARK.start.stroke}
+          className="logo-stroke"
+        />
+      ) : null}
+      <circle {...MARK.goal} className="logo-goal" />
     </svg>
   );
 }

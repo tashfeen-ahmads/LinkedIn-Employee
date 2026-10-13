@@ -38,25 +38,59 @@ describe("the brand colours the stylesheet cannot hand over", () => {
     expect(BRAND.color.accent.toUpperCase()).toBe(token("accent"));
   });
 
-  it("uses the same limit hue as --accent-2", () => {
-    expect(BRAND.color.limit.toUpperCase()).toBe(token("accent-2"));
+  it("uses the same arrival hue as --accent-2", () => {
+    expect(BRAND.color.goal.toUpperCase()).toBe(token("accent-2"));
   });
 });
 
 describe("the mark", () => {
-  it("keeps the line inside the box it is drawn in", () => {
-    // The viewBox is 32 square. A limit rule that runs past it is clipped on
-    // one side only, which reads as a drawing mistake rather than a rule.
-    expect(MARK.limit.x + MARK.limit.width).toBeLessThanOrEqual(32);
-    expect(MARK.limit.y + MARK.limit.height).toBeLessThanOrEqual(32);
+  /** Where a path's stroke runs, as points: the M and every V and L after it. */
+  function points(d: string): Array<[number, number]> {
+    const out: Array<[number, number]> = [];
+    let x = 0;
+    let y = 0;
+    for (const [, cmd, args] of d.matchAll(/([MLV])([^MLV]+)/g)) {
+      const n = args.trim().split(/[ ,]+/).map(Number);
+      if (cmd === "V") y = n[0]!;
+      else [x, y] = [n[0]!, n[1]!];
+      out.push([x, y]);
+    }
+    return out;
+  }
+
+  it("keeps everything inside the box it is drawn in", () => {
+    // The viewBox is 32 square. A dot or ring that runs past it is clipped on
+    // one side only, which reads as a drawing mistake rather than a design.
+    const { goal, start } = MARK;
+    for (const [cx, cy, r] of [
+      [goal.cx, goal.cy, goal.r],
+      [start.cx, start.cy, start.r + start.stroke / 2],
+    ]) {
+      expect(cx! - r!).toBeGreaterThanOrEqual(2);
+      expect(cx! + r!).toBeLessThanOrEqual(30);
+      expect(cy! - r!).toBeGreaterThanOrEqual(2);
+      expect(cy! + r!).toBeLessThanOrEqual(30);
+    }
   });
 
-  it("stops the letter above the line rather than on it", () => {
-    // The whole meaning of the mark is the gap. The right leg ends at 21.6 in
-    // the path below; if the line ever moves up to meet it, the mark says the
-    // opposite of what the product does.
-    const rightLegEndsAt = 21.6;
-    expect(MARK.limit.y).toBeGreaterThan(rightLegEndsAt);
-    expect(MARK.letter).toContain("v4.3");
+  it("is one path from the ring to the dot", () => {
+    // The meaning is the route: it starts at the rep and arrives at the
+    // meeting. The stroke must begin directly above the ring and end directly
+    // below the dot, or the letter is an N with two ornaments beside it.
+    const path = points(MARK.letter);
+    const [first, last] = [path[0]!, path[path.length - 1]!];
+    expect(first[0]).toBe(MARK.start.cx);
+    expect(first[1]).toBeLessThan(MARK.start.cy);
+    expect(last[0]).toBe(MARK.goal.cx);
+    expect(last[1]).toBeGreaterThan(MARK.goal.cy);
+  });
+
+  it("leaves the ring open: the stem stops at its edge", () => {
+    // A stem whose round cap reaches into the ring's hole fills it, and a
+    // filled ring is a second dot that says nothing.
+    const [, top] = points(MARK.letter)[0]!;
+    const capReaches = top + MARK.stroke / 2;
+    const holeStarts = MARK.start.cy - MARK.start.r + MARK.start.stroke / 2;
+    expect(capReaches).toBeLessThanOrEqual(holeStarts);
   });
 });

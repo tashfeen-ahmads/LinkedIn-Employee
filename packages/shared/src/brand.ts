@@ -53,8 +53,8 @@ export const BRAND = {
   color: {
     /** `--accent`. The plate, and the letter when it has no plate. */
     accent: "#3730E8",
-    /** `--accent-2`. The line the mark stops short of, and nothing else. */
-    limit: "#12A5A0",
+    /** `--accent-2`. The mark's end point, the meeting the path arrives at. */
+    goal: "#12A5A0",
   },
 } as const;
 

@@ -13,7 +13,9 @@ import {
   EXAMPLE_NOTES,
   EXAMPLE_SENT,
   EXAMPLE_SLOTS,
-  EXAMPLE_TODAY,
+  EXAMPLE_SPREAD,
+  HERO_NOTE,
+  HERO_NOTE_TEXT,
   PEOPLE,
   SLOT_TZ_LABEL,
   meetingLines,
@@ -49,93 +51,146 @@ export function Hero() {
     <section className="mk-hero hero-wash">
       <div className="container mk-hero-grid">
         <div className="mk-hero-copy">
+          <p className="mk-hero-badge">
+            <span className="mk-hero-badge-dot" aria-hidden="true" />
+            Free while we grow. No card.
+          </p>
           <h1 className="mk-display">
             <span className="mk-line">The AI SDR for LinkedIn</span>{" "}
-            <span className="mk-line">built around account safety.</span>
+            <span className="mk-line">
+              built around <span className="mk-hero-em">account safety</span>.
+            </span>
           </h1>
           <p className="mk-hero-sub">
-            {BRAND.name} finds the right people, writes each one a note, drafts your replies and books
-            the call, all inside daily limits.
+            {BRAND.name} finds the right people, writes each one a personal note, drafts your replies and
+            books the call, all paced inside daily limits.
           </p>
-          <div className="mk-actions">
+          <div className="mk-hero-actions">
             <Link href={SIGNUP} className="btn large">
               Sign up free
             </Link>
-            <Link href="/how-it-works" className="mk-textlink">
+            <Link href="/how-it-works" className="btn large secondary mk-hero-second">
               See how it works <span aria-hidden="true">→</span>
             </Link>
           </div>
+          <ul className="mk-hero-proof">
+            <li>
+              <NavIcon name="check" className="mk-icon" />
+              You approve every launch
+            </li>
+            <li>
+              <NavIcon name="check" className="mk-icon" />
+              Never contacts anyone twice
+            </li>
+            <li>
+              <NavIcon name="check" className="mk-icon" />
+              <span>
+                <span className="mk-num">
+                  {LINKEDIN_LIMITS.invitesPerDayStart} to {LINKEDIN_LIMITS.invitesPerDayMax}
+                </span>{" "}
+                invitations a day
+              </span>
+            </li>
+          </ul>
         </div>
 
-        <TodayPanel />
+        <HeroScene />
       </div>
     </section>
   );
 }
 
 /**
- * One account's day, as the product would show it. The allowance is the ramp's
- * own value for the example day, the next send is where the spread placed it,
- * and the people are labelled as examples.
+ * The product at work, layered the way it happens: the day's invitations
+ * spread across working hours behind, one note written for one person in
+ * front, and the warm-up the account is on. Every number is the sender's own
+ * (the ramp's cap for the example day, the spread's real times, the note's
+ * length against the real limit); the person is an invented example.
  */
-function TodayPanel() {
+function HeroScene() {
+  const { startMin, endMin, minutes } = EXAMPLE_SPREAD;
+  const span = endMin - startMin;
+  const at = (minute: number) => `${(((minute - startMin) / span) * 100).toFixed(2)}%`;
+  const next = minutes[EXAMPLE_SENT];
   return (
-    <figure className="mk-today" aria-label="Example: one account's sending day">
-      <div className="mk-today-head">
-        <p className="mk-today-title">Today</p>
-        <p className="mk-today-tag">Example account, day {EXAMPLE_DAY_NUMBER} of sending</p>
-      </div>
-
-      <div className="mk-meters">
-        <Meter label="Invitations" value={EXAMPLE_SENT} of={EXAMPLE_DAY_CAP} />
-        <Meter label="Messages" value={EXAMPLE_MESSAGES} of={LINKEDIN_LIMITS.messagesPerDay} />
-      </div>
-
-      <ul className="mk-today-list">
-        {EXAMPLE_TODAY.map(({ person, opener }) => (
-          <li key={person.name} className="mk-today-row">
-            <Image
-              src={person.photo}
-              alt={`Example prospect ${person.name}`}
-              width={44}
-              height={44}
-              priority
-              className="mk-avatar"
+    <figure className="mk-scene" aria-label="Example: one invitation written for one person, inside one account's day">
+      <div className="mk-scene-day">
+        <div className="mk-scene-day-head">
+          <p className="mk-scene-title">Your day</p>
+          <p className="mk-scene-count mk-num">
+            {EXAMPLE_SENT} of {EXAMPLE_DAY_CAP} sent
+          </p>
+        </div>
+        <div className="mk-scene-track" aria-hidden="true">
+          {minutes.map((minute, index) => (
+            <span
+              key={minute}
+              className={`mk-scene-dot${index < EXAMPLE_SENT ? " is-sent" : ""}${index === EXAMPLE_SENT ? " is-next" : ""}`}
+              style={{ left: at(minute) }}
             />
-            <div className="mk-today-who">
-              <p className="mk-today-name">{person.name}</p>
-              <p className="mk-today-role">
-                {person.role}, {person.company}
-              </p>
-              <p className="mk-today-note">Note: {opener}</p>
-            </div>
-          </li>
-        ))}
-      </ul>
+          ))}
+          {next !== undefined ? <span className="mk-scene-tick" style={{ left: at(next) }} /> : null}
+        </div>
+        <div className="mk-scene-axis mk-num" aria-hidden="true">
+          <span>{EXAMPLE_DAY.start}</span>
+          <span>{EXAMPLE_DAY.end}</span>
+        </div>
+        <p className="mk-scene-next">
+          <NavIcon name="clock" className="mk-icon" />
+          <span>
+            Next invitation <strong className="mk-num">{EXAMPLE_NEXT}</strong>
+          </span>
+        </p>
+      </div>
 
-      <p className="mk-today-foot">
-        <NavIcon name="clock" className="mk-icon" />
+      <div className="mk-scene-note">
+        <div className="mk-scene-person">
+          <Image
+            src={HERO_NOTE.person.photo}
+            alt={`Example prospect ${HERO_NOTE.person.name}`}
+            width={56}
+            height={56}
+            priority
+            className="mk-scene-avatar"
+          />
+          <div>
+            <p className="mk-scene-name">{HERO_NOTE.person.name}</p>
+            <p className="mk-scene-role">
+              {HERO_NOTE.person.role}, {HERO_NOTE.person.company}
+            </p>
+          </div>
+        </div>
+        <p className="mk-scene-text">
+          {HERO_NOTE.parts.map((part) =>
+            part.from ? (
+              <mark key={part.text} className="mk-scene-mark" title={`From ${part.from}`}>
+                {part.text}
+                <span className="sr-only"> (from {part.from})</span>
+              </mark>
+            ) : (
+              <span key={part.text}>{part.text}</span>
+            ),
+          )}
+        </p>
+        <div className="mk-scene-foot">
+          <span className="mk-num">
+            {HERO_NOTE_TEXT.length} / {INVITE_NOTE_MAX_CHARS} characters
+          </span>
+          <span className="mk-scene-ok">
+            <NavIcon name="check" className="mk-icon" />
+            Approved by you
+          </span>
+        </div>
+      </div>
+
+      <p className="mk-scene-chip">
+        <NavIcon name="shield" className="mk-icon" />
         <span>
-          Next invitation at <strong className="mk-num">{EXAMPLE_NEXT}</strong>, inside your hours
+          Day {EXAMPLE_DAY_NUMBER} of warm-up <span aria-hidden="true">·</span>{" "}
+          <span className="mk-num">{EXAMPLE_DAY_CAP}</span> a day
         </span>
       </p>
     </figure>
-  );
-}
-
-function Meter({ label, value, of }: { label: string; value: number; of: number }) {
-  return (
-    <div className="mk-meter">
-      <div className="mk-meter-row">
-        <span>{label}</span>
-        <span className="mk-num">
-          {value} of {of}
-        </span>
-      </div>
-      <span className="mk-meter-track" aria-hidden="true">
-        <span className="mk-meter-fill" style={fill(value, of)} />
-      </span>
-    </div>
   );
 }
 

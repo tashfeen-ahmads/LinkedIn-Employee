@@ -41,7 +41,7 @@ const C = {
   muted: "#454D5E",
   subtle: "#61697A",
   accent: BRAND.color.accent,
-  limit: BRAND.color.limit,
+  goal: BRAND.color.goal,
   tint: "#F0F0FE",
 } as const;
 

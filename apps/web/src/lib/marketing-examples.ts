@@ -80,6 +80,9 @@ export const EXAMPLE_DAY = {
   times: EXAMPLE_MINUTES.map(clock),
 };
 
+/** Where each of the example day's invitations lands, for the hero's timeline. */
+export const EXAMPLE_SPREAD = { startMin: START_MIN, endMin: END_MIN, minutes: EXAMPLE_MINUTES };
+
 /** The hero's account is part-way through that day. */
 export const EXAMPLE_SENT = 7;
 export const EXAMPLE_NEXT = EXAMPLE_DAY.times[EXAMPLE_SENT]!;
@@ -122,12 +125,24 @@ export const EXAMPLE_NOTES: ReadonlyArray<{ person: ExamplePerson; note: string;
   },
 ];
 
-/** The hero's three rows: who today's notes went to, and how each opens. */
-export const EXAMPLE_TODAY: ReadonlyArray<{ person: ExamplePerson; opener: string }> = [
-  { person: PEOPLE.maya, opener: "Saw you lead growth at Calder & Finch…" },
-  { person: PEOPLE.daniel, opener: "Running operations across six clinics…" },
-  { person: PEOPLE.ingrid, opener: "What you wrote about hiring drivers…" },
-];
+/*
+ * The hero's note: one invitation written for one example person. The parts
+ * marked `from` are the details taken from her profile, which the hero
+ * highlights the way the review screen names a note's grounding (rule 16).
+ * No link and no pitch (rules 29 and 40); its length is counted against the
+ * real limit where it is drawn.
+ */
+export const HERO_NOTE: { person: ExamplePerson; parts: ReadonlyArray<{ text: string; from?: string }> } = {
+  person: PEOPLE.maya,
+  parts: [
+    { text: "Hi Maya, saw your team " },
+    { text: "doubled its outbound pod this spring", from: "her headline" },
+    { text: ". Curious how you keep " },
+    { text: "replies personal", from: "a recent post" },
+    { text: " at that pace. Happy to connect." },
+  ],
+};
+export const HERO_NOTE_TEXT = HERO_NOTE.parts.map((part) => part.text).join("");
 
 /*
  * The offered times, from the function that produces the only times that ever

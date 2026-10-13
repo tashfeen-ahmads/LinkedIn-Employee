@@ -203,6 +203,13 @@ const PATHS: Record<string, React.ReactNode> = {
       <path d="M8 11V8a4 4 0 0 1 8 0v3" />
     </>
   ),
+  /* Done, or allowed: a tick in a ring. */
+  check: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="m8.2 12.4 2.6 2.6 5-5.4" />
+    </>
+  ),
   dot: <circle cx="12" cy="12" r="3.2" />,
 };
 

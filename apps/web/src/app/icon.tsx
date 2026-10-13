@@ -13,21 +13,42 @@ export const contentType = "image/png";
  * custom property. Both are checked against the stylesheet by
  * `apps/web/test/brand-tokens.test.ts`.
  *
- * The line is kept at this size even though the component drops it below 20px:
- * a favicon is rendered once at 32 and scaled by the browser with filtering,
- * so it survives as a tint rather than becoming a smudge.
+ * Drawn with its start ring at 32: a favicon is rendered once at that size and
+ * scaled down by the browser with filtering, so the ring survives as a soft
+ * foot to the stem rather than a smudge.
  */
 export default function Icon() {
   return new ImageResponse(
-    (
-      <div style={{ width: "100%", height: "100%", display: "flex" }}>
-        <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-          <rect width="32" height="32" rx={MARK.plateRadius} fill={BRAND.color.accent} />
-          <path d={MARK.letter} stroke="#FFFFFF" strokeWidth={MARK.stroke} strokeLinecap="round" />
-          <rect {...MARK.limit} fill={BRAND.color.limit} />
-        </svg>
-      </div>
-    ),
+    <div style={{ width: "100%", height: "100%", display: "flex" }}>
+      <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+        <rect
+          width="32"
+          height="32"
+          rx={MARK.plateRadius}
+          fill={BRAND.color.accent}
+        />
+        <path
+          d={MARK.letter}
+          stroke="#FFFFFF"
+          strokeWidth={MARK.stroke}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <circle
+          cx={MARK.start.cx}
+          cy={MARK.start.cy}
+          r={MARK.start.r}
+          stroke="#FFFFFF"
+          strokeWidth={MARK.start.stroke}
+        />
+        <circle
+          cx={MARK.goal.cx}
+          cy={MARK.goal.cy}
+          r={MARK.goal.r}
+          fill={BRAND.color.goal}
+        />
+      </svg>
+    </div>,
     size,
   );
 }
