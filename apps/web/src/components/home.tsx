@@ -22,6 +22,7 @@ import {
   slotLabel,
   twelveHour,
 } from "@/lib/marketing-examples";
+import { SEARCH_FILTERS } from "@le/linkedin";
 import { RampChart } from "./diagrams";
 import { NavIcon } from "./icons";
 import { LogoMark } from "./logo";
@@ -285,6 +286,88 @@ export function Decisions() {
             </ol>
           </div>
         </div>
+      </div>
+    </section>
+  );
+}
+
+/* ------------------------------------------------ 2b. Sales Navigator */
+
+/*
+ * The search tier, said where somebody deciding "who to reach" will see it.
+ * The rows are SEARCH_FILTERS, which a test holds to what the search really
+ * applies, so this table cannot promise a filter the product drops.
+ */
+export function SalesNavigator() {
+  return (
+    <section className="mk-section mk-tint" id="sales-navigator">
+      <div className="container mk-sn">
+        <Reveal>
+          <div className="mk-sn-copy">
+            <span className="mk-eyebrow">Sales Navigator</span>
+            <h2 className="mk-h2">Have Sales Navigator? {BRAND.name} searches with it.</h2>
+            <p className="mk-lede">
+              Tick one box and every search runs on Sales Navigator: tighter lists, and fewer
+              invitations spent on the wrong people. No Sales Navigator? {BRAND.name} still works
+              on a regular LinkedIn account.
+            </p>
+            <ul className="mk-sn-points">
+              <li>
+                <NavIcon name="check" className="mk-sn-icon" />
+                <span>One tick in your settings. Nothing else to set up.</span>
+              </li>
+              <li>
+                <NavIcon name="check" className="mk-sn-icon" />
+                <span>Without it, each campaign names the filters it could not apply, before you launch.</span>
+              </li>
+              <li>
+                <NavIcon name="check" className="mk-sn-icon" />
+                <span>Sales Navigator is sold by LinkedIn, not by us.</span>
+              </li>
+            </ul>
+            <Link href="/guides/linkedin-prospecting-without-sales-navigator" className="mk-textlink small">
+              Prospecting without Sales Navigator <span aria-hidden="true">→</span>
+            </Link>
+          </div>
+        </Reveal>
+
+        <figure className="mk-sn-card">
+          <figcaption className="mk-sn-caption">What each search can filter on</figcaption>
+          <table className="mk-sn-table">
+            <thead>
+              <tr>
+                <th scope="col">
+                  <span className="sr-only">Filter</span>
+                </th>
+                <th scope="col">Regular LinkedIn</th>
+                <th scope="col" className="is-sn">
+                  Sales Navigator
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {SEARCH_FILTERS.map((filter) => (
+                <tr key={filter.label}>
+                  <th scope="row">{filter.label}</th>
+                  <td>
+                    {filter.classic ? (
+                      <>
+                        <NavIcon name="check" className="mk-sn-yes" />
+                        <span className="sr-only">Yes</span>
+                      </>
+                    ) : (
+                      <span className="mk-sn-no">No</span>
+                    )}
+                  </td>
+                  <td className="is-sn">
+                    <NavIcon name="check" className="mk-sn-yes" />
+                    <span className="sr-only">Yes</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </figure>
       </div>
     </section>
   );

@@ -20,6 +20,7 @@ import { label } from "@/lib/labels";
 import { TeamSection } from "./team-section";
 import { linkedInState } from "./linkedin-state";
 import { BillingSection } from "./billing-section";
+import { SalesNavigatorSection } from "./sales-navigator-section";
 import { PageHeader, PageGroup, Panel, Section } from "@/components/page";
 import { AllowanceMeter } from "@/components/charts";
 import { countersForToday } from "@/lib/account-day";
@@ -118,6 +119,36 @@ async function refreshLinkedIn() {
   revalidatePath("/app/profile");
 }
 
+
+/**
+ * The Sales Navigator switch, on its own: the one setting on this page that
+ * decides whether a search finds anybody, so it is one press rather than a
+ * checkbox inside the edit form. Only the caller's own account row.
+ */
+async function setSalesNavigator(formData: FormData) {
+  "use server";
+  const session = await requireSession();
+  const supabase = await createClient();
+  const on = formData.get("value") === "on";
+  const { data: updated } = await supabase
+    .from("linkedin_accounts")
+    .update({ has_sales_navigator: on } as never)
+    .eq("workspace_id", session.workspaceId)
+    .eq("user_id", session.userId)
+    .select("id");
+  if (!updated?.length) {
+    redirect(errorQuery("/app/profile", "Connect your LinkedIn account first, then turn on Sales Navigator."));
+  }
+  revalidatePath("/app", "layout");
+  redirect(
+    noticeQuery(
+      "/app/profile",
+      on
+        ? "Sales Navigator is on. New searches use it."
+        : "Sales Navigator is off. New searches use regular LinkedIn search.",
+    ),
+  );
+}
 
 /**
  * Everything on this screen, saved once.
@@ -866,7 +897,6 @@ export default async function ProfilePage({
                 <Fact label="Sending hours" id="sending" wide>
                   {describeWorkingHours(hours, me?.timezone ?? "UTC")}
                 </Fact>
-                <Fact label="Sales Navigator">{hasSalesNavigator ? "Yes" : "No"}</Fact>
                 <Fact label="When a reply arrives" id="autonomy" wide>
                   {autonomy === "autonomous"
                     ? "The agent answers and books on its own."
@@ -886,6 +916,10 @@ export default async function ProfilePage({
         stops being a fifth box on a page somebody already reads as a pile of
         boxes.
       */}
+      {editing ? null : (
+        <SalesNavigatorSection on={hasSalesNavigator} connected={Boolean(found)} action={setSalesNavigator} />
+      )}
+
       <Section id="linkedin" title="Your LinkedIn account" description="The account every message goes out from.">
         <Panel>
         {mine ? (

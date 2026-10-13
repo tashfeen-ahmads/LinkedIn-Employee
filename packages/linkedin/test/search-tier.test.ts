@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { UnipileProvider } from "../src/unipile.js";
-import type { SearchQuery } from "../src/provider.js";
+import { SEARCH_FILTERS, type SearchQuery } from "../src/provider.js";
 import { isPublicProfileUrl } from "@le/shared";
 
 /**
@@ -105,6 +105,9 @@ describe("searchProspects tier", () => {
     // Silently dropping these returns a list that looks like the profile asked
     // for and is not, and the reviewer approves it.
     expect(page.droppedFilters).toEqual(["seniority", "company size", "excluded titles"]);
+    // The screens explaining Sales Navigator read SEARCH_FILTERS. It must
+    // name exactly what the search drops, or the website promises otherwise.
+    expect(SEARCH_FILTERS.flatMap((f) => (f.classic ? [] : [f.dropped]))).toEqual(page.droppedFilters);
     // Asserted against a body that exists: `bodies[0]?.seniority` is undefined
     // when no request was made at all, which would pass while proving nothing.
     expect(bodies.length).toBeGreaterThan(0);

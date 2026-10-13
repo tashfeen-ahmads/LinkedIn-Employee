@@ -4243,6 +4243,59 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
   .mk-decide-steps::before { display: none; }
 }
 
+/* --------------------------------------------------- Sales Navigator */
+
+.mk-sn {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: clamp(2rem, 5vw, 4.5rem);
+  align-items: center;
+}
+.mk-sn-copy { display: flex; flex-direction: column; gap: var(--space-4); }
+.mk-sn-copy .mk-h2 { font-size: clamp(2rem, 1.45rem + 1.4vw, 2.5rem); text-wrap: balance; }
+.mk-sn-points { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+.mk-sn-points li { display: flex; align-items: flex-start; gap: var(--space-3); font-size: 1rem; line-height: 1.5; }
+.mk-sn-icon { width: 1.25rem; height: 1.25rem; flex: none; margin-top: 0.1rem; color: var(--accent); }
+.mk-sn-card {
+  margin: 0;
+  padding: clamp(1.25rem, 2.5vw, 1.75rem);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+}
+.mk-sn-caption { font-size: 0.9375rem; font-weight: 600; margin-bottom: var(--space-4); }
+.mk-sn-table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 0.9375rem; }
+.mk-sn-table th,
+.mk-sn-table td { padding: 0.8rem 0.75rem; text-align: center; border-top: 1px solid var(--border); }
+.mk-sn-table thead th {
+  border-top: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+  white-space: normal;
+  color: var(--text-muted);
+  background: none;
+  vertical-align: bottom;
+}
+.mk-sn-table thead th:first-child { width: 38%; }
+.mk-sn-table tbody th { text-align: left; font-weight: 500; padding-left: 0; }
+/* The Sales Navigator column is one tinted band, top to bottom. */
+.mk-sn-table .is-sn { background: var(--accent-soft); color: var(--accent-hover); }
+.mk-sn-table thead .is-sn { border-radius: var(--radius-sm) var(--radius-sm) 0 0; }
+.mk-sn-table tbody tr:last-child .is-sn { border-radius: 0 0 var(--radius-sm) var(--radius-sm); }
+.mk-sn-yes { width: 1.375rem; height: 1.375rem; vertical-align: middle; color: var(--accent); stroke-width: 2; }
+.mk-sn-no { font-size: 0.875rem; color: var(--text-subtle); }
+@media (max-width: 960px) {
+  .mk-sn { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 480px) {
+  .mk-sn-table th,
+  .mk-sn-table td { padding: 0.7rem 0.4rem; }
+  .mk-sn-table { font-size: 0.875rem; }
+}
+
 /* ------------------------------------------------- one note per person */
 
 .mk-notes { padding-block: clamp(3rem, 6vw, 5rem); }
@@ -6079,3 +6132,47 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
   .legal-layout { grid-template-columns: 16rem minmax(0, 1fr); gap: var(--space-7); }
   .legal-toc { position: sticky; top: 6rem; max-height: calc(100vh - 8rem); overflow-y: auto; }
 }
+
+/* ------------------------------------------- Sales Navigator (profile) */
+
+.sn-panel { display: flex; flex-direction: column; gap: var(--space-4); }
+.sn-panel.is-on { border-color: var(--accent-border); }
+.sn-head { display: flex; align-items: flex-start; gap: var(--space-3); }
+.sn-head .pill { margin-top: 0.1rem; }
+.sn-head p { line-height: 1.5; text-wrap: pretty; }
+.sn-filters {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+  gap: var(--space-2) var(--space-4);
+}
+.sn-filters li { display: flex; align-items: center; gap: var(--space-2); font-size: 0.9375rem; }
+.sn-filters li.is-missing { color: var(--text-subtle); text-decoration: line-through; text-decoration-thickness: 1px; }
+.sn-filter-icon { width: 1.125rem; height: 1.125rem; flex: none; color: var(--positive); }
+.sn-filter-dash { width: 1.125rem; flex: none; display: inline-flex; justify-content: center; }
+.sn-filter-dash::before { content: ""; width: 0.6rem; height: 2px; border-radius: 1px; background: var(--text-subtle); }
+.sn-action {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3) var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+.sn-action p { max-width: 52ch; }
+.sn-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3) var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  background: var(--accent-soft);
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius);
+}
+.sn-strip p { flex: 1 1 22rem; line-height: 1.5; }
+.sn-strip-icon { width: 1.5rem; height: 1.5rem; flex: none; color: var(--accent); }

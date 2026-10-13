@@ -52,7 +52,7 @@ const AGENTS: ReadonlyArray<{
     icon: "prospects",
     job: "Finds the people",
     detail:
-      "Searches LinkedIn on the tier your account actually has, opens every profile before it reaches the list, removes anyone you have already contacted or excluded, and scores the rest on fit. Filters it could not apply are named on the campaign.",
+      "Searches with Sales Navigator if your account has it, and regular LinkedIn search if not. Opens every profile before it reaches the list, removes anyone you have already contacted or excluded, and scores the rest on fit. Filters it could not apply are named on the campaign.",
     output: "Ranked prospects with reasons, filters it could not apply",
     then: "Quinn gets a ranked list of real, checked people.",
   },

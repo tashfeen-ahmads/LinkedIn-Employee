@@ -15,6 +15,7 @@ import { readFunnelData } from "@/lib/funnel-data";
 import { canSeeTeamFunnel, scopeFunnel } from "@/lib/funnel-scope";
 import { StrategyStatus } from "@/components/strategy-status";
 import { TeamPanel } from "@/components/team-panel";
+import { NavIcon } from "@/components/icons";
 import type { TeamFacts } from "@/lib/team";
 
 import { DailyReportSection } from "./report-section";
@@ -34,7 +35,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
   const session = await requireSession();
   const supabase = await createClient();
 
-  const [{ state: setup, next }, everything, { data: profiles }, { rows: found }, { data: me }] = await Promise.all([
+  const [{ state: setup, next }, everything, { data: profiles }, { rows: found }, { data: me }, { data: account }] = await Promise.all([
     readSetupState(supabase, session.workspaceId),
     readFunnelData(supabase, session.workspaceId),
     supabase
@@ -59,6 +60,14 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
     // For the greeting: "Morning" at four in the afternoon is a small thing
     // that tells somebody the product does not know where they are.
     supabase.from("profiles").select("timezone").eq("id", session.userId).maybeSingle(),
+    // Whether this person's searches run on Sales Navigator, for the strip
+    // that offers it. Their own row only: a teammate's seat is theirs to say.
+    supabase
+      .from("linkedin_accounts")
+      .select("status, has_sales_navigator")
+      .eq("workspace_id", session.workspaceId)
+      .eq("user_id", session.userId)
+      .maybeSingle(),
   ]);
 
   // The Strategy Agent's own progress, which is a different question from
@@ -172,6 +181,24 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
         Is it working, as four plain figures under the list of work: the same
         reading Results used to open with, moved up rather than repeated.
       */}
+      {/*
+        Sales Navigator, offered to a working account that searches without it.
+        Not a NeedsYou row: nothing is stopped (rule 50), the lists are only
+        broader. Gone the moment it is turned on.
+      */}
+      {account?.status === "active" && !account.has_sales_navigator ? (
+        <div className="sn-strip" role="note">
+          <NavIcon name="prospects" className="sn-strip-icon" />
+          <p className="small">
+            <strong>Have Sales Navigator?</strong> Your searches run on regular LinkedIn, which
+            cannot filter by seniority or company size. Turn it on for tighter lists.
+          </p>
+          <Link className="btn secondary small" href="/app/profile#sales-navigator">
+            Turn on Sales Navigator
+          </Link>
+        </div>
+      ) : null}
+
       <HeadlineStats report={report} />
 
       {/*

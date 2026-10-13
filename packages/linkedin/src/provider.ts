@@ -81,6 +81,24 @@ export interface ProspectPage {
 /** Which LinkedIn search surface an account is entitled to. */
 export type SearchTier = "sales_navigator" | "classic";
 
+/**
+ * What each tier can filter on, in a buyer's words, for the screens that
+ * explain the choice. The search body is built in `unipile.ts`; this is its
+ * description, and `search-tier.test.ts` holds the two together, because a
+ * website promising a filter the search cannot apply is the same lie as a
+ * campaign that silently drops one.
+ *
+ * `dropped` is the word `droppedFilters` reports when classic cannot apply it.
+ */
+export const SEARCH_FILTERS = [
+  { label: "Job title", classic: true },
+  { label: "Location", classic: true },
+  { label: "Industry", classic: true },
+  { label: "Seniority", classic: false, dropped: "seniority" },
+  { label: "Company size", classic: false, dropped: "company size" },
+  { label: "Leave out job titles", classic: false, dropped: "excluded titles" },
+] as const;
+
 /** One connection the account has, as the provider reports it. */
 export interface ProviderRelation {
   providerId: string;

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { SalesNavigator } from "@/components/home";
 import { Faq, PageHero } from "@/components/marketing";
 import { BreadcrumbSchema, SoftwareSchema } from "@/components/schema";
 import { PUBLIC_LIMITS, SITE, pageMeta } from "@/lib/site";
@@ -55,6 +56,10 @@ const INCLUDED = [
   {
     label: "The same safety limits",
     value: `${PUBLIC_LIMITS.invitesPerDayStart} to ${PUBLIC_LIMITS.invitesPerDayMax} invitations a day and ${PUBLIC_LIMITS.invitesPerWeek} a week, spread across your working hours.`,
+  },
+  {
+    label: "Sales Navigator, if you have it",
+    value: `Tick one box and ${BRAND.name} searches with Sales Navigator, filtering by seniority and company size too. A regular LinkedIn account works as well.`,
   },
   {
     label: "Replies you approve",
@@ -129,6 +134,8 @@ export default function PricingPage() {
           </div>
         </div>
       </section>
+
+      <SalesNavigator />
 
       <Faq items={QA} title="Before you ask" />
     </>

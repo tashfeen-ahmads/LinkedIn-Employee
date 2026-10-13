@@ -1050,6 +1050,10 @@ export default async function CampaignPage({
             title, industry and location, and each was scored against the full profile. Read the
             names before launching, and expect more of them to be wrong than usual.
           </p>
+          <p className="small">
+            <Link href="/app/profile#sales-navigator">Have Sales Navigator? Turn it on</Link> and
+            the next search applies every filter.
+          </p>
         </div>
       ) : null}
 
