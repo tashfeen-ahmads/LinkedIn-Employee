@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { FakeDb } from "./fake-db.js";
 import { agentForCampaign, modelFor, openersFor, voiceOf } from "../src/agent.js";
 import { pitchFor } from "../src/pitch.js";
+import { knowledgeFor } from "../src/knowledge.js";
 import { mergeValuesFor } from "../src/jobs/linkedin-action.js";
 
 /*
@@ -222,5 +223,83 @@ describe("which model actually runs", () => {
     const agent = await agentForCampaign(db.asDb(), CAMPAIGN);
 
     expect(modelFor({}, agent).model).toBeUndefined();
+  });
+});
+
+/*
+ * One workspace, two brands.
+ *
+ * Agents are how a workspace runs separate products, so each agent's copy and
+ * facts belong to that brand alone. A pitch, an opener or a knowledge document
+ * of brand B reaching a prospect of brand A is an offer for a product they
+ * were never shown, under a real rep's name.
+ */
+describe("a workspace running two brands", () => {
+  const AGENT_B = "44444444-4444-4444-8444-444444444444";
+
+  function twoBrands(options: { workspaceDefault?: boolean; aHasOwn?: boolean } = {}) {
+    const db = harness({ withAgent: true });
+    db.seed("agents", [
+      { id: AGENT_B, workspace_id: WORKSPACE, name: "Brand B", playbook: {}, custom_fields: [], archived_at: null },
+    ]);
+    db.seed("pitches", [
+      ...(options.aHasOwn
+        ? [{ id: "pa", workspace_id: WORKSPACE, agent_id: AGENT, body: "Brand A's offer", approved_at: "2026-09-24T00:00:00Z", is_default: true }]
+        : []),
+      { id: "pb", workspace_id: WORKSPACE, agent_id: AGENT_B, body: "Brand B's offer", approved_at: "2026-09-24T00:00:00Z", is_default: true },
+      ...(options.workspaceDefault
+        ? [{ id: "pw", workspace_id: WORKSPACE, agent_id: null, body: "The workspace default", approved_at: "2026-09-24T00:00:00Z", is_default: true }]
+        : []),
+    ]);
+    db.seed("knowledge_documents", [
+      { id: "ka", workspace_id: WORKSPACE, agent_id: AGENT, title: "A pricing", content: "A costs 10.", created_at: "2026-09-02T00:00:00Z" },
+      { id: "kb", workspace_id: WORKSPACE, agent_id: AGENT_B, title: "B pricing", content: "B costs 99.", created_at: "2026-09-01T00:00:00Z" },
+      { id: "kw", workspace_id: WORKSPACE, agent_id: null, title: "Shared FAQ", content: "Fact.", created_at: "2026-09-03T00:00:00Z" },
+    ]);
+    return db;
+  }
+
+  it("makes brand A's own offer, never brand B's", async () => {
+    const db = twoBrands({ aHasOwn: true, workspaceDefault: true });
+    expect(await pitchFor(db.asDb(), WORKSPACE, null, AGENT)).toBe("Brand A's offer");
+  });
+
+  it("falls back to the workspace's own default, not to another agent's default", async () => {
+    // Two defaults share `is_default` since migration 0031 — the workspace's
+    // and brand B's. Matched on that alone, `maybeSingle()` errors and brand
+    // A goes silent.
+    const db = twoBrands({ workspaceDefault: true });
+    expect(await pitchFor(db.asDb(), WORKSPACE, null, AGENT)).toBe("The workspace default");
+  });
+
+  it("says nothing rather than brand B's offer when nothing of A's or the workspace's is approved", async () => {
+    // The one other default in the workspace is brand B's. Matched on
+    // `is_default` alone it is the only row, and brand A's prospect hears it.
+    const db = twoBrands();
+    expect(await pitchFor(db.asDb(), WORKSPACE, null, AGENT)).toBeNull();
+    // And a campaign with no agent hears no brand's offer either.
+    expect(await pitchFor(db.asDb(), WORKSPACE, null, null)).toBeNull();
+  });
+
+  it("writes brand A's replies from A's and the shared knowledge, never B's", async () => {
+    const db = twoBrands();
+    const docs = await knowledgeFor(db.asDb(), WORKSPACE, AGENT);
+    // In the knowledge page's order — oldest first — across both halves.
+    expect(docs.map((d) => d.title)).toEqual(["A pricing", "Shared FAQ"]);
+  });
+
+  it("gives a conversation with no agent only the shared knowledge", async () => {
+    const db = twoBrands();
+    const docs = await knowledgeFor(db.asDb(), WORKSPACE, null);
+    expect(docs.map((d) => d.title)).toEqual(["Shared FAQ"]);
+  });
+
+  it("never reads another workspace's knowledge under this agent's id", async () => {
+    const db = twoBrands();
+    db.seed("knowledge_documents", [
+      { id: "kx", workspace_id: "other-workspace", agent_id: AGENT, title: "Theirs", content: "No.", created_at: "2026-08-01T00:00:00Z" },
+    ]);
+    const docs = await knowledgeFor(db.asDb(), WORKSPACE, AGENT);
+    expect(docs.map((d) => d.title)).not.toContain("Theirs");
   });
 });

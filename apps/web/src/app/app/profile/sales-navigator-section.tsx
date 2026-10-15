@@ -1,59 +1,113 @@
-import { SEARCH_FILTERS } from "@le/linkedin";
+import { FREE_NOTES_PER_MONTH } from "@le/shared";
+import { SEARCH_FILTERS, planLabel, type LinkedInPlan } from "@le/linkedin";
 import { Panel, Section } from "@/components/page";
 import { NavIcon } from "@/components/icons";
 import { SubmitButton } from "@/components/submit-button";
 
+const PLANS: ReadonlyArray<{ value: LinkedInPlan; hint: string }> = [
+  {
+    value: "basic",
+    hint: `Notes on ${FREE_NOTES_PER_MONTH} invitations a month, then invitations go without one. Regular LinkedIn search.`,
+  },
+  { value: "premium", hint: "A note on every invitation. Regular LinkedIn search." },
+  {
+    value: "sales_navigator",
+    hint: "A note on every invitation, and searches filter by seniority and company size too.",
+  },
+];
+
 /**
- * Which search the account runs, as a setting somebody can see and change in
- * one press rather than a checkbox inside the edit form under sending hours.
+ * Which LinkedIn plan the account has, and what that means for sending.
  *
- * The filters listed are SEARCH_FILTERS, the same list the website shows and
- * a test holds to what the search really applies (rule 12).
+ * Three answers, because they differ in two ways. Sales Navigator changes the
+ * search (rule 12). Any paid plan lifts LinkedIn's monthly limit on invitation
+ * notes, which a free account has (migration 0045). Said before launch, where
+ * somebody can still do something about it, rather than discovered as a
+ * campaign that stops after its third invitation.
  *
- * Turning it on is the costly mistake: a search on a tier the account does not
- * have returns nobody, which reads as "your customer profile matched nobody".
- * So the button that turns it on says what it requires.
+ * What the rep says and what LinkedIn reports are shown side by side when they
+ * disagree. The filters listed are SEARCH_FILTERS, which a test holds to what
+ * the search really applies.
  */
 export function SalesNavigatorSection({
-  on,
+  plan,
+  detected,
+  notesLeft,
   connected,
   action,
 }: {
-  on: boolean;
-  /** No account row yet: the answer lives in the edit form until Connect. */
+  plan: LinkedInPlan;
+  /** What the provider reported, or null when it has not been asked or could not say. */
+  detected: LinkedInPlan | null;
+  /** Free account: notes left this month. Null on a paid plan. */
+  notesLeft: number | null;
+  /** No account row yet: the answer is kept until Connect. */
   connected: boolean;
   action: (formData: FormData) => Promise<void>;
 }) {
+  const salesNav = plan === "sales_navigator";
   const missing = SEARCH_FILTERS.flatMap((f) => (f.classic ? [] : [f.dropped]));
+  const disagrees = detected !== null && detected !== plan;
   return (
     <Section
       id="sales-navigator"
-      title="Sales Navigator"
-      description="Which LinkedIn search finds your prospects."
+      title="LinkedIn plan"
+      description="What the account can do decides how precisely it searches and whether invitations carry a note."
     >
-      <Panel className={on ? "sn-panel is-on" : "sn-panel"}>
+      <Panel className={salesNav ? "sn-panel is-on" : "sn-panel"}>
         <div className="sn-head">
-          <span className={on ? "pill positive" : "pill"}>{on ? "On" : "Off"}</span>
+          <span className={plan === "basic" ? "pill" : "pill positive"}>{planLabel(plan)}</span>
           <p>
-            {on ? (
-              <strong>Searches run on Sales Navigator.</strong>
-            ) : (
-              <strong>Searches run on regular LinkedIn search.</strong>
-            )}{" "}
+            <strong>{salesNav ? "Searches run on Sales Navigator." : "Searches run on regular LinkedIn search."}</strong>{" "}
             <span className="muted">
-              {on
+              {salesNav
                 ? "Every filter in your strategies is applied."
                 : `It cannot filter on ${listInWords(missing)}, so lists are broader and need more reading before launch.`}
             </span>
           </p>
         </div>
 
+        <p className="small">
+          {notesLeft === null ? (
+            <>
+              <strong>Invitation notes:</strong> a note on every invitation.
+            </>
+          ) : (
+            <>
+              <strong>Invitation notes:</strong> {notesLeft} of {FREE_NOTES_PER_MONTH} left this month. A free
+              LinkedIn account can add a note to only {FREE_NOTES_PER_MONTH} invitations a month; after that
+              invitations go out without a note until the month turns, which LinkedIn allows.
+            </>
+          )}
+        </p>
+
+        {disagrees ? (
+          <div className="notice warning" role="status">
+            <p className="small">
+              <strong>LinkedIn reports {planLabel(detected!)} on this account.</strong>{" "}
+              {detected === "basic"
+                ? plan === "sales_navigator"
+                  ? "A search on Sales Navigator from an account without it finds nobody, so choose the plan LinkedIn reports."
+                  : "Notes are limited to the free allowance until LinkedIn reports a paid plan."
+                : detected === "sales_navigator"
+                  ? "Choose Sales Navigator below to search with it."
+                  : plan === "sales_navigator"
+                    ? "A search on Sales Navigator from an account without it finds nobody, so choose Premium below."
+                    : "Choose Premium below so every invitation can carry a note."}
+            </p>
+          </div>
+        ) : null}
+
         <ul className="sn-filters" aria-label="Filters your searches apply">
           {SEARCH_FILTERS.map((filter) => {
-            const applied = on || filter.classic;
+            const applied = salesNav || filter.classic;
             return (
               <li key={filter.label} className={applied ? "is-applied" : "is-missing"}>
-                {applied ? <NavIcon name="check" className="sn-filter-icon" /> : <span className="sn-filter-dash" aria-hidden="true" />}
+                {applied ? (
+                  <NavIcon name="check" className="sn-filter-icon" />
+                ) : (
+                  <span className="sn-filter-dash" aria-hidden="true" />
+                )}
                 <span>{filter.label}</span>
                 <span className="sr-only">{applied ? "applied" : "not applied"}</span>
               </li>
@@ -61,37 +115,30 @@ export function SalesNavigatorSection({
           })}
         </ul>
 
-        {connected ? (
-          <form action={action} className="sn-action">
-            <input type="hidden" name="value" value={on ? "off" : "on"} />
-            {on ? (
-              <>
-                <p className="small muted">
-                  Turn this off if the subscription has ended. A search on Sales Navigator from an
-                  account without it finds nobody.
-                </p>
-                <SubmitButton className="btn secondary small" pendingLabel="Saving…">
-                  Turn off Sales Navigator
-                </SubmitButton>
-              </>
-            ) : (
-              <>
-                <p className="small muted">
-                  Only turn this on if this LinkedIn account has a Sales Navigator subscription. It is
-                  sold by LinkedIn, not by us.
-                </p>
-                <SubmitButton className="btn small" pendingLabel="Saving…">
-                  I have Sales Navigator, turn it on
-                </SubmitButton>
-              </>
-            )}
-          </form>
-        ) : (
-          <p className="small muted sn-action">
-            Connect your LinkedIn account below, then turn this on here if the account has Sales
-            Navigator.
-          </p>
-        )}
+        <form action={action} className="sn-action">
+          <fieldset className="sn-choices">
+            <legend className="sr-only">LinkedIn plan</legend>
+            {PLANS.map((option) => (
+              <label key={option.value} className="small check">
+                <input type="radio" name="linkedinPlan" value={option.value} defaultChecked={option.value === plan} />
+                <span>
+                  <strong>{planLabel(option.value)}</strong>
+                  <span className="tiny subtle hint">{option.hint}</span>
+                </span>
+              </label>
+            ))}
+          </fieldset>
+          <div className="sn-save">
+            <p className="tiny muted">
+              {connected
+                ? "Choose the plan this LinkedIn account really has: a search on Sales Navigator from an account without it finds nobody. Premium and Sales Navigator are sold by LinkedIn, not by us."
+                : "Kept until you connect your LinkedIn account, then checked with LinkedIn."}
+            </p>
+            <SubmitButton className="btn small" pendingLabel="Saving…">
+              Save plan
+            </SubmitButton>
+          </div>
+        </form>
       </Panel>
     </Section>
   );

@@ -15,9 +15,11 @@ import {
   LINKEDIN_LIMITS,
   PACING_LOOP,
   countFunnel,
+  fitCutoffSentence,
   stagesFor,
 } from "@le/shared";
-import { ACCOUNT_USAGE_COLUMNS, dailyInviteCap, localDayStart } from "@le/linkedin";
+import { ACCOUNT_USAGE_COLUMNS, dailyInviteCap, localDayStart, parseWorkingHours, plainReason, planOf } from "@le/linkedin";
+import { notesLeftThisMonth } from "@/lib/invite-notes";
 import { restoreFromFailure } from "@/lib/retry-failed";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
@@ -25,12 +27,13 @@ import { callWorker, errorQuery, noticeQuery, startedNotice } from "@/lib/worker
 import { SubmitButton } from "@/components/submit-button";
 import { describeSearch } from "./search-state";
 import { describePacing } from "@/lib/pacing";
-import { INVITE_NOTE_MAX_CHARS, MIN_SENDS_TO_COMPARE, comparisonReady, standings, profileHref } from "@le/shared";
+import { campaignUsesOwnBookingLink } from "@/lib/booking-link";
+import { EXTERNAL_BOOKINGS_UNCOUNTED, FREE_NOTES_PER_MONTH, INVITE_NOTE_MAX_CHARS, MIN_SENDS_TO_COMPARE, alwaysHoldsSentence, comparisonReady, standings, profileHref } from "@le/shared";
 import { PageNotice, type NoticeParams } from "@/components/page-notice";
 import { ConfirmButton } from "@/components/confirm-button";
 import { formatDate, isoAttr } from "@/lib/format";
 import { label } from "@/lib/labels";
-import { daysToSendAll, launchBlockers } from "@/lib/campaign";
+import { SKIPPED_AT_SEND_REASONS, actionableQueue, launchBlockers, sendEstimate } from "@/lib/campaign";
 import { isPlatformAdmin } from "@/lib/admin";
 
 /**
@@ -728,7 +731,7 @@ export default async function CampaignPage({
     .maybeSingle();
   if (!campaign) notFound();
 
-  const [{ data: steps }, { data: members }, { data: account }, { data: lastSearch }, { data: heartbeat }, { data: boot }, { data: owner }, { data: variantRows }, { data: agents }, { data: viewer }] =
+  const [{ data: steps }, { data: members }, { data: account }, { data: lastSearch }, { data: heartbeat }, { data: boot }, { data: owner }, { data: variantRows }, { data: agents }, { data: viewer }, { data: exclusionRows }, { data: siblings }] =
     await Promise.all([
     supabase
       .from("campaign_steps")
@@ -737,7 +740,7 @@ export default async function CampaignPage({
       .order("step_number"),
     supabase
       .from("campaign_prospects")
-      .select("id, status, status_reason, invited_at, accepted_at, replied_at, variant_id, invite_note, invite_note_grounding, invite_note_thin, invite_note_edited, prospects (id, first_name, last_name, headline, title, company, location, linkedin_url, fit_score, fit_reasons)")
+      .select("id, status, status_reason, invited_at, accepted_at, replied_at, variant_id, invite_note, invite_note_grounding, invite_note_thin, invite_note_edited, prospects (id, first_name, last_name, headline, title, company, location, linkedin_url, fit_score, fit_reasons, do_not_contact, last_contacted_at)")
       .eq("campaign_id", id)
       .order("created_at"),
     // Every column the rate limiter reads, not only the two the header shows:
@@ -788,6 +791,18 @@ export default async function CampaignPage({
       .order("is_default", { ascending: false }),
     // Dates shown to whoever is reading, in their own timezone.
     supabase.from("profiles").select("timezone").eq("id", session.userId).maybeSingle(),
+    // The exclusion list, so "still to invite" leaves out the people the send
+    // path will close instead of inviting (rule 14).
+    supabase.from("exclusions").select("kind, value, raw_value, reason").eq("workspace_id", session.workspaceId),
+    // Other running campaigns on the same account share its daily and weekly
+    // allowance, which the days estimate has to say.
+    supabase
+      .from("campaigns")
+      .select("id")
+      .eq("workspace_id", session.workspaceId)
+      .eq("linkedin_account_id", campaign.linkedin_account_id)
+      .eq("status", "running")
+      .neq("id", campaign.id),
   ]);
   const viewerTimezone = viewer?.timezone ?? null;
   // Whether this reader may see the deployment's half of a fault (rule 54).
@@ -837,12 +852,47 @@ export default async function CampaignPage({
     campaign.daily_invite_cap,
     account ? dailyInviteCap(account.first_action_at ? new Date(account.first_action_at) : null) : campaign.daily_invite_cap,
   );
-  const days = daysToSendAll(queued.length, perDay);
+  /*
+   * Who on the queue will actually be invited. The send path closes somebody
+   * marked do not contact, somebody already contacted, and somebody on the
+   * exclusion list rather than inviting them, so counting them promised
+   * invitations that were never going out.
+   */
+  const exclusions = (exclusionRows ?? []).map((row) => ({
+    kind: row.kind,
+    value: row.value,
+    rawValue: row.raw_value,
+    reason: row.reason,
+  }));
+  const { actionable, skipped } = actionableQueue(
+    queued.map((row) => ({
+      invited_at: row.invited_at,
+      prospect: row.prospects as unknown as {
+        do_not_contact: boolean | null;
+        last_contacted_at: string | null;
+        company: string | null;
+        linkedin_url: string | null;
+      } | null,
+    })),
+    exclusions,
+  );
+  const sharedWith = siblings?.length ?? 0;
+  const estimate = sendEstimate({
+    remaining: actionable,
+    perDay,
+    workingDaysPerWeek: parseWorkingHours(account?.working_hours).days.length,
+    otherRunningOnAccount: sharedWith,
+  });
   const dropped = ruleStrings(campaign.rules, "droppedFilters");
   // What the words in the customer profile actually became. LinkedIn searches
   // places and industries by id, so every one of them was translated first.
   const filterNotes = ruleStrings(campaign.rules, "filterNotes");
   const running = campaign.status === "running";
+  // The account's plan, said before launch: a free account's notes run out
+  // after a few invitations a month (migration 0045), and finding that out
+  // from a campaign that goes quiet is the failure this replaces.
+  const sendingPlan = account ? planOf(account) : null;
+  const notesLeft = account ? await notesLeftThisMonth(supabase, account, owner?.timezone ?? "UTC") : null;
   // Judged on what this campaign was asking for. A link campaign has no
   // meetings and never will; ending its funnel in a permanent zero reports a
   // working campaign as a failed one.
@@ -862,6 +912,10 @@ export default async function CampaignPage({
     label: campaign.cta_label,
     url: campaign.cta_url,
   });
+  // Rule 31: a meeting campaign whose replies offer the rep's own scheduling
+  // link books some meetings where this page cannot see them.
+  const ownBookingLink =
+    cta.kind === "meeting" && (await campaignUsesOwnBookingLink(supabase, session.workspaceId, campaign));
 
   const searchNotice = describeSearch(lastSearch);
   // How each angle is doing, and whether anything can yet be said about it.
@@ -891,7 +945,7 @@ export default async function CampaignPage({
   const sentToday = rows.filter((r) => r.invited_at && Date.parse(r.invited_at) >= dayStart).length;
   const pacing = describePacing({
     status: campaign.status,
-    queued: queued.length,
+    queued: actionable,
     sentToday,
     account: account ?? null,
     timezone: owner?.timezone ?? "UTC",
@@ -940,9 +994,22 @@ export default async function CampaignPage({
         }
         lede={
           <>
-            {queued.length} still to invite of {rows.length}
-            {days ? ` · about ${days} working ${days === 1 ? "day" : "days"} at ${perDay} a day` : ""}
+            {actionable} still to invite of {rows.length}
+            {estimate
+              ? ` · about ${estimate.days} working ${estimate.days === 1 ? "day" : "days"} at ${estimate.perDay} a day${
+                  estimate.weeklyLimited ? `, held to ${LINKEDIN_LIMITS.invitesPerWeek} a week` : ""
+                }${
+                  estimate.shared > 0
+                    ? `, longer while ${estimate.shared} other running ${estimate.shared === 1 ? "campaign shares" : "campaigns share"} this account`
+                    : ""
+                }`
+              : ""}
             {account?.display_name ? ` · sending as ${account.display_name}` : ""}
+            {skipped > 0 ? (
+              <span className="block tiny muted">
+                {skipped} will be skipped at send: {SKIPPED_AT_SEND_REASONS}.
+              </span>
+            ) : null}
           </>
         }
         actions={
@@ -1040,15 +1107,30 @@ export default async function CampaignPage({
         )
       ) : null}
 
+      {sendingPlan === "basic" && campaign.status !== "archived" ? (
+        <div className="notice" role="note">
+          <strong>Sending from a free LinkedIn account</strong>
+          <p className="small">
+            {notesLeft
+              ? `Invitations carry their note for ${notesLeft} more this month. `
+              : "This month's invitation notes are used, so invitations go out without a note until the month turns. "}
+            LinkedIn lets a free account add a note to only {FREE_NOTES_PER_MONTH} invitations a month, and
+            invitations without one are still sent. Regular LinkedIn search applies job title, location and
+            industry only. <Link href="/app/profile#sales-navigator">Check the LinkedIn plan</Link>
+          </p>
+        </div>
+      ) : null}
+
       {dropped.length > 0 ? (
         <div className="notice">
           <strong>This list was built without Sales Navigator</strong>
           <p className="small">
             Classic LinkedIn search cannot filter on {listInWords(dropped)}, so{" "}
             {dropped.length === 1 ? "that part" : "those parts"} of your customer profile
-            {dropped.length === 1 ? " was" : " were"} not applied. Everyone below still matched on
-            title, industry and location, and each was scored against the full profile. Read the
-            names before launching, and expect more of them to be wrong than usual.
+            {dropped.length === 1 ? " was" : " were"} not applied. The list was searched by job
+            title, industry and location as far as LinkedIn allowed, and each person was scored
+            against the full profile. The notes below say what else changed. Read the names before
+            launching, and expect more of them to be wrong than usual.
           </p>
           <p className="small">
             <Link href="/app/profile#sales-navigator">Have Sales Navigator? Turn it on</Link> and
@@ -1106,6 +1188,7 @@ export default async function CampaignPage({
                 }))}
               />
             )}
+            {ownBookingLink ? <p className="tiny subtle">{EXTERNAL_BOOKINGS_UNCOUNTED}</p> : null}
           </Section>
 
           {/*
@@ -1320,6 +1403,9 @@ export default async function CampaignPage({
                 max={LINKEDIN_LIMITS.invitesPerDayMax}
                 defaultValue={campaign.daily_invite_cap}
               />
+              <span className="hint">
+                Campaigns on one LinkedIn account share its daily and weekly limits.
+              </span>
             </label>
             <label className="field compact-wide">
               <span>Replies</span>
@@ -1334,8 +1420,9 @@ export default async function CampaignPage({
           </div>
           <p className="small muted">
             {autonomous
-              ? "Your rules let the agent answer pricing, legal and negative replies itself. A message it could not read with confidence, or a prospect asking for a person, still waits for you on either setting."
+              ? "Your rules let the agent answer pricing, legal and negative replies itself."
               : "Pricing, legal and anything negative always wait for a person, on either setting."}{" "}
+            {alwaysHoldsSentence()}{" "}
             The ceiling of {LINKEDIN_LIMITS.invitesPerDayMax} a day is a safety limit, not a preference.
             {running ? "" : " Launch campaign saves anything changed here first."}
           </p>
@@ -1428,6 +1515,7 @@ export default async function CampaignPage({
       <Section
         id="list"
         title="Who is on the list"
+        description={fitCutoffSentence()}
         action={
           <p className="tiny subtle">
             {rows.length} {rows.length === 1 ? "person" : "people"}
@@ -1666,7 +1754,7 @@ export default async function CampaignPage({
                     ) : null}
                   </div>
 
-                  {row.status_reason ? <p className="tiny muted">{row.status_reason}</p> : null}
+                  {row.status_reason ? <p className="tiny muted">{plainReason(row.status_reason)}</p> : null}
                 </li>
               );
             })}

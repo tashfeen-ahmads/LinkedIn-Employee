@@ -24,6 +24,51 @@ import { join } from "node:path";
  */
 const MUTATIONS = [
   /*
+   * A free LinkedIn account's monthly invitation notes (migration 0045). Past
+   * them LinkedIn refuses the whole invitation in a throttle's words, and every
+   * account that sent in October was held for days right after its third note.
+   */
+  {
+    id: "notes/spent-month-sends-without-note",
+    rule: "Once a free account's monthly notes are spent, the invitation goes without one",
+    file: "apps/worker/src/jobs/linkedin-action.ts",
+    from: "      if (!allowance.allowed) note = undefined;",
+    to: "      void allowance;",
+    pkg: "@le/worker",
+  },
+  {
+    id: "notes/refused-note-resent-without",
+    rule: "A free account's invitation refused with a note is asked once more without it, not held as a throttle",
+    file: "apps/worker/src/jobs/linkedin-action.ts",
+    from: "      if (!result.ok && note && plan === \"basic\" && mightBeNoteQuota(result.error)) {",
+    to: "      if (false) {",
+    pkg: "@le/worker",
+  },
+  {
+    id: "notes/paid-plan-unlimited",
+    rule: "Only a free account has a monthly note limit",
+    file: "packages/linkedin/src/notes.ts",
+    from: "  if (input.plan !== \"basic\") return { allowed: true, remaining: null };",
+    to: "",
+    pkg: "@le/linkedin",
+  },
+  {
+    id: "disclosure/classic-titles-or-keywords",
+    rule: "A classic search over titles and keywords says the list matched either, not both (rule 12)",
+    file: "packages/linkedin/src/unipile.ts",
+    from: "          notes.push(CLASSIC_TITLES_OR_KEYWORDS_NOTE);",
+    to: "          void CLASSIC_TITLES_OR_KEYWORDS_NOTE;",
+    pkg: "@le/linkedin",
+  },
+  {
+    id: "disclosure/find-more-records-dropped-filters",
+    rule: "A Find more batch records what its search could not honour on the campaign (rule 12)",
+    file: "apps/worker/src/jobs/targeting.ts",
+    from: "    const rules = mergeSearchDisclosures(continuing.rules, page, searchTier);",
+    to: "    const rules = (continuing.rules ?? {}) as Record<string, unknown>;",
+    pkg: "@le/worker",
+  },
+  /*
    * The October targeting audit. Each of these was a failing test before the
    * fix: a known person re-attached because they arrived without a public
    * address, a prospect row overwritten by a second strategy, a note paired
@@ -399,8 +444,55 @@ const MUTATIONS = [
     id: "hook/approved-only",
     rule: "Only an approved opener ever opens a conversation",
     file: "apps/worker/src/jobs/targeting.ts",
-    from: '      .not("approved_at", "is", null)\n      .limit(12),',
-    to: "      .limit(12),",
+    from: '      .eq("workspace_id", workspaceId)\n      .not("approved_at", "is", null);\n    return (owner',
+    to: '      .eq("workspace_id", workspaceId);\n    return (owner',
+    pkg: "@le/worker",
+  },
+  /*
+   * Brand separation. A workspace running several agents is running several
+   * brands, and each of these let one brand's copy or facts reach a prospect
+   * of another: a workspace-default pitch matched by `is_default` alone, the
+   * invite writer handed every approved opener in the workspace, and a reply
+   * written from every agent's knowledge documents.
+   */
+  {
+    id: "brand/default-pitch-is-the-workspace-own",
+    rule: "The workspace default pitch is the row with no agent, never another agent's default",
+    file: "apps/worker/src/pitch.ts",
+    from: '    .eq("workspace_id", workspaceId)\n    .is("agent_id", null)\n    .eq("is_default", true)',
+    to: '    .eq("workspace_id", workspaceId)\n    .eq("is_default", true)',
+    pkg: "@le/worker",
+  },
+  {
+    id: "brand/openers-stay-with-their-agent",
+    rule: "The invite writer is handed this agent's and the shared openers, never another agent's",
+    file: "apps/worker/src/jobs/targeting.ts",
+    from: '    return (owner ? q.eq("agent_id", owner) : q.is("agent_id", null)).limit(12);',
+    to: "    return q.limit(12);",
+    pkg: "@le/worker",
+  },
+  {
+    id: "brand/knowledge-stays-with-its-agent",
+    rule: "A reply is written from this agent's and the shared knowledge, never another agent's (rule 11)",
+    file: "apps/worker/src/knowledge.ts",
+    from: '    return (owner ? q.eq("agent_id", owner) : q.is("agent_id", null))',
+    to: "    return q",
+    pkg: "@le/worker",
+  },
+  {
+    id: "export/calendar-feed-by-host-only",
+    rule: "A workspace export never carries a calendar feed's address, not even as ciphertext (rule 19)",
+    file: "apps/worker/src/jobs/retention.ts",
+    from: '"id, user_id, url_host, status, last_synced_at, event_count, created_at"',
+    to: '"id, user_id, url_encrypted, url_host, status, last_synced_at, event_count, created_at"',
+    pkg: "@le/worker",
+  },
+  {
+    id: "export/member-settings-not-sign-in-data",
+    rule: "A workspace export carries a member's settings, never their email or address",
+    file: "apps/worker/src/jobs/retention.ts",
+    from: 'const MEMBER_SETTINGS_COLUMNS = "id, timezone, booking_url";',
+    to: 'const MEMBER_SETTINGS_COLUMNS = "id, email, address, timezone, booking_url";',
     pkg: "@le/worker",
   },
   {
@@ -423,8 +515,16 @@ const MUTATIONS = [
     id: "autonomy/a-person-asked-for-a-person",
     rule: "Autonomy never overrides a prospect asking to speak to a human",
     file: "packages/agents/src/reply.ts",
-    from: "  if (rules.handOffOnHumanRequest && classification.asksForHuman) {",
+    from: "  if (classification.asksForHuman) {",
     to: "  if (false) {",
+    pkg: "@le/agents",
+  },
+  {
+    id: "autonomy/human-request-cannot-be-waived",
+    rule: "No stored setting can switch off the hold on a prospect asking for a person",
+    file: "packages/agents/src/reply.ts",
+    from: "  if (classification.asksForHuman) {",
+    to: "  if (rules.handOffOnHumanRequest && classification.asksForHuman) {",
     pkg: "@le/agents",
   },
   {
@@ -1021,8 +1121,8 @@ const MUTATIONS = [
     id: "targeting/fit-threshold",
     rule: "Nobody below the fit threshold is queued for outreach",
     file: "apps/worker/src/jobs/targeting.ts",
-    from: "const shortlist = ranked.filter((r) => !r.disqualified && r.fitScore >= MIN_FIT_TO_QUEUE);",
-    to: "const shortlist = ranked;",
+    from: "    .filter((r) => !r.disqualified && r.fitScore >= MIN_FIT_TO_QUEUE);",
+    to: "    ;",
     pkg: "@le/worker",
   },
   {
@@ -3252,15 +3352,15 @@ const MUTATIONS = [
     id: "export/a-subject-access-request-is-complete",
     rule: "A GDPR export includes everyone, not the first thousand",
     file: "apps/worker/src/jobs/retention.ts",
-    from: "    fetchAllRows<T>((from, to) =>",
-    to: "    (async (q) => ({ rows: (await q(0, 999)).data ?? [], truncated: false }))((from, to) =>",
+    from: "    const result = await fetchAllRows<T>((from, to) =>",
+    to: "    const result = await (async (q) => ({ rows: (await q(0, 999)).data ?? [], truncated: false }))((from, to) =>",
     pkg: "@le/worker",
   },
   {
     id: "export/a-short-export-says-so",
     rule: "An export that stopped short is never handed over as if it were everything",
     file: "apps/worker/src/jobs/retention.ts",
-    from: "    complete: ![prospects, conversations, meetings, campaigns, messages].some((r) => r.truncated),",
+    from: "    complete: !paged.some((r) => r.truncated),",
     to: "    complete: true,",
     pkg: "@le/worker",
   },

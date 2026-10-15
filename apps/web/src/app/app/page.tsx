@@ -21,6 +21,7 @@ import type { TeamFacts } from "@/lib/team";
 import { DailyReportSection } from "./report-section";
 import { LimitsSection } from "./limits-section";
 import { HeadlineStats, ResultsSection } from "./analytics-section";
+import { workspaceUsesOwnBookingLink } from "@/lib/booking-link";
 /**
  * The morning screen: what to do, and whether what was done is working.
  *
@@ -98,6 +99,11 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
     canSeeTeam: canSeeTeamFunnel(session.role),
   });
   const report = funnelReport(funnel.rows, funnel.goals, Date.now());
+  // Whether the Meetings figure below can be the whole story (rule 31). Only
+  // asked when that figure is shown at all.
+  const ownBookingLink =
+    report.stages.some((stage) => stage.key === "meetings") &&
+    (await workspaceUsesOwnBookingLink(supabase, session.workspaceId));
   /*
    * People found per strategy.
    *
@@ -199,7 +205,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
         </div>
       ) : null}
 
-      <HeadlineStats report={report} />
+      <HeadlineStats report={report} ownBookingLink={ownBookingLink} />
 
       {/*
         The guardrails, on the screen somebody opens daily.

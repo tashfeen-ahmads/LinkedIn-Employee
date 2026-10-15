@@ -4,7 +4,7 @@ import { SalesNavigator } from "@/components/home";
 import { Faq, PageHero } from "@/components/marketing";
 import { BreadcrumbSchema, SoftwareSchema } from "@/components/schema";
 import { PUBLIC_LIMITS, SITE, pageMeta } from "@/lib/site";
-import { BRAND } from "@le/shared";
+import { BRAND, FREE_NOTES_PER_MONTH } from "@le/shared";
 
 /*
  * The route stays, because every link, bookmark and search result that ever
@@ -30,7 +30,7 @@ const QA = [
   },
   {
     q: "Do I need to pay LinkedIn for anything?",
-    a: "No. It works with any LinkedIn account. Sales Navigator, which LinkedIn sells separately, makes the search more precise; without it, the campaign tells you which filters could not be applied before you launch.",
+    a: `No. It works with any LinkedIn account. A free account can add a note to only ${FREE_NOTES_PER_MONTH} invitations a month, LinkedIn's own limit; after that ${BRAND.name} sends invitations without one. Premium lifts that limit, and Sales Navigator also makes the search more precise. Without it, the campaign tells you which filters could not be applied before you launch.`,
   },
   {
     q: "Can I bring my team?",
@@ -51,7 +51,7 @@ const INCLUDED = [
   {
     label: "The whole product",
     value:
-      "Strategy, prospect search, a personalized note for every invitation, follow-ups and meeting booking.",
+      "Strategy, prospect search, a personalized note for every invitation LinkedIn allows one on, follow-ups and meeting booking.",
   },
   {
     label: "The same safety limits",

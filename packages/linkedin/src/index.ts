@@ -5,3 +5,4 @@ export * from "./rate-limit.js";
 export * from "./cursor.js";
 export * from "./usage.js";
 export * from "./provider-errors.js";
+export * from "./notes.js";

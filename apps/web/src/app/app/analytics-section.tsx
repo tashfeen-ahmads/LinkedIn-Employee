@@ -2,6 +2,7 @@ import Link from "next/link";
 import {
   CLICKS_ARE_INVISIBLE,
   CTA_DEFINITIONS,
+  EXTERNAL_BOOKINGS_UNCOUNTED,
   MIN_FOR_RATE,
   RATE_TARGETS,
   countFunnel,
@@ -17,6 +18,7 @@ import {
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { readFunnelData } from "@/lib/funnel-data";
+import { workspaceUsesOwnBookingLink } from "@/lib/booking-link";
 import { canSeeTeamFunnel, scopeFunnel } from "@/lib/funnel-scope";
 import { Section, Empty } from "@/components/page";
 import { FunnelChart, RankedBars, TrendChart } from "@/components/charts";
@@ -50,7 +52,7 @@ export async function ResultsSection() {
   const supabase = await createClient();
   const now = Date.now();
 
-  const [everything, { data: profiles }, { data: memberships }] = await Promise.all([
+  const [everything, { data: profiles }, { data: memberships }, ownBookingLink] = await Promise.all([
     readFunnelData(supabase, session.workspaceId),
     supabase
       .from("customer_profiles")
@@ -58,6 +60,7 @@ export async function ResultsSection() {
       .eq("workspace_id", session.workspaceId)
       .order("priority", { ascending: true }),
     supabase.from("memberships").select("user_id, role").eq("workspace_id", session.workspaceId),
+    workspaceUsesOwnBookingLink(supabase, session.workspaceId),
   ]);
 
   // Scoped once, before anything is counted: a rep reads their own campaigns
@@ -155,11 +158,17 @@ export async function ResultsSection() {
       <Section
         id="funnel"
         title="Where people get to"
-        description={
+        description={[
           funnel.goals.includes("link")
             ? CLICKS_ARE_INVISIBLE
-            : "Each stage as a share of everyone invited, and the conversion from the stage above it."
-        }
+            : "Each stage as a share of everyone invited, and the conversion from the stage above it.",
+          // Rule 31: a meetings stage beside a rep's own scheduling link
+          // undercounts, and says so rather than reading as a campaign that
+          // booked nobody.
+          ownBookingLink && funnel.goals.includes("meeting") ? EXTERNAL_BOOKINGS_UNCOUNTED : null,
+        ]
+          .filter(Boolean)
+          .join(" ")}
       >
         {nothingYet ? (
           <Empty title="Nobody has been invited yet." action="Open campaigns" href="/app/campaigns">
@@ -303,7 +312,14 @@ function rateValue(r: Rate): string {
  * `funnelReport` Results uses, so the two can never disagree, and Meetings
  * only appears where a campaign here can reach that stage (rule 29).
  */
-export function HeadlineStats({ report }: { report: FunnelReport }) {
+export function HeadlineStats({
+  report,
+  ownBookingLink = false,
+}: {
+  report: FunnelReport;
+  /** Somebody here sends their own scheduling link, whose bookings are not counted (rule 31). */
+  ownBookingLink?: boolean;
+}) {
   return (
     <section className="headline-stats" aria-label="This week">
       <HeadlineStat
@@ -333,7 +349,11 @@ export function HeadlineStats({ report }: { report: FunnelReport }) {
         <HeadlineStat
           label="Meetings"
           value={report.counts.meetings.toLocaleString()}
-          note="Booked, across every campaign."
+          note={
+            ownBookingLink
+              ? "Booked here. Meetings booked through your own scheduling link are not counted."
+              : "Booked, across every campaign."
+          }
         />
       ) : null}
     </section>

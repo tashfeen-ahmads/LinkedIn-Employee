@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { ProspectCandidate } from "@le/shared";
 import type {
+  AccountPlan,
   AccountHealth,
   ActionResult,
   HostedAuthLink,
@@ -41,6 +42,7 @@ const ROUTES = {
   chatMessages: (id: string) => `/api/v1/chats/${id}/messages`,
   messages: "/api/v1/messages",
   relations: "/api/v1/users/relations",
+  inmailBalance: "/api/v1/linkedin/inmail_balance",
   webhooks: "/api/v1/webhooks",
   webhook: (id: string) => `/api/v1/webhooks/${id}`,
 } as const;
@@ -190,6 +192,30 @@ export class UnipileProvider implements LinkedInProvider {
     }
   }
 
+  /**
+   * Which paid LinkedIn plans the account has, from its InMail balances.
+   *
+   * The balance call answers per product and leaves a product the account is
+   * not subscribed to empty, which is the only place the provider says what
+   * the account pays for. Any failure is null, never "free": a lookup that
+   * could not look must not take an account's notes away (rule 17).
+   */
+  async getAccountPlan(accountId: string): Promise<AccountPlan | null> {
+    try {
+      const res = await this.request<Record<string, unknown>>(
+        `${ROUTES.inmailBalance}?account_id=${encodeURIComponent(accountId)}`,
+      );
+      const has = (key: string) => {
+        const value = res[key];
+        return value !== null && value !== undefined && value !== false;
+      };
+      if (!("premium" in res) && !("sales_navigator" in res)) return null;
+      return { premium: has("premium") || has("sales_navigator"), salesNavigator: has("sales_navigator") };
+    } catch {
+      return null;
+    }
+  }
+
   async searchProspects(input: {
     accountId: string;
     query: SearchQuery;
@@ -320,6 +346,12 @@ export class UnipileProvider implements LinkedInProvider {
           notes.push(
             `Classic search takes one keyword at a time, so the profile was searched as ${terms.length} separate queries and the results combined: ${terms.join(", ")}.`,
           );
+        }
+        // Each term is its own search, so a title and a keyword the profile
+        // asked for together came back as either one. The mechanics stay (one
+        // box, one term), and the reviewer is told what the list therefore is.
+        if (hasAny(input.query.titles) && hasAny(input.query.keywords)) {
+          notes.push(CLASSIC_TITLES_OR_KEYWORDS_NOTE);
         }
         if (!withIndustry && resolved.industries.length > 0) {
           notes.push(
@@ -1078,9 +1110,12 @@ function toUnipileSearchBody(
     body: {
       api: "classic",
       category: "people",
-      // Seniority survives as a text hint rather than vanishing entirely, and
-      // is still reported dropped above, because a hint is not a filter.
-      keywords: anyOf([...(query.keywords ?? []), ...(query.seniorities ?? [])]),
+      // This body is not what is sent. `searchProspects` asks classic one term
+      // at a time (`classicTerms`: titles and keywords only), so seniority is
+      // never sent to LinkedIn on this tier, not even as a text hint. It is
+      // reported in `droppedFilters` above, which is the only true account of
+      // it, so it is left out here too rather than described as surviving.
+      keywords: anyOf(query.keywords ?? []),
       // Classic's one structured field for what someone does. Free text, not
       // an id — unlike location and industry, which are ids or nothing.
       advanced_keywords: query.titles?.length ? { title: anyOf(query.titles) } : undefined,
@@ -1125,6 +1160,19 @@ function nextPosition(
  * seat somebody pays for, and the tail of a profile's keyword list is its
  * vaguest part.
  */
+/**
+ * Said whenever a classic search was asked for job titles and keywords both.
+ * They are separate requests merged afterwards, so the list is "title OR
+ * keyword", never "title AND keyword", and a reviewer reading it as the
+ * profile they approved would be reading the narrower query.
+ */
+export const CLASSIC_TITLES_OR_KEYWORDS_NOTE =
+  "Job titles and keywords were searched separately, so a person here matched at least one of them, not necessarily all.";
+
+function hasAny(list: string[] | undefined): boolean {
+  return (list ?? []).some((t) => t.trim().length > 0);
+}
+
 export function classicTerms(query: SearchQuery): string[] {
   const unique = [
     ...new Set(

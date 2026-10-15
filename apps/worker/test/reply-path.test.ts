@@ -285,6 +285,35 @@ describe("the knowledge a reply is written from", () => {
     const titles = (classifyMock.mock.calls[0]![1] as { knowledgeTitles: string[] }).knowledgeTitles;
     expect(titles).toEqual(docs.slice(0, 20).map((d) => d.title));
   });
+
+  it("is this brand's and the shared documents, never another agent's", async () => {
+    /*
+     * A workspace running two agents is running two brands. Brand B's pricing
+     * page handed to brand A's reply is answered from as confidently as A's
+     * own would be, and a prospect is quoted a price for a product they were
+     * never offered. Asserted on both halves of the reply — what the
+     * classifier is told exists and what the writer is handed.
+     */
+    const { db, ctx, queues } = harness();
+    db.seed("agents", [
+      { id: "agent-a", workspace_id: WORKSPACE, name: "Brand A", playbook: {}, custom_fields: [], archived_at: null },
+      { id: "agent-b", workspace_id: WORKSPACE, name: "Brand B", playbook: {}, custom_fields: [], archived_at: null },
+    ]);
+    db.find("campaigns", { id: CAMPAIGN })!.agent_id = "agent-a";
+    db.seed("knowledge_documents", [
+      { id: "k-shared", workspace_id: WORKSPACE, agent_id: null, title: "Shared FAQ", content: "Fact.", created_at: "2026-09-01T00:00:00Z" },
+      { id: "k-a", workspace_id: WORKSPACE, agent_id: "agent-a", title: "A pricing", content: "A costs 10.", created_at: "2026-09-02T00:00:00Z" },
+      { id: "k-b", workspace_id: WORKSPACE, agent_id: "agent-b", title: "B pricing", content: "B costs 99.", created_at: "2026-09-03T00:00:00Z" },
+    ]);
+
+    await handleInboundMessage(ctx, queues, inboundJob("How much is it?"));
+
+    const titles = (classifyMock.mock.calls[0]![1] as { knowledgeTitles: string[] }).knowledgeTitles;
+    expect(titles).toEqual(["Shared FAQ", "A pricing"]);
+    expect(draftMock.mock.calls.length).toBeGreaterThan(0);
+    expect(JSON.stringify(draftMock.mock.calls[0]![1])).not.toContain("B costs 99.");
+    expect(JSON.stringify(draftMock.mock.calls[0]![1])).toContain("A costs 10.");
+  });
 });
 
 describe("a reply job id held by a finished job", () => {

@@ -46,6 +46,11 @@ export interface AccountRecord {
    * Absent on a row selected without it, which falls back to the total.
    */
   invites_by_day?: unknown;
+  /** The plan, for the monthly note allowance (`noteAllowance`, migration 0045). */
+  has_sales_navigator?: boolean | null;
+  has_premium?: boolean | null;
+  /** The rep's local month in which LinkedIn refused a note. */
+  notes_exhausted_month?: string | null;
 }
 
 /**
@@ -54,7 +59,7 @@ export interface AccountRecord {
  * function that needs it rather than being retyped at each call site.
  */
 export const ACCOUNT_USAGE_COLUMNS =
-  "id, workspace_id, user_id, provider_account_id, status, connected_at, first_action_at, invites_today, invites_this_week, messages_today, counters_reset_on, last_action_at, working_hours, profile_views_today, invites_paused_until, invites_paused_reason, invite_throttle_streak, invites_by_day";
+  "id, workspace_id, user_id, provider_account_id, status, connected_at, first_action_at, invites_today, invites_this_week, messages_today, counters_reset_on, last_action_at, working_hours, profile_views_today, invites_paused_until, invites_paused_reason, invite_throttle_streak, invites_by_day, has_sales_navigator, has_premium, notes_exhausted_month";
 
 export function parseWorkingHours(value: unknown): WorkingHours {
   if (value && typeof value === "object") {

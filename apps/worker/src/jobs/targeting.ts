@@ -5,13 +5,15 @@ import {
   parseCustomerProfile,
   FIRST_STEP_DELAY_DAYS,
   LINKEDIN_LIMITS,
+  MIN_FIT_TO_QUEUE,
   assignVariants,
+  clampFitScore,
   isPublicProfileUrl,
   matchExclusion,
   normalizeLinkedInUrl,
   parseHeadline,
 } from "@le/shared";
-import { isAccountGone } from "@le/linkedin";
+import { describeRefusal, isAccountGone } from "@le/linkedin";
 import { markAccountGone } from "../accounts.js";
 import { agentForCampaign, modelFor, openersFor, voiceOf } from "../agent.js";
 import type { WorkerContext } from "../context.js";
@@ -19,7 +21,6 @@ import { recordEvent } from "../context.js";
 import { loadExclusions } from "../exclusions.js";
 import type { TargetingJob } from "../queues.js";
 
-const MIN_FIT_TO_QUEUE = 60;
 
 /**
  * Stamped on every `targeting.stopped` event.
@@ -111,7 +112,7 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
   if (job.campaignId) {
     const { data: row } = await db
       .from("campaigns")
-      .select("id, customer_profile_id, linkedin_account_id, owner_user_id, connection_note, search_cursor, search_exhausted")
+      .select("id, customer_profile_id, linkedin_account_id, owner_user_id, connection_note, search_cursor, search_exhausted, rules")
       .eq("id", job.campaignId)
       .eq("workspace_id", job.workspaceId)
       .maybeSingle();
@@ -241,7 +242,17 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
         cause: (err as { message?: string })?.message ?? "unknown",
       });
     }
-    return giveUp(ctx, job, "LinkedIn's provider refused the search.", {
+    // Which refusal it was, in words, because each has a different remedy: a
+    // monthly search limit waits for next month or a paid plan, a plan the
+    // account does not have is a switch on the profile, a sign-in is a
+    // reconnect. "Refused the search" was all four.
+    const cause = (err as { message?: string })?.message ?? "";
+    const said = describeRefusal(cause);
+    const sentence =
+      said.kind === "unknown" || said.kind === "recipient" || said.kind === "note_quota" || said.kind === "note_too_long"
+        ? "LinkedIn refused the search."
+        : `${said.title}. ${said.detail}`;
+    return giveUp(ctx, job, sentence, {
       searchTier,
       cause: (err as { message?: string })?.message ?? "unknown",
     });
@@ -378,12 +389,19 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
     // So "disqualify a competitor" is a rule the scorer can actually apply.
     business: { oneLiner: business.oneLiner, competitors: business.competitors },
   });
-  const shortlist = ranked.filter((r) => !r.disqualified && r.fitScore >= MIN_FIT_TO_QUEUE);
+  // Bounded here as well as in the scorer: this is the last code before the
+  // column, and a score outside 0..100 is a number every screen misreads.
+  const shortlist = ranked
+    .map((r) => {
+      const fit = clampFitScore(r.fitScore);
+      return { ...r, fitScore: fit.score, disqualified: r.disqualified || !fit.usable };
+    })
+    .filter((r) => !r.disqualified && r.fitScore >= MIN_FIT_TO_QUEUE);
   if (shortlist.length === 0) {
     return giveUp(ctx, job, `Nobody scored above the minimum fit of ${MIN_FIT_TO_QUEUE}.`, {
       scored: ranked.length,
       disqualified: ranked.filter((r) => r.disqualified).length,
-      bestScore: ranked.reduce((best, r) => Math.max(best, r.fitScore), 0),
+      bestScore: ranked.reduce((best, r) => Math.max(best, clampFitScore(r.fitScore).score), 0),
     });
   }
 
@@ -415,6 +433,18 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
       repName,
       shortlist,
     });
+    // What this batch's search could not honour is said on the campaign, next
+    // to what the first batch's could not (rule 12). Loud and never fatal, for
+    // the reason `rememberPosition` gives: the people are already stored.
+    const rules = mergeSearchDisclosures(continuing.rules, page, searchTier);
+    const { error: rulesError } = await db
+      .from("campaigns")
+      .update({ rules: rules as never })
+      .eq("id", continuing.id)
+      .eq("workspace_id", job.workspaceId);
+    if (rulesError) {
+      console.error("could not record what the search dropped", { campaignId: continuing.id, reason: rulesError.message });
+    }
     await recordEvent(db, {
       workspaceId: job.workspaceId,
       name: "campaign.extended",
@@ -428,6 +458,8 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
         alreadyKnown: page.items.length - unknown.length + knownOnResolve,
         searchTier,
         exhausted: page.cursor === null,
+        droppedFilters: page.droppedFilters,
+        filterNotes: page.filterNotes ?? [],
       },
     });
     return continuing.id;
@@ -743,19 +775,32 @@ async function loadHooks(
    * of the answer is how the screen and the send come apart.
    */
   agentOpeners: string[] = [],
+  /**
+   * The campaign's agent, or null. Openers are read from that agent and from
+   * the workspace's shared set (`agent_id` null), never from another agent:
+   * a workspace running two brands would otherwise hand one brand's opening
+   * lines to the other's invite writer, and the first thing a stranger reads
+   * would be about a product they were never offered.
+   */
+  agentId: string | null = null,
 ): Promise<{ byVariantId: Map<string, string>; all: string[] }> {
-  const [{ data: hooks }, { data: variants }] = await Promise.all([
-    ctx.db
+  const approvedHooks = (owner: string | null) => {
+    const q = ctx.db
       .from("hooks")
       .select("id, body")
       .eq("workspace_id", workspaceId)
-      .not("approved_at", "is", null)
-      .limit(12),
+      .not("approved_at", "is", null);
+    return (owner ? q.eq("agent_id", owner) : q.is("agent_id", null)).limit(12);
+  };
+  const [{ data: shared }, { data: own }, { data: variants }] = await Promise.all([
+    approvedHooks(null),
+    agentId ? approvedHooks(agentId) : Promise.resolve({ data: [] as Array<{ id: string; body: string | null }> }),
     ctx.db.from("campaign_variants").select("id, hook_id").eq("workspace_id", workspaceId),
   ]);
+  const hooks = [...(own ?? []), ...(shared ?? [])];
 
   const bodyById = new Map(
-    (hooks ?? [])
+    hooks
       .map((row) => [row.id, row.body?.trim() ?? ""] as const)
       .filter(([, body]) => body.length > 0),
   );
@@ -818,6 +863,38 @@ interface CampaignPosition {
   connection_note: string;
   search_cursor: string | null;
   search_exhausted: boolean;
+  rules?: unknown;
+}
+
+/**
+ * The campaign's disclosures once another batch has been added to it.
+ *
+ * `rules.droppedFilters` and `rules.filterNotes` are what the campaign page
+ * shows a reviewer about how the list was searched (rule 12). They were
+ * written once, when the campaign was built, so a Find more run whose search
+ * dropped the industry filter, or ran on a different tier, added people the
+ * page then described with the first run's sentences. Merged, never replaced:
+ * the people from the first batch are still on the list, and what was true of
+ * them is still true. Deduplicated, so pressing Find more ten times does not
+ * print one sentence ten times.
+ *
+ * A list with any classic batch in it was built (partly) without Sales
+ * Navigator, so classic wins over the seat when the two differ.
+ */
+export function mergeSearchDisclosures(
+  rules: unknown,
+  page: { droppedFilters?: string[]; filterNotes?: string[] },
+  searchTier: "classic" | "sales_navigator",
+): Record<string, unknown> {
+  const current = rules && typeof rules === "object" && !Array.isArray(rules) ? (rules as Record<string, unknown>) : {};
+  const strings = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : []);
+  const union = (a: string[], b: string[]) => [...new Set([...a, ...b])];
+  return {
+    ...current,
+    searchTier: current.searchTier === "classic" || searchTier === "classic" ? "classic" : searchTier,
+    droppedFilters: union(strings(current.droppedFilters), page.droppedFilters ?? []),
+    filterNotes: union(strings(current.filterNotes), page.filterNotes ?? []),
+  };
 }
 
 /**
@@ -926,7 +1003,7 @@ async function attachProspects(
         industry: r.candidate.industry ?? null,
         location: r.candidate.location ?? null,
         about: r.candidate.about ?? null,
-        fit_score: r.fitScore,
+        fit_score: clampFitScore(r.fitScore).score,
         fit_reasons: r.fitReasons as never,
         intent_score: r.intentScore,
         signals: r.candidate.signals as never,
@@ -1045,7 +1122,7 @@ async function attachProspects(
       variantByProspectId,
       providerIdByProspectId,
       input,
-      await loadHooks(ctx, job.workspaceId, agentOpeners),
+      await loadHooks(ctx, job.workspaceId, agentOpeners, agent?.id ?? null),
     );
 
     for (const group of groups) {

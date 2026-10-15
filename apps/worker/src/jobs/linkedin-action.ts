@@ -6,8 +6,13 @@ import {
   jitteredRetryMs,
   localDate,
   localDayStart,
+  localMonth,
+  localMonthStart,
+  mightBeNoteQuota,
   msUntilNextLocalMidnight,
   nextGapMs,
+  noteAllowance,
+  planOf,
   warmStillCounts,
   workingMsLeftToday,
   workingMsAhead,
@@ -453,27 +458,74 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
       );
     }
 
+    // The note written for this person when the campaign was built, and read
+    // by a human before launch. The campaign template is the fallback for a
+    // prospect the writer did not answer for, and for every campaign created
+    // before notes existed — so this is additive, and a workspace that has
+    // never seen a personalised note keeps working exactly as it did.
+    // Empty means no note, not an empty one: the provider omits the field
+    // rather than sending a blank line.
+    let note: string | undefined =
+      inviteNote(
+        cp.invite_note,
+        campaign.connection_note,
+        prospect.first_name,
+        variantNote,
+        mergeValuesFor(prospect, inviteSender, inviteAgent),
+      ) || undefined;
+
+    /*
+     * A free LinkedIn account may attach a note to only a few invitations a
+     * month (FREE_NOTES_PER_MONTH). Past that, LinkedIn refuses the whole
+     * invitation with the words it uses for a real throttle, and this account
+     * was held for days over it: every account that sent in October stopped
+     * exactly after its third note. So once the month's notes are spent the
+     * invitation goes without one, which LinkedIn allows. The note decides
+     * nothing else: the caps, the hold and every check above still apply.
+     */
+    const plan = planOf(accountRow);
+    const month = localMonth(new Date(), timezone);
+    if (note && plan === "basic") {
+      const allowance = noteAllowance({
+        plan,
+        notesSentThisMonth: await notesSentThisMonth(db, accountRow.id, timezone),
+        exhaustedMonth: accountRow.notes_exhausted_month,
+        month,
+      });
+      if (!allowance.allowed) note = undefined;
+    }
+
+    const send = (withNote: string | undefined) =>
+      ctx.linkedin.sendInvitation({
+        accountId: accountRow.provider_account_id!,
+        providerId: prospect.provider_id!,
+        note: withNote,
+      });
+
     let result: Awaited<ReturnType<typeof ctx.linkedin.sendInvitation>>;
     try {
-      result = await ctx.linkedin.sendInvitation({
-      accountId: accountRow.provider_account_id,
-      providerId: prospect.provider_id,
-      // The note written for this person when the campaign was built, and read
-      // by a human before launch. The campaign template is the fallback for a
-      // prospect the writer did not answer for, and for every campaign created
-      // before notes existed — so this is additive, and a workspace that has
-      // never seen a personalised note keeps working exactly as it did.
-      // Empty means no note, not an empty one: the provider omits the field
-      // rather than sending a blank line.
-      note:
-        inviteNote(
-          cp.invite_note,
-          campaign.connection_note,
-          prospect.first_name,
-          variantNote,
-          mergeValuesFor(prospect, inviteSender, inviteAgent),
-        ) || undefined,
-      });
+      result = await send(note);
+      /*
+       * Refused with a note on a free account: ask once more without it.
+       *
+       * LinkedIn's note limit and its invitation throttle arrive as the same
+       * sentence, so the text cannot tell them apart and the second request
+       * does. Accepted, it was the note: the month is marked spent and every
+       * invitation after this one goes without. Refused again, it is the
+       * account, and the refusal below is handled exactly as before.
+       */
+      if (!result.ok && note && plan === "basic" && mightBeNoteQuota(result.error)) {
+        await db.from("linkedin_accounts").update({ notes_exhausted_month: month }).eq("id", accountRow.id);
+        await recordEvent(db, {
+          workspaceId: cp.workspace_id,
+          name: "invite.note_refused",
+          subjectType: "campaign_prospect",
+          subjectId: cp.id,
+          payload: { month, provider: (result.error ?? "").slice(0, 300) },
+        });
+        note = undefined;
+        result = await send(undefined);
+      }
     } catch (err) {
       // Thrown, not refused: the job is retried, and the retry must not find
       // the row still held by an attempt that is over.
@@ -515,6 +567,8 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
         // left in place the screen reported an invited person as refused.
         status_reason: null,
         invite_claimed_at: null,
+        // What the month's note count is read from.
+        invite_note_sent: Boolean(note),
       })
       .eq("id", cp.id);
     await db.from("prospects").update({ last_contacted_at: new Date().toISOString() }).eq("id", prospect.id);
@@ -1069,6 +1123,32 @@ async function releaseInvite(db: WorkerContext["db"], campaignProspectId: string
  * are read fresh rather than from the row the job started with, because the
  * point is what the other sends did in the meantime.
  */
+/**
+ * Invitations sent with a note this month, across every campaign on the account.
+ *
+ * Counted from what was sent rather than kept as a counter, because the answer
+ * only ever needs to be roughly right: two sends racing past it at once is at
+ * worst one note over the limit, and that refusal is caught and resent without
+ * the note. Rows from before notes were recorded count as having had one,
+ * because until then every invitation did unless its note was empty.
+ */
+export async function notesSentThisMonth(db: WorkerContext["db"], accountId: string, timezone: string): Promise<number> {
+  const { data: campaigns } = await db.from("campaigns").select("id").eq("linkedin_account_id", accountId);
+  const ids = (campaigns ?? []).map((c) => c.id);
+  if (!ids.length) return 0;
+  const since = localMonthStart(new Date(), timezone).toISOString();
+  const [{ count: invited }, { count: withoutNote }] = await Promise.all([
+    db.from("campaign_prospects").select("id", { count: "exact", head: true }).in("campaign_id", ids).gte("invited_at", since),
+    db
+      .from("campaign_prospects")
+      .select("id", { count: "exact", head: true })
+      .in("campaign_id", ids)
+      .gte("invited_at", since)
+      .eq("invite_note_sent", false),
+  ]);
+  return Math.max(0, (invited ?? 0) - (withoutNote ?? 0));
+}
+
 async function claimsOverCap(
   db: WorkerContext["db"],
   input: { campaignId: string; campaignCap: number; accountId: string; timezone: string },

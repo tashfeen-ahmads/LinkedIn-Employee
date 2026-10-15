@@ -30,7 +30,7 @@ import type IORedis from "ioredis";
 import type { WorkerContext } from "./context.js";
 import { bookFromLink, readBookingPage } from "./jobs/book.js";
 import { connectCalendarFeed, disconnectCalendarFeed } from "./jobs/calendar-feed.js";
-import { reconcileAccount, recordObservedAccounts, recoverAccounts } from "./accounts.js";
+import { reconcileAccount, recordObservedAccounts, recoverAccounts, refreshAccountPlan } from "./accounts.js";
 import { runDiagnostics } from "./jobs/diagnostics.js";
 import { eraseProspect, exportWorkspace } from "./jobs/retention.js";
 import { inviteEmail, verifyUnsubscribeToken } from "@le/email";
@@ -954,7 +954,11 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
       .eq("id", parsed.data.workspaceId)
       .maybeSingle();
     const answers = (ws?.onboarding ?? null) as
-      | { workingHours?: { start: number; end: number; days: number[] } | null; hasSalesNavigator?: boolean }
+      | {
+          workingHours?: { start: number; end: number; days: number[] } | null;
+          hasSalesNavigator?: boolean;
+          hasPremium?: boolean;
+        }
       | null;
 
     /*
@@ -992,6 +996,7 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
         ...(!existing && typeof answers?.hasSalesNavigator === "boolean"
           ? { has_sales_navigator: answers.hasSalesNavigator }
           : {}),
+        ...(!existing && typeof answers?.hasPremium === "boolean" ? { has_premium: answers.hasPremium } : {}),
       },
       { onConflict: "workspace_id,user_id" },
     );
@@ -1338,6 +1343,29 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
     // button that changed nothing.
     console.error("claim on return failed", result.reason);
     return back("connected=1");
+  });
+
+  /*
+   * Which LinkedIn plan the caller's own account has, asked of the provider.
+   * The profile asks on arrival when the last answer is a day old. Only the
+   * caller's row, and only a yes or no about plans: never what other accounts
+   * the provider holds (rule 17).
+   */
+  app.post("/jobs/linkedin-plan", async (c) => {
+    const parsed = LinkRequest.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "invalid request" }, 400);
+    if (!(await assertMembership(ctx.db, parsed.data.workspaceId, parsed.data.userId))) {
+      return c.json({ error: "not a member of that workspace" }, 403);
+    }
+    const { data: account } = await ctx.db
+      .from("linkedin_accounts")
+      .select("id, provider_account_id, status")
+      .eq("workspace_id", parsed.data.workspaceId)
+      .eq("user_id", parsed.data.userId)
+      .maybeSingle();
+    if (!account || account.status !== "active") return c.json({ plan: null });
+    const plan = await refreshAccountPlan(ctx.db, ctx.linkedin, account);
+    return c.json({ plan });
   });
 
   app.post("/jobs/linkedin-refresh", async (c) => {

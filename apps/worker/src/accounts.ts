@@ -513,6 +513,32 @@ export function isoWeekStart(date: string): string {
   return parsed.toISOString().slice(0, 10);
 }
 
+/**
+ * Asks the provider which paid LinkedIn plan the account has, and writes it down.
+ *
+ * Kept beside what the rep told us rather than over it, so a screen can say
+ * when the two disagree. The detected answer does decide one thing, the
+ * monthly note limit (`has_premium`), because a free account told it has
+ * Premium spends notes LinkedIn then refuses. Sales Navigator stays the rep's
+ * switch: it changes the search, and a screen offers the switch when the
+ * provider and the rep disagree. A lookup that could not look changes nothing.
+ */
+export async function refreshAccountPlan(
+  db: Db,
+  provider: LinkedInProvider,
+  account: { id: string; provider_account_id: string | null },
+): Promise<"basic" | "premium" | "sales_navigator" | null> {
+  if (!account.provider_account_id || !provider.getAccountPlan) return null;
+  const plan = await provider.getAccountPlan(account.provider_account_id).catch(() => null);
+  if (!plan) return null;
+  const detected = plan.salesNavigator ? "sales_navigator" : plan.premium ? "premium" : "basic";
+  await db
+    .from("linkedin_accounts")
+    .update({ plan_detected: detected, plan_checked_at: new Date().toISOString(), has_premium: plan.premium })
+    .eq("id", account.id);
+  return detected;
+}
+
 export async function pollHealth(
   db: Db,
   provider: LinkedInProvider,
@@ -522,4 +548,8 @@ export async function pollHealth(
   if (!account.provider_account_id) return;
   const health = await provider.getAccountHealth(account.provider_account_id);
   await applyHealth(db, account, health, notify);
+  // Nightly, so a plan bought or cancelled since is noticed without anybody
+  // pressing anything. Only for a working account: there is nothing to ask a
+  // disconnected one.
+  if (health === "ok") await refreshAccountPlan(db, provider, account);
 }

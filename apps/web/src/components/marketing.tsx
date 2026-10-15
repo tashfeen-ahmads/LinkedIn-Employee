@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { SiteMenu, SiteNav } from "./site-nav";
-import { BRAND, LINKEDIN_LIMITS } from "@le/shared";
+import { BRAND, FREE_NOTES_PER_MONTH, LINKEDIN_LIMITS, alwaysHoldsSentence } from "@le/shared";
 import { SITE } from "@/lib/site";
 import { Wordmark } from "./logo";
 
@@ -155,11 +155,11 @@ export const FAQ_ITEMS = [
   },
   {
     q: "Do I need Sales Navigator?",
-    a: "No. Nora works with any LinkedIn account. Sales Navigator, which LinkedIn sells separately, lets it search more precisely by seniority and company size, and where a filter cannot be applied, the campaign says so before you launch.",
+    a: `No. Nora works with any LinkedIn account. A free account can add a note to only ${FREE_NOTES_PER_MONTH} invitations a month, LinkedIn's own limit, and after that Nora sends invitations without one. Sales Navigator, which LinkedIn sells separately, lifts that limit and lets it search more precisely by seniority and company size, and where a filter cannot be applied, the campaign says so before you launch.`,
   },
   {
     q: "Can I approve every message?",
-    a: "Yes, and that is the default: Nora drafts each reply from your documents and you approve it with one click. Autopilot is a switch you flip once you trust it, and then clean replies go out on their own. Two things always wait for you either way: somebody who asks to speak to a person, and a message Nora did not understand.",
+    a: "Yes, and that is the default: Nora drafts each reply from your documents and you approve it with one click. Autopilot is a switch you flip once you trust it, and then clean replies go out on their own. " + alwaysHoldsSentence(),
   },
   {
     q: "What happens when a prospect asks something hard?",

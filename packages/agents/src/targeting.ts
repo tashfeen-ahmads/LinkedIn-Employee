@@ -11,6 +11,7 @@ import {
   type InviteNote,
   type ProspectCandidate,
   INVITE_NOTE_MAX_CHARS,
+  clampFitScore,
 } from "@le/shared";
 import { callStructured, type AgentContext } from "./client.js";
 import {
@@ -146,15 +147,23 @@ export async function scoreProspects(
     .map((candidate): RankedProspect => {
       const fit = byId.get(candidate.providerId);
       const intent = intentScore(candidate.signals ?? []);
-      const fitScore = fit?.fitScore ?? 0;
+      // The model's number is cast, not parsed, so its bounds are enforced
+      // here: an integer 0..100, and a score that is not a number at all is
+      // nobody's score (0, disqualified) rather than a guess.
+      const clamped = fit ? clampFitScore(fit.fitScore) : { score: 0, usable: false };
+      const fitScore = clamped.score;
       return {
         candidate,
         fitScore,
         fitReasons: fit?.reasons ?? [],
         intentScore: intent.score,
         rank: rankScore(fitScore, intent.score),
-        disqualified: fit?.disqualified ?? !fit,
-        disqualifyReason: fit ? (fit.disqualifyReason ?? undefined) : "not scored",
+        disqualified: !clamped.usable || (fit?.disqualified ?? !fit),
+        disqualifyReason: !fit
+          ? "not scored"
+          : !clamped.usable
+            ? "unreadable score"
+            : (fit.disqualifyReason ?? undefined),
       };
     })
     .sort((a, b) => b.rank - a.rank);

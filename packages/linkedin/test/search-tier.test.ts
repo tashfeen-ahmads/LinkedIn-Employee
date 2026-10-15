@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { UnipileProvider } from "../src/unipile.js";
+import { CLASSIC_TITLES_OR_KEYWORDS_NOTE, UnipileProvider } from "../src/unipile.js";
 import { SEARCH_FILTERS, type SearchQuery } from "../src/provider.js";
 import { isPublicProfileUrl } from "@le/shared";
 
@@ -371,6 +371,53 @@ describe("a classic search that finds nobody", () => {
     });
 
     expect(bodies).toHaveLength(1);
+  });
+
+  it("says titles and keywords were an either-or, not an and", async () => {
+    // Each term is its own request and the answers are merged, so a profile
+    // asking for a title AND a keyword got people matching either. The
+    // mechanics are right for classic; leaving the reviewer to believe the
+    // narrower query is not.
+    const { provider } = providerWithResults([[person]]);
+
+    const page = await provider.searchProspects({
+      accountId: "a1",
+      query: { titles: ["Founder"], keywords: ["revops"], geographies: ["United Kingdom"] },
+      tier: "classic",
+    });
+
+    expect(page.items).toHaveLength(1);
+    expect(page.filterNotes).toContain(CLASSIC_TITLES_OR_KEYWORDS_NOTE);
+    expect(CLASSIC_TITLES_OR_KEYWORDS_NOTE).not.toMatch(/[–—]/);
+  });
+
+  it("does not say so when only titles were searched", async () => {
+    const { provider } = providerWithResults([[person]]);
+
+    const page = await provider.searchProspects({
+      accountId: "a1",
+      query: { titles: ["Founder", "CEO"], geographies: ["United Kingdom"] },
+      tier: "classic",
+    });
+
+    expect(page.filterNotes).not.toContain(CLASSIC_TITLES_OR_KEYWORDS_NOTE);
+  });
+
+  it("never sends seniority on classic, and reports it dropped", async () => {
+    const { provider, bodies } = providerWithResults([[person]]);
+
+    const page = await provider.searchProspects({
+      accountId: "a1",
+      query: { titles: ["Founder"], seniorities: ["Director"], geographies: ["United Kingdom"] },
+      tier: "classic",
+    });
+
+    expect(bodies.length).toBeGreaterThan(0);
+    for (const body of bodies) {
+      expect(String(body.keywords)).not.toMatch(/Director/);
+      expect(body.seniority).toBeUndefined();
+    }
+    expect(page.droppedFilters).toContain("seniority");
   });
 });
 

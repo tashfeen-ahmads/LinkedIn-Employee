@@ -4,7 +4,7 @@ import { Empty, PageHeader } from "@/components/page";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { callWorker, errorQuery, noticeQuery } from "@/lib/worker";
-import { isPublicProfileUrl, profileHref } from "@le/shared";
+import { fitCutoffSentence, isPublicProfileUrl, profileHref } from "@le/shared";
 import { redirect } from "next/navigation";
 import { PageNotice } from "@/components/page-notice";
 import { ConfirmButton } from "@/components/confirm-button";
@@ -273,7 +273,7 @@ export default async function ProspectsPage({
             {totalCount ?? 0} {strategy ? `found by "${strategy.name}"` : "in this workspace"},{" "}
             {contactedCount ?? 0} of whom have been contacted. Once somebody has been reached out to
             they are never added to another campaign, and that is checked again in the moment before
-            every send, not only when a list is built.
+            every send, not only when a list is built. {fitCutoffSentence()}
           </>
         }
       />

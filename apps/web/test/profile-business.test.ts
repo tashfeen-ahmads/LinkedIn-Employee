@@ -26,10 +26,10 @@ describe("the profile edits every onboarding answer", () => {
   it("has a field on the profile for each of them", () => {
     // Day checkboxes are named `day-${n}` in both and the timezone comes from
     // the shared picker, so they are checked by their own names.
-    for (const name of asked.filter((n) => n !== "hasSalesNavigator")) {
+    for (const name of asked) {
       expect(profile, `onboarding asks "${name}" and the profile cannot change it`).toContain(`name="${name}"`);
     }
-    expect(profile).toContain('name="hasSalesNavigator"');
+    expect(profile).toContain('name="linkedinPlan"');
     expect(profile).toContain("name={`day-${day.value}`}");
     expect(profile).toContain("<TimezoneSelect");
   });

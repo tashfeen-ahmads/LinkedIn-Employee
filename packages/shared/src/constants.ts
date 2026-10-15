@@ -290,6 +290,18 @@ export type LlmProvider = keyof typeof MODELS;
 export const INVITE_NOTE_MAX_CHARS = 200;
 
 /**
+ * Notes a free (Basic) LinkedIn account may attach to invitations each month.
+ *
+ * LinkedIn's own help pages currently disagree between three and five, so
+ * this is the lower one: a note we hold back costs nothing anybody sees, and a
+ * note over LinkedIn's limit got the whole invitation refused, read as a
+ * throttle, and the account held for days (migration 0045). A product rule
+ * like the caps above, not a tunable. Premium and Sales Navigator have no
+ * monthly note limit.
+ */
+export const FREE_NOTES_PER_MONTH = 3;
+
+/**
  * How long a pitch may be.
  *
  * A pitch is spoken into a chat window, not read on a landing page. Ninety

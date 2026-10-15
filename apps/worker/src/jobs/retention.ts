@@ -165,29 +165,146 @@ async function hasLiveActivity(db: Db, workspaceId: string, prospectId: string, 
   return Boolean(active?.length);
 }
 
+/**
+ * Bumped whenever a table or a column is added to or removed from the export,
+ * so whoever reads a file can tell which shape they are holding.
+ */
+export const EXPORT_VERSION = 2;
+
+/**
+ * What each key in the file is, written into the file itself: an export is
+ * read by somebody who has never seen this repo, often months later.
+ */
+export const EXPORT_README: Record<string, string> = {
+  exportVersion: "The shape of this file. Bumped when tables or columns are added or removed.",
+  complete: "False when any table stopped short of its end. A false file is not everything.",
+  workspace: "The workspace: name, plan, data retention period and the answers given during onboarding. Billing identifiers are left out.",
+  members: "Who belongs to the workspace and their role. User ids only; no email, password or sign-in data.",
+  memberSettings: "Each member's own settings: timezone and their own scheduling link.",
+  linkedinAccounts: "Each member's LinkedIn sending settings: working hours, plan, status. Provider account ids and counters are left out.",
+  availability: "Each member's booking settings: timezone, working hours, meeting length, notice and buffers.",
+  availabilityBlackouts: "Times a member marked as busy. The product's own calendar treats these as unavailable.",
+  calendarFeeds: "Calendar feeds a member connected, by host only. The feed address is a credential and is never exported.",
+  businessProfiles: "What the Strategy Agent wrote about this business.",
+  customerProfiles: "Strategies (customer profiles): who to search for, their approval, priority and search position.",
+  agents: "Agents: the name, voice, model and playbook each brand or product writes with.",
+  ctas: "Calls to action: the destinations campaigns point at.",
+  pitches: "Offer lines, which agent owns each, and whether a person approved it.",
+  hooks: "Opening lines, which agent owns each, and whether a person approved it.",
+  knowledgeDocuments: "The product facts agents may quote, and which agent each belongs to (none means every agent).",
+  exclusions: "The do-not-contact list of companies and people. Re-import this first: it is a promise made to somebody.",
+  campaigns: "Campaigns and their settings.",
+  campaignSteps: "Each campaign's follow-up messages and their delays.",
+  campaignVariants: "The angles each campaign tests, and the opener and offer attached to each.",
+  campaignProspects: "Who is on which campaign, their status, angle and personalised note.",
+  prospects: "Everybody this workspace has found or contacted, including when they were last contacted.",
+  conversations: "LinkedIn conversations with prospects.",
+  messages: "Every message sent and received.",
+  meetings: "Meetings booked.",
+};
+
 export interface WorkspaceExport {
+  exportVersion: number;
+  readme: Record<string, string>;
   exportedAt: string;
   /** False when a table stopped short of its end. Never hidden from the file. */
   complete: boolean;
   workspace: unknown;
+  members: unknown[];
+  memberSettings: unknown[];
+  linkedinAccounts: unknown[];
+  availability: unknown[];
+  availabilityBlackouts: unknown[];
+  calendarFeeds: unknown[];
+  businessProfiles: unknown[];
+  customerProfiles: unknown[];
+  agents: unknown[];
+  ctas: unknown[];
+  pitches: unknown[];
+  hooks: unknown[];
+  knowledgeDocuments: unknown[];
+  exclusions: unknown[];
+  campaigns: unknown[];
+  campaignSteps: unknown[];
+  campaignVariants: unknown[];
+  campaignProspects: unknown[];
   prospects: unknown[];
   conversations: unknown[];
   messages: unknown[];
   meetings: unknown[];
-  campaigns: unknown[];
 }
+
+const WORKSPACE_COLUMNS = "id, name, plan, data_retention_days, onboarding, created_at";
+const MEMBER_SETTINGS_COLUMNS = "id, timezone, booking_url";
+
+/**
+ * Exactly the columns asked for, and nothing else.
+ *
+ * PostgREST already returns only what was selected; this says so a second
+ * time in the one file whose whole job is deciding what leaves the building.
+ * A column list is the line between a member's timezone and their email, or a
+ * feed's host and the feed address itself, and a line drawn once is a line
+ * one careless `*` away from not being there.
+ */
+function onlyColumns<T>(rows: T[], columns: string): T[] {
+  if (columns.trim() === "*") return rows;
+  const keep = columns.split(",").map((c) => c.trim()).filter(Boolean);
+  return rows.map((row) => {
+    const source = row as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    for (const key of keep) if (key in source) out[key] = source[key];
+    return out as T;
+  });
+}
+
+type ExportedTable =
+  | "prospects"
+  | "conversations"
+  | "meetings"
+  | "campaigns"
+  | "messages"
+  | "memberships"
+  | "linkedin_accounts"
+  | "availability"
+  | "availability_blackouts"
+  | "calendar_feeds"
+  | "business_profiles"
+  | "customer_profiles"
+  | "agents"
+  | "ctas"
+  | "pitches"
+  | "hooks"
+  | "knowledge_documents"
+  | "exclusions"
+  | "campaign_steps"
+  | "campaign_variants"
+  | "campaign_prospects";
 
 /**
  * Everything a workspace holds, as JSON. Serves both a customer's own
- * portability request and their ability to answer one from a prospect.
- * Credentials are never included.
+ * portability request and their ability to answer one from a prospect, and
+ * carries the configuration and suppression list a business would need to
+ * rebuild somewhere else — the do-not-contact list above all, because it is a
+ * promise made to somebody and losing it in a move is how it gets broken.
+ *
+ * Credentials are never included: no OAuth token, no calendar feed address
+ * (`url_host` only — rule 19), no provider account id, no billing identifier,
+ * no member's email or sign-in data. Columns that could carry one are named
+ * explicitly rather than read with `*`, so a secret added to such a table
+ * later does not ride out in this file by default.
+ *
+ * Every query is filtered by `workspace_id` here, because the worker holds the
+ * service role and row-level security will not do it.
+ *
+ * There is no re-import. The file is a faithful copy, not a backup the product
+ * can restore from.
  */
 export async function exportWorkspace(ctx: WorkerContext, workspaceId: string): Promise<WorkspaceExport> {
   const { db } = ctx;
 
   const { data: workspace } = await db
     .from("workspaces")
-    .select("id, name, plan, created_at")
+    .select(WORKSPACE_COLUMNS)
     .eq("id", workspaceId)
     .maybeSingle();
 
@@ -200,8 +317,8 @@ export async function exportWorkspace(ctx: WorkerContext, workspaceId: string): 
    * everything held about somebody, silently missing everyone after the
    * thousandth, is a worse answer than no file, because it looks complete.
    */
-  const all = <T>(table: "prospects" | "conversations" | "meetings" | "campaigns" | "messages", columns: string) =>
-    fetchAllRows<T>((from, to) =>
+  const all = async <T>(table: ExportedTable, columns: string) => {
+    const result = await fetchAllRows<T>((from, to) =>
       db
         .from(table)
         .select(columns)
@@ -210,25 +327,132 @@ export async function exportWorkspace(ctx: WorkerContext, workspaceId: string): 
         .order("id", { ascending: true })
         .range(from, to) as never,
     );
+    return { ...result, rows: onlyColumns(result.rows, columns) };
+  };
 
-  const [prospects, conversations, meetings, campaigns, messages] = await Promise.all([
+  const [
+    prospects,
+    conversations,
+    meetings,
+    campaigns,
+    messages,
+    members,
+    linkedinAccounts,
+    availability,
+    availabilityBlackouts,
+    calendarFeeds,
+    businessProfiles,
+    customerProfiles,
+    agents,
+    ctas,
+    pitches,
+    hooks,
+    knowledgeDocuments,
+    exclusions,
+    campaignSteps,
+    campaignVariants,
+    campaignProspects,
+  ] = await Promise.all([
     all<unknown>("prospects", "*"),
     all<unknown>("conversations", "*"),
     all<unknown>("meetings", "*"),
     all<unknown>("campaigns", "*"),
     all<unknown>("messages", "id, conversation_id, direction, source, body, sent_at, created_at"),
+    all<{ user_id: string }>("memberships", "user_id, role, created_at"),
+    // Settings, not plumbing: no provider account id, member id or counters.
+    all<unknown>(
+      "linkedin_accounts",
+      "id, user_id, display_name, profile_url, status, has_sales_navigator, has_premium, working_hours, paused_at, connected_at, created_at",
+    ),
+    all<unknown>("availability", "*"),
+    all<unknown>("availability_blackouts", "*"),
+    // The host alone. The address is a bearer credential for the rep's whole
+    // calendar (rule 19), so `url_encrypted` is never selected, not even as
+    // ciphertext.
+    all<unknown>("calendar_feeds", "id, user_id, url_host, status, last_synced_at, event_count, created_at"),
+    all<unknown>("business_profiles", "*"),
+    all<unknown>("customer_profiles", "*"),
+    all<unknown>("agents", "*"),
+    all<unknown>("ctas", "*"),
+    all<unknown>("pitches", "*"),
+    all<unknown>("hooks", "*"),
+    all<unknown>("knowledge_documents", "*"),
+    all<unknown>("exclusions", "*"),
+    all<unknown>("campaign_steps", "*"),
+    all<unknown>("campaign_variants", "*"),
+    all<unknown>("campaign_prospects", "*"),
   ]);
 
+  // Profiles carry no workspace id: a person may belong to several. Read only
+  // for this workspace's own members, and only the settings — never the email,
+  // address or anything sign-in related.
+  const memberIds = [...new Set(members.rows.map((m) => m.user_id))];
+  const memberSettings = memberIds.length
+    ? await fetchAllRows<unknown>((from, to) =>
+        db
+          .from("profiles")
+          .select(MEMBER_SETTINGS_COLUMNS)
+          .in("id", memberIds)
+          .order("id", { ascending: true })
+          .range(from, to) as never,
+      )
+    : { rows: [], truncated: false };
+  memberSettings.rows = onlyColumns(memberSettings.rows, MEMBER_SETTINGS_COLUMNS);
+
+  const paged = [
+    prospects,
+    conversations,
+    meetings,
+    campaigns,
+    messages,
+    members,
+    memberSettings,
+    linkedinAccounts,
+    availability,
+    availabilityBlackouts,
+    calendarFeeds,
+    businessProfiles,
+    customerProfiles,
+    agents,
+    ctas,
+    pitches,
+    hooks,
+    knowledgeDocuments,
+    exclusions,
+    campaignSteps,
+    campaignVariants,
+    campaignProspects,
+  ];
+
   return {
+    exportVersion: EXPORT_VERSION,
+    readme: EXPORT_README,
     exportedAt: new Date().toISOString(),
-    workspace: workspace ?? null,
+    // Said rather than hidden: an export that stopped short must not be handed
+    // over as if it were everything.
+    complete: !paged.some((r) => r.truncated),
+    workspace: workspace ? onlyColumns([workspace], WORKSPACE_COLUMNS)[0] : null,
+    members: members.rows,
+    memberSettings: memberSettings.rows,
+    linkedinAccounts: linkedinAccounts.rows,
+    availability: availability.rows,
+    availabilityBlackouts: availabilityBlackouts.rows,
+    calendarFeeds: calendarFeeds.rows,
+    businessProfiles: businessProfiles.rows,
+    customerProfiles: customerProfiles.rows,
+    agents: agents.rows,
+    ctas: ctas.rows,
+    pitches: pitches.rows,
+    hooks: hooks.rows,
+    knowledgeDocuments: knowledgeDocuments.rows,
+    exclusions: exclusions.rows,
+    campaigns: campaigns.rows,
+    campaignSteps: campaignSteps.rows,
+    campaignVariants: campaignVariants.rows,
+    campaignProspects: campaignProspects.rows,
     prospects: prospects.rows,
     conversations: conversations.rows,
     messages: messages.rows,
     meetings: meetings.rows,
-    campaigns: campaigns.rows,
-    // Said rather than hidden: an export that stopped short must not be handed
-    // over as if it were everything.
-    complete: ![prospects, conversations, meetings, campaigns, messages].some((r) => r.truncated),
   };
 }

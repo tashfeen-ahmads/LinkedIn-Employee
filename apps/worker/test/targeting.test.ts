@@ -306,6 +306,35 @@ describe("runTargetingJob", () => {
     expect(db.rows("prospects")[0]?.fit_score).toBe(92);
   });
 
+  it("stores a fit score as a whole number out of 100, and never a score it cannot read", async () => {
+    // The scorer's answer is cast, not parsed. A 140 sorted above everybody, a
+    // fraction was refused by the int column along with the whole batch, and
+    // NaN compared false against the cut-off without saying why.
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    linkedin.candidates = {
+      items: [
+        candidate("p1", "https://www.linkedin.com/in/a"),
+        candidate("p2", "https://www.linkedin.com/in/b"),
+        candidate("p3", "https://www.linkedin.com/in/c"),
+      ],
+      cursor: null,
+    };
+    scoreMock.mockResolvedValue([
+      ranked("https://www.linkedin.com/in/a", "p1", 140),
+      ranked("https://www.linkedin.com/in/b", "p2", 87.6),
+      ranked("https://www.linkedin.com/in/c", "p3", Number.NaN),
+    ]);
+
+    await runTargetingJob(ctx, job);
+
+    const scores = db
+      .rows("prospects")
+      .map((p) => p.fit_score)
+      .sort();
+    expect(scores).toEqual([100, 88]);
+  });
+
   it("does nothing when every candidate is already known", async () => {
     const { db, ctx, linkedin } = harness();
     const { runTargetingJob } = await import("../src/jobs/targeting.js");
@@ -1458,6 +1487,47 @@ describe("continuing a campaign's search", () => {
     expect(db.find("campaigns", { id: CAMPAIGN })?.search_cursor).toBe("page-3");
   });
 
+  it("says what the new batch's search could not honour, beside what the first one could not", async () => {
+    // Rule 12. The campaign page reads `rules`; a Find more run whose search
+    // dropped the industry filter added people the page then described with
+    // the first run's sentences.
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    seedCampaign(db, {
+      rules: {
+        searchTier: "classic",
+        droppedFilters: ["seniority"],
+        filterNotes: ["First run note."],
+        autonomy: "supervised",
+      },
+    });
+    linkedin.candidates = {
+      items: [candidate("p9", "https://www.linkedin.com/in/jane-nine")],
+      cursor: "page-3",
+      droppedFilters: ["seniority", "company size"],
+      filterNotes: ["First run note.", "Nobody matched inside those industries, so the industry filter was dropped."],
+    };
+    scoreMock.mockResolvedValue([ranked("https://www.linkedin.com/in/jane-nine", "p9", 90)]);
+
+    await runTargetingJob(ctx, more);
+
+    const rules = db.find("campaigns", { id: CAMPAIGN })?.rules as Record<string, unknown>;
+    expect(rules.droppedFilters).toEqual(["seniority", "company size"]);
+    expect(rules.filterNotes).toEqual([
+      "First run note.",
+      "Nobody matched inside those industries, so the industry filter was dropped.",
+    ]);
+    // Everything else on the row a human set is left alone.
+    expect(rules.autonomy).toBe("supervised");
+
+    const event = db.rows("events").find((e) => e.name === "campaign.extended");
+    const payload = event?.payload as { droppedFilters: string[]; filterNotes: string[] };
+    expect(payload.droppedFilters).toEqual(["seniority", "company size"]);
+    expect(payload.filterNotes).toContain(
+      "Nobody matched inside those industries, so the industry filter was dropped.",
+    );
+  });
+
   it("moves past a page on which it already knew everybody", async () => {
     // The common case once a campaign is a few hundred deep, and the one that
     // used to kill the button: a run that produced no prospects left the
@@ -1878,5 +1948,53 @@ describe("the follow-up sequence is stored or the campaign is not", () => {
     expect(db.rows("campaigns")).toHaveLength(0);
     // Nobody spent their exclusion on a campaign that never existed (rule 27).
     expect(db.rows("prospects")).toHaveLength(0);
+  });
+});
+
+describe("the openers a brand's invite writer is handed", () => {
+  it("are never another agent's", async () => {
+    /*
+     * A workspace running two agents is running two brands. Brand A has no
+     * approved opener of its own and the workspace has no shared one, so the
+     * campaign's resolved set is empty and `loadHooks` falls back to what it
+     * read itself — which used to be every approved opener in the workspace,
+     * brand B's included. The first thing brand A's prospect read was then
+     * about brand B's product.
+     */
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    db.seed("agents", [
+      { id: "agent-a", workspace_id: WORKSPACE, name: "Brand A", is_default: true, archived_at: null, playbook: {}, custom_fields: [], created_at: "2026-09-01T00:00:00Z" },
+      { id: "agent-b", workspace_id: WORKSPACE, name: "Brand B", is_default: false, archived_at: null, playbook: {}, custom_fields: [], created_at: "2026-09-02T00:00:00Z" },
+    ]);
+    db.seed("hooks", [
+      {
+        id: "hook-b",
+        workspace_id: WORKSPACE,
+        agent_id: "agent-b",
+        name: "Brand B's opener",
+        body: "Brand B's opening line about brand B's product.",
+        angle: "proof",
+        written_by: "agent",
+        approved_at: "2026-09-01T00:00:00.000Z",
+        is_default: true,
+      },
+    ]);
+    linkedin.candidates = {
+      items: [candidate("p1", "https://www.linkedin.com/in/jane-one")],
+      cursor: null,
+      droppedFilters: [],
+    };
+    scoreMock.mockResolvedValue([ranked("https://www.linkedin.com/in/jane-one", "p1", 90)]);
+    notesMock.mockResolvedValue(new Map());
+
+    await runTargetingJob(ctx, job);
+
+    expect(db.rows("campaigns")[0]?.agent_id).toBe("agent-a");
+    expect(notesMock.mock.calls.length).toBeGreaterThan(0);
+    for (const call of notesMock.mock.calls) {
+      const handed = (call?.[1] ?? {}) as { hooks?: string[] };
+      expect(handed.hooks ?? []).not.toContain("Brand B's opening line about brand B's product.");
+    }
   });
 });

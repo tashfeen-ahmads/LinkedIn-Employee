@@ -1425,6 +1425,38 @@ tests that were verified by deliberately breaking the code.
     approved (`resolved_by`) still goes: a human answering a human is not
     outreach, as migration 0041 says. An autopilot reply waits.
 
+62. **A free account's notes are LinkedIn's to ration, and running out is not
+    a throttle.** LinkedIn lets a free (Basic) account attach a note to only a
+    few invitations a month; its own help pages disagree between three and
+    five, so `FREE_NOTES_PER_MONTH` is three. Past it LinkedIn refuses the
+    whole invitation in exactly the words of a real throttle ("temporary
+    provider limit"), and this product read it as one: every account that sent
+    in October was held for six to seventy-two hours right after its third
+    note, probed with the same note, refused, and held again.
+
+    So the plan is modelled (`has_premium`, `has_sales_navigator`,
+    `planOf`, migration 0045) and the note is decided on the send path
+    (`noteAllowance`, rule 1): a free account's month is counted from what was
+    actually sent with a note, and once it is spent the invitation goes without
+    one, which LinkedIn allows. A refusal with a note on a free account is
+    asked **once more without the note**: accepted, it was the note, and the
+    month is marked spent (`notes_exhausted_month`); refused again, it is the
+    account, and the throttle rules above apply unchanged. The note decides
+    nothing else, so every cap, hold and check still runs.
+
+    What LinkedIn reports is read from the provider (`getAccountPlan`, nightly
+    and on the profile) and kept beside what the rep said, never over it, so a
+    screen can say when they disagree. It decides `has_premium`, because a free
+    account told it has Premium spends notes LinkedIn then refuses; it never
+    flips Sales Navigator, because that changes the search and is the rep's
+    switch. A lookup that could not look changes nothing (rule 17).
+
+    A refusal reaches a person in words (`describeRefusal`, `plainReason`):
+    notes used, invitation limit, one recipient, search limit, missing plan,
+    sign-in, restriction, each with what happens next and when. The raw text
+    names our supplier and a route (rule 54), and never reaches a customer
+    screen.
+
 ## Conventions
 
 - Agent output is validated against a zod schema before it touches the

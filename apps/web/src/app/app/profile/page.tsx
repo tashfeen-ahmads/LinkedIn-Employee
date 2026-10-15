@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { callWorker, errorQuery, noticeQuery, startedNotice } from "@/lib/worker";
-import { checkCtaUrl, LINKEDIN_LIMITS, describeWorkingHours } from "@le/shared";
+import { alwaysHoldsSentence, checkCtaUrl, FREE_NOTES_PER_MONTH, LINKEDIN_LIMITS, describeWorkingHours } from "@le/shared";
 import { TimezoneSelect } from "@/components/timezone-select";
 import {
   cannotSend,
@@ -21,10 +21,11 @@ import { TeamSection } from "./team-section";
 import { linkedInState } from "./linkedin-state";
 import { BillingSection } from "./billing-section";
 import { SalesNavigatorSection } from "./sales-navigator-section";
+import { notesLeftThisMonth } from "@/lib/invite-notes";
 import { PageHeader, PageGroup, Panel, Section } from "@/components/page";
 import { AllowanceMeter } from "@/components/charts";
 import { countersForToday } from "@/lib/account-day";
-import { dailyInviteCap, type AccountRecord } from "@le/linkedin";
+import { dailyInviteCap, planLabel, planOf, type AccountRecord, type LinkedInPlan } from "@le/linkedin";
 import { hasStrategySource, mergeStash, readOnboardingStash, stashedAccountAnswers } from "@/lib/onboarding-stash";
 import { BUSINESS_DESCRIPTION_MAX, COMPANY_NAME_MAX, readBusinessForm } from "@/lib/profile-business";
 
@@ -121,33 +122,47 @@ async function refreshLinkedIn() {
 
 
 /**
- * The Sales Navigator switch, on its own: the one setting on this page that
- * decides whether a search finds anybody, so it is one press rather than a
- * checkbox inside the edit form. Only the caller's own account row.
+ * The LinkedIn plan, on its own: it decides whether a search finds anybody and
+ * whether invitations carry a note, so it is one press rather than a field in
+ * the edit form. The caller's own account row, or the stash before Connect.
  */
-async function setSalesNavigator(formData: FormData) {
+async function setLinkedInPlan(formData: FormData) {
   "use server";
   const session = await requireSession();
   const supabase = await createClient();
-  const on = formData.get("value") === "on";
+  const patch = planPatch(formData.get("linkedinPlan"));
+  if (!patch) redirect(errorQuery("/app/profile", "Choose one of the three plans."));
   const { data: updated } = await supabase
     .from("linkedin_accounts")
-    .update({ has_sales_navigator: on } as never)
+    .update(patch as never)
     .eq("workspace_id", session.workspaceId)
     .eq("user_id", session.userId)
     .select("id");
   if (!updated?.length) {
-    redirect(errorQuery("/app/profile", "Connect your LinkedIn account first, then turn on Sales Navigator."));
+    const { data: wsStash } = await supabase
+      .from("workspaces")
+      .select("onboarding")
+      .eq("id", session.workspaceId)
+      .maybeSingle();
+    const { data: stashed } = await supabase
+      .from("workspaces")
+      .update({ onboarding: mergeStash(wsStash?.onboarding, stashedAccountAnswers(patch)) as never })
+      .eq("id", session.workspaceId)
+      .select("id");
+    if (!stashed?.length) {
+      redirect(errorQuery("/app/profile", "Connect your LinkedIn account first, then choose its plan."));
+    }
   }
   revalidatePath("/app", "layout");
-  redirect(
-    noticeQuery(
-      "/app/profile",
-      on
-        ? "Sales Navigator is on. New searches use it."
-        : "Sales Navigator is off. New searches use regular LinkedIn search.",
-    ),
-  );
+  redirect(noticeQuery("/app/profile", "Saved. New searches and invitations follow this plan."));
+}
+
+/** The plan answer as the two columns it is stored in, or null when it is not one of the three. */
+function planPatch(value: FormDataEntryValue | null): { has_sales_navigator: boolean; has_premium: boolean } | null {
+  if (value === "sales_navigator") return { has_sales_navigator: true, has_premium: true };
+  if (value === "premium") return { has_sales_navigator: false, has_premium: true };
+  if (value === "basic") return { has_sales_navigator: false, has_premium: false };
+  return null;
 }
 
 /**
@@ -265,7 +280,7 @@ async function saveProfile(formData: FormData) {
   const days = [1, 2, 3, 4, 5, 6, 0].filter((day) => formData.get(`day-${day}`) === "on");
 
   const accountPatch: Record<string, unknown> = {
-    has_sales_navigator: formData.get("hasSalesNavigator") === "on",
+    ...(planPatch(formData.get("linkedinPlan")) ?? {}),
   };
   // A window that is empty or inverted is not a setting anybody means to
   // choose, so it is refused rather than written — and said out loud, because
@@ -524,7 +539,7 @@ export default async function ProfilePage({
     supabase
       .from("linkedin_accounts")
       .select(
-        "user_id, status, status_detail, provider_account_id, display_name, invites_today, invites_this_week, invites_by_day, messages_today, profile_views_today, counters_reset_on, first_action_at, has_sales_navigator, working_hours",
+        "user_id, status, status_detail, provider_account_id, display_name, invites_today, invites_this_week, invites_by_day, messages_today, profile_views_today, counters_reset_on, first_action_at, has_sales_navigator, has_premium, plan_detected, plan_checked_at, notes_exhausted_month, id, working_hours",
       )
       .eq("workspace_id", session.workspaceId)
       .eq("user_id", session.userId)
@@ -569,7 +584,30 @@ export default async function ProfilePage({
   const hours = found
     ? readWorkingHours(found.working_hours)
     : readWorkingHours(stash.workingHours);
-  const hasSalesNavigator = found ? found.has_sales_navigator : (stash.hasSalesNavigator ?? false);
+  const plan = found
+    ? planOf(found)
+    : planOf({ has_sales_navigator: stash.hasSalesNavigator, has_premium: stash.hasPremium });
+  /*
+   * What LinkedIn itself reports, asked at most once a day on arrival so a
+   * plan bought or cancelled shows up without anybody pressing anything. The
+   * answer is read from the row the worker writes, never from the request.
+   */
+  let detected = (mine?.plan_detected ?? null) as LinkedInPlan | null;
+  if (mine && mine.status === "active") {
+    const checked = mine.plan_checked_at ? Date.parse(mine.plan_checked_at) : 0;
+    if (!Number.isFinite(checked) || Date.now() - checked > 86_400_000) {
+      const asked = await callWorker<{ plan: LinkedInPlan | null }>("/jobs/linkedin-plan", {
+        workspaceId: session.workspaceId,
+        userId: session.userId,
+      });
+      if (asked.ok && asked.data?.plan) detected = asked.data.plan;
+    }
+  }
+  const notesLeft = mine
+    ? await notesLeftThisMonth(supabase, mine, me?.timezone ?? "UTC")
+    : plan === "basic"
+      ? FREE_NOTES_PER_MONTH
+      : null;
   const editing = params.edit === "1";
   const canManage = ["owner", "admin", "manager"].includes(session.role);
   // The business half is the workspace's, so it is an owner's or admin's to
@@ -768,13 +806,16 @@ export default async function ProfilePage({
                     </div>
                   </fieldset>
                 </div>
-                <label className="small check">
-                  <input type="checkbox" name="hasSalesNavigator" defaultChecked={hasSalesNavigator} />
-                  <span>
-                    This account has Sales Navigator
-                    <span className="tiny subtle hint">
-                      Without it, search cannot filter on seniority or company size.
-                    </span>
+                <label className="field medium">
+                  <span>LinkedIn plan</span>
+                  <select name="linkedinPlan" defaultValue={plan}>
+                    <option value="basic">Free (Basic)</option>
+                    <option value="premium">Premium</option>
+                    <option value="sales_navigator">Sales Navigator</option>
+                  </select>
+                  <span className="hint">
+                    A free account adds a note to {FREE_NOTES_PER_MONTH} invitations a month. Only Sales
+                    Navigator filters by seniority and company size.
                   </span>
                 </label>
               </div>
@@ -790,10 +831,7 @@ export default async function ProfilePage({
                     <option value="autonomous">The agent answers and books, on its own</option>
                     <option value="supervised">Hold anything uncertain for me to read first</option>
                   </select>
-                  <span className="hint">
-                    Either way, a prospect who asks for a person and a message the agent did not
-                    understand always wait for you, and an opt-out stops everything.
-                  </span>
+                  <span className="hint">{alwaysHoldsSentence()}</span>
                 </label>
               </Panel>
             </Section>
@@ -900,7 +938,8 @@ export default async function ProfilePage({
                 <Fact label="When a reply arrives" id="autonomy" wide>
                   {autonomy === "autonomous"
                     ? "The agent answers and books on its own."
-                    : "Anything uncertain is held for you to read first."}
+                    : "Anything uncertain is held for you to read first."}{" "}
+                  <span className="subtle">{alwaysHoldsSentence()}</span>
                 </Fact>
               </dl>
             </Panel>
@@ -917,7 +956,13 @@ export default async function ProfilePage({
         boxes.
       */}
       {editing ? null : (
-        <SalesNavigatorSection on={hasSalesNavigator} connected={Boolean(found)} action={setSalesNavigator} />
+        <SalesNavigatorSection
+          plan={plan}
+          detected={detected}
+          notesLeft={notesLeft}
+          connected={Boolean(mine)}
+          action={setLinkedInPlan}
+        />
       )}
 
       <Section id="linkedin" title="Your LinkedIn account" description="The account every message goes out from.">
@@ -926,7 +971,8 @@ export default async function ProfilePage({
           <>
             <p className="small muted">
               {mine.display_name ?? "Connected"} · {linkedIn.label}
-              {mine.has_sales_navigator ? " · Sales Navigator" : ""}
+              {" · "}
+              {planLabel(plan)}
             </p>
 
             {needsReconnect ? (

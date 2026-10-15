@@ -209,6 +209,13 @@ export type LinkedinAccountRow = {
    * rolling window, not the calendar's.
    */
   invites_by_day: Json;
+  /** A paid plan (Premium or Sales Navigator): no monthly note limit. Migration 0045. */
+  has_premium: boolean;
+  /** What the provider reported, kept apart from what the rep said. */
+  plan_detected: "basic" | "premium" | "sales_navigator" | null;
+  plan_checked_at: string | null;
+  /** The rep's local month (YYYY-MM) in which LinkedIn refused a note. */
+  notes_exhausted_month: string | null;
   created_at: string;
 };
 
@@ -434,6 +441,8 @@ export type CampaignProspectRow = {
   invite_claimed_at: string | null;
   /** How many times LinkedIn refused to invite this person, about them. */
   invite_refusals: number;
+  /** Whether the invitation carried a note. Null before migration 0045. */
+  invite_note_sent: boolean | null;
   created_at: string;
   updated_at: string;
 };

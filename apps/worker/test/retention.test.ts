@@ -261,3 +261,133 @@ describe("exportWorkspace", () => {
     20_000,
   );
 });
+
+describe("exportWorkspace — configuration and suppression", () => {
+  const OTHER = "99999999-9999-4999-8999-999999999999";
+  const MEMBER = "77777777-7777-4777-8777-777777777777";
+  const STRANGER = "88888888-8888-4888-8888-888888888888";
+
+  /** One row per configuration table in this workspace, and one in another. */
+  function configured() {
+    const { db, ctx } = harness();
+    db.find("workspaces", { id: WORKSPACE })!.onboarding = { workingHours: null, hasSalesNavigator: false, autonomy: "reviewed" };
+    db.find("workspaces", { id: WORKSPACE })!.stripe_customer_id = "cus_secret_billing";
+    db.seed("memberships", [
+      { workspace_id: WORKSPACE, user_id: MEMBER, role: "owner" },
+      { workspace_id: OTHER, user_id: STRANGER, role: "owner" },
+    ]);
+    db.seed("profiles", [
+      { id: MEMBER, email: "owner@acme.test", full_name: "Owner", timezone: "Europe/London", booking_url: "https://cal.com/owner", address: "1 Home Street" },
+      { id: STRANGER, email: "stranger@other.test", timezone: "UTC", booking_url: "https://cal.com/stranger" },
+    ]);
+    db.seed("linkedin_accounts", [
+      {
+        workspace_id: WORKSPACE,
+        user_id: MEMBER,
+        provider_account_id: "acct_provider_secret",
+        linkedin_member_id: "member_provider_secret",
+        status: "active",
+        working_hours: { start: 9, end: 17, days: [1, 2, 3, 4, 5] },
+      },
+    ]);
+    db.seed("calendar_feeds", [
+      { workspace_id: WORKSPACE, user_id: MEMBER, url_encrypted: "iv.tag.feedciphertext", url_host: "calendar.google.com", status: "ok" },
+    ]);
+    db.seed("integrations", [
+      { workspace_id: WORKSPACE, kind: "hubspot", credentials_encrypted: "iv.tag.oauthciphertext", status: "active" },
+    ]);
+    const perTable: Array<[string, Record<string, unknown>]> = [
+      ["business_profiles", { spec: { companyName: "Acme" } }],
+      ["customer_profiles", { name: "Ops leaders", spec: {} }],
+      ["campaign_steps", { campaign_id: "camp", step_number: 1, delay_days: 0, message: "Hi" }],
+      ["campaign_variants", { campaign_id: "camp", name: "Angle A" }],
+      ["ctas", { kind: "link", label: "Free audit", url: "https://acme.test/audit" }],
+      ["pitches", { body: "Our offer", approved_at: "2026-09-01T00:00:00Z" }],
+      ["hooks", { body: "Our opener", approved_at: "2026-09-01T00:00:00Z" }],
+      ["agents", { name: "Brand A" }],
+      ["knowledge_documents", { title: "Pricing", content: "Ten a month." }],
+      ["availability", { user_id: MEMBER, timezone: "Europe/London" }],
+      ["availability_blackouts", { user_id: MEMBER, starts_at: "2026-09-10T09:00:00Z", ends_at: "2026-09-10T10:00:00Z" }],
+      ["exclusions", { kind: "company", value: "globex", raw_value: "Globex" }],
+    ];
+    for (const [table, row] of perTable) {
+      db.seed(table, [
+        { ...row, workspace_id: WORKSPACE, marker: "ours" },
+        { ...row, workspace_id: OTHER, marker: "theirs" },
+      ]);
+    }
+    return { db, ctx };
+  }
+
+  it("carries every configuration and suppression table, only this workspace's", async () => {
+    const { ctx } = configured();
+    const dump = (await exportWorkspace(ctx, WORKSPACE)) as unknown as Record<string, unknown>;
+
+    for (const key of [
+      "businessProfiles",
+      "customerProfiles",
+      "campaignSteps",
+      "campaignVariants",
+      "ctas",
+      "pitches",
+      "hooks",
+      "agents",
+      "knowledgeDocuments",
+      "availability",
+      "availabilityBlackouts",
+      "exclusions",
+    ]) {
+      const rows = dump[key] as Array<Record<string, unknown>>;
+      expect(rows, key).toHaveLength(1);
+      expect(rows[0]!.workspace_id, key).toBe(WORKSPACE);
+      expect(rows[0]!.marker, key).toBe("ours");
+    }
+    // The harness's own campaign membership row.
+    expect((dump.campaignProspects as unknown[]).length).toBe(1);
+    expect(dump.complete).toBe(true);
+  });
+
+  it("says which shape it is and what each table holds", async () => {
+    const { ctx } = configured();
+    const dump = await exportWorkspace(ctx, WORKSPACE);
+    expect(dump.exportVersion).toBeGreaterThanOrEqual(2);
+    // Every table in the file is explained in it, so nobody has to guess.
+    for (const key of Object.keys(dump)) {
+      if (key === "readme" || key === "exportedAt") continue;
+      expect(dump.readme[key], key).toBeTruthy();
+    }
+  });
+
+  it("lists members by id and role, with their settings, and nobody else's", async () => {
+    const { ctx } = configured();
+    const dump = await exportWorkspace(ctx, WORKSPACE);
+
+    expect(dump.members).toEqual([expect.objectContaining({ user_id: MEMBER, role: "owner" })]);
+    expect(dump.memberSettings).toEqual([{ id: MEMBER, timezone: "Europe/London", booking_url: "https://cal.com/owner" }]);
+    expect(dump.linkedinAccounts).toEqual([
+      expect.objectContaining({ user_id: MEMBER, working_hours: { start: 9, end: 17, days: [1, 2, 3, 4, 5] } }),
+    ]);
+    expect(dump.workspace).toEqual(
+      expect.objectContaining({ onboarding: { workingHours: null, hasSalesNavigator: false, autonomy: "reviewed" } }),
+    );
+    expect(JSON.stringify(dump)).not.toContain(STRANGER);
+  });
+
+  it("never carries a secret, an address or sign-in data", async () => {
+    const { ctx } = configured();
+    const dump = await exportWorkspace(ctx, WORKSPACE);
+    const serialized = JSON.stringify(dump);
+
+    // The calendar feed by host alone: the address is a credential (rule 19).
+    expect(dump.calendarFeeds).toEqual([expect.objectContaining({ url_host: "calendar.google.com" })]);
+    expect(serialized).not.toContain("feedciphertext");
+    expect(serialized).not.toContain("url_encrypted");
+    expect(serialized).not.toContain("oauthciphertext");
+    expect(serialized).not.toContain("credentials_encrypted");
+    expect(serialized).not.toContain("acct_provider_secret");
+    expect(serialized).not.toContain("member_provider_secret");
+    expect(serialized).not.toContain("cus_secret_billing");
+    expect(serialized).not.toContain("owner@acme.test");
+    expect(serialized).not.toContain("1 Home Street");
+  });
+});

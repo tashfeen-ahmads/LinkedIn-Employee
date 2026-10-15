@@ -126,7 +126,7 @@ describe("sendOneNow", () => {
 
     expect(result.ok).toBe(false);
     expect(linkedin.sentInvitations).toHaveLength(0);
-    expect(result.detail).toMatch(/outside_working_hours/);
+    expect(result.detail).toMatch(/outside your sending hours/);
     expect(result.detail).toMatch(/not an error/);
   });
 

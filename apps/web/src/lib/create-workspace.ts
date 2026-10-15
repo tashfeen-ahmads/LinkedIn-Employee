@@ -104,7 +104,11 @@ export async function createWorkspace(formData: FormData): Promise<string> {
     .update({
       onboarding: {
         workingHours: hoursUsable ? { start, end, days } : null,
-        hasSalesNavigator: formData.get("hasSalesNavigator") === "on",
+        // The plan question; the older yes/no Sales Navigator answer is still
+        // read so a form loaded before this shipped is not misread.
+        hasSalesNavigator:
+          formData.get("linkedinPlan") === "sales_navigator" || formData.get("hasSalesNavigator") === "on",
+        hasPremium: formData.get("linkedinPlan") === "premium" || formData.get("linkedinPlan") === "sales_navigator",
         autonomy: formData.get("autonomy") === "autonomous" ? "autonomous" : "supervised",
         // What the Strategy Agent is about to be asked to read, kept so a run
         // that fails can be retried from the dashboard. Without it the only

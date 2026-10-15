@@ -102,7 +102,7 @@ export async function LimitsSection() {
         framed
         id="allowance"
         title="Today’s allowance"
-        description="Product rules rather than settings, so nobody can raise them. The invitation cap grows on its own during warm-up."
+        description="Product rules rather than settings, so nobody can raise them. The invitation cap grows on its own during warm-up. Campaigns on one LinkedIn account share its daily and weekly limits."
       >
         <div className="allowance-stack">
           <AllowanceMeter label="Invitations today" used={usage.invitesToday} cap={cap} />

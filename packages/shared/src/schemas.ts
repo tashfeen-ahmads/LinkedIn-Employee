@@ -468,6 +468,11 @@ export const RulesOfEngagementSchema = z.object({
   handOffOnPricing: z.boolean().default(true),
   handOffOnNegative: z.boolean().default(true),
   handOffOnLegal: z.boolean().default(true),
+  /**
+   * Accepted for stored rules that carry it, and ignored. A prospect asking for
+   * a person is held in every mode (rule 41: it is their wish, not our
+   * caution), so this can no longer turn that hold off. See `applyRules`.
+   */
   handOffOnHumanRequest: z.boolean().default(true),
   minConfidence: z.number().min(0).max(1).default(0.75),
   workingHours: z

@@ -1,5 +1,5 @@
-import { LINKEDIN_LIMITS } from "@le/shared";
-import { warmStillCounts } from "@le/linkedin";
+import { LINKEDIN_LIMITS, roughly } from "@le/shared";
+import { describeRefusal, plainReason, warmStillCounts } from "@le/linkedin";
 import { INVITE_CLAIM_LEASE_MS, runLinkedInAction, RescheduleError } from "./linkedin-action.js";
 import type { WorkerContext } from "../context.js";
 
@@ -114,12 +114,12 @@ export async function sendOneNow(
       };
     }
     if (err instanceof RescheduleError) {
-      // The limiter declining is the system working. Said as such, with its own
-      // word for it, rather than as a failure.
+      // The limiter declining is the system working. Said as such, in the
+      // words a person uses, with when it will happen instead.
       return {
         ok: false,
         campaignProspectId: next.id,
-        detail: `The rate limiter is holding this send: ${err.reason}. It is not an error — sending resumes on its own.`,
+        detail: `${heldBecause(err.reason)} It is not an error: it goes out on its own in ${roughly(err.retryAfterMs)}.`,
       };
     }
     // Everything else is the provider, the database, or us. The message is the
@@ -137,7 +137,7 @@ export async function sendOneNow(
   // what gets reported.
   const { data: after } = await db
     .from("campaign_prospects")
-    .select("status, status_reason, invite_claimed_at")
+    .select("status, status_reason, invite_claimed_at, next_action_at")
     .eq("id", next.id)
     .maybeSingle();
 
@@ -166,10 +166,40 @@ export async function sendOneNow(
     campaignProspectId: next.id,
     status: after?.status,
     statusReason: after?.status_reason ?? null,
+    // LinkedIn's refusal in plain words. The raw text names our supplier and
+    // a route (rule 54), and answers none of what the person pressing the
+    // button wants to know: was it me, does it fix itself, and when.
     detail: after?.status_reason
-      ? `Not sent — ${after.status_reason}`
+      ? refusalSentence(after.status_reason, after.next_action_at, after.status)
       : `Not sent. The row is now "${after?.status ?? "gone"}" and nothing said why, which is itself worth reporting.`,
   };
+}
+
+/** A refusal, said for the person who pressed the button. */
+function refusalSentence(reason: string, nextActionAt: string | null | undefined, status: string | undefined): string {
+  const until = status === "queued" && nextActionAt ? new Date(nextActionAt) : null;
+  return `Not sent: ${plainReason(reason, { until })}`;
+}
+
+/** Why the limiter or a hold declined, without the codes it declined in. */
+function heldBecause(reason: string): string {
+  switch (reason) {
+    case "outside_working_hours":
+      return "It is outside your sending hours.";
+    case "daily_invite_cap":
+    case "campaign_daily_cap":
+      return "Today's invitation allowance is used.";
+    case "weekly_invite_cap":
+      return `This account has sent its ${LINKEDIN_LIMITS.invitesPerWeek} invitations for the last seven days, shared across all its campaigns.`;
+    case "too_soon":
+      return "The last invitation went out moments ago, and invitations are spaced at least two minutes apart.";
+    case "prospect_hold":
+      return "LinkedIn asked for a wait before this person is invited again.";
+    case "warm_up_wait":
+      return "This person's profile was viewed recently, and the invitation waits a little after the view.";
+    default:
+      return `${describeRefusal(reason).title}.`;
+  }
 }
 
 /** How far down the queue to look for somebody ready to invite. */

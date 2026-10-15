@@ -19,7 +19,7 @@ import {
 import type { WorkerContext } from "../context.js";
 import { pitchFor } from "../pitch.js";
 import { agentForCampaign, voiceOf } from "../agent.js";
-import { knowledgeQuery } from "../knowledge.js";
+import { knowledgeFor } from "../knowledge.js";
 import { recordEvent } from "../context.js";
 import { flagForHuman } from "../holds.js";
 import { enqueueOnce, jobId } from "../queues.js";
@@ -164,7 +164,8 @@ export async function handleInboundMessage(
     ? await agentForCampaign(ctx.db, campaignProspect.campaign_id)
     : null;
   const [knowledge, pitch] = await Promise.all([
-    loadKnowledge(ctx, job.workspaceId),
+    // This brand's documents and the shared ones, never another agent's.
+    loadKnowledge(ctx, job.workspaceId, agent?.id ?? null),
     // This prospect's angle decides which pitch they hear, then their
     // campaign's agent, then the workspace default. They accepted because of
     // one pain being named; hearing an offer that argues a different one is
@@ -842,9 +843,8 @@ async function loadHistory(
     }));
 }
 
-async function loadKnowledge(ctx: WorkerContext, workspaceId: string) {
-  const { data } = await knowledgeQuery(ctx.db, workspaceId);
-  return data ?? [];
+async function loadKnowledge(ctx: WorkerContext, workspaceId: string, agentId: string | null) {
+  return knowledgeFor(ctx.db, workspaceId, agentId);
 }
 
 async function loadBusinessProfile(ctx: WorkerContext, workspaceId: string) {

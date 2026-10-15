@@ -25,6 +25,8 @@ export interface StrategySource {
 export interface OnboardingStash {
   workingHours: WorkingHours | null;
   hasSalesNavigator: boolean | null;
+  /** A paid plan (Premium or Sales Navigator): no monthly note limit. */
+  hasPremium: boolean | null;
   autonomy: "autonomous" | "supervised" | null;
   /** Empty for a workspace set up before the source was kept. */
   source: StrategySource;
@@ -47,6 +49,7 @@ export function readOnboardingStash(value: unknown): OnboardingStash {
   return {
     workingHours: hours(raw.workingHours),
     hasSalesNavigator: typeof raw.hasSalesNavigator === "boolean" ? raw.hasSalesNavigator : null,
+    hasPremium: typeof raw.hasPremium === "boolean" ? raw.hasPremium : null,
     autonomy: raw.autonomy === "autonomous" || raw.autonomy === "supervised" ? raw.autonomy : null,
     source: compact({
       websiteUrl: text(source.websiteUrl),
@@ -120,10 +123,12 @@ export function mergeStash(current: unknown, patch: Record<string, unknown>): Re
  */
 export function stashedAccountAnswers(patch: {
   has_sales_navigator?: unknown;
+  has_premium?: unknown;
   working_hours?: unknown;
-}): Partial<Pick<OnboardingStash, "workingHours" | "hasSalesNavigator">> {
-  const out: Partial<Pick<OnboardingStash, "workingHours" | "hasSalesNavigator">> = {};
+}): Partial<Pick<OnboardingStash, "workingHours" | "hasSalesNavigator" | "hasPremium">> {
+  const out: Partial<Pick<OnboardingStash, "workingHours" | "hasSalesNavigator" | "hasPremium">> = {};
   if (typeof patch.has_sales_navigator === "boolean") out.hasSalesNavigator = patch.has_sales_navigator;
+  if (typeof patch.has_premium === "boolean") out.hasPremium = patch.has_premium;
   const h = hours(patch.working_hours);
   if (h) out.workingHours = h;
   return out;

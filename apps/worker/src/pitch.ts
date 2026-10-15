@@ -66,10 +66,17 @@ export async function pitchFor(
     if (body) return body;
   }
 
+  // The workspace's own default, which is the row with no agent. Since
+  // migration 0031 every agent may hold a default as well, so a filter on
+  // `is_default` alone matches one row per agent: `maybeSingle()` then errors
+  // and the campaign goes silent, or — with exactly one agent default and no
+  // workspace one — it returns that agent's line and one brand's offer is
+  // made under another's name.
   const { data } = await db
     .from("pitches")
     .select("body, approved_at")
     .eq("workspace_id", workspaceId)
+    .is("agent_id", null)
     .eq("is_default", true)
     .maybeSingle();
   if (!data?.approved_at) return null;

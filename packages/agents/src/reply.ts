@@ -106,8 +106,13 @@ export function applyRules(classification: ReplyClassification, rules: RulesOfEn
    * real rep's name — so autonomy does not override it. Everything else on this
    * list is the product being cautious on the customer's behalf; this one is
    * the customer telling us what they want.
+   *
+   * Unconditional on purpose. `handOffOnHumanRequest` is still accepted by the
+   * schema so stored rules keep parsing, and it is read by nothing: a setting
+   * that could switch this off would be a way to break that promise by
+   * configuration, which is no better than breaking it by accident.
    */
-  if (rules.handOffOnHumanRequest && classification.asksForHuman) {
+  if (classification.asksForHuman) {
     return { action: "hold_for_human", reason: "prospect asked for a person" };
   }
 

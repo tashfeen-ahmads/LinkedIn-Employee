@@ -224,6 +224,22 @@ describe("an autonomous workspace", () => {
     expect(applyRules(classification({ asksForHuman: true }), autonomous).action).toBe("hold_for_human");
   });
 
+  it("holds a request for a person even when the stored rules say not to", () => {
+    /*
+     * `handOffOnHumanRequest` is kept in the schema for old rows and ignored.
+     * Otherwise a single false in a settings blob answers "can I talk to a
+     * human?" with a machine, which is the promise rule 41 says is not ours to
+     * waive.
+     */
+    const waived = RulesOfEngagementSchema.parse({
+      mode: "autopilot",
+      autonomy: "autonomous",
+      handOffOnHumanRequest: false,
+    });
+    const decision = applyRules(classification({ asksForHuman: true }), waived);
+    expect(decision).toEqual({ action: "hold_for_human", reason: "prospect asked for a person" });
+  });
+
   it("still holds a message it did not understand", () => {
     // Autonomy means finishing the work, not guessing at it: a reply written
     // from a misread message reaches a real person just as fast as a good one.

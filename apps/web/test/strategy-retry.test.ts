@@ -154,6 +154,7 @@ describe("account answers saved before an account exists", () => {
   it("shows the stash's values on the form until the row exists", () => {
     const profile = read("app", "app", "profile", "page.tsx");
     expect(profile).toMatch(/readWorkingHours\(stash\.workingHours\)/);
-    expect(profile).toMatch(/defaultChecked=\{hasSalesNavigator\}/);
+    expect(profile).toMatch(/planOf\(\{ has_sales_navigator: stash\.hasSalesNavigator, has_premium: stash\.hasPremium \}\)/);
+    expect(profile).toMatch(/defaultValue=\{plan\}/);
   });
 });

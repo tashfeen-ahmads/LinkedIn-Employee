@@ -1,4 +1,5 @@
 import type {
+  AccountPlan,
   AccountHealth,
   ActionResult,
   PendingInvitation,
@@ -81,6 +82,13 @@ export class MockLinkedInProvider implements LinkedInProvider {
   /** Set by a test to make the health call fail the way a dropped account does. */
   healthError: Error | null = null;
 
+  /** What `getAccountPlan` answers; null is "could not tell". */
+  plan: AccountPlan | null = null;
+
+  async getAccountPlan(): Promise<AccountPlan | null> {
+    return this.plan;
+  }
+
   async getAccountHealth(): Promise<AccountHealth> {
     if (this.healthError) throw this.healthError;
     return this.health;
@@ -151,10 +159,16 @@ export class MockLinkedInProvider implements LinkedInProvider {
    * does not use.
    */
   invitationRefusal: string | null = null;
+  /**
+   * Refuse only invitations that carry a note, as LinkedIn does once a free
+   * account has used its monthly notes: in the same words as a throttle.
+   */
+  noteRefusal: string | null = null;
 
   async sendInvitation(input: { accountId: string; providerId: string; note?: string }): Promise<ActionResult> {
     if (this.invitationError) throw this.invitationError;
     if (this.invitationRefusal) return { ok: false, error: this.invitationRefusal };
+    if (this.noteRefusal && input.note) return { ok: false, error: this.noteRefusal };
     this.sentInvitations.push(input);
     return { ok: true, providerId: `inv_${this.sentInvitations.length}` };
   }

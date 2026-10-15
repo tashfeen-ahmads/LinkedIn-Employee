@@ -3,7 +3,7 @@ import { loadBusinessProfile } from "@le/db";
 import { BusinessProfileSchema } from "@le/shared";
 import type { WorkerContext } from "../context.js";
 import { recordEvent } from "../context.js";
-import { knowledgeQuery } from "../knowledge.js";
+import { knowledgeFor } from "../knowledge.js";
 
 export interface WritePitchInput {
   workspaceId: string;
@@ -64,7 +64,10 @@ export async function writeWorkspacePitch(
 
   const [{ data: knowledge }, { data: rep }, { data: existing }, { data: profiles }] =
     await Promise.all([
-      knowledgeQuery(ctx.db, input.workspaceId),
+      // This brand's documents and the shared ones, never another brand's:
+      // a pitch for one product argued from another's facts is the same leak
+      // the reply path closed.
+      knowledgeFor(ctx.db, input.workspaceId, input.agentId ?? null).then((data) => ({ data })),
       ctx.db.from("profiles").select("full_name").eq("id", input.userId).maybeSingle(),
       mine(),
       // The opening angles a person already approved on /app/strategy. Written

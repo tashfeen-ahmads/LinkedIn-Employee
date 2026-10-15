@@ -10,7 +10,7 @@ import { StrategyDetailsForm, StrategyRetryButton } from "@/components/strategy-
 import { readStrategyState } from "@/lib/strategy-state";
 import { hasStrategySource, readOnboardingStash } from "@/lib/onboarding-stash";
 import { SubmitButton } from "@/components/submit-button";
-import { BRAND } from "@le/shared";
+import { BRAND, FREE_NOTES_PER_MONTH, alwaysHoldsSentence } from "@le/shared";
 import { NORA } from "@/lib/team";
 
 /*
@@ -356,31 +356,42 @@ export default async function OnboardingPage({
             to give the agent is your call rather than ours.
           </p>
           <fieldset className="field-group">
-            <legend>Does this LinkedIn account have Sales Navigator?</legend>
+            <legend>Which LinkedIn plan does this account have?</legend>
             <span className="tiny subtle hint">
-              {NORA} works either way. This decides how precisely it can search, so pick the
-              one that is true: searching with a tier the account doesn&rsquo;t have finds nobody.
+              {NORA} works with all three. Pick the one that is true: it decides how precisely it can
+              search and whether invitations can carry a note. Once you connect, {NORA} also checks
+              with LinkedIn.
             </span>
             <label className="small check">
-              <input type="radio" name="hasSalesNavigator" value="on" required />
+              <input type="radio" name="linkedinPlan" value="basic" required />
               <span>
-                <strong>Yes, I have Sales Navigator</strong>
+                <strong>Free (Basic)</strong>
                 <span className="tiny subtle hint">
-                  Searches filter by job title, seniority, company size, industry and location, and
-                  can leave out titles you don&rsquo;t want. Tighter lists, fewer invitations spent
-                  on the wrong people.
+                  Searches use job title, location and industry only, so lists are broader. LinkedIn
+                  lets a free account add a note to only {FREE_NOTES_PER_MONTH} invitations a month;
+                  after that {NORA} sends invitations without a note. LinkedIn also caps how many
+                  searches a free account can run each month.
                 </span>
               </span>
             </label>
             <label className="small check">
-              <input type="radio" name="hasSalesNavigator" value="off" required />
+              <input type="radio" name="linkedinPlan" value="premium" required />
               <span>
-                <strong>No, a regular LinkedIn account</strong>
+                <strong>Premium</strong>
                 <span className="tiny subtle hint">
-                  Searches use job title, location and industry only (no seniority, company size or
-                  excluded titles), so lists are broader and you&rsquo;ll review more of them. LinkedIn
-                  also caps how many searches a free account can run each month. You can switch to
-                  Sales Navigator later on your profile.
+                  Every invitation can carry a note. Searches still use job title, location and
+                  industry only.
+                </span>
+              </span>
+            </label>
+            <label className="small check">
+              <input type="radio" name="linkedinPlan" value="sales_navigator" required />
+              <span>
+                <strong>Sales Navigator</strong>
+                <span className="tiny subtle hint">
+                  Every invitation can carry a note, and searches also filter by seniority and company
+                  size and can leave out titles you don&rsquo;t want. Tighter lists, fewer invitations
+                  spent on the wrong people.
                 </span>
               </span>
             </label>
@@ -392,10 +403,7 @@ export default async function OnboardingPage({
               <option value="autonomous">The agent answers and books, on its own</option>
             </select>
             <span className="hint">
-              Either way it only states facts from your own material, never sends a link it was not
-              given, and stops the moment somebody asks not to be contacted. Two things always wait
-              for you: a prospect who asks to speak to a person, and a message it did not
-              understand.
+              Either way it only states facts from your own material. {alwaysHoldsSentence()}
             </span>
           </label>
         </section>

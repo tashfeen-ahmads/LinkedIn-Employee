@@ -78,6 +78,13 @@ export interface ProspectPage {
   filterNotes?: string[];
 }
 
+/** What the provider reports the account pays for. */
+export interface AccountPlan {
+  /** Any paid plan: no monthly limit on invitation notes. */
+  premium: boolean;
+  salesNavigator: boolean;
+}
+
 /** Which LinkedIn search surface an account is entitled to. */
 export type SearchTier = "sales_navigator" | "classic";
 
@@ -194,6 +201,8 @@ export interface LinkedInProvider {
     endpoints: Array<{ source: "messaging" | "account_status"; url: string; name: string }>;
   }): Promise<{ created: number; removed: number }>;
   getAccountHealth(accountId: string): Promise<AccountHealth>;
+  /** Paid plans the account has, or null when the provider could not say. */
+  getAccountPlan?(accountId: string): Promise<AccountPlan | null>;
   searchProspects(input: {
     accountId: string;
     query: SearchQuery;

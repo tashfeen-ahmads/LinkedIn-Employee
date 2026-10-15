@@ -4,7 +4,8 @@ import { createClient } from "@/lib/supabase-server";
 import { PageNotice } from "@/components/page-notice";
 import { PageHeader, Section, Empty } from "@/components/page";
 import { Availability } from "./availability";
-import { profileHref } from "@le/shared";
+import { EXTERNAL_BOOKINGS_UNCOUNTED, profileHref } from "@le/shared";
+import { workspaceUsesOwnBookingLink } from "@/lib/booking-link";
 import { dayKey, formatTime, isoAttr } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -53,7 +54,7 @@ export default async function MeetingsPage({
    * so they are asked separately.
    */
   const MEETINGS = "id, prospect_id, starts_at, ends_at, meeting_url, brief, status, booked_via";
-  const [{ data: ahead }, { data: behind }, { data: me }] = await Promise.all([
+  const [{ data: ahead }, { data: behind }, { data: me }, ownBookingLink] = await Promise.all([
     supabase
       .from("meetings")
       .select(MEETINGS)
@@ -69,6 +70,9 @@ export default async function MeetingsPage({
       .order("starts_at", { ascending: false })
       .limit(200),
     supabase.from("profiles").select("booking_url, timezone").eq("id", session.userId).maybeSingle(),
+    // Anybody here sending their own scheduling link, not only the viewer: a
+    // teammate's Calendly bookings are missing from this list just the same.
+    workspaceUsesOwnBookingLink(supabase, session.workspaceId),
   ]);
 
   // Every time on this screen is on the rep's clock. Rendered on the server
@@ -106,6 +110,17 @@ export default async function MeetingsPage({
 
       <PageNotice error={params.error} notice={params.notice} />
 
+      {/*
+        Said on every tab, not only when the list is empty (rule 31). A list
+        with three meetings on it reads as the whole diary, and the ones booked
+        on somebody's own scheduling page are exactly the ones it cannot show.
+      */}
+      {ownBookingLink ? (
+        <div className="notice">
+          <p className="small">{EXTERNAL_BOOKINGS_UNCOUNTED}</p>
+        </div>
+      ) : null}
+
       <nav className="tabs" aria-label="Meetings">
         {TABS.map((t) => (
           <Link
@@ -130,7 +145,7 @@ export default async function MeetingsPage({
           href="/app/meetings?tab=availability"
         >
           {me?.booking_url
-            ? "Reese can send your own booking page when a prospect wants to meet. Meetings booked there happen on that page, so they cannot appear here or in your results; check that calendar for them."
+            ? "Reese can send your own booking page when a prospect wants to meet, and also offers times from the hours you set. Meetings booked from those times appear here."
             : "Reese offers times from the hours you set and books the one a prospect accepts. It never invents a time: the only slots that reach anybody are the ones this product worked out you were free for."}
         </Empty>
       ) : (

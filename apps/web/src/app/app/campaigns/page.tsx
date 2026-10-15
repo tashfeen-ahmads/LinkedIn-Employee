@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase-server";
 import { fetchAllRows } from "@/lib/rows";
 import { PageNotice, type NoticeParams } from "@/components/page-notice";
 import { label } from "@/lib/labels";
+import { actionableQueue, type QueuedRow } from "@/lib/campaign";
 
 export default async function CampaignsPage({
   searchParams,
@@ -15,7 +16,7 @@ export default async function CampaignsPage({
   const session = await requireSession();
   const supabase = await createClient();
 
-  const [{ data: campaigns }, counts, { data: strategies }, { data: businesses }] = await Promise.all([
+  const [{ data: campaigns }, counts, { data: strategies }, { data: businesses }, { data: exclusionRows }] = await Promise.all([
     supabase
       .from("campaigns")
       .select(
@@ -27,13 +28,21 @@ export default async function CampaignsPage({
     // stops at PostgREST's thousandth row without saying so, and a campaign
     // grown past that with `Find more` would report a queue smaller than it is
     // — which reads as the campaign having nearly finished.
-    fetchAllRows<{ campaign_id: string; status: string }>((from, to) =>
-      supabase
-        .from("campaign_prospects")
-        .select("campaign_id, status")
-        .eq("workspace_id", session.workspaceId)
-        .order("id", { ascending: true })
-        .range(from, to),
+    // With the prospect fields the send path checks, so "still queued" leaves
+    // out the people it will close rather than invite (see `actionableQueue`).
+    // The embed is cast, as on the campaign page: the generated types carry no
+    // relationships, so the join reads as an error type it is not.
+    fetchAllRows<{ campaign_id: string; status: string } & QueuedRow>(
+      (from, to) =>
+        supabase
+          .from("campaign_prospects")
+          .select("campaign_id, status, invited_at, prospect:prospects (do_not_contact, last_contacted_at, company, linkedin_url)")
+          .eq("workspace_id", session.workspaceId)
+          .order("id", { ascending: true })
+          .range(from, to) as unknown as PromiseLike<{
+          data: Array<{ campaign_id: string; status: string } & QueuedRow> | null;
+          error: { message: string } | null;
+        }>,
     ),
     supabase
       .from("customer_profiles")
@@ -49,13 +58,21 @@ export default async function CampaignsPage({
       .select("id, spec, website_url")
       .eq("workspace_id", session.workspaceId)
       .order("created_at", { ascending: true }),
+    supabase.from("exclusions").select("kind, value, raw_value, reason").eq("workspace_id", session.workspaceId),
   ]);
+
+  const exclusions = (exclusionRows ?? []).map((row) => ({
+    kind: row.kind,
+    value: row.value,
+    rawValue: row.raw_value,
+    reason: row.reason,
+  }));
 
   const byCampaign = new Map<string, { queued: number; total: number }>();
   for (const row of counts.rows) {
     const entry = byCampaign.get(row.campaign_id) ?? { queued: 0, total: 0 };
     entry.total += 1;
-    if (row.status === "queued") entry.queued += 1;
+    if (row.status === "queued") entry.queued += actionableQueue([row], exclusions).actionable;
     byCampaign.set(row.campaign_id, entry);
   }
 

@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { BRAND, DEFAULT_WORKING_HOURS, INVITE_NOTE_MAX_CHARS, LINKEDIN_LIMITS } from "@le/shared";
+import { BRAND, DEFAULT_WORKING_HOURS, FREE_NOTES_PER_MONTH, INVITE_NOTE_MAX_CHARS, LINKEDIN_LIMITS } from "@le/shared";
 import { SITE } from "@/lib/site";
 import {
   BOOKED_DAY_NAME,
@@ -322,6 +322,10 @@ export function SalesNavigator() {
               </li>
               <li>
                 <NavIcon name="check" className="mk-sn-icon" />
+                <span>Premium or Sales Navigator also lifts LinkedIn&rsquo;s monthly limit on invitation notes.</span>
+              </li>
+              <li>
+                <NavIcon name="check" className="mk-sn-icon" />
                 <span>Sales Navigator is sold by LinkedIn, not by us.</span>
               </li>
             </ul>
@@ -398,6 +402,13 @@ export function Notes() {
                 <li>
                   <NavIcon name="profile" className="mk-icon" />
                   <span>You read every one before launch</span>
+                </li>
+                <li>
+                  <NavIcon name="clock" className="mk-icon" />
+                  <span>
+                    On a free LinkedIn account, notes on {FREE_NOTES_PER_MONTH} invitations a month, LinkedIn&rsquo;s
+                    limit. After that invitations still go, without a note.
+                  </span>
                 </li>
               </ul>
             </div>

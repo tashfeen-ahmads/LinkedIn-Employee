@@ -3,7 +3,7 @@ import Link from "next/link";
 import { BreadcrumbSchema } from "@/components/schema";
 import { Glance, PageHero } from "@/components/marketing";
 import { PUBLIC_LIMITS, pageMeta } from "@/lib/site";
-import { BRAND } from "@le/shared";
+import { AUTOPILOT_ALWAYS_HOLDS, BRAND } from "@le/shared";
 
 export const metadata: Metadata = pageMeta({
   title: "About Nora: the AI SDR built around account safety",
@@ -18,21 +18,12 @@ export const metadata: Metadata = pageMeta({
  * the owner supplies it: inventing any of it would be a fabricated record.
  */
 
-/** What autopilot never finishes on its own, however the workspace is set up. */
-const ALWAYS_HELD = [
-  {
-    title: "A message the agent did not understand.",
-    body: "A reply written from a misread message reaches a real person just as fast as a good one, so it waits for you.",
-  },
-  {
-    title: "A prospect who asks to speak to a person.",
-    body: "That is not our caution, it is their wish, and answering it with another automated message would ignore it.",
-  },
-  {
-    title: "Anybody who asks to be removed.",
-    body: "Everything stops for them, always, and they are never contacted again.",
-  },
-];
+/**
+ * What autopilot never finishes on its own, however the workspace is set up.
+ * Read from the one list the app's settings screens also read, so this page
+ * cannot promise a different set than the product enforces.
+ */
+const ALWAYS_HELD = AUTOPILOT_ALWAYS_HOLDS;
 
 export default function AboutPage() {
   return (
@@ -82,13 +73,13 @@ export default function AboutPage() {
             </p>
             <p>
               How much it finishes on its own is your call, per workspace. Hold pricing, legal and
-              anything negative for yourself, or let it answer and book. Three things are never left
-              to autopilot, whatever you choose:
+              anything negative for yourself, or let it answer and book. These are never left to
+              autopilot, whatever you choose:
             </p>
             <ul className="fx4-held">
               {ALWAYS_HELD.map((item) => (
                 <li key={item.title}>
-                  <strong>{item.title}</strong> {item.body}
+                  <strong>{item.title}</strong> {item.detail}
                 </li>
               ))}
             </ul>

@@ -1,3 +1,5 @@
+import { BRAND } from "@le/shared";
+
 /**
  * What a provider refusal actually means: try this person again later, or never.
  *
@@ -181,4 +183,153 @@ export function classifyProviderError(error: string | null | undefined): Provide
 export function describeCooldown(summary: string, until: Date, waiting: number): string {
   const people = waiting === 1 ? "1 person is" : `${waiting} people are`;
   return `${summary}. ${people} waiting and will be invited automatically after ${until.toISOString()}. Nothing is lost.`;
+}
+
+/**
+ * Could this refusal be LinkedIn's monthly limit on invitation notes?
+ *
+ * A free account that has used its notes for the month is refused with the
+ * same words as a real invitation throttle ("temporary provider limit"), so the
+ * text alone cannot tell them apart. The send path does: it asks once more
+ * without the note. Accepted, it was the note; refused again, it is the
+ * account. Explicit wording about notes or personalised invitations is matched
+ * too, in case the provider ever says so plainly.
+ */
+export function mightBeNoteQuota(error: string | null | undefined): boolean {
+  if (!error) return false;
+  return /errors\/cannot_resend_yet|temporary provider limit|personali[sz]ed (invitation|message|note)|invitation note|custom (message|note)/.test(
+    error.toLowerCase(),
+  );
+}
+
+/** What kind of refusal this was, for the words a person reads. */
+export type RefusalKind =
+  | "note_quota"
+  | "invitation_limit"
+  | "recipient"
+  | "rate_limit"
+  | "provider_down"
+  | "note_too_long"
+  | "plan_missing"
+  | "restricted"
+  | "sign_in"
+  | "search_limit"
+  | "unknown";
+
+/**
+ * Ordered most specific first. Matched on lowercased text, because neither the
+ * slugs nor the prose are a contract. Read-only: what is retried and for how
+ * long is still `classifyProviderError`, and this never changes it.
+ */
+const KINDS: ReadonlyArray<{ kind: RefusalKind; match: RegExp }> = [
+  { kind: "note_quota", match: /personali[sz]ed (invitation|message|note)|invitation note|custom (message|note)|note limit/ },
+  { kind: "note_too_long", match: /errors\/too_many_characters|too many characters/ },
+  { kind: "recipient", match: /errors\/already_invited_recently|already been sent recently/ },
+  { kind: "invitation_limit", match: /errors\/cannot_resend_yet|temporary provider limit|weekly (invitation )?limit|too many invitations|invitation limit/ },
+  { kind: "search_limit", match: /commercial use limit|search limit|monthly search|errors\/limit_exceeded/ },
+  { kind: "plan_missing", match: /feature_not_subscribed|not subscribed|requires? (a )?(premium|sales navigator)/ },
+  { kind: "sign_in", match: /errors\/(disconnected_account|invalid_credentials|expired_credentials)|disconnected|reconnect|credentials|unauthori[sz]ed|\b401\b|account not found/ },
+  { kind: "restricted", match: /restricted|errors\/account_restricted|\b403\b|forbidden/ },
+  { kind: "rate_limit", match: /errors\/rate_limit|too many requests|\b429\b/ },
+  { kind: "provider_down", match: /\b(502|503|504)\b|gateway timeout|service unavailable|socket hang up|etimedout|econnreset/ },
+];
+
+export function refusalKind(error: string | null | undefined): RefusalKind {
+  if (!error) return "unknown";
+  const text = error.toLowerCase();
+  for (const rule of KINDS) if (rule.match.test(text)) return rule.kind;
+  return "unknown";
+}
+
+/**
+ * A refusal in a customer's words, with what happens next.
+ *
+ * The raw text names our supplier and an HTTP route (rule 54) and answers the
+ * wrong question: a person reading it wants to know whether they did
+ * something wrong, whether it fixes itself, and when. `until` is the hold's
+ * end when there is one; without it the sentence does not invent a time.
+ */
+export function describeRefusal(
+  error: string | null | undefined,
+  options: { until?: Date | null; timezone?: string } = {},
+): { kind: RefusalKind; title: string; detail: string } {
+  const kind = refusalKind(error);
+  const when = options.until && options.until.getTime() > Date.now() ? ` ${BRAND.name} tries again after ${formatWhen(options.until, options.timezone)}.` : "";
+  switch (kind) {
+    case "note_quota":
+      return {
+        kind,
+        title: "This month's invitation notes are used",
+        detail: "A free LinkedIn account can add a note to only a few invitations a month. Invitations keep going out without a note until next month.",
+      };
+    case "note_too_long":
+      return { kind, title: "The note was too long", detail: "LinkedIn refuses a note over 200 characters. Shorten it on the campaign and this person is tried again." };
+    case "recipient":
+      return {
+        kind,
+        title: "LinkedIn says this person was invited recently",
+        detail: `This is about this person only; everybody else on the list carries on.${when}`,
+      };
+    case "invitation_limit":
+      return {
+        kind,
+        title: "LinkedIn is holding back invitations from this account",
+        detail: `Nothing is lost: everyone waiting is invited automatically once LinkedIn accepts invitations again. On a free account this can also mean the month's notes are used, and ${BRAND.name} then sends without a note.${when}`,
+      };
+    case "rate_limit":
+      return { kind, title: "LinkedIn asked this account to slow down", detail: `Sending pauses and resumes on its own.${when}` };
+    case "provider_down":
+      return { kind, title: "LinkedIn could not be reached", detail: `Nothing was sent and nothing is lost. It is tried again shortly.${when}` };
+    case "search_limit":
+      return {
+        kind,
+        title: "LinkedIn's monthly search limit was reached",
+        detail: "A free LinkedIn account can run only so many searches a month. Finding more people resumes next month, or straight away with Premium or Sales Navigator.",
+      };
+    case "plan_missing":
+      return {
+        kind,
+        title: "This needs a LinkedIn plan the account does not have",
+        detail: "Check the LinkedIn plan on your profile. If Sales Navigator is turned on there, the account has to have it.",
+      };
+    case "sign_in":
+      return { kind, title: "LinkedIn needs you to sign in again", detail: "Reconnect your LinkedIn account on your profile. Nothing is sent until you do." };
+    case "restricted":
+      return {
+        kind,
+        title: "LinkedIn has restricted this account",
+        detail: "Sending is paused. Open LinkedIn to see what it asks for, then reconnect on your profile.",
+      };
+    default:
+      return { kind, title: "LinkedIn refused this", detail: "This person is not retried automatically. If it keeps happening, tell us from Support." };
+  }
+}
+
+function formatWhen(date: Date, timezone?: string): string {
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      weekday: "short",
+      hour: "numeric",
+      minute: "2-digit",
+      timeZone: timezone || "UTC",
+      timeZoneName: "short",
+    }).format(date);
+  } catch {
+    return date.toISOString();
+  }
+}
+
+/**
+ * A row's reason as a person should read it.
+ *
+ * Our own reasons (the exclusion list, do not contact, already contacted,
+ * removed during review) are already sentences and pass through. LinkedIn's
+ * refusals arrive as our supplier's raw text with a route and a status code
+ * (rule 54), so they are translated.
+ */
+export function plainReason(reason: string, options: { until?: Date | null; timezone?: string } = {}): string {
+  const fromProvider = refusalKind(reason) !== "unknown" || /errors\/|\b[45]\d\d\b|unipile/i.test(reason);
+  if (!fromProvider) return reason;
+  const said = describeRefusal(reason, options);
+  return `${said.title}. ${said.detail}`;
 }

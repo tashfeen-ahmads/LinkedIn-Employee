@@ -1,4 +1,4 @@
-import { INVITE_NOTE_MAX_CHARS, LINKEDIN_LIMITS } from "@le/shared";
+import { INVITE_NOTE_MAX_CHARS, LINKEDIN_LIMITS, matchExclusion, type ExclusionRule } from "@le/shared";
 
 /**
  * What has to be true before a campaign may start sending.
@@ -106,4 +106,86 @@ export function launchBlockers(state: LaunchState): string[] {
 export function daysToSendAll(prospectCount: number, dailyInviteCap: number): number | null {
   if (prospectCount === 0 || dailyInviteCap < 1) return null;
   return Math.ceil(prospectCount / dailyInviteCap);
+}
+
+/**
+ * A queued row as the send path will judge it.
+ *
+ * `prospect` is the joined `prospects` row; only the fields the send path
+ * reads before it sends an invitation are needed.
+ */
+export interface QueuedRow {
+  invited_at?: string | null;
+  prospect: {
+    do_not_contact?: boolean | null;
+    last_contacted_at?: string | null;
+    company?: string | null;
+    linkedin_url?: string | null;
+  } | null;
+}
+
+/**
+ * How many queued people will actually be invited, and how many the send path
+ * will close instead.
+ *
+ * The pacing loop queues every `queued` row, and the send path then closes
+ * three kinds without sending: somebody marked do not contact, somebody this
+ * workspace has already contacted (rule 24), and somebody on the exclusion
+ * list (rule 14). Counting them as "still to invite" promised invitations
+ * that were never going to go out, and stretched the days estimate with them.
+ * Judged with the same `matchExclusion` the send path calls, never a second
+ * reading of it.
+ */
+export function actionableQueue(
+  rows: ReadonlyArray<QueuedRow>,
+  exclusions: ReadonlyArray<ExclusionRule>,
+): { actionable: number; skipped: number } {
+  let skipped = 0;
+  for (const row of rows) {
+    const p = row.prospect;
+    const skip =
+      Boolean(p?.do_not_contact) ||
+      Boolean(!row.invited_at && p?.last_contacted_at) ||
+      Boolean(
+        p && matchExclusion(exclusions, { company: p.company ?? null, linkedinUrl: p.linkedin_url ?? null }),
+      );
+    if (skip) skipped += 1;
+  }
+  return { actionable: rows.length - skipped, skipped };
+}
+
+export const SKIPPED_AT_SEND_REASONS =
+  "on your exclusion list, marked do not contact, or already contacted";
+
+/**
+ * How long the queue takes, in working days, at the pace the loop will keep.
+ *
+ * Two ceilings, not one. `perDay` is the campaign's cap or the account's ramp;
+ * the rolling week (`LINKEDIN_LIMITS.invitesPerWeek`) is shared by everything
+ * the account sends, and spread over the account's own working days it is the
+ * lower of the two for any account past its first week of ramp: 35 a day five
+ * days a week is 175, and the week stops at 100. An estimate at the daily cap
+ * promised a list of 400 in twelve days that takes twenty.
+ *
+ * Other running campaigns on the same account draw on the same two
+ * allowances. How the loop divides them depends on whose prospects come due
+ * first, so the estimate does not guess a split; it says the count, and the
+ * screen says the number is the best case.
+ */
+export function sendEstimate(input: {
+  remaining: number;
+  perDay: number;
+  workingDaysPerWeek: number;
+  otherRunningOnAccount?: number;
+}): { days: number; perDay: number; weeklyLimited: boolean; shared: number } | null {
+  if (input.remaining <= 0 || input.perDay < 1) return null;
+  const workingDays = Math.min(7, Math.max(1, Math.floor(input.workingDaysPerWeek) || 5));
+  const weeklyPerDay = Math.floor(LINKEDIN_LIMITS.invitesPerWeek / workingDays);
+  const pace = Math.max(1, Math.min(input.perDay, weeklyPerDay));
+  return {
+    days: Math.ceil(input.remaining / pace),
+    perDay: pace,
+    weeklyLimited: weeklyPerDay < input.perDay,
+    shared: Math.max(0, input.otherRunningOnAccount ?? 0),
+  };
 }

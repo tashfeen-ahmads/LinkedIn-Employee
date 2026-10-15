@@ -1,5 +1,6 @@
 import { ONBOARDING_STEPS, type OnboardingState } from "./onboarding.js";
 import { LINKEDIN_LIMITS } from "./constants.js";
+import { alwaysHoldsSentence } from "./autopilot.js";
 
 /**
  * How this product works, start to finish, in one definition.
@@ -192,7 +193,7 @@ export const TOUR_STAGES: readonly TourStage[] = [
     youDo: null,
     weDo: "Reese drafts each reply from the documents you gave it and offers only times you have open. By default every draft waits for your approval in the Inbox; switch on autopilot and clean replies send and book on their own.",
     caveat:
-      "Two things wait for a person whatever the setting: somebody who asks to speak to a human, and a message the agent did not understand. It may never invent a price, a date or a link; a draft carrying a link nobody gave it is held, not sent.",
+      `It may never invent a price, a date or a link. ${alwaysHoldsSentence()}`,
     step: "hasKnowledge",
     href: "/app/inbox",
   },
