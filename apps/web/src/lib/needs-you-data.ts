@@ -1,5 +1,6 @@
 import "server-only";
 import {
+  IDLE_RELEASE_DETAIL,
   CTA_PLACEHOLDER,
   MESSAGE_WEBHOOK_BEAT,
   PACING_LOOP,
@@ -49,6 +50,7 @@ export async function loadNeedsYou(
     strategies,
     { data: unlaunched },
     { data: thin },
+    released,
   ] = await Promise.all([
     supabase.from("worker_heartbeats").select("beat_at").eq("name", PACING_LOOP).maybeSingle(),
     // What the webhook endpoint itself recorded, not whether a secret is set
@@ -109,6 +111,14 @@ export async function loadNeedsYou(
       .eq("status", "queued")
       .eq("invite_note_thin", true)
       .limit(1000),
+    // Released after a fortnight unused (rule 63): the row says reconnect to
+    // start campaigns rather than reading as a fault.
+    supabase
+      .from("linkedin_accounts")
+      .select("id", head)
+      .eq("workspace_id", workspaceId)
+      .eq("status", "disconnected")
+      .eq("status_detail", IDLE_RELEASE_DETAIL),
   ]);
 
   const stamped = beat?.beat_at ? Date.parse(beat.beat_at) : null;
@@ -169,6 +179,7 @@ export async function loadNeedsYou(
   const facts: NeedsYouFacts = {
     loopStalled: stamped === null || now.getTime() - stamped > PACING_STALE_MS,
     linkedInConnected: (account.count ?? 0) > 0,
+    linkedInReleasedIdle: (released.count ?? 0) > 0,
     webhookRefused,
     heldReplies,
     heldBookings,

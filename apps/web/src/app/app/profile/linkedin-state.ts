@@ -1,3 +1,4 @@
+import { IDLE_RELEASE_TAGLINE, isIdleReleased } from "@le/shared";
 import { label } from "../../../lib/labels";
 /**
  * What a LinkedIn account row means to the person it belongs to.
@@ -26,8 +27,12 @@ export type LinkedInState =
   | { kind: "none"; label: "not connected" }
   /** Connect was pressed and the sign-in has not come back yet. */
   | { kind: "unfinished"; label: "not connected" }
-  /** The sign-in came back refused; nothing was connected. */
-  | { kind: "failed"; label: "not connected"; detail: string }
+  /**
+   * Nothing is connected: the sign-in came back refused, or the account was
+   * released after a fortnight unused (`released`, rule 63) and the rep is
+   * told to reconnect rather than that a sign-in failed.
+   */
+  | { kind: "failed"; label: "not connected"; detail: string; released?: boolean }
   /** A real account is attached, working or not. */
   | { kind: "attached"; label: string };
 
@@ -39,6 +44,7 @@ export function linkedInState(row: LinkedInRow | null | undefined): LinkedInStat
   if (!row) return { kind: "none", label: "not connected" };
   if (!row.provider_account_id) {
     if (row.status === "connecting") return { kind: "unfinished", label: "not connected" };
+    if (isIdleReleased(row)) return { kind: "failed", label: "not connected", detail: IDLE_RELEASE_TAGLINE, released: true };
     return { kind: "failed", label: "not connected", detail: row.status_detail ?? SIGN_IN_DID_NOT_HAPPEN };
   }
   // A row holding an account that an older Connect press set back to

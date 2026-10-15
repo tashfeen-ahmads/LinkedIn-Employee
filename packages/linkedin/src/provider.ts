@@ -265,6 +265,13 @@ export interface LinkedInProvider {
     limit?: number;
   }): Promise<{ invitations: PendingInvitation[]; raw: unknown; truncated: boolean }>;
   withdrawInvitation(input: { accountId: string; invitationId: string }): Promise<ActionResult>;
+  /**
+   * Disconnect an account at the provider, which stops it being billed.
+   *
+   * Only the idle release calls this (rule 63). An account the provider no
+   * longer has is already released, so that answers ok rather than failing.
+   */
+  deleteAccount(accountId: string): Promise<ActionResult>;
   sendMessage(input: { accountId: string; chatId?: string; providerId?: string; text: string }): Promise<ActionResult>;
   /**
    * Publish a post to the account holder's own profile.

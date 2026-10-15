@@ -192,6 +192,14 @@ export class MockLinkedInProvider implements LinkedInProvider {
     return { ok: true };
   }
 
+  /** Accounts released through `deleteAccount`, in order. */
+  deletedAccounts: string[] = [];
+
+  async deleteAccount(accountId: string): Promise<ActionResult> {
+    this.deletedAccounts.push(accountId);
+    return { ok: true };
+  }
+
   async sendMessage(input: { accountId: string; chatId?: string; providerId?: string; text: string }): Promise<ActionResult> {
     this.sentMessages.push(input);
     return {

@@ -606,6 +606,17 @@ export class UnipileProvider implements LinkedInProvider {
     }
   }
 
+  async deleteAccount(accountId: string): Promise<ActionResult> {
+    try {
+      await this.request(ROUTES.account(accountId), { method: "DELETE" });
+      return { ok: true };
+    } catch (err) {
+      // Already gone is the outcome being asked for.
+      if (err instanceof UnipileError && err.status === 404) return { ok: true };
+      return toActionError(err);
+    }
+  }
+
   async sendMessage(input: {
     accountId: string;
     chatId?: string;

@@ -68,6 +68,43 @@ const MUTATIONS = [
    * them LinkedIn refuses the whole invitation in a throttle's words, and every
    * account that sent in October was held for days right after its third note.
    */
+  /*
+   * An account unused for a fortnight is released at the provider (rule 63).
+   * Releasing one somebody is using cuts off their conversations, so every
+   * signal has to be old and every lookup has to have answered.
+   */
+  {
+    id: "idle/every-signal-must-be-old",
+    rule: "An account is released only when every activity signal is older than the window",
+    file: "packages/shared/src/idle-release.ts",
+    from: "  return signals.every((at) => {",
+    to: "  return signals.some((at) => {",
+    pkg: "@le/shared",
+  },
+  {
+    id: "idle/running-campaign-keeps-account",
+    rule: "An account with a running campaign is never released",
+    file: "packages/shared/src/idle-release.ts",
+    from: "  if (activity.runningCampaigns > 0) return false;",
+    to: "  void activity.runningCampaigns;",
+    pkg: "@le/shared",
+  },
+  {
+    id: "idle/unread-sign-in-keeps-account",
+    rule: "A rep whose sign-in could not be read keeps their account",
+    file: "apps/worker/src/jobs/idle-accounts.ts",
+    from: "        lastSeenAt: lastSeen.has(row.user_id) ? lastSeen.get(row.user_id) : undefined,",
+    to: "        lastSeenAt: lastSeen.get(row.user_id) ?? null,",
+    pkg: "@le/worker",
+  },
+  {
+    id: "idle/refused-release-leaves-row",
+    rule: "A release the provider refused leaves the row holding its account",
+    file: "apps/worker/src/jobs/idle-accounts.ts",
+    from: "    if (!result.ok) {",
+    to: "    if (false) {",
+    pkg: "@le/worker",
+  },
   {
     id: "notes/spent-month-sends-without-note",
     rule: "Once a free account's monthly notes are spent, the invitation goes without one",

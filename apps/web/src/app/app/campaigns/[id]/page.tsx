@@ -28,7 +28,7 @@ import { SubmitButton } from "@/components/submit-button";
 import { describeSearch } from "./search-state";
 import { describePacing } from "@/lib/pacing";
 import { campaignUsesOwnBookingLink } from "@/lib/booking-link";
-import { EXTERNAL_BOOKINGS_UNCOUNTED, FREE_NOTES_PER_MONTH, INVITE_NOTE_MAX_CHARS, MIN_SENDS_TO_COMPARE, alwaysHoldsSentence, comparisonReady, standings, profileHref } from "@le/shared";
+import { EXTERNAL_BOOKINGS_UNCOUNTED, FREE_NOTES_PER_MONTH, IDLE_RELEASE_TAGLINE, isIdleReleased, INVITE_NOTE_MAX_CHARS, MIN_SENDS_TO_COMPARE, alwaysHoldsSentence, comparisonReady, standings, profileHref } from "@le/shared";
 import { PageNotice, type NoticeParams } from "@/components/page-notice";
 import { ConfirmButton } from "@/components/confirm-button";
 import { formatDate, isoAttr } from "@/lib/format";
@@ -433,14 +433,16 @@ async function findMore(formData: FormData) {
 
   const { data: account } = await supabase
     .from("linkedin_accounts")
-    .select("status")
+    .select("status, status_detail")
     .eq("id", campaign.linkedin_account_id)
     .maybeSingle();
   if (account?.status !== "active") {
     redirect(
       errorQuery(
         `/app/campaigns/${campaignId}`,
-        "Reconnect your LinkedIn account on your profile first. Nothing can be searched until it is connected.",
+        isIdleReleased(account)
+          ? IDLE_RELEASE_TAGLINE
+          : "Reconnect your LinkedIn account on your profile first. Nothing can be searched until it is connected.",
       ),
     );
   }
@@ -676,7 +678,7 @@ async function launchState(campaignId: string, workspaceId: string) {
       .eq("status", "queued"),
     supabase
       .from("linkedin_accounts")
-      .select("status")
+      .select("status, status_detail")
       .eq("id", campaign.linkedin_account_id)
       .maybeSingle(),
   ]);
@@ -687,6 +689,7 @@ async function launchState(campaignId: string, workspaceId: string) {
     dailyInviteCap: campaign.daily_invite_cap,
     prospectCount: count ?? 0,
     accountStatus: account?.status ?? null,
+    accountReleasedIdle: isIdleReleased(account),
     inviteNotes: (queuedNotes ?? []).map((row) => row.invite_note),
   };
 }
@@ -748,7 +751,7 @@ export default async function CampaignPage({
     // answers it by asking the same limiter the sending loop asks.
     supabase
       .from("linkedin_accounts")
-      .select(`${ACCOUNT_USAGE_COLUMNS}, display_name`)
+      .select(`${ACCOUNT_USAGE_COLUMNS}, display_name, status_detail`)
       .eq("id", campaign.linkedin_account_id)
       .maybeSingle(),
     // How the last press of Find more went. The work happens in the worker, so
@@ -841,6 +844,7 @@ export default async function CampaignPage({
     dailyInviteCap: campaign.daily_invite_cap,
     prospectCount: queued.length,
     accountStatus: account?.status ?? null,
+    accountReleasedIdle: isIdleReleased(account),
     inviteNotes: queued.map((row) => row.invite_note),
   });
   // The rate the loop will actually keep: the campaign's cap, or the account's

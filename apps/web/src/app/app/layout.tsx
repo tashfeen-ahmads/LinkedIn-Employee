@@ -142,6 +142,7 @@ function initials(name: string): string {
  */
 function accountSentence(status: string, state: LinkedInState): string {
   if (state.kind === "unfinished") return "The LinkedIn sign-in was not finished, so nothing can send yet.";
+  if (state.kind === "failed" && state.released) return state.detail;
   if (state.kind === "failed") return "The LinkedIn sign-in did not go through, so no account is connected and nothing can send.";
   switch (status) {
     case "restricted":

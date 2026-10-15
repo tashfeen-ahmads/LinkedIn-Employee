@@ -1,3 +1,4 @@
+import { IDLE_RELEASE_TAGLINE } from "./idle-release.js";
 /**
  * What needs a person, as one ordered list.
  *
@@ -126,6 +127,8 @@ export interface NeedsYouFacts {
   loopStalled: boolean;
   /** A LinkedIn account exists and is active. */
   linkedInConnected: boolean;
+  /** The rep's account was released after a fortnight unused (rule 63), so the row says why and how to return. */
+  linkedInReleasedIdle?: boolean;
   /**
    * The last webhook delivery was refused, and why (rule 46).
    *
@@ -209,8 +212,12 @@ export function needsYou(facts: NeedsYouFacts): NeedsYouItem[] {
   if (!facts.linkedInConnected) {
     items.push({
       kind: "linkedin_disconnected",
-      title: "Your LinkedIn account is not connected.",
-      why: "Every invitation, message and reply goes through it, so nothing reaches anybody until it is reconnected.",
+      title: facts.linkedInReleasedIdle
+        ? "Please reconnect your LinkedIn account to start your campaigns."
+        : "Your LinkedIn account is not connected.",
+      why: facts.linkedInReleasedIdle
+        ? IDLE_RELEASE_TAGLINE
+        : "Every invitation, message and reply goes through it, so nothing reaches anybody until it is reconnected.",
       href: "/app/profile#team",
       action: "Reconnect LinkedIn",
       tone: "blocker",

@@ -512,6 +512,10 @@ describe("a campaign's daily cap is a daily cap", () => {
     // The trickle that made the cap decorative: two people eligible at the
     // first tick, more at the next, and each tick budgeting from the full cap.
     const { db, prospect } = harness({ cap: 3 });
+    // The jitter pinned: at cap 3 a whole day's pace is hours between sends,
+    // and at the top of the jitter the third no longer fits before midnight —
+    // correctly left for tomorrow, and not what this test is about.
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
     const later = new Date(NOW.getTime() + 30 * 60_000).toISOString();
     for (let i = 0; i < 3; i++) prospect({ next_action_at: later });
     prospect();

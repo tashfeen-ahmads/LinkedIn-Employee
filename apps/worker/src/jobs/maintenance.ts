@@ -10,6 +10,7 @@ import { syncCalendarFeeds } from "./calendar-feed.js";
 import { runLifecycleEmails } from "./lifecycle.js";
 import { runRetentionSweep } from "./retention.js";
 import { fillMissingNotes } from "./rewrite-notes.js";
+import { releaseIdleAccounts } from "./idle-accounts.js";
 import { enqueueOnce, jobId } from "../queues.js";
 import type { Queues } from "../queues.js";
 import { recordBeat } from "../heartbeat.js";
@@ -115,6 +116,10 @@ export async function runMaintenance(
   await step("acceptance-rates", () => flagPoorAcceptanceRates(ctx));
   await step("withdraw-stale", () => withdrawStaleInvites(ctx, now));
   await step("close-exhausted", () => closeExhaustedSequences(ctx, now));
+  // After acceptance and withdrawals, which still need the account. An account
+  // with no running campaign and nothing done for a fortnight is billed for
+  // nothing; it is released and the rep is told to reconnect (rule 63).
+  await step("release-idle-accounts", async () => (await releaseIdleAccounts(ctx, now)).released);
   await step("lifecycle-emails", () => runLifecycleEmails(ctx, now));
   // Notes the writer missed when a campaign was built, before anybody launches it.
   await step("fill-missing-notes", () => fillMissingNotes(ctx));

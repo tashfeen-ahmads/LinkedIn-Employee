@@ -5,6 +5,7 @@ import {
   readWebhookRefusal,
   type NeedsYouFacts,
 } from "../src/needs-you.js";
+import { IDLE_RELEASE_TAGLINE } from "../src/idle-release.js";
 
 /**
  * What needs a person, as one ordered list.
@@ -88,6 +89,14 @@ describe("order", () => {
       strategiesUnapproved: 2,
     });
     expect(order[0]).toBe("loop_stalled");
+  });
+
+  it("asks a rep whose idle account was released to reconnect it to start campaigns", () => {
+    const row = needsYou({ ...CALM, linkedInConnected: false, linkedInReleasedIdle: true }).find(
+      (item) => item.kind === "linkedin_disconnected",
+    );
+    expect(row?.title).toContain("reconnect");
+    expect(row?.why).toBe(IDLE_RELEASE_TAGLINE);
   });
 
   it("puts a disconnected account above the work that depends on it", () => {

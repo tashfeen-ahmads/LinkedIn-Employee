@@ -999,6 +999,11 @@ export type Database = {
         Args: { p_ticket_id: string; p_followup: string };
         Returns: undefined;
       };
+      /** When each named rep last signed in or refreshed a session. Service role only (migration 0048). */
+      account_last_seen: {
+        Args: { p_user_ids: string[] };
+        Returns: { user_id: string; last_seen_at: string | null }[];
+      };
       /** Every person on the platform, with their last sign-in. Admins only. */
       platform_users: {
         Args: Record<string, never>;

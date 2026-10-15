@@ -25,6 +25,8 @@ interface Filter {
  */
 export class FakeDb {
   readonly tables = new Map<string, Row[]>();
+  /** Makes `account_last_seen()` answer with an error, as a revoked grant would. */
+  lastSeenFails = false;
   /** Unique keys enforced on insert/upsert, mirroring the migration. */
   private readonly uniqueKeys: Record<string, string[]> = {
     prospects: ["workspace_id", "linkedin_url"],
@@ -69,6 +71,14 @@ export class FakeDb {
    * does not — the same difference the real function makes in Postgres.
    */
   async rpc(name: string, args: Row): Promise<{ data: unknown; error: { message: string } | null }> {
+    if (name === "account_last_seen") {
+      // `auth` is not a table the worker can select; tests seed what the
+      // function would read into `auth_last_seen`, or set `lastSeenFails`.
+      if (this.lastSeenFails) return { data: null, error: { message: "permission denied for schema auth" } };
+      const ids = new Set(args.p_user_ids as string[]);
+      const rows = (this.tables.get("auth_last_seen") ?? []).filter((row) => ids.has(row.user_id as string));
+      return { data: rows.map((row) => ({ user_id: row.user_id, last_seen_at: row.last_seen_at ?? null })), error: null };
+    }
     if (name !== "record_linkedin_action") {
       throw new Error(`fake-db has no implementation of ${name}()`);
     }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { INVITE_NOTE_MAX_CHARS, LINKEDIN_LIMITS } from "@le/shared";
+import { IDLE_RELEASE_TAGLINE, INVITE_NOTE_MAX_CHARS, LINKEDIN_LIMITS } from "@le/shared";
 import { daysToSendAll, launchBlockers, type LaunchState } from "../src/lib/campaign.js";
 
 function state(overrides: Partial<LaunchState> = {}): LaunchState {
@@ -61,6 +61,11 @@ describe("launchBlockers", () => {
     expect(launchBlockers(state({ accountStatus: null }))).toContain(
       "No LinkedIn account is connected to this campaign.",
     );
+  });
+
+  it("tells a rep whose idle account was released to reconnect it (rule 63)", () => {
+    const blockers = launchBlockers(state({ accountStatus: "disconnected", accountReleasedIdle: true }));
+    expect(blockers).toContain(IDLE_RELEASE_TAGLINE);
   });
 
   it("refuses to send from a restricted account, and says so", () => {

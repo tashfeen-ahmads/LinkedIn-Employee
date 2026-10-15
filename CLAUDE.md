@@ -1480,6 +1480,33 @@ tests that were verified by deliberately breaking the code.
     names our supplier and a route (rule 54), and never reaches a customer
     screen.
 
+63. **An account nobody uses is handed back, and the rep is told how to
+    return.** Every connected account is billed by the provider each month,
+    sending or not. `releaseIdleAccounts` (`apps/worker/src/jobs/idle-accounts.ts`,
+    nightly) disconnects an account at the provider (`deleteAccount`) when it
+    has no running campaign and **every** signal is older than
+    `IDLE_RELEASE_DAYS` (14): connected, last send, a campaign created, edited
+    or launched, a message in any of its conversations, and the rep's last
+    sign-in or session refresh (`account_last_seen`, migration 0048 — a
+    long-lived session never signs in again, so sign-in alone would release
+    somebody working every day). `isIdleForRelease` is pure and is the rule.
+
+    A lookup that failed is never "no activity": any read that errors releases
+    nobody that night, and a rep the sign-in lookup did not answer for is kept
+    (rule 17). Running campaigns are asked again immediately before the
+    release, and the row is marked only while it still holds the id that was
+    released, so a reconnect in between is never overwritten. A refusal leaves
+    the row exactly as it was and is raised after every other account has had
+    its turn.
+
+    A released row is `disconnected` with `IDLE_RELEASE_DETAIL` and no provider
+    id; `isIdleReleased` is the one reading of it. Every screen that would say
+    "not connected" says `IDLE_RELEASE_TAGLINE` instead — the banner, the
+    profile, the overview's list and Launch — because a rep who returns to a
+    dead account with no reason reads it as the product breaking. Reconnecting
+    is the ordinary Connect button. It is not a fault, so it never appears in
+    Issues.
+
 ## Conventions
 
 - Agent output is validated against a zod schema before it touches the

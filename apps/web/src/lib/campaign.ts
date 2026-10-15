@@ -1,4 +1,10 @@
-import { INVITE_NOTE_MAX_CHARS, LINKEDIN_LIMITS, matchExclusion, type ExclusionRule } from "@le/shared";
+import {
+  IDLE_RELEASE_TAGLINE,
+  INVITE_NOTE_MAX_CHARS,
+  LINKEDIN_LIMITS,
+  matchExclusion,
+  type ExclusionRule,
+} from "@le/shared";
 
 /**
  * What has to be true before a campaign may start sending.
@@ -14,6 +20,8 @@ export interface LaunchState {
   prospectCount: number;
   /** The status of the LinkedIn account the campaign sends from, if connected. */
   accountStatus: string | null;
+  /** The account was released after a fortnight unused (rule 63): say how to come back. */
+  accountReleasedIdle?: boolean;
   /**
    * The personalised note on each queued prospect, null where there is none.
    *
@@ -79,7 +87,9 @@ export function launchBlockers(state: LaunchState): string[] {
 
   if (state.accountStatus !== "active") {
     blockers.push(
-      state.accountStatus === null
+      state.accountReleasedIdle
+        ? IDLE_RELEASE_TAGLINE
+        : state.accountStatus === null
         ? "No LinkedIn account is connected to this campaign."
         : `The LinkedIn account for this campaign is ${state.accountStatus}.`,
     );

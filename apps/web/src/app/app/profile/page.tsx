@@ -1081,9 +1081,10 @@ export default async function ProfilePage({
               did not take — keeps its button underneath.
             */}
             {linkedIn.kind === "failed" ? (
-              <div className="notice danger">
+              <div className={linkedIn.released ? "notice warning" : "notice danger"}>
                 <p>
-                  <strong>Not connected.</strong> {linkedIn.detail}
+                  <strong>{linkedIn.released ? "Please reconnect your account." : "Not connected."}</strong>{" "}
+                  {linkedIn.detail}
                 </p>
               </div>
             ) : (
