@@ -24,6 +24,14 @@ import { join } from "node:path";
  */
 const MUTATIONS = [
   {
+    id: "reply/matched-by-our-own-chat",
+    rule: "A reply in a chat this account opened is that prospect's, even when the sender id does not match, or it is dropped without a trace",
+    file: "apps/worker/src/jobs/inbound.ts",
+    from: "    (await findByChat(ctx, job.workspaceId, account.id, job.providerChatId));",
+    to: "    null;",
+    pkg: "@le/worker",
+  },
+  {
     id: "pacing/gap-measured-from-last-send",
     rule: "The first invitation of a run is spaced from the account's last send, not from the tick, or a warmed person waits past the end of the day",
     file: "apps/worker/src/jobs/campaign-tick.ts",

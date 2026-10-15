@@ -1092,3 +1092,29 @@ describe("a webhook delivery that was accepted", () => {
     expect(checks.find((c) => c.key === "webhook-deliveries")?.state).toBe("ok");
   });
 });
+
+describe("who a reply is from", () => {
+  it("is the prospect on the other side of our own chat, even when the sender id does not match", async () => {
+    // Matched only by sender id, a reply whose sender came back in another
+    // form matched nobody and was dropped without a trace.
+    const { db, ctx, queues } = harness();
+    db.seed("conversations", [
+      { id: "conv-1", workspace_id: WORKSPACE, prospect_id: PROSPECT, linkedin_account_id: ACCOUNT, campaign_id: CAMPAIGN, provider_chat_id: "chat_1" },
+    ]);
+
+    await handleInboundMessage(ctx, queues, { ...inboundJob("Sounds interesting"), fromProviderId: "some-other-form-of-jane" });
+
+    const stored = db.rows("messages").filter((m) => m.direction === "inbound");
+    expect(stored).toHaveLength(1);
+    expect(stored[0]!.conversation_id).toBe("conv-1");
+  });
+
+  it("is counted when it matches nobody, so a dropped reply is never silent", async () => {
+    const { db, ctx, queues } = harness();
+
+    await handleInboundMessage(ctx, queues, { ...inboundJob("hi"), fromProviderId: "stranger", providerChatId: "chat_x" });
+
+    expect(db.rows("messages").filter((m) => m.direction === "inbound")).toHaveLength(0);
+    expect(db.rows("events").filter((e) => e.name === "inbound.unmatched")).toHaveLength(1);
+  });
+});

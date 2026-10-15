@@ -50,9 +50,32 @@ export async function handleInboundMessage(
     .single();
   if (!account) return;
 
-  const prospect = await findSender(ctx, job.workspaceId, job.fromProviderId);
-  // A message from someone we never contacted is not ours to answer.
-  if (!prospect) return;
+  /*
+   * Who wrote it: by the sender's LinkedIn id, and failing that by the chat.
+   *
+   * The id is one field of somebody else's payload, and the chat is one we
+   * opened ourselves: a message from the other side of a conversation this
+   * product started is a reply from that prospect whatever the sender field
+   * says. Matching only the id, a reply whose sender came back in a different
+   * form matched nobody and was dropped without a trace, while every screen
+   * read "no replies yet".
+   */
+  const prospect =
+    (await findSender(ctx, job.workspaceId, job.fromProviderId)) ??
+    (await findByChat(ctx, job.workspaceId, account.id, job.providerChatId));
+  // A message from someone we never contacted is not ours to answer, but it is
+  // counted: "nobody replied" and "replies were dropped" must not look alike.
+  // The count only, never the words or who sent them (rule 15).
+  if (!prospect) {
+    await recordEvent(db, {
+      workspaceId: job.workspaceId,
+      name: "inbound.unmatched",
+      subjectType: "linkedin_account",
+      subjectId: account.id,
+      payload: { hasSender: Boolean(job.fromProviderId), hasChat: Boolean(job.providerChatId) },
+    }).catch(() => undefined);
+    return;
+  }
 
   const conversation = await ensureConversation(ctx, {
     workspaceId: job.workspaceId,
@@ -537,6 +560,38 @@ export async function handleInboundMessage(
  * that fails is thrown, so the queue retries it and a failure past its retries
  * is listed, rather than read as a stranger's message.
  */
+/** The prospect on the other side of a chat this account already has with them. */
+async function findByChat(
+  ctx: WorkerContext,
+  workspaceId: string,
+  linkedinAccountId: string,
+  providerChatId: string,
+): ReturnType<typeof findSender> {
+  if (!providerChatId) return null;
+  const { data: conversation } = await ctx.db
+    .from("conversations")
+    .select("prospect_id")
+    .eq("workspace_id", workspaceId)
+    .eq("linkedin_account_id", linkedinAccountId)
+    .eq("provider_chat_id", providerChatId)
+    .maybeSingle();
+  if (!conversation?.prospect_id) return null;
+  const { data: row } = await ctx.db
+    .from("prospects")
+    .select("id, workspace_id, first_name, last_name, do_not_contact")
+    .eq("workspace_id", workspaceId)
+    .eq("id", conversation.prospect_id)
+    .maybeSingle();
+  if (!row) return null;
+  return {
+    id: row.id,
+    workspace_id: row.workspace_id,
+    first_name: row.first_name,
+    last_name: row.last_name,
+    do_not_contact: row.do_not_contact === true,
+  };
+}
+
 async function findSender(
   ctx: WorkerContext,
   workspaceId: string,
