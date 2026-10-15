@@ -60,7 +60,9 @@ async function loadAgent(id: string) {
   const supabase = await createClient();
   const { data } = await supabase
     .from("agents")
-    .select("id, name, model, system_prompt, from_name, playbook, custom_fields, is_default, archived_at")
+    .select(
+      "id, name, model, system_prompt, from_name, brand_name, brand_description, playbook, custom_fields, is_default, archived_at",
+    )
     .eq("id", id)
     .eq("workspace_id", session.workspaceId)
     .maybeSingle();
@@ -95,6 +97,38 @@ async function saveIdentity(formData: FormData) {
       from_name: fromName || null,
       system_prompt: systemPrompt || null,
     })
+    .eq("id", id)
+    .eq("workspace_id", session.workspaceId);
+
+  if (error) redirect(errorQuery(here, "That did not save. Please try again."));
+  revalidatePath(here);
+  redirect(noticeQuery(here, "Saved."));
+}
+
+/**
+ * The brand this agent speaks for (migration 0047).
+ *
+ * Empty is the workspace's own business, which is what every agent had until
+ * now. A name with nothing said about what the brand sells is refused rather
+ * than stored: the worker ignores it, and a field that saves and changes
+ * nothing is how a rep learns a screen is decorative.
+ */
+async function saveBrand(formData: FormData) {
+  "use server";
+  const id = String(formData.get("id") ?? "");
+  const { session, supabase, agent } = await loadAgent(id);
+  const here = `/app/agents/${id}`;
+  if (!agent) notFound();
+
+  const brandName = String(formData.get("brand_name") ?? "").trim();
+  const brandDescription = String(formData.get("brand_description") ?? "").trim();
+  if (brandName && !brandDescription) {
+    redirect(errorQuery(here, "Say what this brand sells as well as its name, or leave both empty."));
+  }
+
+  const { error } = await supabase
+    .from("agents")
+    .update({ brand_name: brandName || null, brand_description: brandDescription || null })
     .eq("id", id)
     .eq("workspace_id", session.workspaceId);
 
@@ -506,6 +540,36 @@ export default async function AgentPage({
             <span className="small muted">
               Voice, audience, and what to avoid, in your words. This is the difference between copy
               that sounds like you and copy that sounds like software.
+            </span>
+          </label>
+          <SubmitButton pendingLabel="Saving…">Save</SubmitButton>
+        </form>
+      </Section>
+
+      <Section
+        id="brand"
+        title="Brand"
+        description="Which business this agent speaks for, when it is not your workspace's own."
+      >
+        <form action={saveBrand} className="card">
+          <input type="hidden" name="id" value={id} />
+          <label className="field">
+            <span>Brand name</span>
+            <input name="brand_name" defaultValue={agent.brand_name ?? ""} maxLength={120} autoComplete="off" />
+          </label>
+          <label className="field">
+            <span>What this brand sells</span>
+            <textarea
+              name="brand_description"
+              rows={3}
+              defaultValue={agent.brand_description ?? ""}
+              maxLength={1000}
+            />
+            <span className="small muted">
+              One or two sentences: what it is and who it is for. Leave both empty and this agent
+              describes your workspace&rsquo;s own business. When set, replies and copy for this
+              agent&rsquo;s campaigns introduce this brand instead, and its facts come from this
+              agent&rsquo;s knowledge documents rather than your business profile.
             </span>
           </label>
           <SubmitButton pendingLabel="Saving…">Save</SubmitButton>

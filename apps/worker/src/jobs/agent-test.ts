@@ -1,7 +1,5 @@
-import { loadBusinessProfile } from "@le/db";
 import {
   AgentPlaybookSchema,
-  BusinessProfileSchema,
   parseCustomerProfile,
   CustomFieldSchema,
   type Agent,
@@ -9,6 +7,7 @@ import {
 } from "@le/shared";
 import { testAgentInvite, type AgentTestSubject } from "@le/agents";
 import type { WorkerContext } from "../context.js";
+import { businessFor } from "../brand.js";
 
 /**
  * Runs an agent against one prospect and reports what it would send.
@@ -124,7 +123,9 @@ export async function runAgentTest(
        * ran a second business. Through the one definition instead, which
        * picks deliberately and cannot throw for having a choice.
        */
-      loadBusinessProfile(db, input.workspaceId).then((row) => ({ data: row })),
+      // With this agent's brand overlaid, so the test writes for the product
+      // the agent's campaigns will actually be about (`businessFor`).
+      businessFor(db, input.workspaceId, input.agentId).then((spec) => ({ data: spec })),
       db
         .from("customer_profiles")
         .select("spec, approved_at")
@@ -135,8 +136,7 @@ export async function runAgentTest(
       db.from("profiles").select("full_name").eq("id", input.userId).maybeSingle(),
     ]);
 
-  const businessSpec = BusinessProfileSchema.safeParse(business?.spec);
-  if (!businessSpec.success) {
+  if (!business) {
     return refuse("Add your business profile first — the agent writes from it.");
   }
   const profileSpec = parseCustomerProfile(profiles?.[0]?.spec);
@@ -152,7 +152,7 @@ export async function runAgentTest(
 
   const result = await testAgentInvite(ctx.agentsFor(input.workspaceId), {
     agent,
-    business: businessSpec.data,
+    business,
     profile: profileSpec.data,
     repName: profile?.full_name ?? "",
     openers,

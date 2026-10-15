@@ -316,6 +316,71 @@ describe("the knowledge a reply is written from", () => {
   });
 });
 
+describe("the business a reply introduces", () => {
+  /*
+   * One workspace, two agents, two brands, one business profile (rule 37).
+   * Handed the workspace's profile, brand B's reply introduced Acme and argued
+   * Acme's proof points to somebody who had only ever heard of B.
+   */
+  function twoBrands(db: FakeDb) {
+    db.seed("agents", [
+      {
+        id: "agent-a",
+        workspace_id: WORKSPACE,
+        name: "Brand A",
+        brand_name: "Alpha Audits",
+        brand_description: "Alpha Audits runs free LinkedIn profile audits for consultants.",
+        playbook: {},
+        custom_fields: [],
+        archived_at: null,
+      },
+      {
+        id: "agent-b",
+        workspace_id: WORKSPACE,
+        name: "Brand B",
+        brand_name: "Beta Bookings",
+        brand_description: "Beta Bookings fills dentists' empty appointment slots.",
+        playbook: {},
+        custom_fields: [],
+        archived_at: null,
+      },
+      { id: "agent-plain", workspace_id: WORKSPACE, name: "Plain", playbook: {}, custom_fields: [], archived_at: null },
+    ]);
+    db.find("business_profiles", { workspace_id: WORKSPACE })!.spec = {
+      ...(db.find("business_profiles", { workspace_id: WORKSPACE })!.spec as object),
+      proofPoints: ["Acme doubled pipeline for 40 agencies"],
+    };
+  }
+  const handed = () => (draftMock.mock.calls[0]![1] as { business: { companyName: string; oneLiner: string; proofPoints: string[] } }).business;
+
+  it("is agent B's brand on agent B's campaign, not agent A's or the workspace's", async () => {
+    const { db, ctx, queues } = harness();
+    twoBrands(db);
+    db.find("campaigns", { id: CAMPAIGN })!.agent_id = "agent-b";
+
+    await handleInboundMessage(ctx, queues, inboundJob("Sounds interesting"));
+
+    expect(draftMock).toHaveBeenCalledTimes(1);
+    expect(handed().companyName).toBe("Beta Bookings");
+    expect(handed().oneLiner).toBe("Beta Bookings fills dentists' empty appointment slots.");
+    const whole = JSON.stringify(handed());
+    expect(whole).not.toContain("Alpha Audits");
+    // The workspace's facts belong to the workspace's product.
+    expect(whole).not.toContain("Acme doubled pipeline");
+  });
+
+  it("is the workspace's own business for an agent with no brand", async () => {
+    const { db, ctx, queues } = harness();
+    twoBrands(db);
+    db.find("campaigns", { id: CAMPAIGN })!.agent_id = "agent-plain";
+
+    await handleInboundMessage(ctx, queues, inboundJob("Sounds interesting"));
+
+    expect(handed().companyName).toBe("Acme");
+    expect(handed().proofPoints).toEqual(["Acme doubled pipeline for 40 agencies"]);
+  });
+});
+
 describe("a reply job id held by a finished job", () => {
   async function approvedDraft(db: FakeDb) {
     db.seed("conversations", [{ id: "conv-1", workspace_id: WORKSPACE, prospect_id: PROSPECT, linkedin_account_id: ACCOUNT }]);

@@ -15,7 +15,8 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "eval:classify": "tsx evals/run-classification.ts"
+    "eval:classify": "tsx evals/run-classification.ts",
+    "eval:fit": "tsx evals/run-fit-score.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.124.0",

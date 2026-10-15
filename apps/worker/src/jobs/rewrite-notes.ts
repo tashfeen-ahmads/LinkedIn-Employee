@@ -1,13 +1,12 @@
 import { personalizeInvites } from "@le/agents";
-import { loadBusinessProfile } from "@le/db";
 import {
-  BusinessProfileSchema,
   parseCustomerProfile,
   type ProspectCandidate,
 } from "@le/shared";
 import type { WorkerContext } from "../context.js";
 import { recordEvent } from "../context.js";
 import { agentForCampaign, modelFor, openersFor, voiceOf } from "../agent.js";
+import { businessFor } from "../brand.js";
 
 /**
  * Write the connection notes again, for the people a campaign has not invited yet.
@@ -90,9 +89,9 @@ export async function rewriteCampaignNotes(
     };
   }
 
-  const profileRow = await loadBusinessProfile(db, input.workspaceId);
-  const business = BusinessProfileSchema.safeParse(profileRow?.spec);
-  if (!business.success) {
+  // The campaign's agent's brand when it speaks for one (`businessFor`).
+  const business = await businessFor(db, input.workspaceId, campaign.agent_id ?? null);
+  if (!business) {
     return { ok: false, reason: "Tell us what you sell first — the notes are written from your business profile." };
   }
 
@@ -210,9 +209,9 @@ export async function rewriteCampaignNotes(
   try {
     for (const group of groups.values()) {
       const written = await personalizeInvites(ctx.agentsFor(input.workspaceId), {
-        business: business.data,
+        business,
         profile: customer.data,
-        repName: agent?.fromName?.trim() || rep?.full_name || business.data.companyName,
+        repName: agent?.fromName?.trim() || rep?.full_name || business.companyName,
         campaignAngle: group.angle,
         hooks: group.hooks.length ? group.hooks : customer.data.hooks,
         voice: voiceOf(agent),

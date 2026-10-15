@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { AUTOPILOT_ALWAYS_HOLDS } from "@le/shared";
 import { BreadcrumbSchema } from "@/components/schema";
 import { Glance, PageHero } from "@/components/marketing";
 import { LEGAL, LegalDocument, LegalEmail, type LegalSection } from "@/components/legal";
@@ -172,11 +173,14 @@ const SECTIONS: ReadonlyArray<LegalSection> = [
           judges safe are sent without review. Either way, you are responsible for the messages sent
           from your account, including those sent automatically under settings you chose.
         </p>
-        <p>
-          Some things always wait for a person, whatever your settings: a prospect who asks to speak to
-          a human and a message Nora did not understand. A request to be removed always stops
-          everything.
-        </p>
+        <p>Whatever your settings, the following are never left to autopilot:</p>
+        <ul>
+          {AUTOPILOT_ALWAYS_HOLDS.map((hold) => (
+            <li key={hold.id}>
+              <strong>{hold.title}</strong> {hold.detail}
+            </li>
+          ))}
+        </ul>
       </>
     ),
   },

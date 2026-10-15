@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { alwaysHoldsSentence } from "@le/shared";
 import { ArticleLayout, articleMeta, type Faq, type Source } from "@/components/article";
 import { AudMore, AudNote, AudStats, AudSteps } from "@/components/seo/aud-blocks";
 import { FIRST_MONTH_TOTAL, FIRST_MONTH_WEEKS, FOLLOW_UP_MINUTES } from "@/components/seo/aud-first-month";
@@ -143,7 +144,7 @@ export default function Page() {
         within a couple of hours, and it does not pitch. When someone replies, Nora drafts an answer
         from your knowledge documents and a person approves it. You can switch on autopilot so clean
         replies go out on their own; pricing, legal and negative replies still wait for you by
-        default, an opt-out stops all contact, and anyone who asks for a human gets one. Calls are
+        default. {alwaysHoldsSentence()} Calls are
         booked on Nora&rsquo;s booking page or through your own scheduling link.
       </p>
 

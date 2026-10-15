@@ -11,7 +11,7 @@ import type { ReactNode } from "react";
 export const LEGAL = {
   entity: "Nova First Technologies",
   email: "brian@virtualpros.com",
-  updated: "October 13, 2026",
+  updated: "October 15, 2026",
 } as const;
 
 export interface LegalSection {

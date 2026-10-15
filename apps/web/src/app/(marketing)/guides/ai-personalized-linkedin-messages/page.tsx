@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { HOOK_MAX_CHARS, INVITE_NOTE_MAX_CHARS, MIN_SENDS_TO_COMPARE, PITCH_MAX_CHARS } from "@le/shared";
+import { HOOK_MAX_CHARS, INVITE_NOTE_MAX_CHARS, MIN_SENDS_TO_COMPARE, PITCH_MAX_CHARS, alwaysHoldsSentence } from "@le/shared";
 import { ArticleLayout, articleMeta, type Faq, type Source } from "@/components/article";
 import { RewritePairs } from "@/components/seo/ga1-diagrams";
 import { LINKEDIN_NOTE_LIMITS } from "@/lib/note-check";
@@ -295,8 +295,8 @@ export default function Page() {
         When someone replies, the answer has to be about their message. Nora drafts each reply from the documents you
         gave it and from an approved one-line offer of up to {PITCH_MAX_CHARS} characters, adapted to the question
         rather than pasted under it, and you approve the draft before it goes. You can switch on autopilot so clean
-        replies go out on their own; pricing questions, legal questions and anything the agent could not read
-        confidently can still wait for you. If Lena replied &ldquo;Mostly past clients, tracked in a spreadsheet. Why
+        replies go out on their own; pricing questions and legal questions can still wait for you.{" "}
+        {alwaysHoldsSentence()} If Lena replied &ldquo;Mostly past clients, tracked in a spreadsheet. Why
         do you ask?&rdquo;, a good reply would answer the &ldquo;why&rdquo; in one or two sentences tied to the
         spreadsheet, not restate the whole offer.
       </p>

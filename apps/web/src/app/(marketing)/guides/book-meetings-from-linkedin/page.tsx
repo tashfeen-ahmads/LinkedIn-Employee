@@ -9,6 +9,7 @@ import {
   LINKEDIN_LIMITS,
   OPT_OUT_PHRASES,
   PITCH_MAX_CHARS,
+  alwaysHoldsSentence,
   containsLink,
 } from "@le/shared";
 
@@ -470,8 +471,7 @@ export default function Page() {
         <li>
           <strong>A gate decides who answers.</strong> By default a person approves every reply before it
           sends. Even with that switched off, pricing, legal and negative messages wait for a person unless
-          the workspace chooses otherwise, and two holds never lift: a message the agent is not confident it
-          understood, and a prospect who asks to speak to a human.
+          the workspace chooses otherwise. {alwaysHoldsSentence()}
         </li>
         <li>
           <strong>The draft answers the question first,</strong> uses only facts from your business profile

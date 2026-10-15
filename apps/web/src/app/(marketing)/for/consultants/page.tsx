@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { INVITE_NOTE_MAX_CHARS, PITCH_MAX_CHARS } from "@le/shared";
+import { INVITE_NOTE_MAX_CHARS, PITCH_MAX_CHARS, alwaysHoldsSentence } from "@le/shared";
 import { ArticleLayout, articleMeta, type Faq, type Source } from "@/components/article";
 import { AudMore, AudNote, AudStats, AudSteps } from "@/components/seo/aud-blocks";
 import { FIRST_MONTH_TOTAL, FOLLOW_UP_MINUTES } from "@/components/seo/aud-first-month";
@@ -106,7 +106,7 @@ export default function Page() {
       <p>
         Nora drafts each reply only from your documents, and by default you approve it before it
         goes. Switch on autopilot and clean replies go out on their own; pricing, legal and negative
-        replies still wait for you by default. You can use Nora&rsquo;s booking page or your existing
+        replies still wait for you by default. {alwaysHoldsSentence()} You can use Nora&rsquo;s booking page or your existing
         Calendly or Cal.com link. Bookings made on another site are not visible to Nora, and the
         screens say so rather than showing zero meetings. The{" "}
         <Link href="/guides/book-meetings-from-linkedin">guide to booking meetings from LinkedIn</Link>{" "}

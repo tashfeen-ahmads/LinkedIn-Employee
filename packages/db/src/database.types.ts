@@ -740,6 +740,13 @@ export type AgentRow = {
   system_prompt: string | null;
   /** Who the message appears to come from, which is not always a full name. */
   from_name: string | null;
+  /**
+   * The brand this agent speaks for (migration 0047), overlaid on the
+   * workspace's business profile by `businessFor`. Null or an empty
+   * description means the workspace's own business.
+   */
+  brand_name: string | null;
+  brand_description: string | null;
   /** AgentPlaybook. Shape enforced in code, never by a check constraint. */
   playbook: Json;
   /** CustomField[] — the merge fields this workspace fills from its own data. */

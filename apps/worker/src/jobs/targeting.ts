@@ -16,6 +16,7 @@ import {
 import { describeRefusal, isAccountGone } from "@le/linkedin";
 import { markAccountGone } from "../accounts.js";
 import { agentForCampaign, modelFor, openersFor, voiceOf } from "../agent.js";
+import { brandOf, withBrand } from "../brand.js";
 import type { WorkerContext } from "../context.js";
 import { recordEvent } from "../context.js";
 import { loadExclusions } from "../exclusions.js";
@@ -486,9 +487,14 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
    * is the trade, rather than loosening the rule for every call in the
    * product. Once only: twice means it is the prompt.
    */
+  // The copy is written for the brand of the agent this campaign will run on
+  // (the workspace default, assigned below). The scorer above kept the
+  // strategy's own business: who would buy is the strategy's question.
+  const planBusiness =
+    withBrand(business, await brandOf(db, job.workspaceId, await defaultAgentId(ctx, job.workspaceId))) ?? business;
   const askForPlan = () =>
     buildCampaign(ctx.agentsFor(job.workspaceId), {
-      business,
+      business: planBusiness,
       profile,
       repName,
       dailyInviteCap: Math.min(LINKEDIN_LIMITS.invitesPerDayMax, 20),
@@ -1095,6 +1101,10 @@ async function attachProspects(
      */
     const agent = await agentForCampaign(ctx.db, input.campaignId);
     const agentOpeners = await openersFor(ctx.db, job.workspaceId, agent);
+    // The note introduces the agent's brand when it speaks for one, never the
+    // workspace's other product (`businessFor`'s overlay).
+    const noteBusiness =
+      withBrand(input.business, await brandOf(ctx.db, job.workspaceId, agent?.id ?? null)) ?? input.business;
 
     /*
      * The model the agent asked for, if this deployment can serve it.
@@ -1127,7 +1137,7 @@ async function attachProspects(
 
     for (const group of groups) {
       const written = await personalizeInvites(ctx.agentsFor(job.workspaceId), {
-        business: input.business,
+        business: noteBusiness,
         profile: input.profile,
         // The name a prospect reads is the agent's when it has one. A full
         // legal name reads like a signature block; a first name reads like a

@@ -7,7 +7,6 @@ import {
   type ConversationTurn,
 } from "@le/agents";
 import {
-  BusinessProfileSchema,
   parseCustomerProfile,
   RulesOfEngagementSchema,
   canTransition,
@@ -20,6 +19,7 @@ import type { WorkerContext } from "../context.js";
 import { pitchFor } from "../pitch.js";
 import { agentForCampaign, voiceOf } from "../agent.js";
 import { knowledgeFor } from "../knowledge.js";
+import { businessFor } from "../brand.js";
 import { recordEvent } from "../context.js";
 import { flagForHuman } from "../holds.js";
 import { enqueueOnce, jobId } from "../queues.js";
@@ -235,7 +235,9 @@ export async function handleInboundMessage(
   // is written without knowing that, so it waits for the person who now has
   // to sort the meeting out.
   let bookingHeld: string | null = null;
-  const business = await loadBusinessProfile(ctx, job.workspaceId);
+  // The campaign's agent's brand over the workspace's business, so a reply on
+  // brand B's campaign never introduces brand A (`businessFor`).
+  const business = await businessFor(ctx.db, job.workspaceId, agent?.id ?? null);
   if (!business) {
     await holdWithoutDraft(ctx, job.workspaceId, conversation.id, inbound.id as string, "no business profile configured");
     return;
@@ -845,19 +847,6 @@ async function loadHistory(
 
 async function loadKnowledge(ctx: WorkerContext, workspaceId: string, agentId: string | null) {
   return knowledgeFor(ctx.db, workspaceId, agentId);
-}
-
-async function loadBusinessProfile(ctx: WorkerContext, workspaceId: string) {
-  const { data } = await ctx.db
-    .from("business_profiles")
-    .select("spec")
-    .eq("workspace_id", workspaceId)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (!data) return null;
-  const parsed = BusinessProfileSchema.safeParse(data.spec);
-  return parsed.success ? parsed.data : null;
 }
 
 async function loadCustomerProfile(ctx: WorkerContext, id: string) {

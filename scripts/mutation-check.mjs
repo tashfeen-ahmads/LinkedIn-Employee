@@ -488,6 +488,22 @@ const MUTATIONS = [
     pkg: "@le/worker",
   },
   {
+    id: "brand/agent-business-overlay",
+    rule: "A reply on one agent's campaign introduces that agent's brand, never the workspace's other business (migration 0047)",
+    file: "apps/worker/src/brand.ts",
+    from: "  return withBrand(parsed.success ? parsed.data : null, brand);",
+    to: "  return withBrand(parsed.success ? parsed.data : null, null);",
+    pkg: "@le/worker",
+  },
+  {
+    id: "brand/agent-business-own-workspace",
+    rule: "An agent's brand is read inside its own workspace, never by a bare agent id",
+    file: "apps/worker/src/brand.ts",
+    from: '    .eq("id", agentId)\n    .eq("workspace_id", workspaceId)\n    .maybeSingle();',
+    to: '    .eq("id", agentId)\n    .maybeSingle();',
+    pkg: "@le/worker",
+  },
+  {
     id: "export/calendar-feed-by-host-only",
     rule: "A workspace export never carries a calendar feed's address, not even as ciphertext (rule 19)",
     file: "apps/worker/src/jobs/retention.ts",
@@ -4806,6 +4822,27 @@ const MUTATIONS = [
     from: "  using (is_platform_admin());",
     to: "  using (workspace_id in (select current_workspace_ids()));",
     pkg: "@le/db",
+  },
+  /*
+   * Workspace import. An approval is a statement by a person about particular
+   * text in a particular workspace, so nothing a file brings in arrives
+   * approved (rules 9 and 40).
+   */
+  {
+    id: "import/imported-approvals-are-cleared",
+    rule: "An imported strategy arrives unapproved, so nothing is searched for until somebody here approves it (rule 9)",
+    file: "apps/worker/src/jobs/import-workspace.ts",
+    from: "        approved_at: null,\n        cta_kind: profile.cta_kind",
+    to: "        approved_at: new Date().toISOString(),\n        cta_kind: profile.cta_kind",
+    pkg: "@le/worker",
+  },
+  {
+    id: "import/imported-line-approvals-are-cleared",
+    rule: "An imported pitch or opener arrives unapproved, so it is never sent until somebody here approves it (rule 40)",
+    file: "apps/worker/src/jobs/import-workspace.ts",
+    from: "          approved_at: null,\n          approved_by: null,",
+    to: "          approved_at: new Date().toISOString(),\n          approved_by: null,",
+    pkg: "@le/worker",
   },
 ];
 

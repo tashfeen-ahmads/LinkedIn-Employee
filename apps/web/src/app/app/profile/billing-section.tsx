@@ -57,11 +57,37 @@ export async function BillingSection() {
             saved to disk as if it were the export.
           */}
           {["owner", "admin"].includes(session.role) ? (
-            <p>
-              <a className="btn secondary small" href="/app/export">
-                Download workspace export
-              </a>
-            </p>
+            <>
+              <p>
+                <a className="btn secondary small" href="/app/export">
+                  Download workspace export
+                </a>
+              </p>
+              {/*
+                A plain form post to a route, not a server action: an action's
+                body is capped at a megabyte and its id changes every deploy.
+                Configuration and the do-not-contact list only — never anybody's
+                prospects or conversations — and everything a person approves
+                arrives unapproved.
+              */}
+              <form action="/app/import" method="post" encType="multipart/form-data">
+                <p className="small muted">
+                  Import an export file into this workspace: agents, knowledge, calls to action, pitches,
+                  openers and strategies, plus everyone on its exclusion list or already contacted. Prospects,
+                  campaigns, conversations and team members are not imported, and strategies, pitches and
+                  openers arrive unapproved so you can check them first. Up to 5 MB.
+                </p>
+                <div className="row">
+                  <label className="sr-only" htmlFor="import-file">
+                    Export file
+                  </label>
+                  <input id="import-file" name="file" type="file" accept="application/json,.json" required />
+                  <button className="btn secondary small" type="submit">
+                    Import
+                  </button>
+                </div>
+              </form>
+            </>
           ) : (
             <p className="tiny subtle">An owner or an admin can download this.</p>
           )}

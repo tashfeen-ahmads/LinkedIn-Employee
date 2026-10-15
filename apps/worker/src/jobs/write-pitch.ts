@@ -1,7 +1,6 @@
 import { writePitch, PITCH_PROMPT_VERSION } from "@le/agents";
-import { loadBusinessProfile } from "@le/db";
-import { BusinessProfileSchema } from "@le/shared";
 import type { WorkerContext } from "../context.js";
+import { businessFor } from "../brand.js";
 import { recordEvent } from "../context.js";
 import { knowledgeFor } from "../knowledge.js";
 
@@ -40,10 +39,11 @@ export async function writeWorkspacePitch(
   ctx: WorkerContext,
   input: WritePitchInput,
 ): Promise<WritePitchResult> {
-  const profileRow = await loadBusinessProfile(ctx.db, input.workspaceId);
-
-  const parsed = BusinessProfileSchema.safeParse(profileRow?.spec);
-  if (!parsed.success) {
+  // The agent's brand when it speaks for one, the workspace's business
+  // otherwise: an offer line for brand B written from brand A's profile is an
+  // offer for a product the prospect was never shown.
+  const business = await businessFor(ctx.db, input.workspaceId, input.agentId ?? null);
+  if (!business) {
     // Named, not guessed at. Without a business profile the agent would write
     // pitches for a company it knows nothing about — fluent, entirely
     // invented, and then offered to a person for approval as though they had
@@ -91,7 +91,7 @@ export async function writeWorkspacePitch(
 
   const agents = ctx.agentsFor(input.workspaceId);
   const set = await writePitch(agents, {
-    business: parsed.data,
+    business,
     knowledge: knowledge ?? [],
     repName: rep?.full_name ?? undefined,
     hooks,

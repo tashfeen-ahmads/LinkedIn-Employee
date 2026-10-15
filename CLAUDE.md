@@ -697,6 +697,16 @@ tests that were verified by deliberately breaking the code.
     because "asked for four and stored one" needs looking into and "stored
     four" does not.
 
+    One business profile per workspace does not mean one brand. An agent may
+    carry its own `brand_name` and `brand_description` (migration 0047), and
+    `businessFor` (`apps/worker/src/brand.ts`) lays them over the workspace's
+    profile wherever a writer is handed "the company" for that agent's work —
+    replies, pitches, openers, invite notes, the agent test. A branded profile
+    drops the workspace's pricing, proof points and differentiators rather
+    than lending them to another product (rule 11); an empty description is
+    the workspace's own business. Strategies never read it: they still hang
+    off the one business profile.
+
 38. **One stylesheet, one definition per class.** A class declared twice is
     not a duplicate, it is a silent override: the later rule wins on source
     order, the earlier one stops mattering, and it happens on a page nobody

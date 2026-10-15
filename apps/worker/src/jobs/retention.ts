@@ -296,8 +296,9 @@ type ExportedTable =
  * Every query is filtered by `workspace_id` here, because the worker holds the
  * service role and row-level security will not do it.
  *
- * There is no re-import. The file is a faithful copy, not a backup the product
- * can restore from.
+ * The file is a faithful copy, not a backup the product can restore from.
+ * `importWorkspace` (import-workspace.ts) brings back its configuration and
+ * suppression list only, unapproved, into the importer's own workspace.
  */
 export async function exportWorkspace(ctx: WorkerContext, workspaceId: string): Promise<WorkspaceExport> {
   const { db } = ctx;

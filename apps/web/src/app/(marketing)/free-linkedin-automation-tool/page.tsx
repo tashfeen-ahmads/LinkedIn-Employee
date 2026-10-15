@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { INVITE_NOTE_MAX_CHARS } from "@le/shared";
+import { INVITE_NOTE_MAX_CHARS, alwaysHoldsSentence } from "@le/shared";
 import { ArticleLayout, Callout, CompareTable, articleMeta, type Faq, type Source } from "@/components/article";
 import { SoftwareSchema } from "@/components/schema";
 import { AudStats, AudSteps } from "@/components/seo/aud-blocks";
@@ -109,7 +109,7 @@ export default function Page() {
           <span>Follow-ups after an acceptance, and a reply drafted
           from your own documents for each answer, for you to approve. Switch on autopilot and clean
           replies go out on their own; pricing, legal and negative replies are still held for you by
-          default.</span>
+          default. {alwaysHoldsSentence()}</span>
         </li>
         <li>
           <strong>Meetings</strong>

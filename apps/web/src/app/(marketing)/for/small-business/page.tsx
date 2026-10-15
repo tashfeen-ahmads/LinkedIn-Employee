@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { alwaysHoldsSentence } from "@le/shared";
 import { ArticleLayout, articleMeta, type Faq, type Source } from "@/components/article";
 import { AudMore, AudNote, AudStats, AudSteps } from "@/components/seo/aud-blocks";
 import { FIRST_MONTH_TOTAL, FIRST_MONTH_WEEKS, FOLLOW_UP_MINUTES } from "@/components/seo/aud-first-month";
@@ -90,8 +91,7 @@ export default function Page() {
         {FOLLOW_UP_MINUTES.max} minutes after Nora notices, within working hours, and does not pitch.
         When they reply, the draft uses only the facts in your knowledge documents, makes the offer
         you approved, and either proposes real times from your booking page or sends your own
-        scheduling link. An opt-out stops all contact at once, and anyone who asks for a person gets
-        you.
+        scheduling link. {alwaysHoldsSentence()}
       </p>
 
       <h2 id="first-month">Your first month, by the numbers</h2>

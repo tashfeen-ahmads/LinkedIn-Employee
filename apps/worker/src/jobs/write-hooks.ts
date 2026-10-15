@@ -1,7 +1,6 @@
 import { writeHooks, HOOK_PROMPT_VERSION } from "@le/agents";
-import { loadBusinessProfile } from "@le/db";
-import { BusinessProfileSchema } from "@le/shared";
 import type { WorkerContext } from "../context.js";
+import { businessFor } from "../brand.js";
 import { recordEvent } from "../context.js";
 
 export interface WriteHooksInput {
@@ -35,10 +34,9 @@ export async function writeWorkspaceHooks(
   ctx: WorkerContext,
   input: WriteHooksInput,
 ): Promise<WriteHooksResult> {
-  const profileRow = await loadBusinessProfile(ctx.db, input.workspaceId);
-
-  const parsed = BusinessProfileSchema.safeParse(profileRow?.spec);
-  if (!parsed.success) {
+  // The agent's brand when it speaks for one (`businessFor`).
+  const business = await businessFor(ctx.db, input.workspaceId, input.agentId ?? null);
+  if (!business) {
     return {
       ok: false,
       reason: "Tell us what you sell first — the openers are written from your business profile.",
@@ -82,7 +80,7 @@ export async function writeWorkspaceHooks(
 
   const agents = ctx.agentsFor(input.workspaceId);
   const set = await writeHooks(agents, {
-    business: parsed.data,
+    business,
     profiles: audiences,
     repName: rep?.full_name ?? undefined,
     instruction: input.instruction?.trim() || undefined,

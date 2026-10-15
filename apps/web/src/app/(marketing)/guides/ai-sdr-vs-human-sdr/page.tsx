@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { INVITE_NOTE_MAX_CHARS } from "@le/shared";
+import { INVITE_NOTE_MAX_CHARS, alwaysHoldsSentence } from "@le/shared";
 import { ArticleLayout, articleMeta, CompareTable, type Faq, type Source } from "@/components/article";
 import { CostBars } from "@/components/seo/ga1-diagrams";
 import {
@@ -224,8 +224,7 @@ export default function Page() {
           <strong>You choose which replies wait for you.</strong> By default Nora drafts each reply
           from your documents and you approve it before it goes. You can switch on autopilot so clean
           replies go out on their own, while replies about pricing, legal questions and negative replies
-          still wait for a person; a workspace can release those too. Two kinds always wait whatever the setting: a message the agent could not
-          read confidently, and a prospect asking to speak to a human. An opt-out stops everything.
+          still wait for a person; a workspace can release those too. {alwaysHoldsSentence()}
         </li>
         <li>
           <strong>The agent cannot invent facts.</strong> It answers only from the documents you give

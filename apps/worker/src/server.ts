@@ -33,6 +33,8 @@ import { connectCalendarFeed, disconnectCalendarFeed } from "./jobs/calendar-fee
 import { reconcileAccount, recordObservedAccounts, recoverAccounts, refreshAccountPlan } from "./accounts.js";
 import { runDiagnostics } from "./jobs/diagnostics.js";
 import { eraseProspect, exportWorkspace } from "./jobs/retention.js";
+import { IMPORT_MAX_BYTES, importWorkspace } from "./jobs/import-workspace.js";
+import { bodyLimit } from "hono/body-limit";
 import { inviteEmail, verifyUnsubscribeToken } from "@le/email";
 import { trySend } from "./email.js";
 import { sendAccountEmails } from "./jobs/lifecycle.js";
@@ -237,6 +239,11 @@ const EraseRequest = LinkRequest.extend({
 });
 
 const ExportRequest = LinkRequest;
+
+// The file is checked field by field in `importWorkspace`; here it is only
+// required to be an object, so a version mismatch is answered in words rather
+// than as "invalid request".
+const ImportRequest = LinkRequest.extend({ file: z.unknown() });
 
 const CheckoutRequest = LinkRequest.extend({
   plan: z.enum(["solo", "pro", "teams"]),
@@ -1529,6 +1536,41 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
 
     return c.json(await exportWorkspace(ctx, parsed.data.workspaceId));
   });
+
+  // Configuration and suppression from an export, into the caller's own
+  // workspace. Owners and admins only, checked here as well as on the page:
+  // the shared secret proves the caller is the web app, not that this member
+  // may rewrite the workspace's strategies and exclusion list.
+  app.post(
+    "/jobs/import-workspace",
+    // The file plus the envelope around it. The page caps the file itself.
+    bodyLimit({
+      maxSize: IMPORT_MAX_BYTES + 1024 * 1024,
+      onError: (c) => c.json({ error: "That file is too large to import. The limit is 5 MB." }, 413),
+    }),
+    async (c) => {
+      const parsed = ImportRequest.safeParse(await c.req.json().catch(() => null));
+      if (!parsed.success) return c.json({ error: "invalid request" }, 400);
+      const { data: member } = await ctx.db
+        .from("memberships")
+        .select("role")
+        .eq("workspace_id", parsed.data.workspaceId)
+        .eq("user_id", parsed.data.userId)
+        .maybeSingle();
+      if (!member) return c.json({ error: "not a member of that workspace" }, 403);
+      if (!["owner", "admin"].includes(member.role)) {
+        return c.json({ error: "Only an owner or admin can import into a workspace." }, 403);
+      }
+
+      const result = await importWorkspace(ctx, {
+        workspaceId: parsed.data.workspaceId,
+        userId: parsed.data.userId,
+        raw: parsed.data.file,
+      });
+      if (!result.ok) return c.json({ error: result.error }, 422);
+      return c.json(result);
+    },
+  );
 
   
   

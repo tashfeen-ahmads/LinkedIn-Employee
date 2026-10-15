@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { MIN_SENDS_TO_COMPARE } from "@le/shared";
+import { MIN_SENDS_TO_COMPARE, alwaysHoldsSentence } from "@le/shared";
 import { ArticleLayout, articleMeta, type Faq, type Source } from "@/components/article";
 import { AudMore, AudNote, AudStats, AudSteps } from "@/components/seo/aud-blocks";
 import { FIRST_MONTH_TOTAL, FIRST_MONTH_WEEKS, FOLLOW_UP_MINUTES } from "@/components/seo/aud-first-month";
@@ -93,8 +93,8 @@ export default function Page() {
         &ldquo;Does it integrate with...&rdquo; answered wrongly reaches a buyer looking exactly like a
         right answer. Nora drafts replies only from your knowledge documents, and a document too long
         to fit is left out whole rather than cut off, so a draft never quotes half a pricing page. By
-        default you approve each draft; with autopilot on, clean replies go out on their own. A draft
-        carrying a link Nora was not given is held for you either way.
+        default you approve each draft; with autopilot on, clean replies go out on their own.{" "}
+        {alwaysHoldsSentence()}
       </p>
       <p>
         The goal can be a demo or a sign-up link. A link campaign never proposes a call, and a demo

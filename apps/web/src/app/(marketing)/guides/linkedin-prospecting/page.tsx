@@ -4,7 +4,7 @@ import { ArticleLayout, articleMeta, Callout, CompareTable, type Faq, type Sourc
 import { ProspectingGates } from "@/components/seo/gb2-funnel";
 import { Gb1Message } from "@/components/seo/gb1-visuals";
 import { PUBLIC_LIMITS } from "@/lib/site";
-import { INVITE_NOTE_MAX_CHARS, LINKEDIN_LIMITS } from "@le/shared";
+import { INVITE_NOTE_MAX_CHARS, LINKEDIN_LIMITS, alwaysHoldsSentence } from "@le/shared";
 import { dailyInviteCap } from "@le/linkedin";
 
 const PATH = "/guides/linkedin-prospecting";
@@ -372,7 +372,7 @@ export default function Page() {
         From there, answer the question they asked, offer two or three real times rather than
         &ldquo;a quick call sometime&rdquo;, and stop the moment anyone says no. Nora drafts each reply from your own documents
         for you to approve, unless you switch on autopilot for clean replies. It checks every reply for an opt-out in code
-        before any model reads it, and a prospect who asks for a person is always handed to one. If you also have someone&rsquo;s
+        before any model reads it. {alwaysHoldsSentence()} If you also have someone&rsquo;s
         email address, that is a second channel worth using by hand; Nora works on LinkedIn only. Our guide on{" "}
         <Link href="/guides/book-meetings-from-linkedin">booking meetings from LinkedIn</Link> covers
         the last mile in detail.

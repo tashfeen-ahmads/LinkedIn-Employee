@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { DEFAULT_WORKING_HOURS, LINKEDIN_LIMITS, PITCH_MAX_CHARS } from "@le/shared";
+import { DEFAULT_WORKING_HOURS, LINKEDIN_LIMITS, PITCH_MAX_CHARS, alwaysHoldsSentence } from "@le/shared";
 import { ArticleLayout, articleMeta, CompareTable, type Faq, type Source } from "@/components/article";
 import { Gb1Pairs, Gb1Situations, clock } from "@/components/seo/gb1-visuals";
 import { PUBLIC_LIMITS } from "@/lib/site";
@@ -254,8 +254,7 @@ export default function Page() {
         has read and approved, kept to {PITCH_MAX_CHARS} characters because it is read in a chat window on
         a phone, and adapted to the question they asked rather than pasted underneath it. If you switch on
         autopilot, clean replies go out on their own, while pricing, legal terms or anything negative can
-        still be held for a person, and anyone who says &ldquo;remove me&rdquo;
-        or similar is never written to again. If they ask for a meeting, the times offered come from a real
+        still be held for a person. {alwaysHoldsSentence()} If they ask for a meeting, the times offered come from a real
         calendar, never invented by a model. The{" "}
         <Link href="/guides/book-meetings-from-linkedin">guide to booking meetings from LinkedIn replies</Link>{" "}
         covers that step.
