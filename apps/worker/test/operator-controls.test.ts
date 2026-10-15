@@ -225,4 +225,28 @@ describe("console controls", () => {
     expect((await runAdminControl(ctx, queues, ADMIN, { op: "account-clear-hold", accountId: ACCOUNT })).ok).toBe(true);
     expect(db.find("linkedin_accounts", { id: ACCOUNT })?.invites_paused_until).toBeNull();
   });
+
+  it("releases the invitation parked on the hold, and only the first", async () => {
+    // Parked until the hold's old end, it read as "one invitation is on its
+    // way" and the account sent nothing for ten hours after the hold was gone.
+    const { ctx, db } = harness(false);
+    db.find("linkedin_accounts", { id: ACCOUNT })!.invites_paused_until = "2026-09-10T00:00:00Z";
+    const promoted: string[] = [];
+    const parked = (id: string, delay: number) => ({
+      data: { kind: "invite", campaignProspectId: id },
+      timestamp: Date.now(),
+      delay,
+      promote: async () => void promoted.push(id),
+    });
+    const { queues } = fakeQueues();
+    (queues.linkedinAction as unknown as { getJobs: () => Promise<unknown[]> }).getJobs = async () => [
+      parked("someone-else", 1_000),
+      parked(CP, 10 * 60 * 60_000),
+    ];
+
+    const result = await runAdminControl(ctx, queues, ADMIN, { op: "account-clear-hold", accountId: ACCOUNT });
+
+    expect(result.ok).toBe(true);
+    expect(promoted).toEqual([CP]);
+  });
 });

@@ -183,9 +183,10 @@ export async function runAdminControl(
         subjectId: account.id,
         payload: { by: "operator", was: account.invites_paused_until },
       }).catch(() => undefined);
+      const woken = await wakeParkedInvite(db, queues, account.id).catch(() => false);
       return {
         ok: true,
-        detail: "Hold cleared. If LinkedIn is still refusing, the next refusal puts it straight back — that is the safety working.",
+        detail: `Hold cleared${woken ? " and the waiting invitation released" : ""}. If LinkedIn is still refusing, the next refusal puts it straight back: that is the safety working.`,
       };
     }
     case "user-password-reset": {
@@ -299,4 +300,40 @@ export async function queueStats(queues: Queues): Promise<QueueStats | null> {
   } catch {
     return null;
   }
+}
+
+/**
+ * The invitation parked on a hold that has just been cleared, released now.
+ *
+ * Invitations refused by a hold are rescheduled to its end. Cleared early,
+ * they stay parked until a time that now means nothing, and while the account
+ * is probing the loop waits for that one invitation before placing another:
+ * three live accounts read "one invitation is on its way" for ten hours while
+ * nothing was. Only the earliest is released: it is the probe, and every check
+ * on the send path still runs when it does.
+ */
+async function wakeParkedInvite(db: WorkerContext["db"], queues: Queues, accountId: string): Promise<boolean> {
+  const queue = queues.linkedinAction as unknown as {
+    getJobs?: (types: readonly string[]) => Promise<
+      Array<{ data?: { kind?: string; campaignProspectId?: string }; timestamp?: number; delay?: number; promote?: () => Promise<void> } | null>
+    >;
+  };
+  if (typeof queue.getJobs !== "function") return false;
+  const parked = (await queue.getJobs(["delayed"])).filter(
+    (job): job is NonNullable<typeof job> => Boolean(job?.data?.campaignProspectId && job.data.kind === "invite"),
+  );
+  if (!parked.length) return false;
+  const { data: campaigns } = await db.from("campaigns").select("id").eq("linkedin_account_id", accountId);
+  const ours = new Set((campaigns ?? []).map((c) => c.id));
+  if (!ours.size) return false;
+  const { data: rows } = await db
+    .from("campaign_prospects")
+    .select("id, campaign_id")
+    .in("id", parked.map((job) => job.data!.campaignProspectId!));
+  const onAccount = new Set((rows ?? []).filter((r) => ours.has(r.campaign_id)).map((r) => r.id));
+  const due = (job: (typeof parked)[number]) => Number(job.timestamp ?? 0) + Number(job.delay ?? 0);
+  const first = parked.filter((job) => onAccount.has(job.data!.campaignProspectId!)).sort((a, b) => due(a) - due(b))[0];
+  if (!first || typeof first.promote !== "function") return false;
+  await first.promote();
+  return true;
 }

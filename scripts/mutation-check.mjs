@@ -23,6 +23,14 @@ import { join } from "node:path";
  * sentence about the product rather than a diff.
  */
 const MUTATIONS = [
+  {
+    id: "notes/clear-hold-releases-parked-probe",
+    rule: "Clearing a hold releases the invitation parked on it, or a probing account waits for the old hold's end",
+    file: "apps/worker/src/jobs/admin-control.ts",
+    from: "  await first.promote();",
+    to: "  void first;",
+    pkg: "@le/worker",
+  },
   /*
    * A free LinkedIn account's monthly invitation notes (migration 0045). Past
    * them LinkedIn refuses the whole invitation in a throttle's words, and every
