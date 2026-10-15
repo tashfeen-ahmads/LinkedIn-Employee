@@ -242,3 +242,21 @@ describe("after LinkedIn has refused this account", () => {
     expect([...jobs.values()].some((j) => j.data.kind === "warm_up")).toBe(true);
   });
 });
+
+describe("views late in the day", () => {
+  it("buys no more views than can still be invited before close", async () => {
+    // Half past three, hours to five: room for one invitation to follow a
+    // view, not two. The second view used to go stale overnight.
+    vi.useFakeTimers();
+    const now = new Date("2026-10-07T15:30:00Z");
+    vi.setSystemTime(now);
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
+    const { db, prospect } = harness(now, { warmUp: true, firstActionAt: null, account: { working_hours: WORKING } });
+    for (let i = 0; i < 10; i++) prospect();
+    const { jobs, queues } = memoryQueue();
+
+    await runCampaignTick(db.asDb(), queues, now);
+
+    expect([...jobs.values()].filter((j) => j.data.kind === "warm_up").length).toBeLessThanOrEqual(1);
+  });
+});

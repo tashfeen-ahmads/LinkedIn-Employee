@@ -24,6 +24,30 @@ import { join } from "node:path";
  */
 const MUTATIONS = [
   {
+    id: "pacing/gap-measured-from-last-send",
+    rule: "The first invitation of a run is spaced from the account's last send, not from the tick, or a warmed person waits past the end of the day",
+    file: "apps/worker/src/jobs/campaign-tick.ts",
+    from: "    const next = delay + Math.max(0, gap - sinceLast);",
+    to: "    const next = delay + gap;",
+    pkg: "@le/worker",
+  },
+  {
+    id: "pacing/views-only-what-can-be-invited",
+    rule: "Views are bought only for invitations that can follow inside the window and before close, or the rest go stale and are viewed twice",
+    file: "apps/worker/src/jobs/campaign-tick.ts",
+    from: "      followable - pendingOnAccount,\n",
+    to: "",
+    pkg: "@le/worker",
+  },
+  {
+    id: "pacing/never-faster-than-a-whole-day",
+    rule: "A late start sends fewer invitations today, never the whole day's allowance squeezed into the afternoon",
+    file: "packages/linkedin/src/rate-limit.ts",
+    from: "  return Math.max(left, fullDay);",
+    to: "  return left;",
+    pkg: "@le/linkedin",
+  },
+  {
     id: "notes/clear-hold-releases-parked-probe",
     rule: "Clearing a hold releases the invitation parked on it, or a probing account waits for the old hold's end",
     file: "apps/worker/src/jobs/admin-control.ts",
@@ -3855,8 +3879,8 @@ const MUTATIONS = [
     id: "pacing/a-day-is-spread-across-the-day",
     rule: "A day's invitation allowance is paced across the working day, never fired consecutively — a daily ceiling with no pacing underneath it is a burst with a maximum size, and it is what got the first live account throttled for five days",
     file: "apps/worker/src/jobs/campaign-tick.ts",
-    from: "    const next = delay + spreadGapMs({ remaining: budget, windowMs });",
-    to: "    const next = delay + nextGapMs();",
+    from: "    const gap = spreadGapMs({\n      remaining: budget,\n      windowMs,\n",
+    to: "    const gap = spreadGapMs({\n      remaining: budget,\n      windowMs: 0,\n",
     pkg: "@le/worker",
   },
   {
@@ -3871,8 +3895,8 @@ const MUTATIONS = [
     id: "pacing/the-allowance-fits-inside-the-day",
     rule: "The jitter's ceiling is in the divisor, so even a day drawing high every time places its last invitation inside the rep's hours instead of after them",
     file: "packages/linkedin/src/rate-limit.ts",
-    from: "  return input.windowMs / (remaining * SPREAD_JITTER_HIGH);",
-    to: "  return input.windowMs / remaining;",
+    from: "  const left = input.windowMs / (remaining * SPREAD_JITTER_HIGH);",
+    to: "  const left = input.windowMs / remaining;",
     pkg: "@le/linkedin",
   },
   {

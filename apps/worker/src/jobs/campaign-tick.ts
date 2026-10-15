@@ -17,7 +17,9 @@ import {
   localDayStart,
   nextGapMs,
   spreadGapMs,
+  invitePaceMs,
   warmStillCounts,
+  workingDayMs,
   workingMsLeftToday,
   workingMsAhead,
 } from "@le/linkedin";
@@ -28,7 +30,7 @@ import { resetCountersIfNeeded, toUsage, type AccountRecord, ACCOUNT_USAGE_COLUM
 import { recordBeat } from "../heartbeat.js";
 import { outreachPause } from "../platform.js";
 import { HELD_FOR_PITCH } from "../pitch.js";
-import { WARM_MARGIN_MS, viewFitsToday } from "../warm.js";
+import { INVITE_FOLLOW_MS, WARM_FOLLOW_SPAN_MS, WARM_MARGIN_MS, viewFitsToday } from "../warm.js";
 
 /**
  * The pacing loop. Runs every few minutes and, for each running campaign, asks
@@ -518,12 +520,42 @@ async function enqueueWarmUps(
   const viewJobsOnAccount = [...inFlight.warms.values()].filter((job) => job.accountId === campaign.linkedin_account_id).length;
 
   const viewsLeft = LINKEDIN_LIMITS.profileViewsPerDay - usage.profileViewsToday - viewJobsOnAccount;
+  /*
+   * ...and no more than the invitations that can follow inside the window.
+   *
+   * Views run a few minutes apart and invitations are spread across the day,
+   * so a morning's views for the whole allowance had invitations falling due
+   * hours after the four that make a view a warm-up: the later ones went
+   * stale and those people were viewed again the next day. Only as many are
+   * viewed as the pace can invite before the first view expires; the rest are
+   * viewed later in the day, as invitations take the ones already bought.
+   */
+  const gap = invitePaceMs({
+    remaining: Math.max(1, Math.min(room.accountCap, room.weeklyLeft)),
+    windowMs: workingMsLeftToday(now, usage.workingHours, usage.timezone),
+    dayMs: workingDayMs(usage.workingHours),
+    dayAllowance: dailyInviteCap(usage.firstActionAt, now),
+  });
+  // The span is also bounded by the day: late in the afternoon a view's
+  // invitation has only what is left before close, and two views ripening
+  // into the same last half hour leave one of them to go stale overnight.
+  const followSpan = Math.min(
+    WARM_FOLLOW_SPAN_MS,
+    workingMsAhead(now, usage.workingHours, usage.timezone) - LINKEDIN_LIMITS.warmUpToInviteMinMs - INVITE_FOLLOW_MS,
+  );
+  const followable =
+    gap === null
+      ? Number.POSITIVE_INFINITY
+      : followSpan < 0
+        ? 0
+        : Math.floor(followSpan / Math.max(gap, LINKEDIN_LIMITS.minGapMs)) + 1;
   const budget = Math.max(
     0,
     Math.min(
       viewsLeft,
       Math.min(room.accountCap, room.weeklyLeft) - pendingOnAccount,
       room.campaignLeft - pendingOnCampaign,
+      followable - pendingOnAccount,
     ),
   );
   if (budget === 0) {
@@ -829,7 +861,25 @@ async function enqueueInvites(
      * nobody chose. Divided by the allowance, the rate is the same whether a
      * tick finds ten or one, which is what makes it a pace.
      */
-    const next = delay + spreadGapMs({ remaining: budget, windowMs });
+    const gap = spreadGapMs({
+      remaining: budget,
+      windowMs,
+      dayMs: workingDayMs(usage.workingHours),
+      dayAllowance: dailyInviteCap(usage.firstActionAt, now),
+    });
+    /*
+     * The gap is between two sends, so the first of a run is measured from the
+     * account's last action, not from this tick. Measured from now, a person
+     * who became invitable fifty minutes after the last invitation waited a
+     * whole further gap, which late in the day landed after hours: the view
+     * bought for them went stale overnight and they were viewed again the
+     * next morning.
+     */
+    const sinceLast =
+      added + revived + pending === 0 && lastPlaced === 0 && usage.lastActionAt
+        ? Math.max(0, now.getTime() - usage.lastActionAt.getTime())
+        : 0;
+    const next = delay + Math.max(0, gap - sinceLast);
     /*
      * Never later than the warm-up still counts.
      *
@@ -849,6 +899,15 @@ async function enqueueInvites(
     // A warmed prospect whose slot falls after hours is skipped rather than
     // parked: the morning would send it on a view gone stale overnight. The
     // loop re-warms them tomorrow.
+    /*
+     * A warmed person is invited before the day ends rather than left to go
+     * stale, provided the ordinary gap still fits: the view is already spent,
+     * and an invitation following it at the floor is better than a second
+     * view of the same person tomorrow.
+     */
+    if (at > lastSlot && campaign.warm_up && !probing && row.warmed_at && lastSlot >= delay + LINKEDIN_LIMITS.minGapMs) {
+      at = lastSlot;
+    }
     if (at > lastSlot) {
       deferred++;
       continue;

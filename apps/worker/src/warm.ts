@@ -48,3 +48,10 @@ export function warmUpWaitMs(
 export function viewFitsToday(workingMsLeft: number): boolean {
   return warmUpWaitMs(() => 0, workingMsLeft) !== null;
 }
+
+/**
+ * How long after a view its invitation can still be placed: from the earliest
+ * the send path allows after a view to the latest the loop places one.
+ */
+export const WARM_FOLLOW_SPAN_MS =
+  LINKEDIN_LIMITS.warmUpToInviteMaxMs - WARM_MARGIN_MS - LINKEDIN_LIMITS.warmUpToInviteMinMs;

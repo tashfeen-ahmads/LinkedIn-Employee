@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { LINKEDIN_LIMITS } from "@le/shared";
-import { spreadGapMs } from "../src/rate-limit.js";
+import { invitePaceMs, spreadGapMs } from "../src/rate-limit.js";
 
 /**
  * The day's allowance is spread across the day, not fired consecutively.
@@ -115,5 +115,25 @@ describe("spreadGapMs", () => {
     const gap = spreadGapMs({ remaining: 0, windowMs: 8 * HOUR, random: fixed(0.5) });
     expect(Number.isFinite(gap)).toBe(true);
     expect(gap).toBeGreaterThan(0);
+  });
+});
+
+describe("a whole working day's pace is the fastest", () => {
+  const HOUR = 3_600_000;
+  it("a late start is paced as the full day, not squeezed into the afternoon", () => {
+    // Ten a day over an eight-hour day, launched with 3.6 hours left.
+    const squeezed = invitePaceMs({ remaining: 10, windowMs: 3.6 * HOUR })!;
+    const paced = invitePaceMs({ remaining: 10, windowMs: 3.6 * HOUR, dayMs: 8 * HOUR, dayAllowance: 10 })!;
+    expect(paced).toBeGreaterThan(squeezed);
+    expect(paced).toBeCloseTo((8 * HOUR) / (10 * 1.4), -3);
+  });
+  it("changes nothing when the day's own share is already slower", () => {
+    const early = invitePaceMs({ remaining: 3, windowMs: 8 * HOUR, dayMs: 8 * HOUR, dayAllowance: 10 })!;
+    expect(early).toBeCloseTo((8 * HOUR) / (3 * 1.4), -3);
+  });
+  it("ignores a day it cannot read", () => {
+    const base = invitePaceMs({ remaining: 10, windowMs: 2 * HOUR })!;
+    expect(invitePaceMs({ remaining: 10, windowMs: 2 * HOUR, dayMs: Number.NaN, dayAllowance: 10 })).toBe(base);
+    expect(invitePaceMs({ remaining: 10, windowMs: 2 * HOUR, dayMs: 8 * HOUR, dayAllowance: 0 })).toBe(base);
   });
 });

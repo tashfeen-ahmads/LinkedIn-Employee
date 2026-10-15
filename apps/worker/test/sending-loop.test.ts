@@ -542,7 +542,10 @@ describe("a campaign's daily cap is a daily cap", () => {
     await runCampaignTick(db.asDb(), queues, NOW);
     await runCampaignTick(db.asDb(), queues, new Date(NOW.getTime() + 5 * 60_000));
 
-    expect(jobs.size).toBe(LINKEDIN_LIMITS.invitesPerDayStart);
+    // Never the allowance twice. Fewer than all of it is the pace: what does
+    // not fit the rest of today at a whole day's spacing is placed tomorrow.
+    expect(jobs.size).toBeGreaterThan(0);
+    expect(jobs.size).toBeLessThanOrEqual(LINKEDIN_LIMITS.invitesPerDayStart);
   });
 
   it("holds the cap at the moment of sending, so Send one now cannot pass it", async () => {

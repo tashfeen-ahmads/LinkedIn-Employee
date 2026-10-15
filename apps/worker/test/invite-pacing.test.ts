@@ -215,3 +215,49 @@ describe("a day's invitations, across the day", () => {
     expect(placed[0]).toBeLessThan(2 * 3_600_000);
   });
 });
+
+describe("a campaign launched in the afternoon", () => {
+  it("never sends faster than a whole working day's pace, and leaves the rest for tomorrow", async () => {
+    /*
+     * A never-used free account launched at 1:21 in the afternoon, hours nine
+     * to five. Divided by what was left of the day, its first ten went sixteen
+     * to eighteen minutes apart; LinkedIn refused the fourth. A whole day of
+     * ten is forty-eight minutes apart, and that is now the fastest it goes:
+     * the afternoon gets the share of the day it has, not the whole day's.
+     */
+    const launch = new Date("2026-09-23T13:21:00Z");
+    const db = harness(10, launch);
+    const account = db.find("linkedin_accounts", { id: ACCOUNT })!;
+    account.first_action_at = null;
+    account.working_hours = { start: 9, end: 17, days: [1, 2, 3, 4, 5] };
+    const { queues, added } = fakeQueues();
+
+    await runCampaignTick(db.asDb(), queues, launch);
+
+    const placed = delays(added);
+    expect(placed.length).toBeGreaterThan(0);
+    const fullDayPace = (8 * 3_600_000) / 10;
+    for (let i = 1; i < placed.length; i += 1) {
+      // The jitter may draw low, but never below its own floor of the full-day pace.
+      expect(placed[i] - placed[i - 1]).toBeGreaterThanOrEqual(fullDayPace * (0.6 / 1.4) - 1);
+    }
+    expect(placed.every((d) => launch.getTime() + d < Date.parse("2026-09-23T17:00:00Z"))).toBe(true);
+  });
+});
+
+describe("the gap is between two sends", () => {
+  it("measures the first invitation of a run from the last send, not from this tick", async () => {
+    // The last invitation went out fifty minutes ago. Waiting a whole further
+    // gap from now pushed a warmed person past the end of the day.
+    vi.spyOn(Math, "random").mockReturnValue(0.5);
+    const db = harness(10, MORNING);
+    db.find("linkedin_accounts", { id: ACCOUNT })!.last_action_at = new Date(MORNING.getTime() - 50 * 60_000).toISOString();
+    const { queues, added } = fakeQueues();
+
+    await runCampaignTick(db.asDb(), queues, MORNING);
+
+    const placed = delays(added);
+    expect(placed[0]).toBeLessThan(5 * 60_000);
+    vi.restoreAllMocks();
+  });
+});

@@ -4,6 +4,7 @@ import {
   dailyInviteCap,
   invitePaceMs,
   toUsage,
+  workingDayMs,
   workingMsLeftToday,
   type AccountRecord,
 } from "@le/linkedin";
@@ -291,6 +292,8 @@ function paceMs(
   return invitePaceMs({
     remaining,
     windowMs: workingMsLeftToday(now, usage.workingHours, usage.timezone),
+    dayMs: workingDayMs(usage.workingHours),
+    dayAllowance: dailyInviteCap(usage.firstActionAt, now),
   });
 }
 

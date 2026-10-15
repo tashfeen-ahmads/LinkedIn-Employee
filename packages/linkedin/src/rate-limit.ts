@@ -215,6 +215,20 @@ export interface InvitePace {
   remaining: number;
   /** Working milliseconds left today. */
   windowMs: number;
+  /**
+   * The whole working day, and the whole of today's allowance across it.
+   *
+   * Together they are the slowest a full day would ever send, and the pace is
+   * never faster than that. Divided by what is left alone, a campaign launched
+   * at one in the afternoon packed a full day's allowance into the afternoon:
+   * a never-used account sent three invitations sixteen minutes apart on its
+   * first day and LinkedIn refused the fourth. A late start now sends fewer
+   * invitations today rather than the same number faster; what does not fit
+   * is placed tomorrow (rule 61). Optional so a caller that does not know its
+   * day keeps the old reading.
+   */
+  dayMs?: number;
+  dayAllowance?: number;
 }
 
 /**
@@ -234,7 +248,18 @@ export interface InvitePace {
 export function invitePaceMs(input: InvitePace): number | null {
   if (!Number.isFinite(input.windowMs) || input.windowMs <= 0) return null;
   const remaining = Math.max(1, Math.floor(input.remaining));
-  return input.windowMs / (remaining * SPREAD_JITTER_HIGH);
+  const left = input.windowMs / (remaining * SPREAD_JITTER_HIGH);
+  const dayMs = Number(input.dayMs);
+  const allowance = Number(input.dayAllowance);
+  if (!Number.isFinite(dayMs) || dayMs <= 0 || !Number.isFinite(allowance) || allowance < 1) return left;
+  const fullDay = dayMs / (Math.floor(allowance) * SPREAD_JITTER_HIGH);
+  return Math.max(left, fullDay);
+}
+
+/** The length of the rep's working day, for `InvitePace.dayMs`. */
+export function workingDayMs(hours: { start: number; end: number }): number {
+  const span = (Math.min(24, hours.end) - Math.max(0, hours.start)) * 3_600_000;
+  return span > 0 ? span : 0;
 }
 
 export function spreadGapMs(input: InvitePace & { random?: () => number }): number {

@@ -1045,6 +1045,19 @@ tests that were verified by deliberately breaking the code.
     hours that make it a warm-up, and the spacing that matters there is the
     per-prospect wait stamped after the view, not the gap between two views.
 
+    **Never faster than a whole day's pace** (`dayMs`/`dayAllowance` on
+    `InvitePace`). Divided only by what was left, a campaign launched at 1:21
+    in the afternoon packed a never-used account's first ten into the
+    afternoon, sixteen minutes apart, and LinkedIn refused the fourth. A late
+    start now sends fewer today, not the same number faster. And the gap is
+    **between two sends**: the first of a run is measured from the account's
+    last action, not from the tick.
+
+    Views are bought only for invitations that can follow them: no more than
+    the pace can invite inside the warm-up window and before close. Views for
+    the whole allowance in a morning cluster, with invitations spread across
+    the day, left the later ones stale and those people were viewed twice.
+
     `invitePaceMs` is one definition with two readers, for rule 21's reason.
     The loop jitters it into a delay; `describePacing` states it as the wait
     somebody is about to sit through. Read off `checkAction` alone the campaign
