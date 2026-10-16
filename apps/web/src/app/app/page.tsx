@@ -15,7 +15,6 @@ import { readFunnelData } from "@/lib/funnel-data";
 import { canSeeTeamFunnel, scopeFunnel } from "@/lib/funnel-scope";
 import { StrategyStatus } from "@/components/strategy-status";
 import { TeamPanel } from "@/components/team-panel";
-import { NavIcon } from "@/components/icons";
 import type { TeamFacts } from "@/lib/team";
 
 import { DailyReportSection } from "./report-section";
@@ -188,23 +187,12 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
         reading Results used to open with, moved up rather than repeated.
       */}
       {/*
-        Sales Navigator, offered to a working account that searches without it.
-        Not a NeedsYou row: nothing is stopped (rule 50), the lists are only
-        broader. Gone the moment it is turned on.
+        The Sales Navigator question is asked once, on onboarding's LinkedIn
+        step, and kept on the profile. It used to be asked again here on every
+        visit to anybody who had answered "no" — a setup prompt for a setting
+        that was already set. A campaign built without it says so on its own
+        page, where it explains the list.
       */}
-      {account?.status === "active" && !account.has_sales_navigator ? (
-        <div className="sn-strip" role="note">
-          <NavIcon name="prospects" className="sn-strip-icon" />
-          <p className="small">
-            <strong>Have Sales Navigator?</strong> Your searches run on regular LinkedIn, which
-            cannot filter by seniority or company size. Turn it on for tighter lists.
-          </p>
-          <Link className="btn secondary small" href="/app/profile#sales-navigator">
-            Turn on Sales Navigator
-          </Link>
-        </div>
-      ) : null}
-
       <HeadlineStats report={report} ownBookingLink={ownBookingLink} />
 
       {/*
@@ -267,6 +255,10 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
                         <span className="pill">Not pursuing</span>
                       ) : profile.approved_at ? (
                         <span className="pill positive">Approved</span>
+                      ) : profiles.some((p) => p.approved_at) ? (
+                        // One is approved, so this is an option rather than a
+                        // job waiting on anybody: no warning colour (rule 65).
+                        <span className="pill">Not used yet</span>
                       ) : (
                         <span className="pill warning">Needs review</span>
                       )}

@@ -87,13 +87,16 @@ async function saveIdentity(formData: FormData) {
   // Checked here as well as offered in the select, because a form posts
   // whatever it posts. A model missing from the price table costs null and
   // never zero, and a reader takes a null cost for a free one.
-  if (!isSelectableModel(model)) redirect(errorQuery(here, "Pick one of the models in the list."));
+  // Empty is the deployment's own model, chosen at send time: what every agent
+  // seeded at onboarding carries, so refusing it made the agent page unsavable
+  // until somebody picked a model they had no reason to choose.
+  if (model && !isSelectableModel(model)) redirect(errorQuery(here, "Pick one of the models in the list."));
 
   const { error } = await supabase
     .from("agents")
     .update({
       name,
-      model,
+      model: model || null,
       from_name: fromName || null,
       system_prompt: systemPrompt || null,
     })
@@ -523,7 +526,7 @@ export default async function AgentPage({
           <label className="field">
             <span>Model</span>
             <select name="model" defaultValue={agent.model ?? ""}>
-              <option value="">Pick a model…</option>
+              <option value="">Automatic (recommended)</option>
               {SELECTABLE_MODELS.map((model) => (
                 <option key={model} value={model}>
                   {model}

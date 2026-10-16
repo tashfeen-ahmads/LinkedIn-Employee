@@ -1614,6 +1614,23 @@ tests that were verified by deliberately breaking the code.
     written onto every strategy that has no campaign yet and again onto the
     one approved, so the search writes its copy toward it (rule 29).
 
+    **Every answer lands where the app reads it**, or the app asks for it
+    again and the person reads setup as broken. Sage seeds the agent at the
+    first step, so the voice step writes the name and description onto it too
+    (`carryVoiceToAgent`, also from Profile; the bio line is one definition,
+    `withRepBio`). The CTA step makes the entry Calls to action lists
+    (`ensureCta`) and points strategies, and through `targeting.ts` their
+    campaigns, at it; migration 0050 did the same for every workspace whose
+    library was empty. The launch step shows the agent's seeded opener and
+    offer and approves exactly those words on the press (matched on the body
+    posted, rule 40). Screens that read the wrong thing were corrected rather
+    than the data bent to them: spare strategies are options once one is
+    approved (`needsYou`, the team panel, the overview), an agent on the
+    deployment's model is "Automatic" rather than missing one, the pitch page
+    counts an agent's approved lines, Availability falls back to the profile's
+    timezone, How it works ignores optional steps, and the overview no longer
+    asks the Sales Navigator question the LinkedIn step already asked.
+
     Launching ends on `/app?tour=1`: a ten-stop tour of the real pages
     (`WALKTHROUGH`, `components/walkthrough.tsx`), driven by `?tour=N` so each
     stop is an ordinary page load, never modal, startable again from How it

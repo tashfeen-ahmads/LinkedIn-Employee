@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   agentGaps,
+  REP_BIO_PREFIX,
+  withRepBio,
   blankAgent,
   isReservedFieldKey,
   isSelectableModel,
@@ -95,6 +97,8 @@ describe("what an agent still needs", () => {
     // Listed rather than returned as a boolean: "not ready" with no reason
     // sends somebody hunting through four sections of a form.
     expect(agentGaps(ready, { approvedOpeners: 1, approvedPitches: 1 })).toEqual([]);
+    // The deployment's own model: what an agent seeded at onboarding carries.
+    expect(agentGaps({ ...ready, model: null }, { approvedOpeners: 1, approvedPitches: 1 })).toEqual([]);
   });
 });
 
@@ -107,5 +111,24 @@ describe("custom merge fields", () => {
 
   it("allows a name the product does not already fill", () => {
     expect(isReservedFieldKey("chapter_name")).toBe(false);
+  });
+});
+
+describe("the rep's description inside the agent's voice", () => {
+  const base = "Write like a person.";
+  it("adds it when there was none, as the seed does", () => {
+    expect(withRepBio(base, "I run a studio.")).toBe(`${base}\n\n${REP_BIO_PREFIX}I run a studio.`);
+    expect(withRepBio(base, "  ")).toBe(base);
+  });
+
+  it("replaces the line written from the previous description, never duplicating it", () => {
+    const seeded = withRepBio(base, "Old me.");
+    expect(withRepBio(seeded, "New me.", "Old me.")).toBe(`${base}\n\n${REP_BIO_PREFIX}New me.`);
+    expect(withRepBio(seeded, null, "Old me.")).toBe(base);
+  });
+
+  it("leaves a line somebody edited by hand alone", () => {
+    const edited = `${base}\n\n${REP_BIO_PREFIX}Hand-written.`;
+    expect(withRepBio(edited, "New me.", "Old me.")).toBe(edited);
   });
 });

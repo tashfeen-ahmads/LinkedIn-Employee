@@ -175,13 +175,21 @@ export function teamStatus(f: TeamFacts): { lead: TeamStatus } & Record<MemberKe
       ? { status: "Reading your business and writing strategies.", state: "working" }
       : f.strategyPhase === "failed"
         ? { status: "Could not finish reading your business. Try again.", state: "blocked" }
-        : f.strategiesAwaiting > 0
+        : f.strategiesApproved > 0
           ? {
-              status: `${plural(f.strategiesAwaiting, "strategy", "strategies")} waiting for your approval.`,
-              state: "waiting",
+              // With one approved the rest are more people to go after, not a
+              // job waiting on anybody (as in needsYou).
+              status:
+                f.strategiesAwaiting > 0
+                  ? `${plural(f.strategiesApproved, "strategy", "strategies")} approved, ${f.strategiesAwaiting} more ready when you want them.`
+                  : `${plural(f.strategiesApproved, "strategy", "strategies")} approved.`,
+              state: "done",
             }
-          : f.strategiesApproved > 0
-            ? { status: `${plural(f.strategiesApproved, "strategy", "strategies")} approved.`, state: "done" }
+          : f.strategiesAwaiting > 0
+            ? {
+                status: `${plural(f.strategiesAwaiting, "strategy", "strategies")} waiting for your approval.`,
+                state: "waiting",
+              }
             : { status: "Waiting to hear what you sell.", state: "waiting" };
 
   const scout: TeamStatus =

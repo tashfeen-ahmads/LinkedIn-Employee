@@ -57,6 +57,7 @@ const ERRORS: Record<string, string> = {
   name: "Your name is what a prospect sees the invitation come from, so it cannot be blank.",
   "cta-kind": "Choose what your campaigns ask for.",
   handling: "Choose who answers replies: you, or Nora on its own.",
+  "copy-changed": "The opener or offer changed since this page loaded, so nothing was launched. Read it again, then launch.",
   "cta-url": "A link campaign needs a web address we can send, like yoursite.com/offer. Check it and try again.",
   "booking-url": "That scheduling link is not a web address we can send. Check it, or leave it blank.",
   "approve-failed": "That strategy could not be approved. Reload the page and try again.",
@@ -585,6 +586,7 @@ async function launchReview(workspaceId: string): Promise<LaunchReview | null> {
 
   const kind = (campaign.cta_kind ?? "meeting") as keyof typeof CTA_DEFINITIONS;
   return {
+    lines: await linesAwaitingApproval(workspaceId),
     campaignId: campaign.id,
     name: campaign.name,
     people: state?.prospectCount ?? 0,
@@ -599,4 +601,54 @@ async function launchReview(workspaceId: string): Promise<LaunchReview | null> {
     steps: sequence.map((s) => ({ n: s.step_number, delayDays: s.delay_days, message: s.message })),
     blockers: state ? launchBlockers(state) : ["That campaign could not be read."],
   };
+}
+
+/**
+ * The opener and the offer Sage seeded on the workspace's agent, if nobody has
+ * approved them yet — the newest of each.
+ *
+ * They are what the invitation writer leans on and what a prospect hears when
+ * they ask what this is, and they arrive unapproved because an approval is a
+ * person reading those exact words (rule 40). Nothing in setup showed them, so
+ * every workspace finished onboarding into "an offer and an opener are waiting
+ * for you". Shown here, they are read on the screen that launches, and the
+ * launch approves the words that were on it.
+ */
+async function linesAwaitingApproval(workspaceId: string): Promise<LaunchReview["lines"]> {
+  const supabase = await createClient();
+  const { data: agent } = await supabase
+    .from("agents")
+    .select("id")
+    .eq("workspace_id", workspaceId)
+    .eq("is_default", true)
+    .is("archived_at", null)
+    .limit(1)
+    .maybeSingle();
+  if (!agent) return [];
+  const [{ data: hook }, { data: pitch }] = await Promise.all([
+    supabase
+      .from("hooks")
+      .select("id, body")
+      .eq("workspace_id", workspaceId)
+      .eq("agent_id", agent.id)
+      .is("approved_at", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    supabase
+      .from("pitches")
+      .select("id, body")
+      .eq("workspace_id", workspaceId)
+      .eq("agent_id", agent.id)
+      .is("approved_at", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  ]);
+  const lines: LaunchReview["lines"] = [];
+  if (hook?.body?.trim()) lines.push({ table: "hooks", id: hook.id, body: hook.body, title: "How the invitations open" });
+  if (pitch?.body?.trim()) {
+    lines.push({ table: "pitches", id: pitch.id, body: pitch.body, title: "What it says when somebody asks what this is" });
+  }
+  return lines;
 }

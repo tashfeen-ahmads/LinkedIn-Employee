@@ -212,7 +212,11 @@ export const TOUR_STAGES: readonly TourStage[] = [
 
 /** Where the reader actually is: the first stage whose setup step is undone. */
 export function currentStage(state: OnboardingState): TourStage | null {
-  return TOUR_STAGES.find((stage) => stage.step !== null && !state[stage.step]) ?? null;
+  // Only a step that stops something. The knowledge base is optional, and
+  // counted here it pinned every workspace that had finished setup on the
+  // reply stage, with a warning and a button to the Inbox.
+  const required = new Set(ONBOARDING_STEPS.filter((step) => step.required).map((step) => step.key));
+  return TOUR_STAGES.find((stage) => stage.step !== null && required.has(stage.step) && !state[stage.step]) ?? null;
 }
 
 /**

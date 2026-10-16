@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/workspace";
 import { planFlags } from "@/lib/approve";
 import { AUTONOMY_ROLES, setAutonomy } from "@/lib/autonomy";
+import { carryVoiceToAgent } from "@/lib/agent-voice";
 import { createClient } from "@/lib/supabase-server";
 import { callWorker, errorQuery, noticeQuery, startedNotice } from "@/lib/worker";
 import { alwaysHoldsSentence, checkCtaUrl, FREE_NOTES_PER_MONTH, LINKEDIN_LIMITS, describeWorkingHours } from "@le/shared";
@@ -259,6 +260,7 @@ async function saveProfile(formData: FormData) {
     bookingUrl = checked.url;
   }
 
+  const { data: before } = await supabase.from("profiles").select("full_name, bio").eq("id", session.userId).maybeSingle();
   await supabase
     .from("profiles")
     .update({
@@ -269,6 +271,14 @@ async function saveProfile(formData: FormData) {
       ...(isKnownTimezone(timezone) ? { timezone } : {}),
     })
     .eq("id", session.userId);
+  // The agent writes every message, so a corrected name or description has to
+  // reach it too, as it does from onboarding.
+  await carryVoiceToAgent(
+    supabase,
+    session.workspaceId,
+    { fullName: before?.full_name ?? null, bio: before?.bio ?? null },
+    { fullName: fullName ? fullName.slice(0, 120) : (before?.full_name ?? ""), bio: bio || null },
+  );
 
   /* ---- the account: when it may act, and what it can search ---- */
   const start = Number(formData.get("start"));
@@ -861,9 +871,10 @@ export default async function ProfilePage({
             <Panel>
               <dl className="facts">
                 <Fact label="Name">{session.fullName || <span className="subtle">Not set</span>}</Fact>
-                <Fact label="Username">
-                  {me?.username || <span className="subtle">Not set</span>}
-                </Fact>
+                {/* Only when there is one: nothing asks for a username and
+                    this page cannot set one, so "Not set" was a prompt with no
+                    way to answer it. */}
+                {me?.username ? <Fact label="Username">{me.username}</Fact> : null}
                 <Fact label="Role">{label(session.role)}</Fact>
                 <Fact label="How you describe yourself" wide>
                   {me?.bio || <span className="subtle">Nothing yet</span>}

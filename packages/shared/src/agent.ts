@@ -201,6 +201,34 @@ export function blankAgent(repName: string | null): Agent {
  * (rule 16), and offered as the starting point on a new agent rather than
  * imposed: a rep who has a better opener should not have to delete ours first.
  */
+/**
+ * How the rep's own description of themselves sits inside an agent's voice.
+ *
+ * One definition for the two writers: the Strategy Agent seeds the agent at
+ * onboarding's first step, before the rep has described themselves, and the
+ * voice step writes it when they do. Two spellings of the line and the second
+ * write appends a duplicate instead of replacing the first.
+ */
+export const REP_BIO_PREFIX =
+  "Who you are writing as, for tone and background only — never quote or summarise this at a prospect: ";
+
+/**
+ * The voice with the rep's bio set to `bio`.
+ *
+ * Replaces the line written from `previous` (what the profile said before),
+ * adds one when there was none, and leaves the voice alone when somebody has
+ * since edited that line by hand on the agent page: their wording wins.
+ */
+export function withRepBio(voice: string, bio: string | null | undefined, previous?: string | null): string {
+  const next = bio?.trim() ? `${REP_BIO_PREFIX}${bio.trim()}` : "";
+  const old = previous?.trim() ? `${REP_BIO_PREFIX}${previous.trim()}` : null;
+  if (old && voice.includes(old)) {
+    return next ? voice.replace(old, next) : voice.replace(`\n\n${old}`, "").replace(old, "");
+  }
+  if (voice.includes(REP_BIO_PREFIX)) return voice;
+  return next ? `${voice}\n\n${next}` : voice;
+}
+
 export const DEFAULT_OPENER_TEMPLATE =
   "Hi {{first_name}}, {{rep_name}} here{{#company}} regarding {{company}}{{/company}}.";
 
@@ -218,7 +246,11 @@ export function agentGaps(
 ): string[] {
   const gaps: string[] = [];
   if (!agent.name.trim()) gaps.push("a name");
-  if (!isSelectableModel(agent.model)) gaps.push("a model this deployment can price");
+  // Null is the deployment's own model, chosen at send time — what every
+  // agent seeded at onboarding carries on purpose. Reported as missing, every
+  // new workspace's agent page opened on a warning about a choice nobody had
+  // to make.
+  if (agent.model !== null && !isSelectableModel(agent.model)) gaps.push("a model this deployment can price");
   if (!agent.systemPrompt?.trim()) gaps.push("a description of how it should write");
   if (counts.approvedOpeners === 0) gaps.push("at least one approved opener");
   // Not a gap for every goal: a campaign that only asks for a reply never sends

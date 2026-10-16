@@ -101,7 +101,7 @@ async function addBlackout(formData: FormData) {
     .eq("workspace_id", session.workspaceId)
     .eq("user_id", session.userId)
     .maybeSingle();
-  const timezone = row?.timezone || DEFAULTS.timezone;
+  const timezone = row?.timezone || (await profileTimezone(supabase, session.userId)) || DEFAULTS.timezone;
 
   const from = String(formData.get("from") ?? "");
   const to = String(formData.get("to") ?? "");
@@ -199,7 +199,7 @@ export async function Availability() {
   const windowFrom = new Date();
   const windowTo = new Date(windowFrom.getTime() + WINDOW_DAYS * 86_400_000);
 
-  const [{ data: row }, { data: blackouts }, { data: feed }, { data: booked }, { data: feedBusy }] =
+  const [{ data: row }, { data: blackouts }, { data: feed }, { data: booked }, { data: feedBusy }, ownTimezone] =
     await Promise.all([
     supabase
       .from("availability")
@@ -249,9 +249,14 @@ export async function Availability() {
       .eq("user_id", session.userId)
       .gte("ends_at", windowFrom.toISOString())
       .lte("starts_at", windowTo.toISOString()),
+    profileTimezone(supabase, session.userId),
   ]);
 
-  const current = { ...DEFAULTS, ...(row ?? {}) };
+  // The timezone given at onboarding until this page saves its own, which is
+  // what the worker already falls back to when it offers times. Defaulting to
+  // UTC here drew the week hours out of place, and saving it as shown wrote
+  // UTC over the right answer.
+  const current = { ...DEFAULTS, timezone: ownTimezone ?? DEFAULTS.timezone, ...(row ?? {}) };
   const hours = parseHours(current.working_hours);
 
   /*
@@ -524,4 +529,13 @@ function parseHours(value: unknown): { start: number; end: number; days: number[
     }
   }
   return DEFAULTS.working_hours;
+}
+
+/** The timezone on the person's profile, which onboarding's hours step sets. */
+async function profileTimezone(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+): Promise<string | null> {
+  const { data } = await supabase.from("profiles").select("timezone").eq("id", userId).maybeSingle();
+  return data?.timezone?.trim() || null;
 }

@@ -163,6 +163,8 @@ export interface NeedsYouFacts {
   hooksUnapproved: number;
   /** Strategies the Strategy Agent wrote that nobody has approved (rule 9). */
   strategiesUnapproved: number;
+  /** Strategies already approved: with one, the rest are more options, not a stop. */
+  strategiesApproved: number;
   /** Campaigns with a reviewed list that were never launched. */
   campaignsUnlaunched: number;
   /**
@@ -355,7 +357,16 @@ export function needsYou(facts: NeedsYouFacts): NeedsYouItem[] {
     });
   }
 
-  if (facts.strategiesUnapproved > 0) {
+  /*
+   * Only while none is approved, because that is when it stops anything.
+   *
+   * Sage writes three to five and onboarding asks for one. Shown after that,
+   * every workspace finished setup into "strategies are waiting for you" with
+   * a reason — nothing is searched for until one is approved — that had
+   * stopped being true. The rest are on the strategy page, as more people to
+   * go after when somebody wants them.
+   */
+  if (facts.strategiesUnapproved > 0 && facts.strategiesApproved === 0) {
     items.push({
       kind: "strategy_unapproved",
       title: `${plural(facts.strategiesUnapproved, "strategy", "strategies")} ${isare(facts.strategiesUnapproved)} written and waiting for you.`,

@@ -3,6 +3,7 @@ import {
   DEFAULT_OPENER_TEMPLATE,
   PITCH_MAX_CHARS,
   blankAgent,
+  withRepBio,
   type BusinessProfile,
 } from "@le/shared";
 import type { Db } from "@le/db";
@@ -247,10 +248,7 @@ function voiceFrom(business: BusinessProfile, baseline: string, repBio?: string 
    * receiving it (rule 16), and a bio pasted into a 200-character invitation
    * is the rep talking about themselves to a stranger.
    */
-  if (bio) {
-    voice += `\n\nWho you are writing as, for tone and background only — never quote or summarise this at a prospect: ${bio}`;
-  }
-  return voice;
+  return withRepBio(voice, bio);
 }
 
 /**

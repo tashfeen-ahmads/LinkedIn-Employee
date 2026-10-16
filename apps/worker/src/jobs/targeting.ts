@@ -141,7 +141,7 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
 
   const { data: profileRow } = await db
     .from("customer_profiles")
-    .select("id, spec, business_profile_id, do_not_pursue, approved_at, cta_kind, cta_label, cta_url, search_position")
+    .select("id, spec, business_profile_id, do_not_pursue, approved_at, cta_kind, cta_label, cta_url, cta_id, search_position")
     .eq("id", customerProfileId)
     // Every id in this job arrived from a form. The worker holds the service
     // role, so RLS does not stand between a member and another workspace's
@@ -570,6 +570,9 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
       cta_kind: profileRow.cta_kind,
       cta_label: profileRow.cta_label,
       cta_url: profileRow.cta_url,
+      // The library entry the strategy points at, so the Calls to action page
+      // lists this campaign under it and a corrected URL reaches it (rule 36).
+      cta_id: profileRow.cta_id ?? null,
       daily_invite_cap: plan.dailyInviteCap,
       // The reply gate holds every message on an `approval` campaign whatever
       // its autonomy says, so "answers on its own" has to set the mode too or

@@ -48,6 +48,7 @@ export async function loadNeedsYou(
     pitches,
     hooks,
     strategies,
+    approvedStrategies,
     { data: unlaunched },
     { data: thin },
     released,
@@ -91,6 +92,11 @@ export async function loadNeedsYou(
       .eq("workspace_id", workspaceId)
       .is("approved_at", null)
       .eq("do_not_pursue", false),
+    supabase
+      .from("customer_profiles")
+      .select("id", head)
+      .eq("workspace_id", workspaceId)
+      .not("approved_at", "is", null),
     supabase
       .from("campaigns")
       .select("id, cta_id, cta_kind, cta_label, cta_url")
@@ -190,6 +196,7 @@ export async function loadNeedsYou(
     pitchesUnapproved: pitches.count ?? 0,
     hooksUnapproved: hooks.count ?? 0,
     strategiesUnapproved: strategies.count ?? 0,
+    strategiesApproved: approvedStrategies.count ?? 0,
     campaignsUnlaunched: (unlaunched ?? []).length,
     campaignsWithThinNotes: new Set((thin ?? []).map((row) => row.campaign_id)).size,
     campaignsMissingCta,

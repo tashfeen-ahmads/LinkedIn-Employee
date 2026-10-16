@@ -296,7 +296,8 @@ export default async function NewCampaignPage({
         .from("ctas")
         .select("id, name, kind")
         .eq("workspace_id", session.workspaceId)
-        .is("archived_at", null),
+        .is("archived_at", null)
+        .order("created_at", { ascending: true }),
       supabase
         .from("linkedin_accounts")
         .select("id, display_name, status")
@@ -372,7 +373,13 @@ export default async function NewCampaignPage({
           >
             <label className="field">
               <span>Call to action</span>
-              <select name="cta" defaultValue={(ctas ?? []).some((c) => c.id === params.cta) ? params.cta : ""}>
+              {/* The workspace's first call to action — the one chosen at
+                  onboarding — unless the page was opened with another, so a new
+                  campaign asks for what the business said it wants. */}
+              <select
+                name="cta"
+                defaultValue={(ctas ?? []).some((c) => c.id === params.cta) ? params.cta : (ctas?.[0]?.id ?? "")}
+              >
                 <option value="">Just start a conversation</option>
                 {(ctas ?? []).map((cta) => (
                   <option key={cta.id} value={cta.id}>

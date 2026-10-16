@@ -10,6 +10,8 @@ import { queueSearch } from "@/lib/search";
 import { launch } from "@/lib/launch";
 import { approveStrategy, planFlags } from "@/lib/approve";
 import { AUTONOMY_ROLES, setReplyHandling } from "@/lib/autonomy";
+import { carryVoiceToAgent } from "@/lib/agent-voice";
+import { ensureCta } from "@/lib/cta-library";
 
 /*
  * Every onboarding step after the first posts here (rule 65).
@@ -159,12 +161,22 @@ export async function POST(request: NextRequest) {
       const bio = String(form.get("bio") ?? "").trim();
       // What a prospect sees the invitation come from.
       if (!fullName) return again("name");
+      const { data: before } = await supabase.from("profiles").select("full_name, bio").eq("id", user.id).maybeSingle();
       const { data: saved } = await supabase
         .from("profiles")
         .update({ full_name: fullName.slice(0, 120), bio: bio || null })
         .eq("id", user.id)
         .select("id");
       if (!saved?.length) return again("save-failed");
+      // And onto the agent, which is what a prospect's messages are written
+      // from. Sage seeded it at the first step, before these were typed.
+      const carried = await carryVoiceToAgent(
+        supabase,
+        workspaceId,
+        { fullName: before?.full_name ?? null, bio: before?.bio ?? null },
+        { fullName: fullName.slice(0, 120), bio: bio || null },
+      );
+      if (!carried) return again("save-failed");
       if (!(await confirm("voice"))) return again("save-failed");
       return seeOther("/onboarding");
     }
@@ -203,15 +215,19 @@ export async function POST(request: NextRequest) {
       ]);
       const taken = new Set((used ?? []).map((c) => c.customer_profile_id).filter(Boolean));
       const open = (profiles ?? []).map((p) => p.id).filter((id) => !taken.has(id));
+      const choice: StashedCta = { kind, label, url };
+      // An entry on Calls to action as well as the strategies' own columns, so
+      // the page that manages them shows the one just chosen.
+      const ctaId = await ensureCta(supabase, workspaceId, user.id, choice);
+      if (!ctaId) return again("save-failed");
       if (open.length) {
         const { error } = await supabase
           .from("customer_profiles")
-          .update({ cta_kind: kind, cta_label: label, cta_url: url })
+          .update({ cta_kind: kind, cta_label: label, cta_url: url, cta_id: ctaId })
           .eq("workspace_id", workspaceId)
           .in("id", open);
         if (error) return again("save-failed");
       }
-      const choice: StashedCta = { kind, label, url };
       await saveStash({ cta: choice });
       if (!(await confirm("cta", { ctaChoice: choice }))) return again("save-failed");
       return seeOther("/onboarding");
@@ -223,7 +239,10 @@ export async function POST(request: NextRequest) {
       // have written after it — their own choice first, since the workspace's
       // copy is only written by its admins.
       const cta = wizard.confirmations.ctaChoice ?? wizard.stash.cta;
-      const extra = cta ? { cta_kind: cta.kind, cta_label: cta.label, cta_url: cta.url } : {};
+      const ctaId = cta ? await ensureCta(supabase, workspaceId, user.id, cta) : null;
+      const extra = cta
+        ? { cta_kind: cta.kind, cta_label: cta.label, cta_url: cta.url, ...(ctaId ? { cta_id: ctaId } : {}) }
+        : {};
 
       const approved = await approveStrategy(supabase, workspaceId, profileId, extra);
       if (!approved.ok) return again("approve-failed");
@@ -266,6 +285,33 @@ export async function POST(request: NextRequest) {
       const handling = form.get("handling");
       if (handling !== "check" && handling !== "nora") return again("handling");
       if (!(await setReplyHandling(supabase, workspaceId, campaignId, handling, isAdmin))) return again("save-failed");
+      // The opener and offer shown on this screen, approved as shown: matched
+      // on the words posted, so a line edited since the page loaded is never
+      // approved unread (rule 40).
+      const tables = form.getAll("lineTable").map(String);
+      const ids = form.getAll("lineId").map(String);
+      const bodies = form.getAll("lineBody").map(String);
+      for (let i = 0; i < ids.length; i += 1) {
+        const table = tables[i];
+        if (table !== "hooks" && table !== "pitches") continue;
+        const { data: approvedNow } = await supabase
+          .from(table)
+          .update({ approved_at: new Date().toISOString(), approved_by: user.id })
+          .eq("id", ids[i]!)
+          .eq("workspace_id", workspaceId)
+          .eq("body", bodies[i] ?? "")
+          .is("approved_at", null)
+          .select("id");
+        if (approvedNow?.length) continue;
+        // Nothing matched: approved already is fine, changed since is not.
+        const { data: line } = await supabase
+          .from(table)
+          .select("approved_at")
+          .eq("id", ids[i]!)
+          .eq("workspace_id", workspaceId)
+          .maybeSingle();
+        if (!line?.approved_at) return again("copy-changed");
+      }
       const outcome = await launch(campaignId, { workspaceId, userId: user.id });
       switch (outcome.status) {
         case "launched":

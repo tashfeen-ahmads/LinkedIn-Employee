@@ -416,6 +416,8 @@ export interface LaunchReview {
   samples: Array<{ who: string; note: string | null }>;
   steps: Array<{ n: number; delayDays: number; message: string }>;
   blockers: string[];
+  /** The agent's opener and offer, unapproved; launching approves these exact words. */
+  lines: Array<{ table: "hooks" | "pitches"; id: string; body: string; title: string }>;
 }
 
 export function LaunchPanel({
@@ -481,6 +483,23 @@ export function LaunchPanel({
         </section>
       ) : null}
 
+      {review.lines.length ? (
+        <section className="stack-2" aria-labelledby="wz-lines">
+          <h3 id="wz-lines">In your words</h3>
+          <ul className="wz-notes">
+            {review.lines.map((line) => (
+              <li key={line.id}>
+                <p className="tiny subtle">{line.title}</p>
+                <p className="small">{line.body}</p>
+              </li>
+            ))}
+          </ul>
+          <p className="tiny subtle">
+            Launching approves these exact words for {NORA} to use. Change them any time on Agents.
+          </p>
+        </section>
+      ) : null}
+
       <p className="small">
         <Link href={`/app/campaigns/${review.campaignId}`}>Read every name and every message</Link> before you
         launch. Nothing is sent until you press the button.
@@ -502,6 +521,13 @@ export function LaunchPanel({
       <form action="/onboarding/save" method="post">
         <input type="hidden" name="action" value="launch" />
         <input type="hidden" name="campaignId" value={review.campaignId} />
+        {review.lines.map((line) => (
+          <span key={line.id} hidden>
+            <input type="hidden" name="lineTable" value={line.table} />
+            <input type="hidden" name="lineId" value={line.id} />
+            <input type="hidden" name="lineBody" value={line.body} />
+          </span>
+        ))}
         <fieldset className="wz-choice">
           <legend>When somebody replies, who answers?</legend>
           <label className="wz-option">

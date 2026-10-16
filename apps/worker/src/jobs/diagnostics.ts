@@ -639,7 +639,7 @@ export async function runDiagnostics(
         ? "Using this product's own calendar, with your published calendar read alongside it, so anything already in your diary is protected."
         : "Using this product's own calendar. It knows about meetings booked here and nothing else — anything in your Google or Outlook diary has to be blocked out, or a prospect can pick a time you are not free."
       : `Using the ${env.CALENDAR_PROVIDER} calendar.`,
-    fix: own && !availability ? "You have not set your hours, so the defaults are in use: 9 to 5, weekdays, 30 minutes." : undefined,
+    fix: own && !availability ? "Meetings are offered 9 to 5 on weekdays, 30 minutes each, until you change it on Meetings." : undefined,
     href: own ? "/app/meetings" : undefined,
   });
 

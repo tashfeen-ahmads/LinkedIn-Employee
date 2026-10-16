@@ -60,10 +60,15 @@ describe("teamStatus", () => {
     expect(teamStatus({ ...QUIET, strategyPhase: "failed" }).sage.state).toBe("blocked");
   });
 
-  it("puts strategies waiting for approval ahead of the ones approved", () => {
-    const status = teamStatus({ ...QUIET, strategiesApproved: 5, strategiesAwaiting: 3 });
-    expect(status.sage.status).toBe("3 strategies waiting for your approval.");
-    expect(status.sage.state).toBe("waiting");
+  it("asks for an approval only while none is approved (rule 65)", () => {
+    // Onboarding approves one of Sage's three to five; the rest are options.
+    // Read as waiting, every finished setup opened on Sage asking for work
+    // nothing depended on.
+    const status = teamStatus({ ...QUIET, strategiesApproved: 1, strategiesAwaiting: 3 });
+    expect(status.sage.status).toBe("1 strategy approved, 3 more ready when you want them.");
+    expect(status.sage.state).toBe("done");
+    expect(teamStatus({ ...QUIET, strategiesAwaiting: 3 }).sage.status).toBe("3 strategies waiting for your approval.");
+    expect(teamStatus({ ...QUIET, strategiesAwaiting: 3 }).sage.state).toBe("waiting");
     expect(teamStatus({ ...QUIET, strategiesApproved: 1 }).sage.status).toBe("1 strategy approved.");
   });
 

@@ -423,13 +423,13 @@ export default async function PitchPage({ searchParams }: { searchParams: Promis
   const [{ data: pitchRows }, { data: hookRows }, { data: variants }] = await Promise.all([
     supabase
       .from("pitches")
-      .select("id, name, body, angle, written_by, facts_used, approved_at, is_default")
+      .select("id, name, body, angle, written_by, facts_used, approved_at, is_default, agent_id")
       .eq("workspace_id", session.workspaceId)
       .order("is_default", { ascending: false })
       .order("name", { ascending: true }),
     supabase
       .from("hooks")
-      .select("id, name, body, angle, written_by, approved_at, is_default")
+      .select("id, name, body, angle, written_by, approved_at, is_default, agent_id")
       .eq("workspace_id", session.workspaceId)
       .order("is_default", { ascending: false })
       .order("name", { ascending: true }),
@@ -453,8 +453,13 @@ export default async function PitchPage({ searchParams }: { searchParams: Promis
     }
   }
 
-  const noDefault = (rows: Array<{ is_default: boolean; approved_at: string | null }>) =>
-    rows.length > 0 && !rows.some((row) => row.is_default && row.approved_at);
+  // An approved line on an agent is used by that agent's campaigns before any
+  // workspace default (`loadPitch`), and every campaign built from a strategy
+  // carries the workspace's agent. So only with none of those approved is
+  // anything held — reading `is_default` alone warned every workspace whose
+  // agent's lines were approved where they are used.
+  const noDefault = (rows: Array<{ is_default: boolean; approved_at: string | null; agent_id: string | null }>) =>
+    rows.length > 0 && !rows.some((row) => row.approved_at && (row.is_default || row.agent_id));
 
   return (
     <>

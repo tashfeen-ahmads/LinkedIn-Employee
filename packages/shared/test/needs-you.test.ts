@@ -24,6 +24,7 @@ const CALM: NeedsYouFacts = {
   pitchesUnapproved: 0,
   hooksUnapproved: 0,
   strategiesUnapproved: 0,
+  strategiesApproved: 0,
   campaignsUnlaunched: 0,
   campaignsWithThinNotes: 0,
   campaignsMissingCta: 0,
@@ -187,6 +188,7 @@ describe("every row", () => {
     pitchesUnapproved: 1,
     hooksUnapproved: 1,
     strategiesUnapproved: 1,
+    strategiesApproved: 0,
     campaignsUnlaunched: 1,
     campaignsWithThinNotes: 1,
     campaignsMissingCta: 1,
@@ -239,6 +241,12 @@ describe("every row", () => {
     expect(needsYou({ ...CALM, heldReplies: 2 })[0]?.title).toBe("2 replies are waiting for you.");
     expect(needsYou({ ...CALM, strategiesUnapproved: 1 })[0]?.title).toContain("1 strategy is");
     expect(needsYou({ ...CALM, strategiesUnapproved: 2 })[0]?.title).toContain("2 strategies are");
+  });
+
+  it("stops asking for strategies once one is approved (rule 65)", () => {
+    // Onboarding approves one of Sage's three to five. The rest are options,
+    // and "nothing is searched until one is approved" is no longer true.
+    expect(needsYou({ ...CALM, strategiesUnapproved: 3, strategiesApproved: 1 })).toEqual([]);
   });
 });
 

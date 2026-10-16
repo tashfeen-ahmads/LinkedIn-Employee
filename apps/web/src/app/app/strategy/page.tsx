@@ -740,12 +740,12 @@ export default async function StrategyPage({
               <div className="grid grid-2">
                 <Facts
                   label="What they buy"
-                  values={[profile.whatTheyBuy ?? "The agent did not say. This was written before it was asked for."]}
+                  values={[profile.whatTheyBuy ?? "The agent did not say."]}
                 />
                 <Facts
                   label="What they do today instead"
                   values={[
-                    profile.insteadOfToday ?? "The agent did not say. This was written before it was asked for.",
+                    profile.insteadOfToday ?? "The agent did not say.",
                   ]}
                 />
               </div>

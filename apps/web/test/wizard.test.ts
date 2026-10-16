@@ -215,3 +215,26 @@ describe("the review's second pass", () => {
     );
   });
 });
+
+describe("every onboarding answer reaches the app (rule 65)", () => {
+  const route = read("app", "onboarding", "save", "route.ts");
+
+  it("puts the name and description on the agent that writes the messages", () => {
+    // Sage seeds the agent at the first step, before the voice step is reached.
+    expect(route).toMatch(/const carried = await carryVoiceToAgent\(/);
+    expect(read("app", "app", "profile", "page.tsx")).toMatch(/await carryVoiceToAgent\(/);
+  });
+
+  it("lists the chosen call to action on Calls to action, and points strategies at it", () => {
+    expect(route).toMatch(/const ctaId = await ensureCta\(supabase, workspaceId, user\.id, choice\)/);
+    expect(route).toMatch(/cta_url: url, cta_id: ctaId \}/);
+    expect(readFileSync(join(here, "..", "..", "worker", "src", "jobs", "targeting.ts"), "utf8")).toMatch(
+      /cta_id: profileRow\.cta_id \?\? null,/,
+    );
+  });
+
+  it("approves the opener and offer on the launch screen, only as shown", () => {
+    expect(read("app", "onboarding", "page.tsx")).toMatch(/lines: await linesAwaitingApproval\(workspaceId\)/);
+    expect(route).toMatch(/\.eq\("body", bodies\[i\] \?\? ""\)\s*\.is\("approved_at", null\)/);
+  });
+});

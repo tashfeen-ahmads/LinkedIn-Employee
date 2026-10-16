@@ -290,7 +290,9 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
                       <td>
                         {/* A model nobody can price cannot be run, because its spend
                             reports as null and a reader takes that for free. */}
-                        {isSelectableModel(agent.model) ? (
+                        {agent.model === null ? (
+                          <span className="small muted">Automatic</span>
+                        ) : isSelectableModel(agent.model) ? (
                           agent.model
                         ) : (
                           <span className="small warning-text">Pick a model</span>

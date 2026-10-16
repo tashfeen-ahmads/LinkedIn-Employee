@@ -29,7 +29,7 @@ describe("the profile edits every onboarding answer", () => {
     // Day checkboxes are named `day-${n}` in both and the timezone comes from
     // the shared picker, so they are checked by their own names.
     // Hidden fields that route a step's form are plumbing, not questions.
-    const plumbing = new Set(["action", "profileId", "campaignId"]);
+    const plumbing = new Set(["action", "profileId", "campaignId", "lineTable", "lineId", "lineBody"]);
     // What a campaign asks for is per strategy after onboarding, so it is
     // changed on the strategy page rather than the profile.
     const perStrategy = new Set(["ctaKind", "ctaLabel", "ctaUrl"]);

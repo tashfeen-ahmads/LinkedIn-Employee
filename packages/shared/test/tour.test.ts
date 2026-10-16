@@ -85,6 +85,11 @@ describe("currentStage", () => {
     const state = { ...NOTHING, hasBusinessProfile: true, hasApprovedProfile: true };
     expect(currentStage(state)?.step).toBe("hasLinkedInAccount");
   });
+
+  it("is not held on an optional step once setup is finished (rule 65)", () => {
+    // A launched workspace with no knowledge base was pinned on the reply stage.
+    expect(currentStage({ ...EVERYTHING, hasKnowledge: false })).toBeNull();
+  });
 });
 
 describe("stageStatus", () => {

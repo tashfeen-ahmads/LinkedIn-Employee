@@ -6274,18 +6274,6 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
 }
 .sn-save { display: flex; flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--space-3) var(--space-5); }
 .sn-save p { max-width: 60ch; }
-.sn-strip {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-3) var(--space-4);
-  padding: var(--space-4) var(--space-5);
-  background: var(--accent-soft);
-  border: 1px solid var(--accent-border);
-  border-radius: var(--radius);
-}
-.sn-strip p { flex: 1 1 22rem; line-height: 1.5; }
-.sn-strip-icon { width: 1.5rem; height: 1.5rem; flex: none; color: var(--accent); }
 
 /*
  * The tour of the app (rule 65): one card over the real page, bottom right on
