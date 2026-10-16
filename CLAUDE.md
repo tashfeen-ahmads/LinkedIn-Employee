@@ -1541,6 +1541,54 @@ tests that were verified by deliberately breaking the code.
     warmed person who still cannot keep the floor inside their window is left
     for a fresh view rather than squeezed in on the heels of the last.
 
+65. **Setup is a sequence, and the app opens when the first campaign is
+    live.** It was one long form and then a checklist on the dashboard, and the
+    checklist was advice: a new customer could reach the app with no LinkedIn
+    account, a call to action nobody chose and hours in the wrong zone, and
+    wander into the agents page before a strategy was approved. Every one of
+    those defaults reached a real prospect.
+
+    `/onboarding` is now one screen per step (`WIZARD_STEPS` in
+    `apps/web/src/lib/wizard.ts`): business, connect LinkedIn (with the plan),
+    sending hours and timezone, voice and reply handling, the call to action,
+    approve a strategy, build the list, review and launch. The business comes
+    first because a LinkedIn account belongs to a workspace and the business
+    step creates it — and it starts Sage, so the strategies are written while
+    the person does the next four steps. Each step is decided from what is
+    **stored**, never from which button was pressed (`readWizard`); the
+    hours, voice and CTA have defaults, so a value being present proves
+    nothing and a per-person confirmation stamp (`confirmed` in the stash) is
+    the record that somebody looked. The current step is the first not done,
+    in order (`currentStep`) — a LinkedIn account that drops sends somebody
+    back to that step however far they got. Back is always allowed; forward
+    past the current step is refused on the page and again in
+    `/onboarding/save`, because a form can be posted by anyone and the last
+    step launches.
+
+    Until a workspace has a launched campaign the app layout redirects every
+    page to the current step (`openDuringSetup`, `setupRedirect`), except
+    Support and a campaign's own review page, which the last step links to.
+    A launched campaign ends setup however it was reached, so no workspace
+    that launched before this existed is ever sent back. The provider's
+    sign-in returns to the profile page; the redirect carries its `connected`
+    and `error` to the LinkedIn step, which asks the provider rather than
+    waiting to be told (rule 8). `?error=` carries a code mapped to words
+    written on the page, never text from the address bar.
+
+    The steps reuse the product's own paths rather than copies of them:
+    `queueSearch` (`lib/search.ts`) for the search, `launch`
+    (`lib/launch.ts`) for the launch with every blocker re-checked, the
+    competitor warning on the approval screen (rule 49). The CTA chosen is
+    written onto every strategy that has no campaign yet and again onto the
+    one approved, so the search writes its copy toward it (rule 29).
+
+    Launching ends on `/app?tour=1`: a ten-stop tour of the real pages
+    (`WALKTHROUGH`, `components/walkthrough.tsx`), driven by `?tour=N` so each
+    stop is an ordinary page load, never modal, startable again from How it
+    works. The link preview (`BRAND.promise`, the home page title) says what
+    the product does — finds buyers, writes each a note, answers, books —
+    rather than one of its guardrails.
+
 ## Conventions
 
 - Agent output is validated against a zod schema before it touches the

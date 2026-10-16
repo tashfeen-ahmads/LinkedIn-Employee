@@ -22,7 +22,7 @@
 export const BRAND = {
   name: "Nora",
   full: "Nora SDR",
-  tagline: "Your AI SDR for LinkedIn",
+  tagline: "AI SDR that books meetings from LinkedIn",
   /**
    * The marketing site. Two hosts on purpose: a dashboard worked in daily and
    * a site read once want different things, and one page answering on both
@@ -34,9 +34,12 @@ export const BRAND = {
 
   /**
    * What a customer gets, in the words they would use. Not "AI-powered
-   * outreach automation" — the outcome, and the cost of the alternative.
+   * outreach automation" — what it does, start to finish. It is the line under
+   * every shared link (the /og card), so it says the product's job rather than
+   * one of its guardrails: a link that read "built to keep your account safe"
+   * told the person it was sent to what Nora avoids, never what it does.
    */
-  promise: "Meetings from LinkedIn, at a pace that keeps your account safe.",
+  promise: "Finds your buyers, writes each one a personal note, answers replies and books the meeting.",
 
   /**
    * The two brand colours, and the only place they exist outside the

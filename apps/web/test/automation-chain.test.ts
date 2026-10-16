@@ -10,6 +10,8 @@ const strategyPage = read("../src/app/app/strategy/page.tsx");
 const strategyJob = read("../../worker/src/jobs/strategy.ts");
 const campaignPage = read("../src/app/app/campaigns/[id]/page.tsx");
 const signupPage = read("../src/app/signup/page.tsx");
+const searchLib = read("../src/lib/search.ts");
+const onboardingSave = read("../src/app/onboarding/save/route.ts");
 
 /**
  * The links a claim about automation rests on, asserted at the call sites.
@@ -38,8 +40,10 @@ describe("approving a strategy starts the search", () => {
     // before they drift, and this one decides whether anybody is searched for.
     const calls = strategyPage.match(/await queueSearch\(/g) ?? [];
     expect(calls.length, "approving and the button should both call it").toBe(2);
-    // And exactly one definition of it.
-    expect((strategyPage.match(/async function queueSearch\(/g) ?? []).length).toBe(1);
+    // And exactly one definition of it, shared with onboarding's approval.
+    expect(strategyPage).not.toMatch(/async function queueSearch\(/);
+    expect((searchLib.match(/export async function queueSearch\(/g) ?? []).length).toBe(1);
+    expect(onboardingSave).toMatch(/await queueSearch\(/);
   });
 
   it("a strategy that already has a campaign is not searched again", () => {
@@ -53,7 +57,7 @@ describe("approving a strategy starts the search", () => {
     // Losing the approval to a disconnected LinkedIn account would be the
     // product refusing a decision it already has.
     expect(strategyPage).toMatch(/Approved, but the search has not started/);
-    expect(strategyPage).toMatch(/It never throws/);
+    expect(searchLib).toMatch(/It never throws/);
   });
 });
 

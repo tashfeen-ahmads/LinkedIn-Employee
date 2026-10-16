@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase-server";
-import { callWorker, errorQuery } from "@/lib/worker";
+import { callWorker } from "@/lib/worker";
 import { requestAccountEmails } from "@/lib/account-emails";
 import { isValidTimezone } from "@le/shared";
 import { sourceFromForm } from "@/lib/onboarding-stash";
@@ -19,7 +19,7 @@ export async function createWorkspace(formData: FormData): Promise<string> {
   // A second press, or a retry after the first one worked, must not make a
   // second workspace.
   const { data: existing } = await supabase.from("memberships").select("workspace_id").eq("user_id", user.id).limit(1);
-  if (existing?.length) return "/app";
+  if (existing?.length) return "/onboarding";
 
   const companyName = String(formData.get("companyName") ?? "").trim();
   const websiteUrl = String(formData.get("websiteUrl") ?? "").trim();
@@ -106,10 +106,17 @@ export async function createWorkspace(formData: FormData): Promise<string> {
         workingHours: hoursUsable ? { start, end, days } : null,
         // The plan question; the older yes/no Sales Navigator answer is still
         // read so a form loaded before this shipped is not misread.
-        hasSalesNavigator:
-          formData.get("linkedinPlan") === "sales_navigator" || formData.get("hasSalesNavigator") === "on",
-        hasPremium: formData.get("linkedinPlan") === "premium" || formData.get("linkedinPlan") === "sales_navigator",
-        autonomy: formData.get("autonomy") === "autonomous" ? "autonomous" : "supervised",
+        //
+        // Null when the form did not ask: the business step no longer does,
+        // and the LinkedIn step records the plan right before connecting. A
+        // `false` written here would read as an answer nobody gave.
+        hasSalesNavigator: formData.has("linkedinPlan") || formData.has("hasSalesNavigator")
+          ? formData.get("linkedinPlan") === "sales_navigator" || formData.get("hasSalesNavigator") === "on"
+          : null,
+        hasPremium: formData.has("linkedinPlan")
+          ? formData.get("linkedinPlan") === "premium" || formData.get("linkedinPlan") === "sales_navigator"
+          : null,
+        autonomy: formData.has("autonomy") ? (formData.get("autonomy") === "autonomous" ? "autonomous" : "supervised") : null,
         // What the Strategy Agent is about to be asked to read, kept so a run
         // that fails can be retried from the dashboard. Without it the only
         // copy was the job itself, and the only way to start another was the
@@ -131,10 +138,11 @@ export async function createWorkspace(formData: FormData): Promise<string> {
   // was lost to a worker blip at signup gets it now.
   await requestAccountEmails(user.id);
 
-  if (!queued.ok) {
-    return errorQuery("/app", `Your workspace is ready, but we could not start writing your profiles: ${queued.error}`);
-  }
-  return "/app";
+  // On to the next step either way. The business step says plainly when Sage
+  // could not be started and offers to start it again, so a worker blip does
+  // not lose the signup.
+  if (!queued.ok) console.error(`[onboarding] strategy not queued: ${queued.error}`);
+  return "/onboarding";
 }
 
 function slugify(value: string): string {

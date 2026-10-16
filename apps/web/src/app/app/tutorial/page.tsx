@@ -4,6 +4,7 @@ import { TOUR_STAGES, stageStatus } from "@le/shared";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { readSetupState } from "@/lib/setup-state";
+import { walkthroughHref } from "@/lib/walkthrough";
 
 /**
  * The product, explained in order, against where this workspace actually is.
@@ -39,6 +40,13 @@ export default async function TutorialPage() {
           it over by hand whenever you want to. Each stage says what it cannot do as well as what
           it does: you are going to meet those edges either way, and meeting them here is cheaper.
           </>
+        }
+        actions={
+          // The ten-stop tour of the screens themselves, the one onboarding
+          // ends on, for anybody who skipped it or wants it again.
+          <Link className="btn small" href={walkthroughHref(0)}>
+            Take the tour
+          </Link>
         }
       />
 

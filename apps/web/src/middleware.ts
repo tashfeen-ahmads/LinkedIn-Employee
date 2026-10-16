@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { PATH_HEADER } from "@/lib/wizard";
 
 /*
  * Keeps a signed-in session signed in.
@@ -42,7 +43,21 @@ export async function middleware(request: NextRequest) {
     // A provider outage must not take the page down with it; the page's own
     // check decides what the visitor sees.
   }
-  return response;
+
+  /*
+   * Which page was asked for, handed to the layout.
+   *
+   * The app layout sends anybody whose setup is not finished to their
+   * onboarding step (rule 65), and a layout is not told its own path. Set here,
+   * after the session refresh, so the request carries the refreshed cookies as
+   * well; whatever a client sent under this name is overwritten. It decides
+   * only where somebody is redirected, never what they may read.
+   */
+  const headers = new Headers(request.headers);
+  headers.set(PATH_HEADER, `${request.nextUrl.pathname}${request.nextUrl.search}`);
+  const forwarded = NextResponse.next({ request: { headers } });
+  for (const cookie of response.cookies.getAll()) forwarded.cookies.set(cookie);
+  return forwarded;
 }
 
 export const config = {

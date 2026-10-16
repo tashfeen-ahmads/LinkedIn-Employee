@@ -22,6 +22,7 @@ import { ACCOUNT_USAGE_COLUMNS, dailyInviteCap, localDayStart, parseWorkingHours
 import { notesLeftThisMonth } from "@/lib/invite-notes";
 import { restoreFromFailure } from "@/lib/retry-failed";
 import { requireSession } from "@/lib/workspace";
+import { launch } from "@/lib/launch";
 import { createClient } from "@/lib/supabase-server";
 import { callWorker, errorQuery, noticeQuery, startedNotice } from "@/lib/worker";
 import { SubmitButton } from "@/components/submit-button";
@@ -332,60 +333,30 @@ async function launchCampaign(
   campaignId: string,
   session: Awaited<ReturnType<typeof requireSession>>,
 ): Promise<never> {
-  const supabase = await createClient();
-  const state = await launchState(campaignId, session.workspaceId);
-  if (!state) {
-    redirect(errorQuery("/app/campaigns", "That campaign could not be found."));
-  }
-  const blockers = launchBlockers(state);
-  if (blockers.length > 0) {
-    redirect(errorQuery(`/app/campaigns/${campaignId}`, `Not launched yet. ${blockers.join(" ")}`));
-  }
-
-  const { error } = await supabase
-    .from("campaigns")
-    .update({ status: "running", launched_at: new Date().toISOString() })
-    .eq("id", campaignId)
-    .eq("workspace_id", session.workspaceId);
+  const outcome = await launch(campaignId, session);
   revalidatePath(`/app/campaigns/${campaignId}`);
-  if (error) {
-    console.error(`[campaign] launch: ${error.message}`);
-    redirect(errorQuery(`/app/campaigns/${campaignId}`, "The campaign could not be launched. Nothing was sent. Try again."));
+  switch (outcome.status) {
+    case "missing":
+      redirect(errorQuery("/app/campaigns", "That campaign could not be found."));
+    case "blocked":
+      redirect(errorQuery(`/app/campaigns/${campaignId}`, `Not launched yet. ${outcome.blockers.join(" ")}`));
+    case "failed":
+      redirect(errorQuery(`/app/campaigns/${campaignId}`, "The campaign could not be launched. Nothing was sent. Try again."));
+    case "launched":
+      // Launched, and said so either way: the campaign really is running and
+      // the loop picks it up when it is back. What must not happen is silence.
+      redirect(
+        outcome.kicked
+          ? noticeQuery(
+              `/app/campaigns/${campaignId}`,
+              "Launched. Invitations are paced a few minutes apart, so the first one takes a little while to appear on LinkedIn. This page says where it is up to.",
+            )
+          : errorQuery(
+              `/app/campaigns/${campaignId}`,
+              "Launched, but sending has not started: the part of the product that sends did not answer. It picks this campaign up on its own when it is back. System check shows where it is up to.",
+            ),
+      );
   }
-
-  // Launching used to touch nothing but this row, and trust a loop somewhere
-  // else to notice within five minutes. The one action in this product that
-  // most needs the worker was the only one that never spoke to it: a worker
-  // that was not running produced no error and no banner, and the page looked
-  // exactly as it had before. That is how the first live launch went.
-  //
-  // Now it is a round trip. It also means the first invitation is paced from
-  // the press rather than from whenever the schedule next comes round.
-  const kicked = await callWorker("/jobs/campaign-tick", {
-    workspaceId: session.workspaceId,
-    userId: session.userId,
-    campaignId,
-  });
-  if (!kicked.ok) {
-    // Launched, and said so: the campaign really is running and the loop will
-    // pick it up if it comes back. What must not happen is this being silent.
-    // The worker's own error text is not appended — it named our plumbing and
-    // ended in a full stop of its own, which is how this read "again..".
-    console.error(`[campaign] campaign-tick not reached: ${kicked.error}`);
-    redirect(
-      errorQuery(
-        `/app/campaigns/${campaignId}`,
-        "Launched, but sending has not started: the part of the product that sends did not answer. It picks this campaign up on its own when it is back. System check shows where it is up to.",
-      ),
-    );
-  }
-
-  redirect(
-    noticeQuery(
-      `/app/campaigns/${campaignId}`,
-      "Launched. Invitations are paced a few minutes apart, so the first one takes a little while to appear on LinkedIn. This page says where it is up to.",
-    ),
-  );
 }
 
 /**
@@ -654,44 +625,6 @@ async function sendOneNow(formData: FormData) {
       ? noticeQuery(`/app/campaigns/${campaignId}`, answer.detail)
       : errorQuery(`/app/campaigns/${campaignId}`, answer.detail),
   );
-}
-
-/** Reads exactly what launchBlockers needs, for the server-action re-check. */
-async function launchState(campaignId: string, workspaceId: string) {
-  const supabase = await createClient();
-  const { data: campaign } = await supabase
-    .from("campaigns")
-    .select("connection_note, daily_invite_cap, linkedin_account_id")
-    .eq("id", campaignId)
-    .eq("workspace_id", workspaceId)
-    .maybeSingle();
-  if (!campaign) return null;
-
-  const [{ data: steps }, { data: queuedNotes, count }, { data: account }] = await Promise.all([
-    supabase.from("campaign_steps").select("message, delay_days").eq("campaign_id", campaignId),
-    supabase
-      .from("campaign_prospects")
-      // The notes as well as the count: launchBlockers holds each person's
-      // note to LinkedIn's cap, and the re-check must see what the page saw.
-      .select("invite_note", { count: "exact" })
-      .eq("campaign_id", campaignId)
-      .eq("status", "queued"),
-    supabase
-      .from("linkedin_accounts")
-      .select("status, status_detail")
-      .eq("id", campaign.linkedin_account_id)
-      .maybeSingle(),
-  ]);
-
-  return {
-    connectionNote: campaign.connection_note,
-    steps: (steps ?? []).map((s) => ({ message: s.message, delayDays: s.delay_days })),
-    dailyInviteCap: campaign.daily_invite_cap,
-    prospectCount: count ?? 0,
-    accountStatus: account?.status ?? null,
-    accountReleasedIdle: isIdleReleased(account),
-    inviteNotes: (queuedNotes ?? []).map((row) => row.invite_note),
-  };
 }
 
 /**

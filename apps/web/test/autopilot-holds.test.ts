@@ -38,7 +38,7 @@ describe("the holds autopilot never overrides", () => {
 
   it.each([
     ["the profile's edit and read views", "app/app/profile/page.tsx", 2],
-    ["onboarding", "app/onboarding/page.tsx", 1],
+    ["onboarding", "app/onboarding/steps.tsx", 1],
     ["the campaign's reply setting", "app/app/campaigns/[id]/page.tsx", 1],
     ["the marketing FAQ", "components/marketing.tsx", 1],
   ])("%s renders the shared sentence", (_where, path, times) => {

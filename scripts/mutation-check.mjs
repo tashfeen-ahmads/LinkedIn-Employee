@@ -77,6 +77,59 @@ const MUTATIONS = [
    * The day's pace is held at the moment of sending (rule 64), measured from
    * the last invitation, so a backlog cannot burst and a view cannot fake one.
    */
+  /*
+   * Onboarding is a sequence and the app waits for it (rule 65): a step past
+   * the current one is refused, the app redirects until the first launch, and
+   * a launched workspace is never sent back.
+   */
+  {
+    id: "setup/app-waits-for-setup",
+    rule: "The app sends anybody without a launched campaign to their onboarding step",
+    file: "apps/web/src/app/app/layout.tsx",
+    from: "    if (!openDuringSetup(path)) redirect(setupRedirect(path));",
+    to: "    void path;",
+    pkg: "@le/web",
+  },
+  {
+    id: "setup/save-refuses-a-step-ahead",
+    rule: "A step past the current one is refused on the server",
+    file: "apps/web/src/app/onboarding/save/route.ts",
+    from: '  if (stepIndex(step) > stepIndex(current)) return seeOther("/onboarding");',
+    to: "  void current;",
+    pkg: "@le/web",
+  },
+  {
+    id: "setup/steps-in-order",
+    rule: "The current step is the first one not done, in order",
+    file: "apps/web/src/lib/wizard.ts",
+    from: "  return WIZARD_STEPS.find((step) => !stepDone(step.key, facts))?.key ?? null;",
+    to: "  return [...WIZARD_STEPS].reverse().find((step) => !stepDone(step.key, facts))?.key ?? null;",
+    pkg: "@le/web",
+  },
+  {
+    id: "setup/no-jumping-ahead",
+    rule: "A requested step ahead of the current one shows the current one",
+    file: "apps/web/src/lib/wizard.ts",
+    from: "  return stepIndex(asked) <= stepIndex(current) ? asked : current;",
+    to: "  return asked;",
+    pkg: "@le/web",
+  },
+  {
+    id: "setup/only-support-and-review-open-early",
+    rule: "Only support and a campaign's review page open before the first launch",
+    file: "apps/web/src/lib/wizard.ts",
+    from: '  return bare === "/app/support" || /^\\/app\\/campaigns\\/[^/]+$/.test(bare);',
+    to: "  return bare.length >= 0;",
+    pkg: "@le/web",
+  },
+  {
+    id: "setup/launched-is-finished",
+    rule: "A workspace with a launched campaign is never sent back through onboarding",
+    file: "apps/web/src/lib/wizard.ts",
+    from: "  if (facts.hasLaunchedCampaign) return null;",
+    to: "  void facts.hasLaunchedCampaign;",
+    pkg: "@le/web",
+  },
   {
     id: "pace/send-path-holds-the-floor",
     rule: "An invitation is not sent sooner after the last one than the day's pace allows",
@@ -4152,8 +4205,8 @@ const MUTATIONS = [
     id: "web/onboarding-retry-not-dead-end",
     rule: "A member with no business profile can retry the Strategy Agent from /onboarding",
     file: "apps/web/src/app/onboarding/page.tsx",
-    from: "  if (existing?.length) {\n",
-    to: "  if (existing?.length) redirect(\"/app\");\n  if (existing?.length) {\n",
+    from: "  const step = stepToShow(params.step, wizard.facts);\n",
+    to: "  if (wizard.workspaceId) redirect(\"/app\");\n  const step = stepToShow(params.step, wizard.facts);\n",
     pkg: "@le/web",
   },
   {

@@ -5,7 +5,7 @@ import { FaqSchema, SoftwareSchema } from "@/components/schema";
 import { SITE, pageMeta } from "@/lib/site";
 
 export const metadata: Metadata = pageMeta({
-  title: "Nora: AI SDR for LinkedIn built to keep your account safe",
+  title: "Nora: AI SDR that books meetings from LinkedIn for you",
   description: SITE.description,
   path: "/",
 });

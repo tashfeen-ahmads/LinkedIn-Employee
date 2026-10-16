@@ -30,7 +30,8 @@ describe("startedNotice", () => {
 describe("every web caller of the strategy and targeting jobs", () => {
   it("the strategy page reads alreadyRunning on all four", () => {
     const page = read("app", "app", "strategy", "page.tsx");
-    expect(page).toMatch(/alreadyRunning: isAlreadyRunning\(queued\.data\)/);
+    // The search starter lives in one helper every approval goes through.
+    expect(read("lib", "search.ts")).toMatch(/alreadyRunning: isAlreadyRunning\(queued\.data\)/);
     // Write more, add a business.
     expect(page.match(/startedNotice\(\s*queued\.data,/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
     // Approve, and Find prospects.

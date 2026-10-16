@@ -1,42 +1,87 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
+import {
+  BRAND,
+  BusinessProfileSchema,
+  CTA_DEFINITIONS,
+  competitorTargeting,
+  describeCompetitorTargeting,
+  parseCustomerProfile,
+} from "@le/shared";
 import { createClient } from "@/lib/supabase-server";
 import { isAppConfigured } from "@/lib/config";
-import { TimezoneSelect } from "@/components/timezone-select";
-import { SetupRail } from "@/components/setup-rail";
-import { PostButton } from "@/components/post-button";
-import { FormKeeper } from "@/components/form-keeper";
+import { callWorker } from "@/lib/worker";
+import { SubmitButton } from "@/components/submit-button";
+import { AutoRefresh } from "@/components/auto-refresh";
 import { StrategyStatus } from "@/components/strategy-status";
 import { StrategyDetailsForm, StrategyRetryButton } from "@/components/strategy-retry";
 import { readStrategyState } from "@/lib/strategy-state";
-import { hasStrategySource, readOnboardingStash } from "@/lib/onboarding-stash";
-import { SubmitButton } from "@/components/submit-button";
-import { BRAND, FREE_NOTES_PER_MONTH, alwaysHoldsSentence } from "@le/shared";
-import { NORA } from "@/lib/team";
+import { hasStrategySource } from "@/lib/onboarding-stash";
+import { SEARCH_EVENTS, describeLastSearch } from "@/lib/last-search";
+import { launchBlockers } from "@/lib/campaign";
+import { launchState } from "@/lib/launch";
+import { readWizard, type WizardRead } from "@/lib/wizard-state";
+import { WIZARD_STEPS, currentStep, stepDone, stepIndex, stepPosition, stepToShow, type WizardStepKey } from "@/lib/wizard";
+import { describeRepair, type RefreshResult } from "@/app/app/team/repair";
+import {
+  BusinessForm,
+  CtaForm,
+  HoursForm,
+  LaunchPanel,
+  LinkedInForm,
+  SearchButton,
+  StrategyCards,
+  VoiceForm,
+  type LaunchReview,
+  type StrategyCard,
+} from "./steps";
 
 /*
- * What `?error=` may say. `createWorkspace` sends two sentences of its own,
- * matched here exactly, and otherwise passes on whatever the database said,
- * which is not a sentence for a customer and was printed verbatim along with
- * anything else somebody put in the URL.
+ * Onboarding, one step per screen, in an order that cannot be skipped
+ * (rule 65). The app opens when the first campaign is live.
+ *
+ * `?error=` carries a code, never a sentence: whatever is in the address bar
+ * is shown to the person, and a code can only ever map to words written here.
  */
 const ERRORS: Record<string, string> = {
   "Company name is required": "Enter your company name.",
   "Give us a website, a LinkedIn page, or a description to work from":
     "Give us a website, a LinkedIn page or a description to work from. Sage will not invent a business from nothing.",
+  "plan-missing": "Choose the LinkedIn plan this account has.",
+  "linkedin-link": "LinkedIn did not give us a sign-in link just now. Try again in a minute.",
+  timezone: "Choose your timezone.",
+  hours: "The sending window has to end after it starts.",
+  days: "Pick at least one day it may send on.",
+  name: "Your name is what a prospect sees the invitation come from, so it cannot be blank.",
+  "cta-kind": "Choose what your campaigns ask for.",
+  "cta-url": "A link campaign needs a web address we can send, like yoursite.com/offer. Check it and try again.",
+  "booking-url": "That scheduling link is not a web address we can send. Check it, or leave it blank.",
+  "approve-failed": "That strategy could not be approved. Reload the page and try again.",
+  "search-not-started": "The search has not started yet. Press Search LinkedIn to start it.",
+  "launch-blocked": "Not launched yet. Fix what is listed below first.",
+  "launch-missing": "That campaign could not be found. Reload the page.",
+  "launch-failed": "The campaign could not be launched. Nothing was sent. Try again.",
+  "save-failed": "That could not be saved just now. Try again.",
 };
-const UNKNOWN_ERROR = "Your workspace could not be set up just now. Try again in a minute.";
+const UNKNOWN_ERROR = "Something did not go through just now. Try again in a minute.";
+const LINKEDIN_SIGN_IN_FAILED = "The LinkedIn sign-in did not go through, so nothing was connected. Press Connect LinkedIn to try again.";
 
-/** An hour of the day as somebody reads it, for the sending-window selects. */
-function hourLabel(hour: number): string {
-  if (hour === 0 || hour === 24) return "Midnight";
-  if (hour === 12) return "Noon";
-  return `${hour % 12}:00 ${hour < 12 ? "am" : "pm"}`;
-}
-const START_HOURS = Array.from({ length: 24 }, (_, h) => h);
-const END_HOURS = Array.from({ length: 24 }, (_, h) => h + 1);
+/** What each step's screen says under its heading. */
+const LEDES: Record<WizardStepKey, string> = {
+  business:
+    "Sage, the strategist, reads what you publish and writes your business profile and three to five strategies: who to go after, and why they would care. It works while you do the next steps.",
+  linkedin:
+    "Every invitation and message goes out from your own LinkedIn account, so nothing can be searched or sent until it is connected.",
+  hours: "Nothing leaves your account outside these hours, in your own timezone.",
+  voice: "Invitations and replies go out under your name, in your voice.",
+  cta: "What a campaign asks for decides how its messages are written and what counts as a win.",
+  strategy:
+    "Sage wrote these from your business. Approve one and Nora searches LinkedIn for those people. Nothing is searched for until you do.",
+  prospects:
+    "Nora is searching LinkedIn, scoring everyone against your strategy and writing a note for each person. It usually takes a minute or two.",
+  launch: "Your first campaign, ready to go. Read it, then launch it. Nothing is sent until you press the button.",
+};
 
-
-/** Out of the empty account, and straight to "which email did I use". */
 async function signOutToFind() {
   "use server";
   const supabase = await createClient();
@@ -44,376 +89,473 @@ async function signOutToFind() {
   redirect("/forgot?kind=signin");
 }
 
+async function signOut() {
+  "use server";
+  const supabase = await createClient();
+  await supabase.auth.signOut();
+  redirect("/login");
+}
+
 export default async function OnboardingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ step?: string; error?: string; connected?: string }>;
 }) {
   if (!isAppConfigured()) redirect("/login");
-
   const params = await searchParams;
-  const error = params.error
-    ? Object.prototype.hasOwnProperty.call(ERRORS, params.error)
-      ? ERRORS[params.error]
-      : UNKNOWN_ERROR
-    : null;
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
-  const { data: existing } = await supabase.from("memberships").select("workspace_id").eq("user_id", user.id).limit(1);
-  if (existing?.length) {
-    /*
-     * Somebody with a workspace is past this form — but not necessarily past
-     * the step it starts. Every "run Sage again" in the product, on the
-     * dashboard, in the system check and in the setup checklist, points here,
-     * and this sent all of them straight back to `/app`: a failed Strategy
-     * Agent run could not be retried from anywhere. So a workspace with no
-     * business profile yet gets the retry; one that has its profile goes on to
-     * the dashboard as before, because a second run without `expand` would
-     * write a second copy of the same business.
-     */
-    const workspaceId = existing[0]!.workspace_id;
-    const { data: business } = await supabase
-      .from("business_profiles")
-      .select("id")
-      .eq("workspace_id", workspaceId)
+  let wizard = await readWizard(supabase, user.id);
+
+  if (!wizard.workspaceId) {
+    // Someone with a pending invitation is joining a team, not starting one.
+    const { data: pendingInvite } = await supabase
+      .from("invitations")
+      .select("token")
+      .eq("email", user.email ?? "")
+      .is("accepted_at", null)
+      .is("revoked_at", null)
       .limit(1)
       .maybeSingle();
-    if (business) redirect("/app");
-
-    const [strategy, { data: ws }] = await Promise.all([
-      readStrategyState(supabase, workspaceId, false),
-      supabase.from("workspaces").select("onboarding").eq("id", workspaceId).maybeSingle(),
-    ]);
-    const source = readOnboardingStash(ws?.onboarding).source;
-    const known = hasStrategySource(source);
-
-    return (
-      <div className="auth-split">
-        <main className="auth-page wide" id="main" tabIndex={-1}>
-          <header>
-            <h1>Your profiles are not written yet</h1>
-            <p className="muted">
-              Your workspace is set up. What is missing is Sage&rsquo;s first pass: your business
-              profile and three to five customer profiles, which everything else is built from.
-            </p>
-          </header>
-          {error ? (
-            <div className="notice danger" role="alert">
-              {error}
-            </div>
-          ) : null}
-          <StrategyStatus state={strategy} />
-          {strategy.phase === "absent" && known ? (
-            <div className="notice">
-              <p>Sage has what it needs to start, and has not been asked yet.</p>
-              <StrategyRetryButton>Start Sage</StrategyRetryButton>
-            </div>
-          ) : null}
-          {(strategy.phase === "absent" && !known) || strategy.phase === "failed" ? (
-            <StrategyDetailsForm source={source} />
-          ) : null}
-          <p className="small muted">
-            <a href="/app">Go to the dashboard</a>
-          </p>
-        </main>
-        <SetupRail />
-      </div>
-    );
+    if (pendingInvite) redirect(`/invite/${pendingInvite.token}`);
   }
 
-  // What signing up already stored, so this page can show it back rather than
-  // ask for it again. The trigger writes `full_name` from the signup form.
-  const { data: me } = await supabase
-    .from("profiles")
-    .select("full_name")
-    .eq("id", user.id)
-    .maybeSingle();
+  /*
+   * Back from LinkedIn's sign-in, or arriving while the account is not
+   * working: ask the provider rather than wait to be told (rule 8). The row is
+   * bound by the worker's claim on the way back and by a webhook otherwise,
+   * and a webhook that does not arrive left the rep reading "connect LinkedIn"
+   * one second after doing it. Only while the account is not active, so a
+   * working setup makes no provider call here.
+   */
+  let repair: ReturnType<typeof describeRepair> = null;
+  if (wizard.workspaceId && !wizard.facts.linkedInActive && (params.connected === "1" || wizard.account)) {
+    const result = await callWorker<RefreshResult>("/jobs/linkedin-refresh", {
+      workspaceId: wizard.workspaceId,
+      userId: user.id,
+    });
+    repair = describeRepair(result);
+    wizard = await readWizard(supabase, user.id);
+  }
 
-  // Someone with a pending invitation is joining a team, not starting one.
-  const { data: pendingInvite } = await supabase
-    .from("invitations")
-    .select("token")
-    .eq("email", user.email ?? "")
-    .is("accepted_at", null)
-    .is("revoked_at", null)
-    .limit(1)
-    .maybeSingle();
-  if (pendingInvite) redirect(`/invite/${pendingInvite.token}`);
+  const step = stepToShow(params.step, wizard.facts);
+  if (!step) redirect("/app");
+  const current = currentStep(wizard.facts)!;
+  const position = stepPosition(step);
+
+  const error = params.error
+    ? Object.prototype.hasOwnProperty.call(ERRORS, params.error)
+      ? ERRORS[params.error]
+      : step === "linkedin"
+        ? LINKEDIN_SIGN_IN_FAILED
+        : UNKNOWN_ERROR
+    : null;
+
+  const body = await stepBody(step, wizard, user.id, { connected: params.connected === "1", repair });
 
   return (
     <div className="auth-split">
-    <main className="auth-page wide" id="main" tabIndex={-1}>
-      <header>
-        <h1>Set up your agent</h1>
-        <p className="muted">
-          Four sections, one form, one button. This is what the agent works from: the words it
-          writes in, the hours it may send in, and who it looks for. Answer it once and it all
-          lands on your profile, where you can change any of it later.
-        </p>
-      </header>
-
-      {error ? (
-        <div className="notice danger" role="alert">
-          {error}
+      <main className="auth-page wide" id="main" tabIndex={-1}>
+        <div className="wz-progress">
+          <p className="tiny subtle">
+            Step {position.n} of {position.of}
+          </p>
+          <div className="step-meter" aria-hidden="true">
+            {WIZARD_STEPS.map((s, i) => (
+              <span
+                key={s.key}
+                className={stepDone(s.key, wizard.facts) ? "is-done" : i === stepIndex(step) ? "is-next" : undefined}
+              />
+            ))}
+          </div>
         </div>
-      ) : null}
 
-      {/*
-        The page somebody lands on when they sign in with a different address
-        from the one their workspace was set up with: the sign-in works, and
-        they are asked to start over. Said here, before they do.
-      */}
-      <div className="notice" role="note">
-        <p>
-          <strong>Set up {BRAND.name} before?</strong> You are signed in as {user.email}, which has no
-          workspace yet. If you used a different email, sign out and sign in with that one. Your
-          workspace is waiting there.
-        </p>
-        <div className="cluster">
-          <form action={signOutToFind}>
-            <SubmitButton className="btn secondary small" pendingLabel="Signing out…">
-              Sign out and find my account
+        <header>
+          <h1>{WIZARD_STEPS[stepIndex(step)]!.title}</h1>
+          <p className="muted">{LEDES[step]}</p>
+        </header>
+
+        {error ? (
+          <div className="notice danger" role="alert">
+            {error}
+          </div>
+        ) : null}
+
+        {body}
+
+        <nav className="wz-foot cluster" aria-label="Onboarding">
+          {stepIndex(step) > 0 && wizard.workspaceId ? (
+            <Link className="small" href={`/onboarding?step=${WIZARD_STEPS[stepIndex(step) - 1]!.key}`}>
+              Back
+            </Link>
+          ) : null}
+          {step !== current ? (
+            <Link className="small" href="/onboarding">
+              Return to step {stepPosition(current).n}
+            </Link>
+          ) : null}
+          {wizard.workspaceId ? (
+            <Link className="small" href="/app/support">
+              Stuck? Ask us
+            </Link>
+          ) : null}
+          <form action={signOut}>
+            <SubmitButton className="btn ghost small" pendingLabel="Signing out…">
+              Sign out
             </SubmitButton>
           </form>
-        </div>
-      </div>
-
-      {/*
-        One form, in sections, rather than a wizard.
-        A four-step wizard hides how much is being asked and makes going back to
-        change an earlier answer a chore. This is long, and being able to see
-        its whole length is the honest version.
-      */}
-      <form id="onboarding-form" action="/onboarding/submit" method="post" className="stack-5">
-        <FormKeeper formId="onboarding-form" storageKey="nora:onboarding-answers" />
-        <section className="card">
-          <div className="form-step">
-            <span className="form-step-n" aria-hidden="true">1</span>
-            <h2>Your business</h2>
-          </div>
-          <p className="small muted">
-            Sage, the team&rsquo;s strategist, reads what you publish and drafts your business
-            profile and three to five customer profiles. You read and approve them before anything is searched for.
-          </p>
-          <label className="field">
-            <span>Company name</span>
-            <input name="companyName" required autoComplete="organization" placeholder="Brightwater Dental Group" />
-          </label>
-          {/*
-            Text with a URL keyboard, not `type="url"`: the browser's URL check
-            refuses "brightwaterdental.com", which is how almost everybody
-            types their own site, and it refused it with a tooltip that never
-            said a scheme was the problem. The Strategy Agent adds the
-            https:// itself when it reads the site.
-          */}
-          <label className="field">
-            <span>Website</span>
-            <input
-              name="websiteUrl"
-              type="text"
-              inputMode="url"
-              autoComplete="url"
-              autoCapitalize="none"
-              autoCorrect="off"
-              spellCheck={false}
-              placeholder="brightwaterdental.com"
-            />
-          </label>
-          <label className="field">
-            <span>LinkedIn company page</span>
-            <input
-              name="linkedinCompanyUrl"
-              type="text"
-              inputMode="url"
-              autoComplete="off"
-              autoCapitalize="none"
-              autoCorrect="off"
-              spellCheck={false}
-              placeholder="linkedin.com/company/brightwater-dental"
-            />
-          </label>
-          <label className="field">
-            <span>Anything else worth knowing</span>
-            <textarea
-              name="description"
-              rows={4}
-              placeholder="Who you sell to, what you charge, what makes you different."
-            />
-            <span className="hint">
-              A website, a LinkedIn page or a description: one of them is required. The agent will
-              not invent a business from nothing.
-            </span>
-          </label>
-        </section>
-
-        <section className="card">
-          <div className="form-step">
-            <span className="form-step-n" aria-hidden="true">2</span>
-            <h2>How you sound</h2>
-          </div>
-          <p className="small muted">
-            Invitations and replies go out under your name, so this is the voice they are written
-            in. Left blank the agent falls back to your business profile, which sounds like a
-            company rather than a person.
-          </p>
-          <label className="field">
-            <span>Your name</span>
-            {/* Filled in from the account, not asked again. Signing up stored
-                this, and a blank box on the next screen is the product asking
-                a second time for something it already has. */}
-            <input
-              name="fullName"
-              placeholder="Maya Lindqvist"
-              autoComplete="name"
-              defaultValue={me?.full_name ?? ""}
-            />
-            <span className="hint">What a prospect sees the invitation come from.</span>
-          </label>
-          <label className="field">
-            <span>How you would describe yourself to a prospect</span>
-            <textarea
-              name="bio"
-              rows={3}
-              placeholder="Twelve years in logistics ops before this. I care about the boring parts."
-            />
-          </label>
-          <label className="field">
-            <span>Business address · optional</span>
-            <textarea name="address" rows={2} autoComplete="street-address" />
-            <span className="hint">For invoices, and for knowing which rules apply to you.</span>
-          </label>
-        </section>
-
-        <section className="card">
-          <div className="form-step">
-            <span className="form-step-n" aria-hidden="true">3</span>
-            <h2>When it may send</h2>
-          </div>
-          <p className="small muted">
-            Nothing leaves your account outside these hours, in your own timezone. This is the
-            single most common reason a new campaign looks like it is doing nothing: a window set in
-            the wrong zone sends at four in the morning, or never.
-          </p>
-          <label className="field medium">
-            <span>Your timezone</span>
-            <TimezoneSelect value={undefined} />
-          </label>
-          <div className="form-row">
-            {/* Two lists of readable times rather than two boxes taking 0 to
-                23, which asked people to work out that five in the afternoon
-                is 17. Same field names and values, so nothing downstream moves. */}
-            <label className="field compact">
-              <span>From</span>
-              <select name="start" defaultValue={9}>
-                {START_HOURS.map((hour) => (
-                  <option key={hour} value={hour}>
-                    {hourLabel(hour)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="field compact">
-              <span>To</span>
-              <select name="end" defaultValue={17}>
-                {END_HOURS.map((hour) => (
-                  <option key={hour} value={hour}>
-                    {hourLabel(hour)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className="cluster-3">
-              {[
-                { value: 1, label: "Mon" },
-                { value: 2, label: "Tue" },
-                { value: 3, label: "Wed" },
-                { value: 4, label: "Thu" },
-                { value: 5, label: "Fri" },
-                { value: 6, label: "Sat" },
-                { value: 0, label: "Sun" },
-              ].map((day) => (
-                <label key={day.value} className="small check">
-                  <input type="checkbox" name={`day-${day.value}`} defaultChecked={day.value >= 1 && day.value <= 5} />
-                  {day.label}
-                </label>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <section className="card">
-          <div className="form-step">
-            <span className="form-step-n" aria-hidden="true">4</span>
-            <h2>How it searches, and what it does with an answer</h2>
-          </div>
-          <p className="small muted">
-            Two settings the agent cannot guess. Both can be changed later, and both are wrong by
-            default for somebody: the search tier is a paid seat we cannot see, and how much rope
-            to give the agent is your call rather than ours.
-          </p>
-          <fieldset className="field-group">
-            <legend>Which LinkedIn plan does this account have?</legend>
-            <span className="tiny subtle hint">
-              {NORA} works with all three. Pick the one that is true: it decides how precisely it can
-              search and whether invitations can carry a note. Once you connect, {NORA} also checks
-              with LinkedIn.
-            </span>
-            <label className="small check">
-              <input type="radio" name="linkedinPlan" value="basic" required />
-              <span>
-                <strong>Free (Basic)</strong>
-                <span className="tiny subtle hint">
-                  Searches use job title, location and industry only, so lists are broader. LinkedIn
-                  lets a free account add a note to only {FREE_NOTES_PER_MONTH} invitations a month;
-                  after that {NORA} sends invitations without a note. LinkedIn also caps how many
-                  searches a free account can run each month.
-                </span>
-              </span>
-            </label>
-            <label className="small check">
-              <input type="radio" name="linkedinPlan" value="premium" required />
-              <span>
-                <strong>Premium</strong>
-                <span className="tiny subtle hint">
-                  Every invitation can carry a note. Searches still use job title, location and
-                  industry only.
-                </span>
-              </span>
-            </label>
-            <label className="small check">
-              <input type="radio" name="linkedinPlan" value="sales_navigator" required />
-              <span>
-                <strong>Sales Navigator</strong>
-                <span className="tiny subtle hint">
-                  Every invitation can carry a note, and searches also filter by seniority and company
-                  size and can leave out titles you don&rsquo;t want. Tighter lists, fewer invitations
-                  spent on the wrong people.
-                </span>
-              </span>
-            </label>
-          </fieldset>
-          <label className="field">
-            <span>When a reply arrives</span>
-            <select name="autonomy" defaultValue="supervised">
-              <option value="supervised">Hold anything uncertain for me to read first</option>
-              <option value="autonomous">The agent answers and books, on its own</option>
-            </select>
-            <span className="hint">
-              Either way it only states facts from your own material. {alwaysHoldsSentence()}
-            </span>
-          </label>
-        </section>
-
-        <PostButton className="btn block" pendingLabel="Building your profiles…">
-          Build my profiles
-        </PostButton>
-      </form>
-    </main>
-    <SetupRail />
+        </nav>
+      </main>
+      <WizardRail step={step} wizard={wizard} />
     </div>
   );
+}
+
+/**
+ * The whole sequence beside the step, so somebody can see how far there is to
+ * go and change an earlier answer. Steps ahead of the current one are not
+ * links: their inputs do not exist yet.
+ */
+function WizardRail({ step, wizard }: { step: WizardStepKey; wizard: WizardRead }) {
+  const current = currentStep(wizard.facts);
+  const reached = current ? stepIndex(current) : WIZARD_STEPS.length;
+  return (
+    <aside className="auth-aside wz-rail" aria-label="Setup steps">
+      <p className="eyebrow">Set up {BRAND.name}</p>
+      <ol className="wz-steps">
+        {WIZARD_STEPS.map((s, i) => {
+          const done = stepDone(s.key, wizard.facts);
+          const here = s.key === step;
+          const open = i <= reached && wizard.workspaceId !== null;
+          const state = here ? "is-here" : done ? "is-done" : i <= reached ? "is-open" : "is-ahead";
+          return (
+            <li key={s.key} className={state} aria-current={here ? "step" : undefined}>
+              <span className="wz-mark" aria-hidden="true">
+                {done && !here ? "✓" : i + 1}
+              </span>
+              <span>
+                {open && !here ? <Link href={`/onboarding?step=${s.key}`}>{s.title}</Link> : <strong>{s.title}</strong>}
+                <span className="tiny">{s.settles}</span>
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+      <p className="small">
+        When the last step is done your first campaign is live, and {BRAND.name} opens on a short tour of everything
+        else.
+      </p>
+    </aside>
+  );
+}
+
+/** The screen for one step, with what it reads. */
+async function stepBody(
+  step: WizardStepKey,
+  wizard: WizardRead,
+  userId: string,
+  extra: { connected: boolean; repair: ReturnType<typeof describeRepair> },
+): Promise<React.ReactNode> {
+  const supabase = await createClient();
+  const workspaceId = wizard.workspaceId;
+
+  if (step === "business") {
+    if (!workspaceId) {
+      const { data: auth } = await supabase.auth.getUser();
+      return (
+        <>
+          {/* The page somebody lands on when they sign in with a different
+              address from the one their workspace was set up with. */}
+          <div className="notice" role="note">
+            <p className="small">
+              <strong>Set up {BRAND.name} before?</strong> You are signed in as {auth.user?.email}, which has no
+              workspace yet. If you used a different email, sign out and sign in with that one.
+            </p>
+            <form action={signOutToFind}>
+              <SubmitButton className="btn secondary small" pendingLabel="Signing out…">
+                Sign out and find my account
+              </SubmitButton>
+            </form>
+          </div>
+          <BusinessForm />
+        </>
+      );
+    }
+    const strategy = await readStrategyState(supabase, workspaceId, await hasBusiness(workspaceId));
+    const known = hasStrategySource(wizard.stash.source);
+    return (
+      <>
+        <p>
+          <strong>{wizard.workspaceName}</strong>
+          {wizard.stash.source.websiteUrl ? <span className="muted"> · {wizard.stash.source.websiteUrl}</span> : null}
+        </p>
+        <StrategyStatus state={strategy} />
+        {strategy.phase === "absent" && known ? (
+          <div className="notice">
+            <p>Sage has what it needs and has not been asked yet.</p>
+            <StrategyRetryButton>Start Sage</StrategyRetryButton>
+          </div>
+        ) : null}
+        {(strategy.phase === "absent" && !known) || strategy.phase === "failed" ? (
+          <StrategyDetailsForm source={wizard.stash.source} />
+        ) : null}
+        {strategy.phase === "running" ? <AutoRefresh seconds={15} /> : null}
+        <ContinueLink />
+      </>
+    );
+  }
+
+  if (step === "linkedin") {
+    const connected = wizard.facts.linkedInActive;
+    return (
+      <>
+        {connected ? (
+          <div className="notice accent" role="status">
+            <p>
+              <strong>Connected{wizard.account?.display_name ? ` as ${wizard.account.display_name}` : ""}.</strong>{" "}
+              Check the plan below and continue.
+            </p>
+          </div>
+        ) : extra.repair ? (
+          <div className={`notice ${extra.repair.tone}`} role="status">
+            <p>
+              <strong>{extra.repair.title}</strong> {extra.repair.body}
+            </p>
+            {extra.repair.fix ? <p className="small">{extra.repair.fix}</p> : null}
+          </div>
+        ) : null}
+        <LinkedInForm account={wizard.account} stash={wizard.stash} connected={connected} />
+      </>
+    );
+  }
+
+  if (step === "hours" || step === "voice" || step === "cta") {
+    const { data: me } = await supabase
+      .from("profiles")
+      .select("full_name, bio, timezone, booking_url")
+      .eq("id", userId)
+      .maybeSingle();
+    if (step === "hours") {
+      const fromAccount = wizard.account?.working_hours as { start: number; end: number; days: number[] } | null;
+      return <HoursForm timezone={me?.timezone ?? null} hours={fromAccount ?? wizard.stash.workingHours} />;
+    }
+    if (step === "voice") {
+      return <VoiceForm fullName={me?.full_name ?? null} bio={me?.bio ?? null} autonomy={wizard.stash.autonomy} />;
+    }
+    return <CtaForm cta={wizard.stash.cta} bookingUrl={me?.booking_url ?? null} />;
+  }
+
+  if (!workspaceId) return null;
+
+  if (step === "strategy") {
+    const businessId = await hasBusiness(workspaceId);
+    const strategy = await readStrategyState(supabase, workspaceId, businessId);
+    const cards = await strategyCards(workspaceId);
+    if (cards.length === 0 && strategy.phase === "ready" && businessId) {
+      // Written, and every one set aside: there is nothing here to wait for.
+      return (
+        <div className="notice warning" role="status">
+          <p>
+            <strong>Every strategy has been set aside.</strong> Tell us from{" "}
+            <Link href="/app/support">Support</Link> what you sell and who buys it, and we will get Sage to write
+            new ones.
+          </p>
+        </div>
+      );
+    }
+    if (cards.length === 0) {
+      return (
+        <>
+          <StrategyStatus state={strategy} />
+          {strategy.phase === "failed" || strategy.phase === "absent" ? (
+            <StrategyDetailsForm source={wizard.stash.source} />
+          ) : (
+            <p className="small muted">This page updates on its own when they are ready.</p>
+          )}
+          {strategy.phase === "running" || strategy.phase === "ready" ? <AutoRefresh seconds={10} /> : null}
+        </>
+      );
+    }
+    return (
+      <>
+        <StrategyCards cards={cards} />
+        {wizard.facts.hasApprovedStrategy ? <ContinueLink /> : null}
+      </>
+    );
+  }
+
+  if (step === "prospects") {
+    const [{ data: approved }, { data: lastEvent }] = await Promise.all([
+      supabase
+        .from("customer_profiles")
+        .select("id, name")
+        .eq("workspace_id", workspaceId)
+        .not("approved_at", "is", null)
+        .order("approved_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      supabase
+        .from("events")
+        .select("name, payload, created_at")
+        .eq("workspace_id", workspaceId)
+        .in("name", SEARCH_EVENTS)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+    const notice = describeLastSearch(lastEvent);
+    const searching = lastEvent?.name === "targeting.queued" && notice?.tone === "muted";
+    return (
+      <>
+        {approved ? (
+          <p className="small">
+            Strategy: <strong>{approved.name}</strong>
+          </p>
+        ) : null}
+        {notice ? (
+          <div className={`notice ${notice.tone === "warning" ? "warning" : "accent"}`} role="status">
+            <p>
+              <strong>{notice.title}</strong>
+            </p>
+            <p className="small">{searching ? "This page moves on by itself when the list is ready." : notice.body}</p>
+          </div>
+        ) : null}
+        {searching ? <AutoRefresh seconds={8} /> : null}
+        {!searching && approved ? (
+          <div className="cluster">
+            <SearchButton profileId={approved.id} label={notice ? "Search again" : "Search LinkedIn"} />
+            <Link className="btn secondary" href="/onboarding?step=strategy">
+              Choose another strategy
+            </Link>
+          </div>
+        ) : null}
+      </>
+    );
+  }
+
+  // launch
+  const review = await launchReview(workspaceId);
+  if (!review) {
+    return (
+      <div className="notice warning" role="status">
+        <p>No campaign is waiting to launch. Go back a step and build your list.</p>
+      </div>
+    );
+  }
+  return <LaunchPanel review={review} />;
+}
+
+function ContinueLink() {
+  return (
+    <p>
+      <Link className="btn" href="/onboarding">
+        Continue
+      </Link>
+    </p>
+  );
+}
+
+async function hasBusiness(workspaceId: string): Promise<boolean> {
+  const supabase = await createClient();
+  const { count } = await supabase
+    .from("business_profiles")
+    .select("id", { count: "exact", head: true })
+    .eq("workspace_id", workspaceId);
+  return (count ?? 0) > 0;
+}
+
+/** Sage's strategies, best first, with the competitor check on each (rule 49). */
+async function strategyCards(workspaceId: string): Promise<StrategyCard[]> {
+  const supabase = await createClient();
+  const [{ data: businesses }, { data: rows }] = await Promise.all([
+    supabase.from("business_profiles").select("id, spec").eq("workspace_id", workspaceId),
+    supabase
+      .from("customer_profiles")
+      .select("id, name, spec, approved_at, do_not_pursue, business_profile_id")
+      .eq("workspace_id", workspaceId)
+      .order("priority"),
+  ]);
+  const businessById = new Map((businesses ?? []).map((b) => [b.id, BusinessProfileSchema.safeParse(b.spec)]));
+  const cards: StrategyCard[] = [];
+  for (const row of rows ?? []) {
+    if (row.do_not_pursue) continue;
+    const spec = parseCustomerProfile(row.spec);
+    if (!spec.success) continue;
+    const business = row.business_profile_id ? businessById.get(row.business_profile_id) : undefined;
+    cards.push({
+      id: row.id,
+      name: spec.data.name ?? row.name,
+      summary: spec.data.summary,
+      whatTheyBuy: spec.data.whatTheyBuy ?? null,
+      insteadOfToday: spec.data.insteadOfToday ?? null,
+      pains: spec.data.pains ?? [],
+      rivals: business?.success ? describeCompetitorTargeting(competitorTargeting(spec.data, business.data)) : null,
+      approved: Boolean(row.approved_at),
+    });
+  }
+  return cards;
+}
+
+/** The draft the search built, read for the last step. */
+async function launchReview(workspaceId: string): Promise<LaunchReview | null> {
+  const supabase = await createClient();
+  const { data: campaign } = await supabase
+    .from("campaigns")
+    .select("id, name, daily_invite_cap, cta_kind")
+    .eq("workspace_id", workspaceId)
+    .eq("status", "draft")
+    .is("launched_at", null)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!campaign) return null;
+
+  const [state, { data: queued }, { data: steps }] = await Promise.all([
+    launchState(campaign.id, workspaceId),
+    supabase
+      .from("campaign_prospects")
+      .select("prospect_id, invite_note")
+      .eq("campaign_id", campaign.id)
+      .eq("status", "queued")
+      .order("created_at")
+      .limit(3),
+    supabase
+      .from("campaign_steps")
+      .select("step_number, delay_days, message, variant_id")
+      .eq("campaign_id", campaign.id)
+      .order("step_number"),
+  ]);
+  const ids = (queued ?? []).map((row) => row.prospect_id);
+  const { data: people } = ids.length
+    ? await supabase.from("prospects").select("id, first_name, last_name, title, company").in("id", ids)
+    : { data: [] };
+  const byId = new Map((people ?? []).map((p) => [p.id, p]));
+
+  // The campaign-wide sequence, or the first angle's when every step belongs
+  // to an angle (rule 28): one sequence to read, not all of them.
+  const all = steps ?? [];
+  const firstVariant = all.find((s) => s.variant_id)?.variant_id ?? null;
+  const shared = all.filter((s) => !s.variant_id);
+  const sequence = (shared.length ? shared : all.filter((s) => s.variant_id === firstVariant)).slice(0, 3);
+
+  const kind = (campaign.cta_kind ?? "meeting") as keyof typeof CTA_DEFINITIONS;
+  return {
+    campaignId: campaign.id,
+    name: campaign.name,
+    people: state?.prospectCount ?? 0,
+    dailyCap: campaign.daily_invite_cap,
+    asks: CTA_DEFINITIONS[kind]?.label ?? CTA_DEFINITIONS.meeting.label,
+    samples: (queued ?? []).map((row) => {
+      const p = byId.get(row.prospect_id);
+      const name = [p?.first_name, p?.last_name].filter(Boolean).join(" ") || "a prospect";
+      const role = [p?.title, p?.company].filter(Boolean).join(", ");
+      return { who: role ? `${name} · ${role}` : name, note: row.invite_note?.trim() || null };
+    }),
+    steps: sequence.map((s) => ({ n: s.step_number, delayDays: s.delay_days, message: s.message })),
+    blockers: state ? launchBlockers(state) : ["That campaign could not be read."],
+  };
 }

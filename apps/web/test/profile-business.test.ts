@@ -11,8 +11,10 @@ import { readBusinessForm } from "../src/lib/profile-business";
  * then shown on no screen that could edit them.
  */
 const SRC = join(__dirname, "..", "src", "app");
-const onboarding = readFileSync(join(SRC, "onboarding", "page.tsx"), "utf8");
+// The onboarding page and its step screens, read together.
+const onboarding = ["page.tsx", "steps.tsx"].map((f) => readFileSync(join(SRC, "onboarding", f), "utf8")).join("\n");
 const profile = readFileSync(join(SRC, "app", "profile", "page.tsx"), "utf8");
+const strategy = readFileSync(join(SRC, "app", "strategy", "page.tsx"), "utf8");
 
 const form = (fields: Record<string, string>) => ({ get: (name: string) => fields[name] ?? null });
 
@@ -26,7 +28,17 @@ describe("the profile edits every onboarding answer", () => {
   it("has a field on the profile for each of them", () => {
     // Day checkboxes are named `day-${n}` in both and the timezone comes from
     // the shared picker, so they are checked by their own names.
+    // Hidden fields that route a step's form are plumbing, not questions.
+    const plumbing = new Set(["action", "profileId", "campaignId"]);
+    // What a campaign asks for is per strategy after onboarding, so it is
+    // changed on the strategy page rather than the profile.
+    const perStrategy = new Set(["ctaKind", "ctaLabel", "ctaUrl"]);
     for (const name of asked) {
+      if (plumbing.has(name)) continue;
+      if (perStrategy.has(name)) {
+        expect(strategy, `onboarding asks "${name}" and the strategy page cannot change it`).toContain(`name="${name}"`);
+        continue;
+      }
       expect(profile, `onboarding asks "${name}" and the profile cannot change it`).toContain(`name="${name}"`);
     }
     expect(profile).toContain('name="linkedinPlan"');

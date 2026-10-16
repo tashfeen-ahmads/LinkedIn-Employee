@@ -116,10 +116,14 @@ describe("retrying the Strategy Agent", () => {
 
   it("onboarding shows the retry to a member with no business profile", () => {
     const onboarding = read("app", "onboarding", "page.tsx");
-    // The redirect to /app still happens, but only once a profile exists.
+    // Having a workspace is not having finished: the page goes to /app only
+    // when no step is left (rule 65), and a run that failed or never started
+    // is retried from the business and strategy steps.
     expect(onboarding).not.toMatch(/if \(existing\?\.length\) redirect\("\/app"\)/);
-    expect(onboarding).toMatch(/\.from\("business_profiles"\)[\s\S]{0,200}?if \(business\) redirect\("\/app"\)/);
-    expect(onboarding).toMatch(/<StrategyDetailsForm/);
+    expect(onboarding).toMatch(/if \(!step\) redirect\("\/app"\)/);
+    // And that is the only way out to /app: a workspace on its own is not one.
+    expect(onboarding.match(/redirect\("\/app"\)/g)?.length).toBe(1);
+    expect(onboarding.match(/<StrategyDetailsForm/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
   });
 });
 

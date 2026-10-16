@@ -22,6 +22,26 @@ export interface StrategySource {
   description?: string;
 }
 
+/** What campaigns ask for, chosen on the onboarding CTA step (rule 65). */
+export interface StashedCta {
+  kind: "meeting" | "link" | "reply";
+  label: string | null;
+  url: string | null;
+}
+
+/**
+ * When a person confirmed each onboarding step that has no row of its own to
+ * prove it. The hours, the voice and the CTA all have defaults, so a value
+ * being present says nothing about whether anybody looked at it; the stamp is
+ * the record that they did. Keyed by user, because hours and voice are a
+ * rep's own and a teammate joining later has not confirmed anything.
+ */
+export interface StepConfirmations {
+  hours?: string;
+  voice?: string;
+  cta?: string;
+}
+
 export interface OnboardingStash {
   workingHours: WorkingHours | null;
   hasSalesNavigator: boolean | null;
@@ -30,6 +50,8 @@ export interface OnboardingStash {
   autonomy: "autonomous" | "supervised" | null;
   /** Empty for a workspace set up before the source was kept. */
   source: StrategySource;
+  cta: StashedCta | null;
+  confirmed: Record<string, StepConfirmations>;
 }
 
 function text(value: unknown): string | undefined {
@@ -56,7 +78,42 @@ export function readOnboardingStash(value: unknown): OnboardingStash {
       linkedinCompanyUrl: text(source.linkedinCompanyUrl),
       description: text(source.description),
     }),
+    cta: stashedCta(raw.cta),
+    confirmed: confirmations(raw.confirmed),
   };
+}
+
+function stashedCta(value: unknown): StashedCta | null {
+  if (!value || typeof value !== "object") return null;
+  const c = value as Record<string, unknown>;
+  if (c.kind !== "meeting" && c.kind !== "link" && c.kind !== "reply") return null;
+  return { kind: c.kind, label: text(c.label) ?? null, url: text(c.url) ?? null };
+}
+
+function confirmations(value: unknown): Record<string, StepConfirmations> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const out: Record<string, StepConfirmations> = {};
+  for (const [userId, entry] of Object.entries(value as Record<string, unknown>)) {
+    if (!entry || typeof entry !== "object") continue;
+    const e = entry as Record<string, unknown>;
+    const stamp: StepConfirmations = {};
+    for (const key of ["hours", "voice", "cta"] as const) {
+      const at = text(e[key]);
+      if (at) stamp[key] = at;
+    }
+    out[userId] = stamp;
+  }
+  return out;
+}
+
+/** The stash's confirmations with one more step stamped for one person, every other kept. */
+export function withConfirmation(
+  current: Record<string, StepConfirmations>,
+  userId: string,
+  step: keyof StepConfirmations,
+  at: string,
+): Record<string, StepConfirmations> {
+  return { ...current, [userId]: { ...(current[userId] ?? {}), [step]: at } };
 }
 
 function compact(source: StrategySource): StrategySource {
