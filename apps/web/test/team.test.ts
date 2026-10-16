@@ -34,7 +34,7 @@ const QUIET: TeamFacts = {
 
 describe("the team", () => {
   it("is led by the brand, spelt from BRAND rather than typed", () => {
-    expect(NORA).toBe(BRAND.name.toUpperCase());
+    expect(NORA).toBe(BRAND.name);
     expect(LEAD.name).toBe(NORA);
   });
 

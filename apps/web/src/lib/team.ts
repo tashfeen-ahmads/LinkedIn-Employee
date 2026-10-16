@@ -26,8 +26,12 @@ import { BRAND } from "@le/shared";
  * marketing caps are read from the constants the limiter obeys.
  */
 
-/** The brand's name as the assistant is introduced: one definition, from BRAND. */
-export const NORA = BRAND.name.toUpperCase();
+/**
+ * The brand's name as the assistant is introduced: one definition, from BRAND,
+ * spelled exactly as it is everywhere else. It was upper-cased here, so the
+ * onboarding steps and the team panel said "NORA" beside pages saying "Nora".
+ */
+export const NORA = BRAND.name;
 
 export type MemberKey = "sage" | "scout" | "quinn" | "reese";
 

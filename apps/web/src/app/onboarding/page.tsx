@@ -295,20 +295,20 @@ async function stepBody(
       const { data: auth } = await supabase.auth.getUser();
       return (
         <>
-          {/* The page somebody lands on when they sign in with a different
-              address from the one their workspace was set up with. */}
-          <div className="notice" role="note">
-            <p className="small">
-              <strong>Set up {BRAND.name} before?</strong> You are signed in as {auth.user?.email}, which has no
-              workspace yet. If you used a different email, sign out and sign in with that one.
-            </p>
-            <form action={signOutToFind}>
-              <SubmitButton className="btn secondary small" pendingLabel="Signing out…">
-                Sign out and find my account
-              </SubmitButton>
-            </form>
-          </div>
           <BusinessForm />
+          {/* For somebody who signed in with a different address from the one
+              their workspace was set up with. It sat above the form as a boxed
+              notice, so every brand-new customer's first screen opened by asking
+              whether they had used the product before. Under the form, as one
+              quiet line, it is still there for the person it is for. */}
+          <form action={signOutToFind} className="cluster small muted">
+            <span>
+              Signed in as {auth.user?.email}. Already set up {BRAND.name} with another email?
+            </span>
+            <SubmitButton className="btn ghost small" pendingLabel="Signing out…">
+              Use that account
+            </SubmitButton>
+          </form>
         </>
       );
     }

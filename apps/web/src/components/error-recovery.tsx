@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { isStaleBuild, mayReloadAgain, STALE_RELOAD_KEY } from "@/lib/stale-build";
+import { BRAND } from "@le/shared";
 
 /**
  * What somebody sees instead of "Application error: a client-side exception".
@@ -33,7 +34,7 @@ export function ErrorRecovery({ error, reset }: { error: Error & { digest?: stri
     <div className="notice warning" role="alert" style={{ maxWidth: "36rem", margin: "4rem auto" }}>
       {reloading ? (
         <p>
-          <strong>NORA was just updated.</strong> Reloading the page — your answers are kept, so press
+          <strong>{BRAND.name} was just updated.</strong> Reloading the page — your answers are kept, so press
           the button again once it opens.
         </p>
       ) : (
