@@ -21,6 +21,8 @@ import { SEARCH_EVENTS, describeLastSearch } from "@/lib/last-search";
 import { launchBlockers } from "@/lib/campaign";
 import { launchState } from "@/lib/launch";
 import { readWizard, type WizardRead } from "@/lib/wizard-state";
+import { AUTONOMY_ROLES } from "@/lib/autonomy";
+import { parseWorkingHours } from "@le/linkedin";
 import { WIZARD_STEPS, currentStep, stepDone, stepIndex, stepPosition, stepToShow, type WizardStepKey } from "@/lib/wizard";
 import { describeRepair, type RefreshResult } from "@/app/app/team/repair";
 import {
@@ -62,6 +64,10 @@ const ERRORS: Record<string, string> = {
   "launch-missing": "That campaign could not be found. Reload the page.",
   "launch-failed": "The campaign could not be launched. Nothing was sent. Try again.",
   "save-failed": "That could not be saved just now. Try again.",
+  unreadable: "Your setup could not be loaded just now, so nothing was saved. Try again in a minute.",
+  "sage-not-started": "Sage could not be started just now. Try again in a minute.",
+  "sage-admin-only": "Only an owner or admin can change what Sage reads. Press Try again to run it on what you gave at the start.",
+  "sage-needs-source": "Tell Sage what you sell first: a website, a LinkedIn page or a sentence or two.",
 };
 const UNKNOWN_ERROR = "Something did not go through just now. Try again in a minute.";
 const LINKEDIN_SIGN_IN_FAILED = "The LinkedIn sign-in did not go through, so nothing was connected. Press Connect LinkedIn to try again.";
@@ -132,8 +138,29 @@ export default async function OnboardingPage({
    * one second after doing it. Only while the account is not active, so a
    * working setup makes no provider call here.
    */
+  if (wizard.unreadable) {
+    return (
+      <main className="auth-page" id="main" tabIndex={-1}>
+        <header>
+          <h1>Setting up {BRAND.name}</h1>
+        </header>
+        <div className="notice warning" role="alert">
+          <p>
+            Your setup could not be loaded just now. Nothing has changed: reload this page in a minute and you will
+            be where you left off.
+          </p>
+        </div>
+      </main>
+    );
+  }
+
   let repair: ReturnType<typeof describeRepair> = null;
-  if (wizard.workspaceId && !wizard.facts.linkedInActive && (params.connected === "1" || wizard.account)) {
+  if (
+    wizard.workspaceId &&
+    !wizard.facts.linkedInActive &&
+    stepToShow(params.step, wizard.facts) === "linkedin" &&
+    (params.connected === "1" || wizard.account)
+  ) {
     const result = await callWorker<RefreshResult>("/jobs/linkedin-refresh", {
       workspaceId: wizard.workspaceId,
       userId: user.id,
@@ -293,15 +320,15 @@ async function stepBody(
           <strong>{wizard.workspaceName}</strong>
           {wizard.stash.source.websiteUrl ? <span className="muted"> · {wizard.stash.source.websiteUrl}</span> : null}
         </p>
-        <StrategyStatus state={strategy} />
+        <StrategyStatus state={strategy} from="onboarding" />
         {strategy.phase === "absent" && known ? (
           <div className="notice">
             <p>Sage has what it needs and has not been asked yet.</p>
-            <StrategyRetryButton>Start Sage</StrategyRetryButton>
+            <StrategyRetryButton from="onboarding">Start Sage</StrategyRetryButton>
           </div>
         ) : null}
         {(strategy.phase === "absent" && !known) || strategy.phase === "failed" ? (
-          <StrategyDetailsForm source={wizard.stash.source} />
+          <StrategyDetailsForm source={wizard.stash.source} from="onboarding" />
         ) : null}
         {strategy.phase === "running" ? <AutoRefresh seconds={15} /> : null}
         <ContinueLink />
@@ -340,11 +367,22 @@ async function stepBody(
       .eq("id", userId)
       .maybeSingle();
     if (step === "hours") {
-      const fromAccount = wizard.account?.working_hours as { start: number; end: number; days: number[] } | null;
-      return <HoursForm timezone={me?.timezone ?? null} hours={fromAccount ?? wizard.stash.workingHours} />;
+      // Parsed, never cast: a stored value missing its days would otherwise
+      // reach the form and break the page.
+      const hours = wizard.account?.working_hours
+        ? parseWorkingHours(wizard.account.working_hours)
+        : wizard.stash.workingHours;
+      return <HoursForm timezone={me?.timezone ?? null} hours={hours} />;
     }
     if (step === "voice") {
-      return <VoiceForm fullName={me?.full_name ?? null} bio={me?.bio ?? null} autonomy={wizard.stash.autonomy} />;
+      return (
+        <VoiceForm
+          fullName={me?.full_name ?? null}
+          bio={me?.bio ?? null}
+          autonomy={wizard.stash.autonomy}
+          canSetAutonomy={(AUTONOMY_ROLES as readonly string[]).includes(wizard.role ?? "")}
+        />
+      );
     }
     return <CtaForm cta={wizard.stash.cta} bookingUrl={me?.booking_url ?? null} />;
   }
@@ -370,9 +408,9 @@ async function stepBody(
     if (cards.length === 0) {
       return (
         <>
-          <StrategyStatus state={strategy} />
+          <StrategyStatus state={strategy} from="onboarding" />
           {strategy.phase === "failed" || strategy.phase === "absent" ? (
-            <StrategyDetailsForm source={wizard.stash.source} />
+            <StrategyDetailsForm source={wizard.stash.source} from="onboarding" />
           ) : (
             <p className="small muted">This page updates on its own when they are ready.</p>
           )}

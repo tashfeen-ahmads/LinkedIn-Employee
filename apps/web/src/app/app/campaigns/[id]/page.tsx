@@ -23,6 +23,8 @@ import { notesLeftThisMonth } from "@/lib/invite-notes";
 import { restoreFromFailure } from "@/lib/retry-failed";
 import { requireSession } from "@/lib/workspace";
 import { launch } from "@/lib/launch";
+import { readWizard } from "@/lib/wizard-state";
+import { currentStep } from "@/lib/wizard";
 import { createClient } from "@/lib/supabase-server";
 import { callWorker, errorQuery, noticeQuery, startedNotice } from "@/lib/worker";
 import { SubmitButton } from "@/components/submit-button";
@@ -333,6 +335,20 @@ async function launchCampaign(
   campaignId: string,
   session: Awaited<ReturnType<typeof requireSession>>,
 ): Promise<never> {
+  /*
+   * The first launch belongs to the last step of setup (rule 65). This page is
+   * open during setup so the person can read every name before launching, and
+   * without this its own button was a way to finish setup with the hours,
+   * voice and call to action never confirmed.
+   */
+  const supabase = await createClient();
+  const wizard = await readWizard(supabase, session.userId);
+  // A read that failed is not permission: onboarding says it could not load,
+  // which is better than a first campaign going live past unconfirmed steps.
+  if (wizard.unreadable || (!wizard.facts.hasLaunchedCampaign && currentStep(wizard.facts) !== "launch")) {
+    redirect("/onboarding");
+  }
+
   const outcome = await launch(campaignId, session);
   revalidatePath(`/app/campaigns/${campaignId}`);
   switch (outcome.status) {

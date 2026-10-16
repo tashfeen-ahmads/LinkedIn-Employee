@@ -13,12 +13,16 @@ export const STRATEGY_RETRY = "/app/strategy/retry";
 export function StrategyRetryButton({
   children = "Try again",
   className = "btn small",
+  from,
 }: {
   children?: React.ReactNode;
   className?: string;
+  /** Set on onboarding, so the answer comes back there rather than to a page behind setup. */
+  from?: "onboarding";
 }) {
   return (
     <form action={STRATEGY_RETRY} method="post">
+      {from ? <input type="hidden" name="from" value={from} /> : null}
       <PostButton className={className} pendingLabel="Starting…">
         {children}
       </PostButton>
@@ -33,10 +37,11 @@ export function StrategyRetryButton({
  * required, because the agent will not invent a business from nothing. Filled
  * in with whatever was kept, so a correction is an edit rather than a retype.
  */
-export function StrategyDetailsForm({ source = {} }: { source?: StrategySource }) {
+export function StrategyDetailsForm({ source = {}, from }: { source?: StrategySource; from?: "onboarding" }) {
   return (
     <div className="card" id="details">
       <form action={STRATEGY_RETRY} method="post" className="stack-3">
+        {from ? <input type="hidden" name="from" value={from} /> : null}
         <label className="field">
           <span>Website</span>
           <input name="websiteUrl" type="url" placeholder="https://acme.com" defaultValue={source.websiteUrl ?? ""} />

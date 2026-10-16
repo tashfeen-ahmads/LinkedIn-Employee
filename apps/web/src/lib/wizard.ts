@@ -15,8 +15,12 @@
  * Pure, so the order and the gate can be tested without a database.
  */
 
-/** The request header the middleware sets to the path the visitor asked for. */
-export const PATH_HEADER = "x-le-path";
+/**
+ * Set once a person's workspace is seen to have launched, holding their user
+ * id, so the middleware stops asking. It only ever skips the setup redirect,
+ * which is the person's own convenience: nothing is authorised by it.
+ */
+export const SETUP_DONE_COOKIE = "le_setup_done";
 
 export type WizardStepKey =
   | "business"
@@ -142,6 +146,18 @@ export function openDuringSetup(path: string): boolean {
 }
 
 /**
+ * Whether a request is one the setup redirect applies to: an app page being
+ * loaded. A POST is a form or a server action somebody on an onboarding screen
+ * submitted (the Sage retry posts under /app), and refusing it would make the
+ * button that fixes a stuck step the one thing that cannot run.
+ */
+export function gatesSetup(method: string, pathname: string): boolean {
+  if (method !== "GET" && method !== "HEAD") return false;
+  if (pathname !== "/app" && !pathname.startsWith("/app/")) return false;
+  return !openDuringSetup(pathname);
+}
+
+/**
  * Where the app sends somebody whose setup is not finished.
  *
  * The provider's sign-in returns to the profile page with `connected` or
@@ -149,6 +165,10 @@ export function openDuringSetup(path: string): boolean {
  * happened, and everything else is dropped.
  */
 export function setupRedirect(path: string): string {
+  // Only the profile page is where the provider's sign-in comes back to. An
+  // error on any other page is that page's own, and carried to the LinkedIn
+  // step it read as a failed sign-in to somebody whose account was fine.
+  if (!path.startsWith("/app/profile")) return "/onboarding";
   const query = path.includes("?") ? path.slice(path.indexOf("?") + 1).split("#")[0] ?? "" : "";
   const params = new URLSearchParams(query);
   const kept = new URLSearchParams();
@@ -159,4 +179,24 @@ export function setupRedirect(path: string): string {
   if (kept.size) kept.set("step", "linkedin");
   const rest = kept.toString();
   return rest ? `/onboarding?${rest}` : "/onboarding";
+}
+
+/**
+ * Where a Sage retry posted from onboarding lands.
+ *
+ * The retry answers with the strategy page and a sentence, and the strategy
+ * page is behind the setup redirect: the answer was dropped on the way back
+ * and the person saw the same stuck step with no word of what happened. So a
+ * retry from onboarding comes back to onboarding, as a code the page words.
+ */
+export function retryBackToOnboarding(path: string): string {
+  const query = path.includes("?") ? path.slice(path.indexOf("?") + 1).split("#")[0] ?? "" : "";
+  const error = new URLSearchParams(query).get("error");
+  if (!error) return "/onboarding";
+  const code = error.startsWith("Only an owner or admin")
+    ? "sage-admin-only"
+    : error.startsWith("Tell Sage what you sell")
+      ? "sage-needs-source"
+      : "sage-not-started";
+  return `/onboarding?step=strategy&error=${code}`;
 }

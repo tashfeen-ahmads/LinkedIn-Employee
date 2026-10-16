@@ -146,6 +146,8 @@ export type ProfileRow = {
    * a welcome, an invitation, a paused account — is unaffected.
    */
   marketing_opt_out_at: string | null;
+  /** Onboarding steps this person confirmed, by workspace id (migration 0049, rule 65). */
+  setup_confirmed: unknown;
   created_at: string;
 };
 

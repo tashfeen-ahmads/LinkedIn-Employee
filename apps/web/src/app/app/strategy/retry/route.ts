@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { retryStrategy } from "@/lib/strategy-retry";
 import { seeOther } from "@/lib/see-other";
+import { retryBackToOnboarding } from "@/lib/wizard";
 
 /*
  * Runs the Strategy Agent again, as a plain form post.
@@ -12,5 +13,9 @@ import { seeOther } from "@/lib/see-other";
  * every browser without any of our JavaScript running (rule 57).
  */
 export async function POST(request: NextRequest) {
-  return seeOther(await retryStrategy(await request.formData()));
+  const form = await request.formData();
+  const to = await retryStrategy(form);
+  // Pressed during onboarding: back to onboarding, where the strategy page
+  // cannot be reached until setup is finished (rule 65).
+  return seeOther(form.get("from") === "onboarding" ? retryBackToOnboarding(to) : to);
 }

@@ -31,7 +31,9 @@ describe("approving a strategy starts the search", () => {
     const end = body.indexOf("\nasync function ", 1);
     const action = end === -1 ? body : body.slice(0, end);
 
-    expect(action).toContain("approved_at");
+    // The approval itself is the shared definition both approval screens use.
+    expect(action).toMatch(/await approveStrategy\(supabase, session\.workspaceId, id\)/);
+    expect(read("../src/lib/approve.ts")).toContain("approved_at");
     expect(action).toMatch(/await queueSearch\(/);
   });
 

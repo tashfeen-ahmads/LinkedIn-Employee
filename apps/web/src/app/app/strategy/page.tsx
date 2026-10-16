@@ -11,6 +11,7 @@ import { PageNotice } from "@/components/page-notice";
 import { Empty, PageHeader, Section } from "@/components/page";
 import { requireSession } from "@/lib/workspace";
 import { HOW_MANY, queueSearch } from "@/lib/search";
+import { approveStrategy } from "@/lib/approve";
 import { createClient } from "@/lib/supabase-server";
 import {
   ALREADY_RUNNING,
@@ -77,30 +78,16 @@ async function approveProfile(formData: FormData) {
   const supabase = await createClient();
 
   // Checked, because approving is the one decision this screen exists for
-  // (rule 9). A write that failed, or matched nothing, used to be followed by
-  // "Approved" and a search: the screen said yes and the row still said no.
-  const { data: approvedRows, error: approveError } = await supabase
-    .from("customer_profiles")
-    .update({ approved_at: new Date().toISOString(), do_not_pursue: false })
-    .eq("id", id)
-    .eq("workspace_id", session.workspaceId)
-    .select("id");
-  if (approveError || !approvedRows?.length) {
-    if (approveError) console.error(`[strategy] approve profile: ${approveError.message}`);
+  // (rule 9). The shared definition checks the rows it changed.
+  const approved = await approveStrategy(supabase, session.workspaceId, id);
+  if (!approved.ok) {
     redirect(errorQuery("/app/strategy", "That strategy could not be approved, so nothing was searched for. Reload the page and try again."));
   }
-
-  const { data: already } = await supabase
-    .from("campaigns")
-    .select("id")
-    .eq("workspace_id", session.workspaceId)
-    .eq("customer_profile_id", id)
-    .limit(1);
 
   revalidatePath("/app/strategy");
   revalidatePath("/app/campaigns");
 
-  if (already?.length) {
+  if (approved.hasCampaign) {
     redirect(noticeQuery("/app/strategy", "Approved. This strategy already has a campaign, so use Find more on it to grow its list."));
   }
 

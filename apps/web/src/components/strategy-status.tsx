@@ -9,7 +9,7 @@ import { StrategyRetryButton } from "@/components/strategy-retry";
  * only thing that changed was a checklist row still asking for what had just
  * been given. A run that failed looked identical and stayed that way.
  */
-export function StrategyStatus({ state }: { state: StrategyState }) {
+export function StrategyStatus({ state, from }: { state: StrategyState; from?: "onboarding" }) {
   if (state.phase === "ready" || state.phase === "absent") return null;
 
   if (state.phase === "failed") {
@@ -22,7 +22,7 @@ export function StrategyStatus({ state }: { state: StrategyState }) {
         <p className="small">{state.reason}</p>
         {/* A retry, not a link to onboarding: onboarding sends anybody who
             already has a workspace back here, so that link went nowhere. */}
-        <StrategyRetryButton />
+        <StrategyRetryButton from={from} />
       </div>
     );
   }
@@ -45,7 +45,9 @@ export function StrategyStatus({ state }: { state: StrategyState }) {
             That is longer than usual. If it is still going in another few minutes, run it again —
             pressing this while Sage is still working does not start a second run.
           </p>
-          <StrategyRetryButton className="btn secondary small">Run it again</StrategyRetryButton>
+          <StrategyRetryButton className="btn secondary small" from={from}>
+            Run it again
+          </StrategyRetryButton>
         </>
       ) : null}
     </div>

@@ -106,7 +106,8 @@ describe("retrying the Strategy Agent", () => {
   it("is a plain form post, which survives a deploy", () => {
     const route = read("app", "app", "strategy", "retry", "route.ts");
     expect(route).toMatch(/export async function POST/);
-    expect(route).toMatch(/seeOther\(await retryStrategy\(/);
+    expect(route).toMatch(/const to = await retryStrategy\(form\)/);
+    expect(route).toMatch(/return seeOther\(/);
   });
 
   it("onboarding keeps what Sage was asked to read", () => {

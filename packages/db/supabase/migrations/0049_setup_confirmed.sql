@@ -1,0 +1,11 @@
+-- Which onboarding steps a person has confirmed (rule 65).
+--
+-- The hours, the voice and the call to action all have defaults, so a value
+-- being present proves nothing about whether anybody looked at it; a stamp is
+-- the record that they did. It was kept on the workspace row, which only an
+-- owner or admin may update — so a teammate who is neither pressed Confirm, the
+-- update matched nothing, and they were shown the same step again for ever.
+-- A person's own profile row is theirs to write.
+--
+-- Keyed by workspace id: `{ "<workspace>": { "hours": "<iso>", ... } }`.
+alter table profiles add column if not exists setup_confirmed jsonb not null default '{}'::jsonb;

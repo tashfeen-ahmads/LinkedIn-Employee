@@ -75,13 +75,17 @@ export async function launch(
   if (blockers.length > 0) return { status: "blocked", blockers };
 
   const supabase = await createClient();
-  const { error } = await supabase
+  // Checked by the rows it changed: an update that matched nothing (refused,
+  // or the campaign gone since the read above) launched nothing, and saying
+  // "launched" over it is a live campaign on no screen but this one.
+  const { data: updated, error } = await supabase
     .from("campaigns")
     .update({ status: "running", launched_at: new Date().toISOString() })
     .eq("id", campaignId)
-    .eq("workspace_id", session.workspaceId);
-  if (error) {
-    console.error(`[campaign] launch: ${error.message}`);
+    .eq("workspace_id", session.workspaceId)
+    .select("id");
+  if (error || !updated?.length) {
+    if (error) console.error(`[campaign] launch: ${error.message}`);
     return { status: "failed" };
   }
 

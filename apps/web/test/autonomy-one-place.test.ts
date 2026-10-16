@@ -5,6 +5,8 @@ import { describe, expect, it } from "vitest";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const profile = readFileSync(join(here, "../src/app/app/profile/page.tsx"), "utf8");
+// The write itself, shared by the profile screen and onboarding (rule 65).
+const autonomy = readFileSync(join(here, "../src/lib/autonomy.ts"), "utf8");
 const targeting = readFileSync(join(here, "../../worker/src/jobs/targeting.ts"), "utf8");
 
 /**
@@ -31,17 +33,20 @@ describe("autonomy is stored in one place", () => {
     const marker = "/* ---- how much the agent finishes on its own ---- */";
     expect(profile.includes(marker), "the autonomy block moved or was renamed").toBe(true);
     const block = profile.slice(profile.indexOf(marker));
+    expect(block).toMatch(/await setAutonomy\(supabase, session\.workspaceId,/);
 
-    expect(block).toMatch(/\.from\("workspaces"\)[\s\S]{0,400}?\.update\(\{ onboarding:/);
+    expect(autonomy).toMatch(/\.from\("workspaces"\)[\s\S]{0,400}?\.update\(\{ onboarding:/);
     // And still the campaigns, so a campaign already running changes too.
-    expect(block).toMatch(/\.from\("campaigns"\)[\s\S]{0,600}?\.update\(\{ rules:/);
+    expect(autonomy).toMatch(/\.from\("campaigns"\)[\s\S]{0,600}?\.update\(\{ rules:/);
+    // Onboarding sets it through the same definition, not a copy.
+    expect(readFileSync(join(here, "../src/app/onboarding/save/route.ts"), "utf8")).toMatch(/await setAutonomy\(/);
   });
 
   it("merges rather than replaces, or the sending window and the search tier are lost", () => {
     // The same row holds the hours and the Sales Navigator answer that
     // onboarding stashed for the LinkedIn account to claim.
-    expect(profile).toMatch(/onboarding: \{ \.\.\.answers, autonomy \}/);
-    expect(profile).toMatch(/rules: \{ \.\.\.rules, autonomy \}/);
+    expect(autonomy).toMatch(/onboarding: \{ \.\.\.answers, autonomy \}/);
+    expect(autonomy).toMatch(/rules: \{ \.\.\.rules, autonomy \}/);
   });
 
   it("the Targeting Agent reads that same row when it builds the next campaign", () => {

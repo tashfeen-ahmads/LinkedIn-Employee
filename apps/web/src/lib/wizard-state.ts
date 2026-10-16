@@ -1,6 +1,6 @@
 import "server-only";
 import type { Db } from "@le/db";
-import { readOnboardingStash, type OnboardingStash } from "@/lib/onboarding-stash";
+import { readConfirmations, readOnboardingStash, type OnboardingStash, type StepConfirmations } from "@/lib/onboarding-stash";
 import type { WizardFacts } from "@/lib/wizard";
 
 /** This person's own LinkedIn account row, as the onboarding steps read it. */
@@ -16,9 +16,19 @@ export interface WizardAccount {
 }
 
 export interface WizardRead {
+  /**
+   * A lookup failed, so the facts below are not known. Never acted on: a
+   * failed count read as "nothing launched" would send somebody with live
+   * campaigns back through setup (rule 17).
+   */
+  unreadable: boolean;
   workspaceId: string | null;
+  /** This person's role in the workspace: only owners and admins may write the workspace row. */
+  role: string | null;
   workspaceName: string | null;
   stash: OnboardingStash;
+  /** This person's own confirmations for this workspace, from their profile row. */
+  confirmations: StepConfirmations;
   account: WizardAccount | null;
   facts: WizardFacts;
 }
@@ -31,9 +41,9 @@ export interface WizardRead {
  * "connecting" row for three days while every screen said otherwise.
  */
 export async function readWizard(supabase: Db, userId: string): Promise<WizardRead> {
-  const { data: membership } = await supabase
+  const { data: membership, error: membershipError } = await supabase
     .from("memberships")
-    .select("workspace_id")
+    .select("workspace_id, role")
     .eq("user_id", userId)
     .limit(1)
     .maybeSingle();
@@ -41,9 +51,12 @@ export async function readWizard(supabase: Db, userId: string): Promise<WizardRe
   const empty = readOnboardingStash(null);
   if (!workspaceId) {
     return {
+      unreadable: Boolean(membershipError),
       workspaceId: null,
+      role: null,
       workspaceName: null,
       stash: empty,
+      confirmations: {},
       account: null,
       facts: {
         hasWorkspace: false,
@@ -57,7 +70,7 @@ export async function readWizard(supabase: Db, userId: string): Promise<WizardRe
   }
 
   const head = { count: "exact" as const, head: true };
-  const [{ data: workspace }, { data: account }, approved, campaigns, launched] = await Promise.all([
+  const [workspace, account, me, approved, campaigns, launched] = await Promise.all([
     supabase.from("workspaces").select("name, onboarding").eq("id", workspaceId).maybeSingle(),
     supabase
       .from("linkedin_accounts")
@@ -65,25 +78,34 @@ export async function readWizard(supabase: Db, userId: string): Promise<WizardRe
       .eq("workspace_id", workspaceId)
       .eq("user_id", userId)
       .maybeSingle(),
+    supabase.from("profiles").select("setup_confirmed").eq("id", userId).maybeSingle(),
     supabase.from("customer_profiles").select("id", head).eq("workspace_id", workspaceId).not("approved_at", "is", null),
     // A list somebody can still launch: an archived draft is not one, and
     // counting it left the last step with nothing on it and no way back.
     supabase.from("campaigns").select("id", head).eq("workspace_id", workspaceId).eq("status", "draft"),
     supabase.from("campaigns").select("id", head).eq("workspace_id", workspaceId).not("launched_at", "is", null),
   ]);
+  // The profile read is left out on purpose: confirmations missing only means
+  // a step is asked again, which costs a click, while "unreadable" stops the
+  // whole page. Everything that decides whether setup is finished is in.
+  const unreadable = [workspace, account, approved, campaigns, launched].some((r) => Boolean(r.error));
 
-  const stash = readOnboardingStash(workspace?.onboarding);
-  const mine = stash.confirmed[userId] ?? {};
+  const stash = readOnboardingStash(workspace.data?.onboarding);
+  const mine = me.error ? {} : readConfirmations(me.data?.setup_confirmed, workspaceId);
+  const row = account.data as WizardAccount | null;
   return {
+    unreadable,
     workspaceId,
-    workspaceName: workspace?.name ?? null,
+    role: membership?.role ?? null,
+    workspaceName: workspace.data?.name ?? null,
     stash,
-    account: (account as WizardAccount | null) ?? null,
+    confirmations: mine,
+    account: row ?? null,
     facts: {
       hasWorkspace: true,
       // A row with no provider account behind it is not connected, whatever
       // its status column says.
-      linkedInActive: account?.status === "active" && Boolean(account.provider_account_id),
+      linkedInActive: row?.status === "active" && Boolean(row.provider_account_id),
       confirmed: { hours: Boolean(mine.hours), voice: Boolean(mine.voice), cta: Boolean(mine.cta) },
       hasApprovedStrategy: (approved.count ?? 0) > 0,
       hasCampaign: (campaigns.count ?? 0) > 0,

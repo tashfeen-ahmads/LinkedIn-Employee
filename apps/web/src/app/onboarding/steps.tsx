@@ -47,7 +47,9 @@ const DAYS = [
 export function BusinessForm() {
   return (
     <form id="onboarding-business" action="/onboarding/submit" method="post" className="stack-4">
-      <FormKeeper formId="onboarding-business" storageKey="nora:onboarding-business" />
+      {/* The key the app clears once a workspace exists (ClearKept), so a second
+          sign-up in the same browser does not start with the first one's answers. */}
+      <FormKeeper formId="onboarding-business" storageKey="nora:onboarding-answers" />
       <label className="field">
         <span>Company name</span>
         <input name="companyName" required autoComplete="organization" placeholder="Brightwater Dental Group" />
@@ -236,10 +238,13 @@ export function VoiceForm({
   fullName,
   bio,
   autonomy,
+  canSetAutonomy,
 }: {
   fullName: string | null;
   bio: string | null;
   autonomy: "autonomous" | "supervised" | null;
+  /** Owners, admins and managers set it, as on the profile; everyone else sees it. */
+  canSetAutonomy: boolean;
 }) {
   return (
     <form action="/onboarding/save" method="post" className="stack-4">
@@ -259,14 +264,24 @@ export function VoiceForm({
         />
         <span className="hint">The voice every note and reply is written in. Left blank it sounds like a company, not a person.</span>
       </label>
-      <label className="field">
-        <span>When a reply arrives</span>
-        <select name="autonomy" defaultValue={autonomy ?? "supervised"}>
-          <option value="supervised">Hold anything uncertain for me to read first</option>
-          <option value="autonomous">The agent answers and books, on its own</option>
-        </select>
-        <span className="hint">Either way it only states facts from your own material. {alwaysHoldsSentence()}</span>
-      </label>
+      {canSetAutonomy ? (
+        <label className="field">
+          <span>When a reply arrives</span>
+          <select name="autonomy" defaultValue={autonomy ?? "supervised"}>
+            <option value="supervised">Hold anything uncertain for me to read first</option>
+            <option value="autonomous">The agent answers and books, on its own</option>
+          </select>
+          <span className="hint">Either way it only states facts from your own material. {alwaysHoldsSentence()}</span>
+        </label>
+      ) : (
+        <p className="small muted">
+          When a reply arrives:{" "}
+          {autonomy === "autonomous"
+            ? "the agent answers and books on its own."
+            : "anything uncertain is held for a person to read first."}{" "}
+          Your workspace owner sets this.
+        </p>
+      )}
       <PostButton className="btn block" pendingLabel="Saving…">
         Confirm and continue
       </PostButton>

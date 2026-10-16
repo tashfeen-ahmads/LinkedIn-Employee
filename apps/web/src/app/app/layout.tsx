@@ -2,8 +2,6 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { Walkthrough } from "@/components/walkthrough";
 import { redirect } from "next/navigation";
-import { headers } from "next/headers";
-import { PATH_HEADER, openDuringSetup, setupRedirect } from "@/lib/wizard";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { AppNav, type NavGroup } from "@/components/app-nav";
@@ -222,21 +220,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // Where this workspace has got to, read once here and handed to the nav. The
   // dashboard reads the same function, so the sidebar and the page can never
   // disagree about which step somebody is on.
-  const { next, state: setup } = await readSetupState(supabase, session.workspaceId);
-
-  /*
-   * Setup comes first, and in order (rule 65).
-   *
-   * Until a first campaign is live the app is the onboarding steps, not a
-   * dashboard of things that cannot work yet. Read on every page from the same
-   * count the overview uses, so a workspace that launched is never sent back,
-   * and the two screens opened during setup (support, and a campaign's own
-   * review page) are named in one place.
-   */
-  if (!setup.hasLaunchedCampaign) {
-    const path = (await headers()).get(PATH_HEADER) ?? "";
-    if (!openDuringSetup(path)) redirect(setupRedirect(path));
-  }
+  const { next } = await readSetupState(supabase, session.workspaceId);
   const linkedInNeedsYou = !account || account.status !== "active";
 
   return (

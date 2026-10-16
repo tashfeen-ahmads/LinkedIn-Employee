@@ -3,11 +3,13 @@ import { checkCtaUrl, isValidTimezone } from "@le/shared";
 import { createClient } from "@/lib/supabase-server";
 import { seeOther } from "@/lib/see-other";
 import { callWorker } from "@/lib/worker";
-import { mergeStash, withConfirmation, type StepConfirmations } from "@/lib/onboarding-stash";
+import { mergeStash, stampConfirmation, type StashedCta } from "@/lib/onboarding-stash";
 import { readWizard } from "@/lib/wizard-state";
 import { currentStep, stepIndex, type WizardStepKey } from "@/lib/wizard";
 import { queueSearch } from "@/lib/search";
 import { launch } from "@/lib/launch";
+import { approveStrategy, planFlags } from "@/lib/approve";
+import { AUTONOMY_ROLES, setAutonomy } from "@/lib/autonomy";
 
 /*
  * Every onboarding step after the first posts here (rule 65).
@@ -20,6 +22,11 @@ import { launch } from "@/lib/launch";
  * only offers the steps somebody has reached, but a form can be posted by
  * anyone who can reach the route, and "launch" is the one that reaches
  * strangers.
+ *
+ * Who may write what follows the database, not the screen. A person's own
+ * profile row is theirs, so the confirmation stamps live there; the workspace
+ * row is an owner's or admin's, so what lives there (the stash) is written by
+ * them and never made a condition of anybody else finishing a step.
  */
 
 /** Which wizard step each posted action belongs to. */
@@ -48,44 +55,71 @@ export async function POST(request: NextRequest) {
   const wizard = await readWizard(supabase, user.id);
   const workspaceId = wizard.workspaceId;
   if (!workspaceId) return seeOther("/onboarding");
+  // Nothing is decided from facts that could not be read.
+  if (wizard.unreadable) return seeOther(`/onboarding?step=${step}&error=unreadable`);
   const current = currentStep(wizard.facts);
   if (!current) return seeOther("/app");
   if (stepIndex(step) > stepIndex(current)) return seeOther("/onboarding");
 
   const again = (code: string) => seeOther(`/onboarding?step=${step}&error=${code}`);
+  // The roles the database lets write the workspace row (`is_workspace_admin`).
+  const isAdmin = (AUTONOMY_ROLES as readonly string[]).includes(wizard.role ?? "");
 
-  /** Writes stash keys, keeping every other, and stamps this step confirmed when asked to. */
-  const saveStash = async (patch: Record<string, unknown>, confirm?: keyof StepConfirmations): Promise<boolean> => {
+  /** Workspace stash keys, merged; only the workspace's admins may write that row. */
+  const saveStash = async (patch: Record<string, unknown>): Promise<boolean> => {
+    if (!isAdmin) return false;
     const { data: row } = await supabase.from("workspaces").select("onboarding").eq("id", workspaceId).maybeSingle();
-    const next = confirm
-      ? { ...patch, confirmed: withConfirmation(wizard.stash.confirmed, user.id, confirm, new Date().toISOString()) }
-      : patch;
-    const { error } = await supabase
+    const { data: saved, error } = await supabase
       .from("workspaces")
-      .update({ onboarding: mergeStash(row?.onboarding, next) as never })
-      .eq("id", workspaceId);
+      .update({ onboarding: mergeStash(row?.onboarding, patch) as never })
+      .eq("id", workspaceId)
+      .select("id");
     if (error) console.error(`[onboarding] save ${action}: ${error.message}`);
-    return !error;
+    return Boolean(saved?.length);
+  };
+
+  /**
+   * This person's stamp for a step, on their own profile row, merged with what
+   * is there now rather than with what was read at the start of the request.
+   * Checked by the rows it changed: a stamp that did not land is a step shown
+   * again for ever.
+   */
+  const confirm = async (key: "hours" | "voice" | "cta", extra: { ctaChoice?: StashedCta } = {}): Promise<boolean> => {
+    const { data: me } = await supabase.from("profiles").select("setup_confirmed").eq("id", user.id).maybeSingle();
+    const stamped = stampConfirmation(me?.setup_confirmed, workspaceId, key, new Date().toISOString(), extra);
+    const { data: saved, error } = await supabase
+      .from("profiles")
+      .update({ setup_confirmed: stamped as never })
+      .eq("id", user.id)
+      .select("id");
+    if (error) console.error(`[onboarding] confirm ${key}: ${error.message}`);
+    return Boolean(saved?.length);
   };
 
   switch (action) {
     case "linkedin-connect": {
-      const plan = String(form.get("linkedinPlan") ?? "");
-      if (plan !== "basic" && plan !== "premium" && plan !== "sales_navigator") return again("plan-missing");
-      const hasSalesNavigator = plan === "sales_navigator";
-      const hasPremium = plan !== "basic";
-      if (!(await saveStash({ hasSalesNavigator, hasPremium }))) return again("save-failed");
+      const flags = planFlags(form.get("linkedinPlan"));
+      if (!flags) return again("plan-missing");
+      // On the workspace for the row the worker creates at Connect, and on the
+      // row itself once it exists. The nightly plan check corrects either
+      // from what LinkedIn reports (rule 62).
+      await saveStash({ hasSalesNavigator: flags.has_sales_navigator, hasPremium: flags.has_premium });
       if (wizard.account) {
-        await supabase
-          .from("linkedin_accounts")
-          .update({ has_sales_navigator: hasSalesNavigator, has_premium: hasPremium })
-          .eq("id", wizard.account.id);
+        await supabase.from("linkedin_accounts").update(flags).eq("id", wizard.account.id);
       }
       // Already connected: the plan was the only thing to save.
       if (wizard.facts.linkedInActive) return seeOther("/onboarding");
 
       const link = await callWorker<{ url?: string }>("/auth/linkedin/link", { workspaceId, userId: user.id });
       if (!link.ok || !link.data?.url) return again("linkedin-link");
+      // The worker has just created this person's row from the workspace's
+      // stored answer, which may be somebody else's, or none for a role that
+      // cannot write it. Their own answer goes onto their own row.
+      await supabase
+        .from("linkedin_accounts")
+        .update(flags)
+        .eq("workspace_id", workspaceId)
+        .eq("user_id", user.id);
       // The provider's own hosted page, so an absolute address: this is the
       // one redirect here that is meant to leave the product.
       return new Response(null, { status: 303, headers: { Location: link.data.url } });
@@ -103,25 +137,42 @@ export async function POST(request: NextRequest) {
       if (days.length === 0) return again("days");
       const workingHours = { start, end, days };
 
-      await supabase.from("profiles").update({ timezone }).eq("id", user.id);
+      const { data: tz } = await supabase.from("profiles").update({ timezone }).eq("id", user.id).select("id");
+      if (!tz?.length) return again("save-failed");
+      // The account row is what the limiter reads; LinkedIn is connected by
+      // the time this step is reached, so it exists.
       if (wizard.account) {
-        await supabase.from("linkedin_accounts").update({ working_hours: workingHours as never }).eq("id", wizard.account.id);
+        const { data: hours } = await supabase
+          .from("linkedin_accounts")
+          .update({ working_hours: workingHours as never })
+          .eq("id", wizard.account.id)
+          .select("id");
+        if (!hours?.length) return again("save-failed");
       }
-      if (!(await saveStash({ workingHours }, "hours"))) return again("save-failed");
+      await saveStash({ workingHours });
+      if (!(await confirm("hours"))) return again("save-failed");
       return seeOther("/onboarding");
     }
 
     case "voice": {
       const fullName = String(form.get("fullName") ?? "").trim();
       const bio = String(form.get("bio") ?? "").trim();
-      const autonomy = form.get("autonomy") === "autonomous" ? "autonomous" : "supervised";
       // What a prospect sees the invitation come from.
       if (!fullName) return again("name");
-      await supabase
+      const { data: saved } = await supabase
         .from("profiles")
         .update({ full_name: fullName.slice(0, 120), bio: bio || null })
-        .eq("id", user.id);
-      if (!(await saveStash({ autonomy }, "voice"))) return again("save-failed");
+        .eq("id", user.id)
+        .select("id");
+      if (!saved?.length) return again("save-failed");
+      // The workspace's setting, so the same people who may change it on the
+      // profile may change it here, and onto every campaign as well.
+      const wanted = form.get("autonomy");
+      if (wanted && isAdmin) {
+        const set = await setAutonomy(supabase, workspaceId, wanted === "autonomous" ? "autonomous" : "supervised");
+        if (!set) return again("save-failed");
+      }
+      if (!(await confirm("voice"))) return again("save-failed");
       return seeOther("/onboarding");
     }
 
@@ -160,47 +211,30 @@ export async function POST(request: NextRequest) {
       const taken = new Set((used ?? []).map((c) => c.customer_profile_id).filter(Boolean));
       const open = (profiles ?? []).map((p) => p.id).filter((id) => !taken.has(id));
       if (open.length) {
-        await supabase
+        const { error } = await supabase
           .from("customer_profiles")
           .update({ cta_kind: kind, cta_label: label, cta_url: url })
           .eq("workspace_id", workspaceId)
           .in("id", open);
+        if (error) return again("save-failed");
       }
-      if (!(await saveStash({ cta: { kind, label, url } }, "cta"))) return again("save-failed");
+      const choice: StashedCta = { kind, label, url };
+      await saveStash({ cta: choice });
+      if (!(await confirm("cta", { ctaChoice: choice }))) return again("save-failed");
       return seeOther("/onboarding");
     }
 
     case "approve": {
       const profileId = String(form.get("profileId") ?? "");
-      const { data: profile } = await supabase
-        .from("customer_profiles")
-        .select("id")
-        .eq("id", profileId)
-        .eq("workspace_id", workspaceId)
-        .maybeSingle();
-      if (!profile) return again("approve-failed");
+      // The ask this person confirmed on the CTA step, onto a strategy Sage may
+      // have written after it — their own choice first, since the workspace's
+      // copy is only written by its admins.
+      const cta = wizard.confirmations.ctaChoice ?? wizard.stash.cta;
+      const extra = cta ? { cta_kind: cta.kind, cta_label: cta.label, cta_url: cta.url } : {};
 
-      const { data: hasCampaign } = await supabase
-        .from("campaigns")
-        .select("id")
-        .eq("workspace_id", workspaceId)
-        .eq("customer_profile_id", profileId)
-        .limit(1);
-      // The ask chosen on the CTA step, onto a strategy Sage may have written
-      // after it was chosen — unless this strategy already has a campaign.
-      const cta = wizard.stash.cta;
-      const ctaPatch = cta && !hasCampaign?.length ? { cta_kind: cta.kind, cta_label: cta.label, cta_url: cta.url } : {};
-
-      // The approval is the decision (rule 9), and it is checked: a write that
-      // matched nothing must not be followed by a search.
-      const { data: approved, error } = await supabase
-        .from("customer_profiles")
-        .update({ approved_at: new Date().toISOString(), do_not_pursue: false, ...ctaPatch })
-        .eq("id", profileId)
-        .eq("workspace_id", workspaceId)
-        .select("id");
-      if (error || !approved?.length) return again("approve-failed");
-      if (hasCampaign?.length) return seeOther("/onboarding");
+      const approved = await approveStrategy(supabase, workspaceId, profileId, extra);
+      if (!approved.ok) return again("approve-failed");
+      if (approved.hasCampaign) return seeOther("/onboarding");
 
       const started = await queueSearch(workspaceId, user.id, supabase, profileId);
       // Approving still counts when the search could not start; the next step
@@ -224,6 +258,16 @@ export async function POST(request: NextRequest) {
 
     case "launch": {
       const campaignId = String(form.get("campaignId") ?? "");
+      // Only a draft of this workspace: the first launch, never a paused or
+      // archived campaign named in a hand-made form.
+      const { data: draft } = await supabase
+        .from("campaigns")
+        .select("id")
+        .eq("id", campaignId)
+        .eq("workspace_id", workspaceId)
+        .eq("status", "draft")
+        .maybeSingle();
+      if (!draft) return again("launch-missing");
       const outcome = await launch(campaignId, { workspaceId, userId: user.id });
       switch (outcome.status) {
         case "launched":

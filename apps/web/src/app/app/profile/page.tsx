@@ -2,6 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/workspace";
+import { planFlags } from "@/lib/approve";
+import { AUTONOMY_ROLES, setAutonomy } from "@/lib/autonomy";
 import { createClient } from "@/lib/supabase-server";
 import { callWorker, errorQuery, noticeQuery, startedNotice } from "@/lib/worker";
 import { alwaysHoldsSentence, checkCtaUrl, FREE_NOTES_PER_MONTH, LINKEDIN_LIMITS, describeWorkingHours } from "@le/shared";
@@ -130,7 +132,7 @@ async function setLinkedInPlan(formData: FormData) {
   "use server";
   const session = await requireSession();
   const supabase = await createClient();
-  const patch = planPatch(formData.get("linkedinPlan"));
+  const patch = planFlags(formData.get("linkedinPlan"));
   if (!patch) redirect(errorQuery("/app/profile", "Choose one of the three plans."));
   const { data: updated } = await supabase
     .from("linkedin_accounts")
@@ -158,12 +160,6 @@ async function setLinkedInPlan(formData: FormData) {
 }
 
 /** The plan answer as the two columns it is stored in, or null when it is not one of the three. */
-function planPatch(value: FormDataEntryValue | null): { has_sales_navigator: boolean; has_premium: boolean } | null {
-  if (value === "sales_navigator") return { has_sales_navigator: true, has_premium: true };
-  if (value === "premium") return { has_sales_navigator: false, has_premium: true };
-  if (value === "basic") return { has_sales_navigator: false, has_premium: false };
-  return null;
-}
 
 /**
  * Everything on this screen, saved once.
@@ -280,7 +276,7 @@ async function saveProfile(formData: FormData) {
   const days = [1, 2, 3, 4, 5, 6, 0].filter((day) => formData.get(`day-${day}`) === "on");
 
   const accountPatch: Record<string, unknown> = {
-    ...(planPatch(formData.get("linkedinPlan")) ?? {}),
+    ...(planFlags(formData.get("linkedinPlan")) ?? {}),
   };
   // A window that is empty or inverted is not a setting anybody means to
   // choose, so it is refused rather than written — and said out loud, because
@@ -334,57 +330,10 @@ async function saveProfile(formData: FormData) {
 
   /* ---- how much the agent finishes on its own ---- */
   const wanted = formData.get("autonomy");
-  if (wanted && ["owner", "admin", "manager"].includes(session.role)) {
-    const autonomy = wanted === "autonomous" ? "autonomous" : "supervised";
-
-    /*
-     * The workspace's answer, as well as every campaign already running on it.
-     *
-     * Only the campaigns were written, and the Targeting Agent builds a new
-     * one from `workspaces.onboarding` — the answer given at signup. So a rep
-     * who switched this to "autonomous" changed every campaign they had and
-     * every campaign they were ever going to build reverted to the signup
-     * answer, silently, while this screen went on reporting "autonomous"
-     * because one of the old campaigns still said so. Two readings of one
-     * setting, and the screen's is the one somebody believes.
-     *
-     * Merged rather than replaced, exactly as the campaign rules below are:
-     * the same row holds the sending window and the search tier, and a
-     * wholesale write would drop them.
-     */
-    const { data: ws } = await supabase
-      .from("workspaces")
-      .select("onboarding")
-      .eq("id", session.workspaceId)
-      .maybeSingle();
-    const answers = (ws?.onboarding && typeof ws.onboarding === "object" ? ws.onboarding : {}) as Record<
-      string,
-      unknown
-    >;
-    await supabase
-      .from("workspaces")
-      .update({ onboarding: { ...answers, autonomy } as never })
-      .eq("id", session.workspaceId);
-
-    const { data: campaigns } = await supabase
-      .from("campaigns")
-      .select("id, rules")
-      .eq("workspace_id", session.workspaceId);
-
-    for (const campaign of campaigns ?? []) {
-      const rules = (campaign.rules && typeof campaign.rules === "object" ? campaign.rules : {}) as Record<
-        string,
-        unknown
-      >;
-      await supabase
-        .from("campaigns")
-        // Merged, never replaced: `rules` also carries the search notes and the
-        // filters a campaign was built with, and overwriting those would lose
-        // the record of what the list actually is.
-        .update({ rules: { ...rules, autonomy } as never })
-        .eq("id", campaign.id)
-        .eq("workspace_id", session.workspaceId);
-    }
+  if (wanted && (AUTONOMY_ROLES as readonly string[]).includes(session.role)) {
+    // On the workspace and on every campaign in it: one definition, shared
+    // with onboarding, so neither writes half of it.
+    await setAutonomy(supabase, session.workspaceId, wanted === "autonomous" ? "autonomous" : "supervised");
   }
 
   revalidatePath("/app/profile");

@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
-import { PATH_HEADER } from "@/lib/wizard";
+import { DB_SCHEMA } from "@le/db";
+import { SETUP_DONE_COOKIE, gatesSetup, setupRedirect } from "@/lib/wizard";
 
 /*
  * Keeps a signed-in session signed in.
@@ -27,6 +28,7 @@ export async function middleware(request: NextRequest) {
   if (!url || !key) return response;
 
   const supabase = createServerClient(url, key, {
+    db: { schema: DB_SCHEMA },
     cookies: {
       getAll: () => request.cookies.getAll(),
       setAll: (toSet) => {
@@ -37,27 +39,71 @@ export async function middleware(request: NextRequest) {
     },
   });
 
+  let userId: string | null = null;
   try {
-    await supabase.auth.getSession();
+    const { data } = await supabase.auth.getSession();
+    userId = data.session?.user.id ?? null;
   } catch {
     // A provider outage must not take the page down with it; the page's own
     // check decides what the visitor sees.
   }
 
   /*
-   * Which page was asked for, handed to the layout.
+   * Setup comes first (rule 65).
    *
-   * The app layout sends anybody whose setup is not finished to their
-   * onboarding step (rule 65), and a layout is not told its own path. Set here,
-   * after the session refresh, so the request carries the refreshed cookies as
-   * well; whatever a client sent under this name is overwritten. It decides
-   * only where somebody is redirected, never what they may read.
+   * Until the workspace has launched a campaign, every app page goes to the
+   * onboarding step somebody is on. Here rather than in the app layout: a
+   * layout is not rendered again when somebody clicks between pages under it,
+   * so a check there let anyone on an open page walk into the rest of the app
+   * from the sidebar. Every navigation reaches the middleware.
+   *
+   * Page loads only, never a form's POST, so a server action or a retry posted
+   * from onboarding still runs. A lookup that fails lets the page through
+   * rather than sending somebody with live campaigns back to setup (rule 17).
+   * Once launched is seen it is remembered in a cookie naming this user, so a
+   * finished workspace makes no extra query on any page after that.
    */
-  const headers = new Headers(request.headers);
-  headers.set(PATH_HEADER, `${request.nextUrl.pathname}${request.nextUrl.search}`);
-  const forwarded = NextResponse.next({ request: { headers } });
-  for (const cookie of response.cookies.getAll()) forwarded.cookies.set(cookie);
-  return forwarded;
+  const path = `${request.nextUrl.pathname}${request.nextUrl.search}`;
+  if (userId && gatesSetup(request.method, request.nextUrl.pathname) && request.cookies.get(SETUP_DONE_COOKIE)?.value !== userId) {
+    // This person's own workspace, never "any campaign I can see": a platform
+    // admin can read every workspace's campaigns (rule 15), and somebody
+    // else's launch is not the end of this person's setup.
+    const { data: membership, error: membershipError } = await supabase
+      .from("memberships")
+      .select("workspace_id")
+      .eq("user_id", userId)
+      .limit(1)
+      .maybeSingle();
+    const { data, error } = membership
+      ? await supabase
+          .from("campaigns")
+          .select("id")
+          .eq("workspace_id", membership.workspace_id)
+          .not("launched_at", "is", null)
+          .limit(1)
+      : { data: null, error: membershipError ?? { message: "no workspace" } };
+    if (!error && data) {
+      if (data.length > 0) {
+        response.cookies.set(SETUP_DONE_COOKIE, userId, {
+          httpOnly: true,
+          sameSite: "lax",
+          secure: true,
+          path: "/",
+          maxAge: 60 * 60 * 24 * 365,
+        });
+      } else {
+        const target = request.nextUrl.clone();
+        const [pathname, query = ""] = setupRedirect(path).split("?");
+        target.pathname = pathname!;
+        target.search = query ? `?${query}` : "";
+        const redirect = NextResponse.redirect(target);
+        // The refreshed session travels with the redirect, or it is lost.
+        for (const cookie of response.cookies.getAll()) redirect.cookies.set(cookie);
+        return redirect;
+      }
+    }
+  }
+  return response;
 }
 
 export const config = {

@@ -103,8 +103,10 @@ tests that were verified by deliberately breaking the code.
    otherwise disconnect every account on the deployment.
 9. **Targeting refuses a customer profile nobody has approved**
    (`approved_at` in `apps/worker/src/jobs/targeting.ts`). The Strategy Agent
-   writes profiles; it does not approve them. Approval happens on
-   `/app/strategy` and nowhere else.
+   writes profiles; it does not approve them. A person approves them, on
+   `/app/strategy` or on onboarding's approval step (rule 65), and both go
+   through `approveStrategy` (`apps/web/src/lib/approve.ts`) and show the
+   competitor check (rule 49). Nothing else approves one.
 10. **Nothing held for a human is invisible.** `/app/inbox` lists conversations,
    not drafts: a conversation can be flagged with no draft at all, and while the
    page listed drafts those were shown to nobody. Holds carry a kind
@@ -1557,28 +1559,46 @@ tests that were verified by deliberately breaking the code.
     the person does the next four steps. Each step is decided from what is
     **stored**, never from which button was pressed (`readWizard`); the
     hours, voice and CTA have defaults, so a value being present proves
-    nothing and a per-person confirmation stamp (`confirmed` in the stash) is
-    the record that somebody looked. The current step is the first not done,
+    nothing and a per-person confirmation stamp is the record that somebody
+    looked. The current step is the first not done,
     in order (`currentStep`) — a LinkedIn account that drops sends somebody
     back to that step however far they got. Back is always allowed; forward
     past the current step is refused on the page and again in
     `/onboarding/save`, because a form can be posted by anyone and the last
     step launches.
 
-    Until a workspace has a launched campaign the app layout redirects every
-    page to the current step (`openDuringSetup`, `setupRedirect`), except
-    Support and a campaign's own review page, which the last step links to.
-    A launched campaign ends setup however it was reached, so no workspace
-    that launched before this existed is ever sent back. The provider's
-    sign-in returns to the profile page; the redirect carries its `connected`
-    and `error` to the LinkedIn step, which asks the provider rather than
-    waiting to be told (rule 8). `?error=` carries a code mapped to words
-    written on the page, never text from the address bar.
+    Until a workspace has a launched campaign the **middleware** sends every
+    app page load to the current step (`gatesSetup`, `setupRedirect`), except
+    Support and a campaign's own review page, which the last step links to —
+    and that page's Launch only works from the last step. Not the layout: a
+    layout is not rendered again when somebody clicks between the pages under
+    it, so a check there could be walked past from the sidebar. Page loads
+    only, never a POST, so the Sage retry posted from onboarding still runs. A
+    lookup that fails lets the page through rather than sending somebody with
+    live campaigns back to setup (rule 17), and the onboarding page shows a
+    "could not load" notice instead of acting on facts it could not read. A
+    launched campaign ends setup however it was reached, and is remembered in
+    a cookie naming the user so a finished workspace makes no extra query.
+    The provider's sign-in returns to the profile page; only that page's
+    `connected` and `error` are carried to the LinkedIn step, which asks the
+    provider rather than waiting to be told (rule 8). `?error=` carries a
+    code mapped to words written on the page, never text from the address
+    bar.
+
+    Who may write what follows the database. The confirmation stamps live on
+    the person's own profile row (`profiles.setup_confirmed`, migration 0049,
+    keyed by workspace), because only owners and admins may update the
+    workspace row and a teammate's stamp written there matched nothing and
+    showed them the same step for ever. Every write a step depends on is
+    checked by the rows it changed. Reply handling is set through
+    `setAutonomy` (`lib/autonomy.ts`), the profile page's own path, by the
+    same roles, onto every campaign as well as the workspace.
 
     The steps reuse the product's own paths rather than copies of them:
-    `queueSearch` (`lib/search.ts`) for the search, `launch`
-    (`lib/launch.ts`) for the launch with every blocker re-checked, the
-    competitor warning on the approval screen (rule 49). The CTA chosen is
+    `queueSearch` (`lib/search.ts`) for the search, `approveStrategy` for the
+    approval, `launch` (`lib/launch.ts`) for the launch with every blocker
+    re-checked and only on a draft, the competitor warning on the approval
+    screen (rule 49). The CTA chosen is
     written onto every strategy that has no campaign yet and again onto the
     one approved, so the search writes its copy toward it (rule 29).
 

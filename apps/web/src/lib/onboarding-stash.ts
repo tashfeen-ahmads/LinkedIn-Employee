@@ -33,13 +33,21 @@ export interface StashedCta {
  * When a person confirmed each onboarding step that has no row of its own to
  * prove it. The hours, the voice and the CTA all have defaults, so a value
  * being present says nothing about whether anybody looked at it; the stamp is
- * the record that they did. Keyed by user, because hours and voice are a
- * rep's own and a teammate joining later has not confirmed anything.
+ * the record that they did. Kept on the person's own profile row
+ * (`profiles.setup_confirmed`, migration 0049) keyed by workspace, because
+ * only owners and admins may write the workspace row and a teammate pressing
+ * Confirm must not be refused in silence.
  */
 export interface StepConfirmations {
   hours?: string;
   voice?: string;
   cta?: string;
+  /**
+   * The call to action this person chose. Their own copy as well as the
+   * workspace's, because only some roles may write the workspace row and the
+   * approval must apply what this person confirmed, not somebody else's.
+   */
+  ctaChoice?: StashedCta;
 }
 
 export interface OnboardingStash {
@@ -51,7 +59,6 @@ export interface OnboardingStash {
   /** Empty for a workspace set up before the source was kept. */
   source: StrategySource;
   cta: StashedCta | null;
-  confirmed: Record<string, StepConfirmations>;
 }
 
 function text(value: unknown): string | undefined {
@@ -79,7 +86,6 @@ export function readOnboardingStash(value: unknown): OnboardingStash {
       description: text(source.description),
     }),
     cta: stashedCta(raw.cta),
-    confirmed: confirmations(raw.confirmed),
   };
 }
 
@@ -90,31 +96,6 @@ function stashedCta(value: unknown): StashedCta | null {
   return { kind: c.kind, label: text(c.label) ?? null, url: text(c.url) ?? null };
 }
 
-function confirmations(value: unknown): Record<string, StepConfirmations> {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
-  const out: Record<string, StepConfirmations> = {};
-  for (const [userId, entry] of Object.entries(value as Record<string, unknown>)) {
-    if (!entry || typeof entry !== "object") continue;
-    const e = entry as Record<string, unknown>;
-    const stamp: StepConfirmations = {};
-    for (const key of ["hours", "voice", "cta"] as const) {
-      const at = text(e[key]);
-      if (at) stamp[key] = at;
-    }
-    out[userId] = stamp;
-  }
-  return out;
-}
-
-/** The stash's confirmations with one more step stamped for one person, every other kept. */
-export function withConfirmation(
-  current: Record<string, StepConfirmations>,
-  userId: string,
-  step: keyof StepConfirmations,
-  at: string,
-): Record<string, StepConfirmations> {
-  return { ...current, [userId]: { ...(current[userId] ?? {}), [step]: at } };
-}
 
 function compact(source: StrategySource): StrategySource {
   const out: StrategySource = {};
@@ -189,4 +170,31 @@ export function stashedAccountAnswers(patch: {
   const h = hours(patch.working_hours);
   if (h) out.workingHours = h;
   return out;
+}
+
+/** This person's confirmations for one workspace, from their own profile row (migration 0049). */
+export function readConfirmations(value: unknown, workspaceId: string): StepConfirmations {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const entry = (value as Record<string, unknown>)[workspaceId];
+  if (!entry || typeof entry !== "object") return {};
+  const out: StepConfirmations = {};
+  for (const key of ["hours", "voice", "cta"] as const) {
+    const at = (entry as Record<string, unknown>)[key];
+    if (typeof at === "string" && at) out[key] = at;
+  }
+  const choice = stashedCta((entry as Record<string, unknown>).ctaChoice);
+  if (choice) out.ctaChoice = choice;
+  return out;
+}
+
+/** The profile column with one step stamped for one workspace, every other kept. */
+export function stampConfirmation(
+  value: unknown,
+  workspaceId: string,
+  step: "hours" | "voice" | "cta",
+  at: string,
+  extra: Pick<StepConfirmations, "ctaChoice"> = {},
+): Record<string, StepConfirmations> {
+  const base = (value && typeof value === "object" && !Array.isArray(value) ? value : {}) as Record<string, StepConfirmations>;
+  return { ...base, [workspaceId]: { ...readConfirmations(base, workspaceId), ...extra, [step]: at } };
 }

@@ -26,8 +26,12 @@ describe("approving a strategy", () => {
   it("checks the approval landed before it says so or starts a search", () => {
     const page = read("strategy/page.tsx");
     const action = page.slice(page.indexOf("async function approveProfile"), page.indexOf("async function dropProfile"));
-    expect(action).toMatch(/approved_at: new Date\(\)\.toISOString\(\), do_not_pursue: false \}\)[\s\S]{0,120}\.select\("id"\)/);
-    const guard = action.indexOf("if (approveError || !approvedRows?.length)");
+    // The shared approval checks the rows it changed...
+    const shared = readFileSync(join(__dirname, "..", "src", "lib", "approve.ts"), "utf8");
+    expect(shared).toMatch(/approved_at: new Date\(\)\.toISOString\(\),\s*do_not_pursue: false,[\s\S]{0,120}?\}\)[\s\S]{0,120}?\.select\("id"\)/);
+    expect(shared).toMatch(/if \(error \|\| !rows\?\.length\) \{/);
+    // ...and the page stops on a refusal before it searches.
+    const guard = action.indexOf("if (!approved.ok)");
     expect(guard).toBeGreaterThan(-1);
     expect(guard).toBeLessThan(action.indexOf("queueSearch("));
   });
