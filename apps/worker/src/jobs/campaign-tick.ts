@@ -36,6 +36,14 @@ import { INVITE_FOLLOW_MS, WARM_FOLLOW_SPAN_MS, WARM_MARGIN_MS, viewFitsToday } 
 import { lastInviteAt } from "../pace.js";
 
 /**
+ * How soon the first invitation of a run goes when the account has no gap to
+ * serve: seconds after Launch, never the same instant. Both are well under the
+ * limiter's own two-minute floor, which only ever applies between two sends.
+ */
+export const FIRST_SEND_MIN_MS = 5_000;
+export const FIRST_SEND_MAX_MS = 30_000;
+
+/**
  * The pacing loop. Runs every few minutes and, for each running campaign, asks
  * the rate limiter how much the account may still do today, then enqueues
  * exactly that many actions with jittered delays.
@@ -895,12 +903,25 @@ async function enqueueInvites(
      * whole further gap, which late in the day landed after hours: the view
      * bought for them went stale overnight and they were viewed again the
      * next morning.
+     *
+     * An account that has never sent an invitation has no gap to serve, so
+     * its first goes now. It used to count as "sent this instant" and wait a
+     * whole gap — eight to twenty-two minutes on every first launch — while
+     * an account that last sent yesterday went straight away. A new customer
+     * pressed Launch on the last onboarding step and LinkedIn showed nothing
+     * for a quarter of an hour, which reads as the product not working.
+     *
+     * "Now" is a few seconds rather than the same instant: the first of a run
+     * follows a person pressing Launch, and a person takes a moment.
      */
-    const sinceLast =
-      added + revived + pending === 0 && lastPlaced === 0 && lastSent
+    const firstOfRun = added + revived + pending === 0 && lastPlaced === 0;
+    const sinceLast = firstOfRun
+      ? lastSent
         ? Math.max(0, now.getTime() - lastSent.getTime())
-        : 0;
-    const next = delay + Math.max(0, gap - sinceLast);
+        : Number.POSITIVE_INFINITY
+      : 0;
+    const settle = firstOfRun ? FIRST_SEND_MIN_MS + Math.random() * (FIRST_SEND_MAX_MS - FIRST_SEND_MIN_MS) : 0;
+    const next = delay + Math.max(settle, gap - sinceLast);
     /*
      * Never later than the warm-up still counts.
      *

@@ -14,6 +14,7 @@ import { FormKeeper } from "@/components/form-keeper";
 import { NORA } from "@/lib/team";
 import type { OnboardingStash } from "@/lib/onboarding-stash";
 import type { WizardAccount } from "@/lib/wizard-state";
+import type { ReplyHandling } from "@/lib/autonomy";
 
 /*
  * The screens of onboarding, one per step (rule 65).
@@ -234,18 +235,7 @@ export function HoursForm({
 
 /* ------------------------------------------------------------------ 4 */
 
-export function VoiceForm({
-  fullName,
-  bio,
-  autonomy,
-  canSetAutonomy,
-}: {
-  fullName: string | null;
-  bio: string | null;
-  autonomy: "autonomous" | "supervised" | null;
-  /** Owners, admins and managers set it, as on the profile; everyone else sees it. */
-  canSetAutonomy: boolean;
-}) {
+export function VoiceForm({ fullName, bio }: { fullName: string | null; bio: string | null }) {
   return (
     <form action="/onboarding/save" method="post" className="stack-4">
       <input type="hidden" name="action" value="voice" />
@@ -264,24 +254,6 @@ export function VoiceForm({
         />
         <span className="hint">The voice every note and reply is written in. Left blank it sounds like a company, not a person.</span>
       </label>
-      {canSetAutonomy ? (
-        <label className="field">
-          <span>When a reply arrives</span>
-          <select name="autonomy" defaultValue={autonomy ?? "supervised"}>
-            <option value="supervised">Hold anything uncertain for me to read first</option>
-            <option value="autonomous">The agent answers and books, on its own</option>
-          </select>
-          <span className="hint">Either way it only states facts from your own material. {alwaysHoldsSentence()}</span>
-        </label>
-      ) : (
-        <p className="small muted">
-          When a reply arrives:{" "}
-          {autonomy === "autonomous"
-            ? "the agent answers and books on its own."
-            : "anything uncertain is held for a person to read first."}{" "}
-          Your workspace owner sets this.
-        </p>
-      )}
       <PostButton className="btn block" pendingLabel="Saving…">
         Confirm and continue
       </PostButton>
@@ -446,7 +418,17 @@ export interface LaunchReview {
   blockers: string[];
 }
 
-export function LaunchPanel({ review }: { review: LaunchReview }) {
+export function LaunchPanel({
+  review,
+  handling,
+  canSetWorkspace,
+}: {
+  review: LaunchReview;
+  /** What the workspace already chose, so the screen opens on it; null asks with nothing ticked. */
+  handling: ReplyHandling | null;
+  /** Only owners, admins and managers change the workspace's answer; anyone launching sets this campaign's. */
+  canSetWorkspace: boolean;
+}) {
   const ready = review.blockers.length === 0;
   return (
     <div className="stack-4">
@@ -520,6 +502,35 @@ export function LaunchPanel({ review }: { review: LaunchReview }) {
       <form action="/onboarding/save" method="post">
         <input type="hidden" name="action" value="launch" />
         <input type="hidden" name="campaignId" value={review.campaignId} />
+        <fieldset className="wz-choice">
+          <legend>When somebody replies, who answers?</legend>
+          <label className="wz-option">
+            <input type="radio" name="handling" value="check" required defaultChecked={handling === "check"} />
+            <span>
+              <strong>I&rsquo;ll check each one</strong>
+              <span className="small">
+                {NORA} drafts every answer and nothing goes back until you approve it in your Inbox. Slower, and every
+                word is yours.
+              </span>
+            </span>
+          </label>
+          <label className="wz-option">
+            <input type="radio" name="handling" value="nora" defaultChecked={handling === "nora"} />
+            <span>
+              <strong>Let {NORA} run it and fill my calendar</strong>
+              <span className="small">
+                {NORA} answers replies and books the meetings on its own, minutes after they arrive, from your own
+                material only.
+              </span>
+            </span>
+          </label>
+          <p className="tiny subtle">{alwaysHoldsSentence()}</p>
+          <p className="tiny subtle">
+            {canSetWorkspace
+              ? "This becomes the setting for every campaign. Change it any time on your Profile or on a campaign."
+              : "This sets it for this campaign. Your workspace owner sets it for the others."}
+          </p>
+        </fieldset>
         {ready ? (
           <PostButton className="btn block" pendingLabel="Launching…">
             Launch my first campaign
@@ -531,8 +542,8 @@ export function LaunchPanel({ review }: { review: LaunchReview }) {
         )}
       </form>
       <p className="tiny subtle">
-        Invitations are spread across your sending hours, starting slowly on a new account. You can pause it at any
-        time.
+        Inside your sending hours the first invitation goes out within seconds of launching; the rest are spread
+        across those hours, a few a day to start on a new account. You can pause it at any time.
       </p>
     </div>
   );

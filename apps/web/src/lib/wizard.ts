@@ -51,11 +51,11 @@ export const WIZARD_STEPS: readonly WizardStep[] = [
   { key: "business", title: "Your business", settles: "What you sell, so Sage can write your strategies" },
   { key: "linkedin", title: "Connect LinkedIn", settles: "The account every message is sent from" },
   { key: "hours", title: "Sending hours", settles: "Your timezone and the hours it may send in" },
-  { key: "voice", title: "How you sound", settles: "Your name, your voice, and how replies are handled" },
+  { key: "voice", title: "How you sound", settles: "Your name and the voice everything is written in" },
   { key: "cta", title: "What you are asking for", settles: "A call, a link or a conversation" },
   { key: "strategy", title: "Approve a strategy", settles: "Who to go after, and why they would care" },
   { key: "prospects", title: "Build your list", settles: "Real people, each with a note written for them" },
-  { key: "launch", title: "Review and launch", settles: "Your first campaign goes live" },
+  { key: "launch", title: "Review and launch", settles: "Who answers replies, then your first campaign goes live" },
 ];
 
 /** What is actually stored, read for one person in one workspace. */

@@ -57,7 +57,7 @@ export function Walkthrough() {
           <strong>Your first campaign is live.</strong>{" "}
           {launched === "late"
             ? "Sending starts as soon as the sending service answers; nothing is lost."
-            : "Invitations go out across your sending hours, starting slowly."}{" "}
+            : "Inside your sending hours the first invitation goes out within seconds; the rest are spread across them."}{" "}
           Here is a two-minute look round.
         </p>
       ) : null}

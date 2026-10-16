@@ -56,6 +56,7 @@ const ERRORS: Record<string, string> = {
   days: "Pick at least one day it may send on.",
   name: "Your name is what a prospect sees the invitation come from, so it cannot be blank.",
   "cta-kind": "Choose what your campaigns ask for.",
+  handling: "Choose who answers replies: you, or Nora on its own.",
   "cta-url": "A link campaign needs a web address we can send, like yoursite.com/offer. Check it and try again.",
   "booking-url": "That scheduling link is not a web address we can send. Check it, or leave it blank.",
   "approve-failed": "That strategy could not be approved. Reload the page and try again.",
@@ -85,7 +86,8 @@ const LEDES: Record<WizardStepKey, string> = {
     "Sage wrote these from your business. Approve one and Nora searches LinkedIn for those people. Nothing is searched for until you do.",
   prospects:
     "Nora is searching LinkedIn, scoring everyone against your strategy and writing a note for each person. It usually takes a minute or two.",
-  launch: "Your first campaign, ready to go. Read it, then launch it. Nothing is sent until you press the button.",
+  launch:
+    "Your first campaign, ready to go. Read it, choose who answers the replies, then launch it. Nothing is sent until you press the button.",
 };
 
 async function signOutToFind() {
@@ -376,12 +378,7 @@ async function stepBody(
     }
     if (step === "voice") {
       return (
-        <VoiceForm
-          fullName={me?.full_name ?? null}
-          bio={me?.bio ?? null}
-          autonomy={wizard.stash.autonomy}
-          canSetAutonomy={(AUTONOMY_ROLES as readonly string[]).includes(wizard.role ?? "")}
-        />
+        <VoiceForm fullName={me?.full_name ?? null} bio={me?.bio ?? null} />
       );
     }
     return <CtaForm cta={wizard.stash.cta} bookingUrl={me?.booking_url ?? null} />;
@@ -484,7 +481,13 @@ async function stepBody(
       </div>
     );
   }
-  return <LaunchPanel review={review} />;
+  return (
+    <LaunchPanel
+      review={review}
+      handling={wizard.stash.autonomy === "autonomous" ? "nora" : wizard.stash.autonomy === "supervised" ? "check" : null}
+      canSetWorkspace={(AUTONOMY_ROLES as readonly string[]).includes(wizard.role ?? "")}
+    />
+  );
 }
 
 function ContinueLink() {

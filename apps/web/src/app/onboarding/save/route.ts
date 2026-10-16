@@ -9,7 +9,7 @@ import { currentStep, stepIndex, type WizardStepKey } from "@/lib/wizard";
 import { queueSearch } from "@/lib/search";
 import { launch } from "@/lib/launch";
 import { approveStrategy, planFlags } from "@/lib/approve";
-import { AUTONOMY_ROLES, setAutonomy } from "@/lib/autonomy";
+import { AUTONOMY_ROLES, setReplyHandling } from "@/lib/autonomy";
 
 /*
  * Every onboarding step after the first posts here (rule 65).
@@ -165,13 +165,6 @@ export async function POST(request: NextRequest) {
         .eq("id", user.id)
         .select("id");
       if (!saved?.length) return again("save-failed");
-      // The workspace's setting, so the same people who may change it on the
-      // profile may change it here, and onto every campaign as well.
-      const wanted = form.get("autonomy");
-      if (wanted && isAdmin) {
-        const set = await setAutonomy(supabase, workspaceId, wanted === "autonomous" ? "autonomous" : "supervised");
-        if (!set) return again("save-failed");
-      }
       if (!(await confirm("voice"))) return again("save-failed");
       return seeOther("/onboarding");
     }
@@ -268,6 +261,11 @@ export async function POST(request: NextRequest) {
         .eq("status", "draft")
         .maybeSingle();
       if (!draft) return again("launch-missing");
+      // Who answers replies is asked here, at the moment it starts to matter,
+      // and set before the launch so the first reply is handled as chosen.
+      const handling = form.get("handling");
+      if (handling !== "check" && handling !== "nora") return again("handling");
+      if (!(await setReplyHandling(supabase, workspaceId, campaignId, handling, isAdmin))) return again("save-failed");
       const outcome = await launch(campaignId, { workspaceId, userId: user.id });
       switch (outcome.status) {
         case "launched":

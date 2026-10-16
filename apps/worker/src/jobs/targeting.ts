@@ -571,6 +571,10 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
       cta_label: profileRow.cta_label,
       cta_url: profileRow.cta_url,
       daily_invite_cap: plan.dailyInviteCap,
+      // The reply gate holds every message on an `approval` campaign whatever
+      // its autonomy says, so "answers on its own" has to set the mode too or
+      // it changes nothing.
+      reply_mode: onboardingAutonomy === "autonomous" ? "autopilot" : "approval",
       stop_conditions: plan.stopConditions as never,
       // Carried on the campaign, not only in the event log, because the person
       // who reviews this list before launching is the one who needs to know
@@ -587,8 +591,8 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
          * answered at signup, and the setting only took effect once they
          * found the profile screen and set it a second time — so an answer
          * given on day one did nothing until day three. `applyRules` reads
-         * this field and nothing else (rule 41), so this is the whole of
-         * making the answer real.
+         * this field and the campaign's `reply_mode` (set beside it above),
+         * and the two together are what make the answer real.
          */
         autonomy: onboardingAutonomy,
       } as never,

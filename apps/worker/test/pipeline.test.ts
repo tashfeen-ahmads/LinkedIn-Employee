@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MockLinkedInProvider } from "@le/linkedin";
 import { LINKEDIN_LIMITS, PACING_LAST_ACTION, PACING_LOOP, normalizeExclusionValue } from "@le/shared";
 import { FakeDb } from "./fake-db.js";
-import { runCampaignTick } from "../src/jobs/campaign-tick.js";
+import { FIRST_SEND_MAX_MS, FIRST_SEND_MIN_MS, runCampaignTick } from "../src/jobs/campaign-tick.js";
 import { runLinkedInAction } from "../src/jobs/linkedin-action.js";
 import { detectAcceptedInvitations, followUpDueAt } from "../src/jobs/acceptance.js";
 import { handleInboundMessage } from "../src/jobs/inbound.js";
@@ -219,8 +219,12 @@ describe("campaign pipeline", () => {
     expect(count).toBe(1);
     expect(enqueued).toHaveLength(1);
     expect(enqueued[0]?.queue).toBe("linkedinAction");
-    // The delay is what keeps a campaign from looking like a machine.
-    expect((enqueued[0]?.opts as { delay: number }).delay).toBeGreaterThan(0);
+    // Never the same instant, which is what keeps a campaign from looking like
+    // a machine — and on an account that has never sent, within seconds of
+    // Launch rather than a whole gap later.
+    const delay = (enqueued[0]?.opts as { delay: number }).delay;
+    expect(delay).toBeGreaterThanOrEqual(FIRST_SEND_MIN_MS);
+    expect(delay).toBeLessThanOrEqual(FIRST_SEND_MAX_MS);
     void ctx;
   });
 

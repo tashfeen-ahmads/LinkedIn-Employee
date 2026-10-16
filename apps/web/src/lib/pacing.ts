@@ -207,8 +207,8 @@ export function describePacing(input: {
      * then not delivering one.
      */
     body: pace
-      ? `Invitations go out about ${Math.round(pace / 60_000)} minutes apart, spread across the rest of your sending hours so the account never sends in a burst, up to ${left} more today. The first can take up to a quarter of an hour to appear.`
-      : `Invitations go out ${Math.round(LINKEDIN_LIMITS.minGapMs / 60_000)} to ${Math.round(LINKEDIN_LIMITS.maxGapMs / 60_000)} minutes apart, never two together, up to ${left} more today. The first can take up to a quarter of an hour to appear.`,
+      ? `Invitations go out about ${Math.round(pace / 60_000)} minutes apart, spread across the rest of your sending hours so the account never sends in a burst, up to ${left} more today. A campaign just launched sends its first within seconds, unless this account sent one in the last ${Math.round(pace / 60_000)} minutes.`
+      : `Invitations go out ${Math.round(LINKEDIN_LIMITS.minGapMs / 60_000)} to ${Math.round(LINKEDIN_LIMITS.maxGapMs / 60_000)} minutes apart, never two together, up to ${left} more today. A campaign just launched sends its first within seconds, unless this account sent one in the last few minutes.`,
   };
 }
 

@@ -35,8 +35,8 @@ const MUTATIONS = [
     id: "pacing/gap-measured-from-last-send",
     rule: "The first invitation of a run is spaced from the account's last send, not from the tick, or a warmed person waits past the end of the day",
     file: "apps/worker/src/jobs/campaign-tick.ts",
-    from: "    const next = delay + Math.max(0, gap - sinceLast);",
-    to: "    const next = delay + gap;",
+    from: "    const next = delay + Math.max(settle, gap - sinceLast);",
+    to: "    const next = delay + Math.max(settle, gap);",
     pkg: "@le/worker",
   },
   {
@@ -161,6 +161,22 @@ const MUTATIONS = [
     from: "    if (paceWait > 0) {",
     to: "    if (false) {",
     pkg: "@le/worker",
+  },
+  {
+    id: "pace/first-send-in-seconds",
+    rule: "An account that has never sent has no gap to serve: its first invitation goes within seconds",
+    file: "apps/worker/src/jobs/campaign-tick.ts",
+    from: "        : Number.POSITIVE_INFINITY",
+    to: "        : 0",
+    pkg: "@le/worker",
+  },
+  {
+    id: "setup/autonomous-takes-campaigns-off-approval",
+    rule: "Choosing that the agent answers on its own also sets the campaigns' reply mode",
+    file: "apps/worker/src/jobs/targeting.ts",
+    from: 'reply_mode: onboardingAutonomy === "autonomous" ? "autopilot" : "approval",',
+    to: 'reply_mode: "approval",',
+    pkg: "@le/web",
   },
   {
     id: "pace/in-flight-counts-as-sent",

@@ -1047,6 +1047,11 @@ tests that were verified by deliberately breaking the code.
     hours that make it a warm-up, and the spacing that matters there is the
     per-prospect wait stamped after the view, not the gap between two views.
 
+    The first invitation of a run on an account that has never sent goes
+    within seconds (`FIRST_SEND_MIN_MS`/`MAX_MS`): there is no gap to serve.
+    It used to count as sent this instant and wait a whole gap, so every first
+    launch showed nothing on LinkedIn for eight to twenty-two minutes.
+
     **Never faster than a whole day's pace** (`dayMs`/`dayAllowance` on
     `InvitePace`). Divided only by what was left, a campaign launched at 1:21
     in the afternoon packed a never-used account's first ten into the
@@ -1552,8 +1557,15 @@ tests that were verified by deliberately breaking the code.
 
     `/onboarding` is now one screen per step (`WIZARD_STEPS` in
     `apps/web/src/lib/wizard.ts`): business, connect LinkedIn (with the plan),
-    sending hours and timezone, voice and reply handling, the call to action,
-    approve a strategy, build the list, review and launch. The business comes
+    sending hours and timezone, voice, the call to action, approve a strategy,
+    build the list, review and launch. Who answers replies is asked on the
+    launch step, as two ways of working with nothing ticked — "I'll check each
+    one" (`approval`) or "let Nora run it" (`autopilot`, autonomous) — through
+    `setReplyHandling`, which sets the campaign being launched and, for the
+    roles that may, the workspace. Autonomy and reply mode are set together
+    everywhere (`setAutonomy`, `targeting.ts`): the reply gate holds every
+    message on an `approval` campaign whatever its autonomy says, so an
+    "on its own" answer that left the mode alone changed nothing. The business comes
     first because a LinkedIn account belongs to a workspace and the business
     step creates it — and it starts Sage, so the strategies are written while
     the person does the next four steps. Each step is decided from what is

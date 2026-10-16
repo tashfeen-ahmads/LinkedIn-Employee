@@ -22,7 +22,7 @@ describe("the profile edits every onboarding answer", () => {
   const asked = [...onboarding.matchAll(/name="([A-Za-z]+)"/g)].map((m) => m[1]!);
 
   it("asks something at onboarding at all", () => {
-    expect(asked).toEqual(expect.arrayContaining(["companyName", "websiteUrl", "fullName", "autonomy"]));
+    expect(asked).toEqual(expect.arrayContaining(["companyName", "websiteUrl", "fullName", "handling"]));
   });
 
   it("has a field on the profile for each of them", () => {
@@ -33,7 +33,11 @@ describe("the profile edits every onboarding answer", () => {
     // What a campaign asks for is per strategy after onboarding, so it is
     // changed on the strategy page rather than the profile.
     const perStrategy = new Set(["ctaKind", "ctaLabel", "ctaUrl"]);
-    for (const name of asked) {
+    // Who answers replies is asked on the launch step as a choice between two
+    // ways of working; the profile changes the same setting as "autonomy".
+    const renamed: Record<string, string> = { handling: "autonomy" };
+    for (const asked_ of asked) {
+      const name = renamed[asked_] ?? asked_;
       if (plumbing.has(name)) continue;
       if (perStrategy.has(name)) {
         expect(strategy, `onboarding asks "${name}" and the strategy page cannot change it`).toContain(`name="${name}"`);

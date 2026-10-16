@@ -999,6 +999,35 @@ input, select, textarea, button { margin: 0; }
 }
 
 /*
+ * Who answers replies, asked on the launch step as two ways of working rather
+ * than a setting in a dropdown: the whole option is the target, and the one
+ * chosen carries the accent so the decision reads at a glance.
+ */
+.wz-choice {
+  border: 0;
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.wz-choice legend { font-weight: 600; margin-bottom: var(--space-2); padding: 0; }
+.wz-option {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius);
+  padding: var(--space-4);
+  cursor: pointer;
+}
+.wz-option input { margin-top: 0.3rem; accent-color: var(--accent); }
+.wz-option > span { display: flex; flex-direction: column; gap: 4px; }
+.wz-option strong { font-size: 1.05rem; }
+.wz-option:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.wz-option:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/*
  * A long form with its length made legible.
  *
  * Onboarding is four sections on one page — deliberately, because a wizard
