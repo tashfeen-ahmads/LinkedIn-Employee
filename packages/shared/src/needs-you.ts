@@ -100,6 +100,7 @@ export type NeedsYouKind =
   | "pitch_unapproved"
   | "hook_unapproved"
   | "strategy_unapproved"
+  | "meeting_hours_unset"
   | "campaign_unlaunched"
   | "thin_notes"
   | "cta_missing";
@@ -165,6 +166,12 @@ export interface NeedsYouFacts {
   strategiesUnapproved: number;
   /** Strategies already approved: with one, the rest are more options, not a stop. */
   strategiesApproved: number;
+  /**
+   * A running campaign asks for a meeting and the rep who owns it has neither
+   * saved when they can be booked nor given their own scheduling link, so the
+   * agent offers default hours. Optional so older callers read as false.
+   */
+  meetingHoursUnset?: boolean;
   /** Campaigns with a reviewed list that were never launched. */
   campaignsUnlaunched: number;
   /**
@@ -354,6 +361,26 @@ export function needsYou(facts: NeedsYouFacts): NeedsYouItem[] {
       action: "Set the destination",
       tone: "warning",
       count: facts.campaignsMissingCta,
+    });
+  }
+
+  /*
+   * Meetings offered on hours nobody chose.
+   *
+   * The agent offers only times from the rep's availability (rule 6), and with
+   * none saved it falls back to nine to five on weekdays. Booked inside the
+   * defaults is a prospect turning up at a time the rep never said they were
+   * free, so it is said, with the place to set them.
+   */
+  if (facts.meetingHoursUnset) {
+    items.push({
+      kind: "meeting_hours_unset",
+      title: "Prospects are offered meeting times on default hours.",
+      why: "Until you say when you take calls, the agent offers 9 to 5 on weekdays, 30 minutes each, in your timezone.",
+      href: "/app/meetings?tab=availability",
+      action: "Set your meeting hours",
+      tone: "warning",
+      count: 1,
     });
   }
 

@@ -176,14 +176,28 @@ export function LinkedInForm({
 
 /* ------------------------------------------------------------------ 3 */
 
+/** When prospects may book a call, as the step opens on it. */
+export interface MeetingHours {
+  start: number;
+  end: number;
+  days: number[];
+  meetingMinutes: number;
+  location: string | null;
+}
+
+const MEETING_LENGTHS = [15, 20, 30, 45, 60];
+
 export function HoursForm({
   timezone,
   hours,
+  meetings,
 }: {
   timezone: string | null;
   hours: { start: number; end: number; days: number[] } | null;
+  meetings: MeetingHours;
 }) {
   const h = hours ?? { start: 9, end: 17, days: [1, 2, 3, 4, 5] };
+  const m = meetings;
   return (
     <form action="/onboarding/save" method="post" className="stack-4">
       <input type="hidden" name="action" value="hours" />
@@ -226,6 +240,78 @@ export function HoursForm({
           ))}
         </div>
       </fieldset>
+
+      {/*
+        When a prospect may book a call, asked beside the sending hours and
+        apart from them: invitations going out at eight is fine, a call at
+        eight usually is not. These are the only times the agent ever offers
+        (rule 6), so a rep who never sees this question is booked into the
+        defaults without knowing there were any.
+      */}
+      <fieldset className="field-group">
+        <legend>When prospects can book a call with you</legend>
+        <p className="small muted">
+          {NORA} only ever offers times inside these hours, in the timezone above, and never two calls on top of each
+          other.
+        </p>
+        <div className="form-row">
+          <label className="field compact">
+            <span>From</span>
+            <select name="meetStart" defaultValue={m.start}>
+              {START_HOURS.map((hour) => (
+                <option key={hour} value={hour}>
+                  {hourLabel(hour)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field compact">
+            <span>To</span>
+            <select name="meetEnd" defaultValue={m.end}>
+              {END_HOURS.map((hour) => (
+                <option key={hour} value={hour}>
+                  {hourLabel(hour)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="field compact">
+            <span>Each call</span>
+            <select name="meetingMinutes" defaultValue={m.meetingMinutes}>
+              {(MEETING_LENGTHS.includes(m.meetingMinutes) ? MEETING_LENGTHS : [...MEETING_LENGTHS, m.meetingMinutes]).map(
+                (minutes) => (
+                  <option key={minutes} value={minutes}>
+                    {minutes} min
+                  </option>
+                ),
+              )}
+            </select>
+          </label>
+        </div>
+        <div className="cluster-3">
+          {DAYS.map((day) => (
+            <label key={day.value} className="small check">
+              <input type="checkbox" name={`meetDay-${day.value}`} defaultChecked={m.days.includes(day.value)} />
+              {day.label}
+            </label>
+          ))}
+        </div>
+        <label className="field">
+          <span>Where you meet · optional</span>
+          <input
+            name="location"
+            defaultValue={m.location ?? ""}
+            maxLength={280}
+            placeholder="https://meet.google.com/abc-defg-hij"
+            autoComplete="off"
+          />
+          <span className="hint">
+            Your video link or phone number, put in every invitation. Blocked-out time and more settings are on
+            Meetings.
+          </span>
+        </label>
+      </fieldset>
+
       <PostButton className="btn block" pendingLabel="Saving…">
         Confirm hours
       </PostButton>

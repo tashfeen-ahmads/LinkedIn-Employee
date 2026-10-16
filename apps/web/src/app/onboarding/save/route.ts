@@ -12,6 +12,7 @@ import { approveStrategy, planFlags } from "@/lib/approve";
 import { AUTONOMY_ROLES, setReplyHandling } from "@/lib/autonomy";
 import { carryVoiceToAgent } from "@/lib/agent-voice";
 import { ensureCta } from "@/lib/cta-library";
+import { AVAILABILITY_DEFAULTS, availabilityProblem, saveAvailability } from "@/lib/availability";
 
 /*
  * Every onboarding step after the first posts here (rule 65).
@@ -152,6 +153,30 @@ export async function POST(request: NextRequest) {
         if (!hours?.length) return again("save-failed");
       }
       await saveStash({ workingHours });
+
+      // When prospects may book a call: the row the slot finder reads, so the
+      // times offered are the ones given here (rule 6). Notice, buffer and the
+      // daily limit keep what is saved, or the table's defaults.
+      const { data: existing } = await supabase
+        .from("availability")
+        .select("min_notice_hours, buffer_minutes, max_per_day")
+        .eq("workspace_id", workspaceId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      const meetings = {
+        timezone,
+        start: Number(form.get("meetStart")),
+        end: Number(form.get("meetEnd")),
+        days: [1, 2, 3, 4, 5, 6, 0].filter((day) => form.get(`meetDay-${day}`) === "on"),
+        meetingMinutes: Number(form.get("meetingMinutes")),
+        minNoticeHours: existing?.min_notice_hours ?? AVAILABILITY_DEFAULTS.minNoticeHours,
+        bufferMinutes: existing?.buffer_minutes ?? AVAILABILITY_DEFAULTS.bufferMinutes,
+        maxPerDay: existing?.max_per_day ?? AVAILABILITY_DEFAULTS.maxPerDay,
+        location: String(form.get("location") ?? "").trim().slice(0, 280) || null,
+      };
+      if (availabilityProblem(meetings)) return again(meetings.days.length === 0 ? "meet-days" : "meet-hours");
+      if (!(await saveAvailability(supabase, workspaceId, user.id, meetings))) return again("save-failed");
+
       if (!(await confirm("hours"))) return again("save-failed");
       return seeOther("/onboarding");
     }

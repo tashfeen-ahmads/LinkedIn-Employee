@@ -62,6 +62,7 @@ export async function readWizard(supabase: Db, userId: string): Promise<WizardRe
         hasWorkspace: false,
         linkedInActive: false,
         confirmed: { hours: false, voice: false, cta: false },
+        hasMeetingHours: false,
         hasApprovedStrategy: false,
         hasCampaign: false,
         hasLaunchedCampaign: false,
@@ -70,7 +71,7 @@ export async function readWizard(supabase: Db, userId: string): Promise<WizardRe
   }
 
   const head = { count: "exact" as const, head: true };
-  const [workspace, account, me, approved, campaigns, launched] = await Promise.all([
+  const [workspace, account, me, approved, campaigns, launched, meetingHours] = await Promise.all([
     supabase.from("workspaces").select("name, onboarding").eq("id", workspaceId).maybeSingle(),
     supabase
       .from("linkedin_accounts")
@@ -84,6 +85,7 @@ export async function readWizard(supabase: Db, userId: string): Promise<WizardRe
     // counting it left the last step with nothing on it and no way back.
     supabase.from("campaigns").select("id", head).eq("workspace_id", workspaceId).eq("status", "draft"),
     supabase.from("campaigns").select("id", head).eq("workspace_id", workspaceId).not("launched_at", "is", null),
+    supabase.from("availability").select("id", head).eq("workspace_id", workspaceId).eq("user_id", userId),
   ]);
   // The profile read is left out on purpose: confirmations missing only means
   // a step is asked again, which costs a click, while "unreadable" stops the
@@ -107,6 +109,10 @@ export async function readWizard(supabase: Db, userId: string): Promise<WizardRe
       // its status column says.
       linkedInActive: row?.status === "active" && Boolean(row.provider_account_id),
       confirmed: { hours: Boolean(mine.hours), voice: Boolean(mine.voice), cta: Boolean(mine.cta) },
+      // A failed read counts as saved: asking again costs a click, refusing
+      // the step forever costs the setup (and "unreadable" is reserved for the
+      // facts that decide whether setup is finished).
+      hasMeetingHours: meetingHours.error ? true : (meetingHours.count ?? 0) > 0,
       hasApprovedStrategy: (approved.count ?? 0) > 0,
       hasCampaign: (campaigns.count ?? 0) > 0,
       hasLaunchedCampaign: (launched.count ?? 0) > 0,

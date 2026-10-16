@@ -23,6 +23,7 @@ const NOTHING: WizardFacts = {
   hasWorkspace: false,
   linkedInActive: false,
   confirmed: { hours: false, voice: false, cta: false },
+  hasMeetingHours: false,
   hasApprovedStrategy: false,
   hasCampaign: false,
   hasLaunchedCampaign: false,
@@ -31,6 +32,7 @@ const ALL_BUT_LAUNCH: WizardFacts = {
   hasWorkspace: true,
   linkedInActive: true,
   confirmed: { hours: true, voice: true, cta: true },
+  hasMeetingHours: true,
   hasApprovedStrategy: true,
   hasCampaign: true,
   hasLaunchedCampaign: false,
@@ -236,5 +238,20 @@ describe("every onboarding answer reaches the app (rule 65)", () => {
   it("approves the opener and offer on the launch screen, only as shown", () => {
     expect(read("app", "onboarding", "page.tsx")).toMatch(/lines: await linesAwaitingApproval\(workspaceId\)/);
     expect(route).toMatch(/\.eq\("body", bodies\[i\] \?\? ""\)\s*\.is\("approved_at", null\)/);
+  });
+});
+
+describe("meeting hours are set during setup", () => {
+  it("keeps the hours step open until the meeting hours are saved", () => {
+    // Confirmed sending hours with no meeting hours: the agent would offer
+    // defaults the person never saw, so the step is not done.
+    expect(currentStep({ ...ALL_BUT_LAUNCH, hasMeetingHours: false })).toBe("hours");
+    expect(currentStep({ ...ALL_BUT_LAUNCH })).toBe("launch");
+  });
+
+  it("saves them through the same definition as the Meetings page", () => {
+    const route = read("app", "onboarding", "save", "route.ts");
+    expect(route).toMatch(/await saveAvailability\(supabase, workspaceId, user\.id, meetings\)/);
+    expect(read("app", "app", "meetings", "availability.tsx")).toMatch(/await writeAvailability\(supabase, session\.workspaceId, session\.userId, input\)/);
   });
 });

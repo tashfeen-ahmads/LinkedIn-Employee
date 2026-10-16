@@ -182,6 +182,33 @@ export async function loadNeedsYou(
     return !cta.url;
   }).length;
 
+  /*
+   * Meeting campaigns running on hours nobody chose: an owner with neither
+   * saved availability nor their own scheduling link (rule 31).
+   */
+  const { data: meetingCampaigns } = await supabase
+    .from("campaigns")
+    .select("owner_user_id")
+    .eq("workspace_id", workspaceId)
+    .eq("status", "running")
+    .eq("cta_kind", "meeting");
+  const owners = [...new Set((meetingCampaigns ?? []).map((c) => c.owner_user_id).filter(Boolean))] as string[];
+  let meetingHoursUnset = false;
+  if (owners.length) {
+    const [{ data: set, error: setError }, { data: links, error: linkError }] = await Promise.all([
+      supabase.from("availability").select("user_id").eq("workspace_id", workspaceId).in("user_id", owners),
+      supabase.from("profiles").select("id, booking_url").in("id", owners),
+    ]);
+    // A read that failed says nothing either way, so it raises nothing.
+    if (!setError && !linkError) {
+      const covered = new Set([
+        ...(set ?? []).map((row) => row.user_id),
+        ...(links ?? []).filter((row) => row.booking_url).map((row) => row.id),
+      ]);
+      meetingHoursUnset = owners.some((owner) => !covered.has(owner));
+    }
+  }
+
   const facts: NeedsYouFacts = {
     loopStalled: stamped === null || now.getTime() - stamped > PACING_STALE_MS,
     linkedInConnected: (account.count ?? 0) > 0,
@@ -197,6 +224,7 @@ export async function loadNeedsYou(
     hooksUnapproved: hooks.count ?? 0,
     strategiesUnapproved: strategies.count ?? 0,
     strategiesApproved: approvedStrategies.count ?? 0,
+    meetingHoursUnset,
     campaignsUnlaunched: (unlaunched ?? []).length,
     campaignsWithThinNotes: new Set((thin ?? []).map((row) => row.campaign_id)).size,
     campaignsMissingCta,

@@ -36,9 +36,22 @@ describe("the profile edits every onboarding answer", () => {
     // Who answers replies is asked on the launch step as a choice between two
     // ways of working; the profile changes the same setting as "autonomy".
     const renamed: Record<string, string> = { handling: "autonomy" };
+    // When prospects can book a call is changed on Meetings, which owns the
+    // rest of that row (notice, buffer, blocked-out time).
+    const meetings = readFileSync(join(SRC, "app", "meetings", "availability.tsx"), "utf8");
+    const onMeetings: Record<string, string> = {
+      meetStart: "start",
+      meetEnd: "end",
+      meetingMinutes: "meetingMinutes",
+      location: "location",
+    };
     for (const asked_ of asked) {
       const name = renamed[asked_] ?? asked_;
       if (plumbing.has(name)) continue;
+      if (onMeetings[name]) {
+        expect(meetings, `onboarding asks "${name}" and Meetings cannot change it`).toContain(`name="${onMeetings[name]}"`);
+        continue;
+      }
       if (perStrategy.has(name)) {
         expect(strategy, `onboarding asks "${name}" and the strategy page cannot change it`).toContain(`name="${name}"`);
         continue;

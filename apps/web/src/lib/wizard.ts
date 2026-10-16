@@ -50,7 +50,7 @@ export interface WizardStep {
 export const WIZARD_STEPS: readonly WizardStep[] = [
   { key: "business", title: "Your business", settles: "What you sell, so Sage can write your strategies" },
   { key: "linkedin", title: "Connect LinkedIn", settles: "The account every message is sent from" },
-  { key: "hours", title: "Sending hours", settles: "Your timezone and the hours it may send in" },
+  { key: "hours", title: "Your hours", settles: "When it sends, and when prospects can book a call" },
   { key: "voice", title: "How you sound", settles: "Your name and the voice everything is written in" },
   { key: "cta", title: "What you are asking for", settles: "A call, a link or a conversation" },
   { key: "strategy", title: "Approve a strategy", settles: "Who to go after, and why they would care" },
@@ -65,6 +65,12 @@ export interface WizardFacts {
   linkedInActive: boolean;
   /** Steps whose answers this person has seen and confirmed on this screen. */
   confirmed: { hours: boolean; voice: boolean; cta: boolean };
+  /**
+   * When prospects can book this person is saved. Part of the hours step: the
+   * slot finder offers nothing but these (rule 6), and a confirmation without
+   * them left a customer booked into defaults they never saw.
+   */
+  hasMeetingHours: boolean;
   hasApprovedStrategy: boolean;
   hasCampaign: boolean;
   hasLaunchedCampaign: boolean;
@@ -77,7 +83,7 @@ export function stepDone(key: WizardStepKey, facts: WizardFacts): boolean {
     case "linkedin":
       return facts.linkedInActive;
     case "hours":
-      return facts.confirmed.hours;
+      return facts.confirmed.hours && facts.hasMeetingHours;
     case "voice":
       return facts.confirmed.voice;
     case "cta":

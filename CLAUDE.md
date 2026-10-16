@@ -1631,6 +1631,14 @@ tests that were verified by deliberately breaking the code.
     timezone, How it works ignores optional steps, and the overview no longer
     asks the Sales Navigator question the LinkedIn step already asked.
 
+    The hours step asks two questions, because they are two: when the
+    account may send, and when prospects can book a call. The second is the
+    `availability` row the slot finder reads (rule 6), written through
+    `saveAvailability` (`lib/availability.ts`, shared with Meetings), and the
+    step is not done until it exists — a rep who never saw it was booked into
+    defaults they had not chosen. A running meeting campaign whose owner has
+    neither saved hours nor their own scheduling link is a Needs you row.
+
     Launching ends on `/app?tour=1`: a ten-stop tour of the real pages
     (`WALKTHROUGH`, `components/walkthrough.tsx`), driven by `?tour=N` so each
     stop is an ordinary page load, never modal, startable again from How it

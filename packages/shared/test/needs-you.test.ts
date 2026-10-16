@@ -243,6 +243,13 @@ describe("every row", () => {
     expect(needsYou({ ...CALM, strategiesUnapproved: 2 })[0]?.title).toContain("2 strategies are");
   });
 
+  it("says when meetings are offered on hours nobody chose", () => {
+    const [item] = needsYou({ ...CALM, meetingHoursUnset: true });
+    expect(item?.kind).toBe("meeting_hours_unset");
+    expect(item?.href).toBe("/app/meetings?tab=availability");
+    expect(needsYou(CALM)).toEqual([]);
+  });
+
   it("stops asking for strategies once one is approved (rule 65)", () => {
     // Onboarding approves one of Sage's three to five. The rest are options,
     // and "nothing is searched until one is approved" is no longer true.

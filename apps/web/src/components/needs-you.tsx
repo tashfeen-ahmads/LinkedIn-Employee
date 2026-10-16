@@ -16,6 +16,7 @@ const ICON: Record<NeedsYouKind, string> = {
   pitch_unapproved: "posts",
   hook_unapproved: "posts",
   strategy_unapproved: "strategies",
+  meeting_hours_unset: "meetings",
   campaign_unlaunched: "campaigns",
   thin_notes: "posts",
   cta_missing: "cta",

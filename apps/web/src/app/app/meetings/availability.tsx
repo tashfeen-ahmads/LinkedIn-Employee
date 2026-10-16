@@ -1,4 +1,5 @@
 import { revalidatePath } from "next/cache";
+import { availabilityProblem, saveAvailability as writeAvailability } from "@/lib/availability";
 import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
@@ -55,37 +56,23 @@ async function saveAvailability(formData: FormData) {
   // Checked here as well as in the database. The constraint is the thing that
   // cannot be bypassed; this is the thing that says why, on the screen where it
   // can be fixed, instead of returning a Postgres error nobody can read.
-  const problem =
-    !Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end > 24 || end <= start
-      ? "Working hours need a start before an end, between 0 and 24."
-      : days.length === 0
-        ? "Pick at least one day, or nothing can ever be booked."
-        : meetingMinutes < 10 || meetingMinutes > 240
-          ? "A meeting is between 10 and 240 minutes."
-          : minNotice < 0 || minNotice > 336
-            ? "Notice is between 0 and 336 hours."
-            : buffer < 0 || buffer > 120
-              ? "A buffer is between 0 and 120 minutes."
-              : maxPerDay < 1 || maxPerDay > 20
-                ? "Between 1 and 20 meetings a day."
-                : null;
+  // One definition with onboarding's hours step (`lib/availability`).
+  const input = {
+    timezone: String(formData.get("timezone") ?? "UTC").trim() || "UTC",
+    start,
+    end,
+    days,
+    meetingMinutes,
+    minNoticeHours: minNotice,
+    bufferMinutes: buffer,
+    maxPerDay,
+    location: String(formData.get("location") ?? "").trim() || null,
+  };
+  const problem = availabilityProblem(input);
   if (problem) redirect(errorQuery("/app/meetings", problem));
-
-  await supabase.from("availability").upsert(
-    {
-      workspace_id: session.workspaceId,
-      user_id: session.userId,
-      timezone: String(formData.get("timezone") ?? "UTC").trim() || "UTC",
-      working_hours: { start, end, days } as never,
-      meeting_minutes: meetingMinutes,
-      min_notice_hours: minNotice,
-      buffer_minutes: buffer,
-      max_per_day: maxPerDay,
-      location: String(formData.get("location") ?? "").trim() || null,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "workspace_id,user_id" },
-  );
+  if (!(await writeAvailability(supabase, session.workspaceId, session.userId, input))) {
+    redirect(errorQuery("/app/meetings", "Your hours did not save. Please try again."));
+  }
 
   revalidatePath("/app/meetings");
 }

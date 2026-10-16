@@ -54,6 +54,8 @@ const ERRORS: Record<string, string> = {
   timezone: "Choose your timezone.",
   hours: "The sending window has to end after it starts.",
   days: "Pick at least one day it may send on.",
+  "meet-hours": "Your meeting hours have to end after they start.",
+  "meet-days": "Pick at least one day prospects can book a call, or nobody can.",
   name: "Your name is what a prospect sees the invitation come from, so it cannot be blank.",
   "cta-kind": "Choose what your campaigns ask for.",
   handling: "Choose who answers replies: you, or Nora on its own.",
@@ -80,7 +82,8 @@ const LEDES: Record<WizardStepKey, string> = {
     "Sage, the strategist, reads what you publish and writes your business profile and three to five strategies: who to go after, and why they would care. It works while you do the next steps.",
   linkedin:
     "Every invitation and message goes out from your own LinkedIn account, so nothing can be searched or sent until it is connected.",
-  hours: "Nothing leaves your account outside these hours, in your own timezone.",
+  hours:
+    "When your account may send, and when prospects can book a call with you. Both are in your own timezone.",
   voice: "Invitations and replies go out under your name, in your voice.",
   cta: "What a campaign asks for decides how its messages are written and what counts as a win.",
   strategy:
@@ -375,7 +378,24 @@ async function stepBody(
       const hours = wizard.account?.working_hours
         ? parseWorkingHours(wizard.account.working_hours)
         : wizard.stash.workingHours;
-      return <HoursForm timezone={me?.timezone ?? null} hours={hours} />;
+      const { data: booking } = workspaceId
+        ? await supabase
+            .from("availability")
+            .select("working_hours, meeting_minutes, location")
+            .eq("workspace_id", workspaceId)
+            .eq("user_id", userId)
+            .maybeSingle()
+        : { data: null };
+      // What is saved, or the table's own defaults on the days it may send.
+      const saved = booking?.working_hours ? parseWorkingHours(booking.working_hours) : null;
+      const meetings = {
+        start: saved?.start ?? 9,
+        end: saved?.end ?? 17,
+        days: saved?.days ?? hours?.days ?? [1, 2, 3, 4, 5],
+        meetingMinutes: booking?.meeting_minutes ?? 30,
+        location: booking?.location ?? null,
+      };
+      return <HoursForm timezone={me?.timezone ?? null} hours={hours} meetings={meetings} />;
     }
     if (step === "voice") {
       return (
