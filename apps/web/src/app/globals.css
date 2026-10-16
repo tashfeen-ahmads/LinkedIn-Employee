@@ -3937,6 +3937,18 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
   max-width: 44ch;
   text-wrap: pretty;
 }
+/* The setup promise, beside the button it is about: guided steps, one click live. */
+.mk-hero-fast {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-start;
+  max-width: 46ch;
+  font-size: 0.975rem;
+  line-height: 1.55;
+  color: var(--text-muted);
+}
+.mk-hero-fast strong { color: var(--text); font-weight: 600; }
+.mk-hero-fast .mk-icon { flex: none; width: 1.15rem; height: 1.15rem; margin-top: 0.2rem; color: var(--accent); }
 .mk-hero-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-2); }
 .mk-hero-second { gap: 0.5rem; border-color: var(--accent-border); color: var(--accent); }
 .mk-hero-second > span { transition: transform 160ms ease; }

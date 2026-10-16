@@ -64,7 +64,7 @@ const AGENTS: ReadonlyArray<{
     detail:
       "Builds the campaign and writes every connection note from that person's own headline, role and company, plus the follow-ups. Split a campaign across angles and it keeps the groups even, so a result means something. It hands you a draft, never a running campaign.",
     output: "A note per person, follow-ups, angles to test",
-    then: "You approve the words and press Launch.",
+    then: "You approve the words, then one click launches it. The first invitation goes within seconds.",
   },
   {
     key: "reese",
@@ -74,7 +74,7 @@ const AGENTS: ReadonlyArray<{
     detail:
       "Sends invitations and follow-ups under daily caps, spread across your working hours. Reads every reply before writing anything and drafts answers only from the documents you gave it. Offers only times you have open.",
     output: "Paced invitations, drafted replies, booked meetings",
-    then: "Each reply waits for your approval by default. Switch on autopilot and clean replies go out on their own.",
+    then: `At launch you choose: every reply waits for your approval, or ${TEAM_MEMBER.reese.name} answers and books on its own.`,
   },
   {
     key: null,

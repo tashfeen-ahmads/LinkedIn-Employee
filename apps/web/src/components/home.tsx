@@ -66,6 +66,13 @@ export function Hero() {
             {BRAND.name} finds the right people, writes each one a personal note, drafts your replies and
             books the call, all paced inside daily limits.
           </p>
+          <p className="mk-hero-fast">
+            <NavIcon name="campaigns" className="mk-icon" />
+            <span>
+              <strong>A few guided steps, then one click to go live.</strong> Your first invitation goes out
+              within seconds, inside your sending hours.
+            </span>
+          </p>
           <div className="mk-hero-actions">
             <Link href={SIGNUP} className="btn large">
               Sign up free
@@ -248,12 +255,15 @@ export function Decisions() {
                 </p>
                 <span className="mk-fakebtn">Approve</span>
               </div>
-              <p className="mk-decide-note">You approve the opener and the offer, line by line.</p>
+              <p className="mk-decide-note">
+                You approve the opener and the offer, then choose: check each reply yourself, or let {BRAND.name}{" "}
+                answer and book on its own.
+              </p>
             </li>
 
             <li className="mk-decide-card">
               <span className="mk-step-n" aria-hidden="true">3</span>
-              <h3>Press Launch</h3>
+              <h3>One click to go live</h3>
               <div className="mk-decide-visual" aria-hidden="true">
                 <dl className="mk-launch">
                   <div>
@@ -267,10 +277,17 @@ export function Decisions() {
                     <dt>Starts at</dt>
                     <dd>{LINKEDIN_LIMITS.invitesPerDayStart} invitations a day</dd>
                   </div>
+                  <div>
+                    <dt>First invitation</dt>
+                    <dd>Within seconds</dd>
+                  </div>
                 </dl>
-                <span className="mk-fakebtn">Launch</span>
+                <span className="mk-fakebtn">Launch my first campaign</span>
               </div>
-              <p className="mk-decide-note">Nothing sends until you press it, then only inside your hours.</p>
+              <p className="mk-decide-note">
+                Nothing sends until you press it. Then your first invitation goes within seconds, the rest are
+                spread across your hours.
+              </p>
             </li>
           </ol>
 
