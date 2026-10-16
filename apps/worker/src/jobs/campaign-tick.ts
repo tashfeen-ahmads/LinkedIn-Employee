@@ -17,6 +17,8 @@ import {
   localDayStart,
   nextGapMs,
   spreadGapMs,
+  inviteFloorMs,
+  invitePaceCeilingMs,
   invitePaceMs,
   warmStillCounts,
   workingDayMs,
@@ -31,6 +33,7 @@ import { recordBeat } from "../heartbeat.js";
 import { outreachPause } from "../platform.js";
 import { HELD_FOR_PITCH } from "../pitch.js";
 import { INVITE_FOLLOW_MS, WARM_FOLLOW_SPAN_MS, WARM_MARGIN_MS, viewFitsToday } from "../warm.js";
+import { lastInviteAt } from "../pace.js";
 
 /**
  * The pacing loop. Runs every few minutes and, for each running campaign, asks
@@ -530,7 +533,10 @@ async function enqueueWarmUps(
    * viewed as the pace can invite before the first view expires; the rest are
    * viewed later in the day, as invitations take the ones already bought.
    */
-  const gap = invitePaceMs({
+  // At the top of the pace's jitter, not its average: budgeted at the average,
+  // the last views of a batch had invitations drawn long and outside the
+  // window, and those people were viewed twice (rule 48's ceiling, rule 64).
+  const gap = invitePaceCeilingMs({
     remaining: Math.max(1, Math.min(room.accountCap, room.weeklyLeft)),
     windowMs: workingMsLeftToday(now, usage.workingHours, usage.timezone),
     dayMs: workingDayMs(usage.workingHours),
@@ -784,6 +790,12 @@ async function enqueueInvites(
       const due = Date.parse(row.next_action_at);
       return !Number.isFinite(due) || due <= now.getTime();
     })
+    // Warmed people whose window closes first go first: each is placed as soon
+    // as the floor allows (rule 64), so order is what decides who gets the
+    // room when two are ready at once.
+    .sort((a, b) =>
+      campaign.warm_up && !probing ? Date.parse(a.warmed_at ?? "") - Date.parse(b.warmed_at ?? "") || 0 : 0,
+    )
     .slice(0, budget);
   if (!queued.length) {
     return {
@@ -844,6 +856,15 @@ async function enqueueInvites(
    * today is left for tomorrow's first tick to place across tomorrow.
    */
   const lastSlot = startDelay + windowMs - LINKEDIN_LIMITS.minGapMs;
+  /*
+   * The closest any two placements may sit, and the same number the send path
+   * holds them to (rule 64). The clamps below pull a warmed invitation earlier
+   * to keep it inside its window or before close, and unbounded they put two
+   * invitations five minutes apart — the burst, placed by the loop itself.
+   */
+  const floor = inviteFloorMs(usage, now);
+  const lastSent = await lastInviteAt(db, campaign.linkedin_account_id);
+  let prevAt = lastPlaced > 0 ? lastPlaced - now.getTime() : lastSent ? lastSent.getTime() - now.getTime() : -Infinity;
   let delay = startDelay;
   let added = 0;
   let revived = 0;
@@ -876,8 +897,8 @@ async function enqueueInvites(
      * next morning.
      */
     const sinceLast =
-      added + revived + pending === 0 && lastPlaced === 0 && usage.lastActionAt
-        ? Math.max(0, now.getTime() - usage.lastActionAt.getTime())
+      added + revived + pending === 0 && lastPlaced === 0 && lastSent
+        ? Math.max(0, now.getTime() - lastSent.getTime())
         : 0;
     const next = delay + Math.max(0, gap - sinceLast);
     /*
@@ -891,10 +912,22 @@ async function enqueueInvites(
      * whose window has already gone is left for the loop to re-warm.
      */
     let at = next;
-    if (campaign.warm_up && !probing && row.warmed_at) {
-      const latest = Date.parse(row.warmed_at) + LINKEDIN_LIMITS.warmUpToInviteMaxMs - WARM_MARGIN_MS - now.getTime();
+    const warmed = campaign.warm_up && !probing && Boolean(row.warmed_at);
+    if (warmed) {
+      const latest = Date.parse(row.warmed_at!) + LINKEDIN_LIMITS.warmUpToInviteMaxMs - WARM_MARGIN_MS - now.getTime();
       if (!(latest > 0)) continue;
-      at = Math.min(next, latest);
+      /*
+       * As soon as the floor allows, not at the day's spread slot (rule 64).
+       *
+       * A warmed invitation already has its timing: the wait drawn after the
+       * view, random across hours, is what makes it look like a person who
+       * looked and came back. Placed at the spread slot as well, one person's
+       * invitation sat an hour out while the next, viewed earlier with a
+       * longer wait and a window closing sooner, ripened behind it with no
+       * room left — and was viewed a second time. The floor keeps two apart,
+       * the daily cap and the view budget keep the count.
+       */
+      at = Math.min(0, latest);
     }
     // A warmed prospect whose slot falls after hours is skipped rather than
     // parked: the morning would send it on a view gone stale overnight. The
@@ -905,14 +938,23 @@ async function enqueueInvites(
      * and an invitation following it at the floor is better than a second
      * view of the same person tomorrow.
      */
-    if (at > lastSlot && campaign.warm_up && !probing && row.warmed_at && lastSlot >= delay + LINKEDIN_LIMITS.minGapMs) {
+    if (at > lastSlot && warmed && lastSlot >= delay + LINKEDIN_LIMITS.minGapMs) {
       at = lastSlot;
+    }
+    // Never closer to the previous invitation than the floor, whichever clamp
+    // moved it. One that cannot keep the floor inside its own window waits for
+    // a fresh view rather than going out on the heels of the last.
+    at = Math.max(at, prevAt + floor);
+    if (warmed) {
+      const latest = Date.parse(row.warmed_at!) + LINKEDIN_LIMITS.warmUpToInviteMaxMs - WARM_MARGIN_MS - now.getTime();
+      if (at > latest) continue;
     }
     if (at > lastSlot) {
       deferred++;
       continue;
     }
-    delay = next;
+    delay = warmed ? Math.max(delay, at) : Math.max(next, at);
+    prevAt = at;
     // The id is what stops a second tick queueing the same invitation five
     // minutes later — and what strands a prospect for ever when the job that
     // holds it has already finished without sending. enqueueOnce keeps the

@@ -399,8 +399,8 @@ tests that were verified by deliberately breaking the code.
     unchanged page when anything went wrong in between.
 
     It skips the waiting and nothing else. It runs `runLinkedInAction`, so the
-    limiter, the health check, the exclusion list, do-not-contact, the
-    never-twice rule and the audit log all still apply, and it refuses a
+    limiter, the day's pace (rule 64), the health check, the exclusion list,
+    do-not-contact, the never-twice rule and the audit log all still apply, and it refuses a
     campaign nobody has launched — otherwise it is a way around the review this
     product is built on. Every refusal is reported in words: the limiter
     declining is the system working and says so, and a provider error is handed
@@ -1051,7 +1051,7 @@ tests that were verified by deliberately breaking the code.
     afternoon, sixteen minutes apart, and LinkedIn refused the fourth. A late
     start now sends fewer today, not the same number faster. And the gap is
     **between two sends**: the first of a run is measured from the account's
-    last action, not from the tick.
+    last invitation, not from the tick (and not from a profile view — rule 64).
 
     Views are bought only for invitations that can follow them: no more than
     the pace can invite inside the warm-up window and before close. Views for
@@ -1506,6 +1506,40 @@ tests that were verified by deliberately breaking the code.
     dead account with no reason reads it as the product breaking. Reconnecting
     is the ordinary Connect button. It is not a fault, so it never appears in
     Issues.
+
+64. **The day's pace is held at the moment of sending, not only when a job is
+    placed.** Rule 48 spread a day's invitations when the loop placed them, and
+    the send path only enforced the two-minute floor. But a job does not always
+    go when it was placed: everything carried past close wakes at opening, and
+    everything a lifted hold released wakes together. Held only by the floor, a
+    backlog drained two to nine minutes apart — a two-day-old account sent five
+    invitations between 09:13 and 09:27 on the morning after this rule was
+    missing, the burst rule 48 exists to prevent, moved to the morning.
+
+    So `runLinkedInAction` refuses an invitation sooner after the account's
+    last invitation than `inviteFloorMs` (half a whole day's pace — about
+    seventeen minutes at ten a day over eight hours, never under two), after
+    the row is claimed, and counts another invitation claimed mid-send as one
+    that has just gone, because two jobs waking together read the same last
+    invitation. Refusals carry the ordinary jitter, so a held backlog finds its
+    own places in the day. Half, not the loop's lowest jitter, so an ordinary
+    placement that fires a minute late is never pushed past its warm-up window.
+
+    The pace is **between invitations**: `lastInviteAt`
+    (`apps/worker/src/pace.ts`) is the one reading, used by the loop and the
+    send path both, and never `last_action_at`, which moves on every view. A
+    view minutes before a warmed person's window closed made the gap look
+    fresh, the invitation missed the window and the person was viewed twice.
+
+    The loop holds the same floor whichever clamp moved a placement, and a
+    warmed invitation is placed as soon as it is ripe and the floor allows —
+    its timing is already the random wait drawn after the view. That wait now
+    leaves a floor of room in the window for everybody already viewed and
+    waiting (`warmUpWaitMs`'s reserve), and views are budgeted against the
+    slowest the pace places invitations (`invitePaceCeilingMs`), not the
+    average, which is rule 48's ceiling-in-the-divisor applied to views. A
+    warmed person who still cannot keep the floor inside their window is left
+    for a fresh view rather than squeezed in on the heels of the last.
 
 ## Conventions
 

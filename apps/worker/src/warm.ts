@@ -36,9 +36,20 @@ export const INVITE_FOLLOW_MS = 2 * PACING_TICK_MS + LINKEDIN_LIMITS.maxGapMs + 
 export function warmUpWaitMs(
   random: () => number = Math.random,
   workingMsLeft: number = Number.POSITIVE_INFINITY,
+  reserveMs: number = 0,
 ): number | null {
   const min = LINKEDIN_LIMITS.warmUpToInviteMinMs;
-  const max = LINKEDIN_LIMITS.warmUpToInviteMaxMs - WARM_MARGIN_MS - 2 * PACING_TICK_MS;
+  /*
+   * ...and early enough to leave room for the invitations already waiting.
+   *
+   * Each invitation keeps a floor from the last (rule 64). Four morning views
+   * that each drew a three-hour wait ripened inside the same hour with windows
+   * closing minutes apart, and the fourth could not keep the floor before its
+   * window shut — it was viewed again. `reserveMs` is that floor for everybody
+   * already viewed and waiting, taken off the top of the draw.
+   */
+  const reserve = Number.isFinite(reserveMs) && reserveMs > 0 ? reserveMs : 0;
+  const max = Math.max(min, LINKEDIN_LIMITS.warmUpToInviteMaxMs - WARM_MARGIN_MS - 2 * PACING_TICK_MS - reserve);
   const room = workingMsLeft - INVITE_FOLLOW_MS;
   if (!(room >= min)) return null;
   return Math.min(min + random() * (max - min), room);

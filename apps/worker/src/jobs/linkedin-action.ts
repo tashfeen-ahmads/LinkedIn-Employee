@@ -3,6 +3,8 @@ import {
   checkAction,
   classifyProviderError,
   dailyInviteCap,
+  inviteFloorMs,
+  invitePaceWaitMs,
   jitteredRetryMs,
   localDate,
   localDayStart,
@@ -47,6 +49,7 @@ import {
 } from "../accounts.js";
 import { stepFor } from "../sequence.js";
 import { warmUpWaitMs } from "../warm.js";
+import { accountCampaignIds, lastInviteAt, warmedWaitingOnAccount } from "../pace.js";
 import { syncConversationToCrm } from "../crm.js";
 import { loadExclusions } from "../exclusions.js";
 import { clearHold, flagForHuman } from "../holds.js";
@@ -279,7 +282,12 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
      * arithmetic that decides the wait below; the loop offers the view again
      * tomorrow, when it can be spent at full value.
      */
-    const wait = warmUpWaitMs(Math.random, workingMsAhead(new Date(), usage.workingHours, usage.timezone));
+    const waitingOnAccount = await warmedWaitingOnAccount(db, accountRow.id, cp.id);
+    const wait = warmUpWaitMs(
+      Math.random,
+      workingMsAhead(new Date(), usage.workingHours, usage.timezone),
+      (waitingOnAccount + 1) * inviteFloorMs(usage),
+    );
     if (wait === null) return;
 
     const viewed = await ctx.linkedin.viewProfile({
@@ -456,6 +464,24 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
         overCap,
         jitteredRetryMs(msUntilNextLocalMidnight(new Date(), timezone), overCap),
       );
+    }
+
+    /*
+     * ...and the day's pace, measured from this account's last invitation
+     * (rule 64). After the claim for the same reason as the caps: two jobs
+     * waking together both read the same last invitation, so another claim in
+     * flight counts as an invitation that has just gone. Rescheduled with the
+     * ordinary jitter on top, so a held backlog wakes at different moments and
+     * finds its own place in the day instead of draining at the floor.
+     */
+    const paceWait = await invitePaceWait(db, {
+      accountId: accountRow.id,
+      campaignProspectId: cp.id,
+      usage,
+    });
+    if (paceWait > 0) {
+      await releaseInvite(db, cp.id);
+      throw new RescheduleError("pace", jitteredRetryMs(paceWait, "too_soon"));
     }
 
     // The note written for this person when the campaign was built, and read
@@ -1113,6 +1139,34 @@ async function claimInvite(db: WorkerContext["db"], campaignProspectId: string):
 
 async function releaseInvite(db: WorkerContext["db"], campaignProspectId: string): Promise<void> {
   await db.from("campaign_prospects").update({ invite_claimed_at: null }).eq("id", campaignProspectId);
+}
+
+/**
+ * How long this invitation must wait for the day's pace on its account, or 0.
+ *
+ * Read across every campaign on the account, because LinkedIn sees one
+ * account, not campaigns: the last invitation sent from any of them, and any
+ * other invitation claimed and mid-send right now.
+ */
+async function invitePaceWait(
+  db: WorkerContext["db"],
+  input: { accountId: string; campaignProspectId: string; usage: ReturnType<typeof toUsage> },
+): Promise<number> {
+  const now = new Date();
+  const ids = await accountCampaignIds(db, input.accountId);
+  if (!ids.length) return 0;
+  const leaseStart = new Date(now.getTime() - INVITE_CLAIM_LEASE_MS).toISOString();
+  const [last, { data: claims }] = await Promise.all([
+    lastInviteAt(db, input.accountId),
+    db
+      .from("campaign_prospects")
+      .select("id")
+      .in("campaign_id", ids)
+      .eq("status", "queued")
+      .gte("invite_claimed_at", leaseStart),
+  ]);
+  const inFlight = (claims ?? []).some((row) => row.id !== input.campaignProspectId);
+  return invitePaceWaitMs({ usage: input.usage, lastInviteAt: last, inFlight, now });
 }
 
 /**

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LINKEDIN_LIMITS, PACING_LAST_ACTION, normalizeExclusionValue } from "@le/shared";
-import { MockLinkedInProvider } from "@le/linkedin";
+import { MockLinkedInProvider, inviteFloorMs } from "@le/linkedin";
 import { FakeDb } from "./fake-db.js";
 import { runCampaignTick } from "../src/jobs/campaign-tick.js";
 import { RescheduleError, runLinkedInAction } from "../src/jobs/linkedin-action.js";
@@ -698,5 +698,99 @@ describe("a follow-up held for a pitch", () => {
 
     expect(linkedin.sentMessages).toHaveLength(0);
     expect(db.rows("booking_links")).toHaveLength(0);
+  });
+});
+
+describe("a backlog keeps the day's pace at the moment of sending (rule 64)", () => {
+  it("spreads invitations that all wake together instead of sending them minutes apart", async () => {
+    // Five jobs carried overnight wake at opening. Held only by the two-minute
+    // floor, a real account sent five in fourteen minutes.
+    const { db, ctx, linkedin, prospect } = harness({ cap: 20 });
+    const ids = Array.from({ length: 5 }, () => prospect());
+    const due = new Map(ids.map((id) => [id, NOW.getTime()]));
+
+    for (let guard = 0; guard < 200 && due.size; guard++) {
+      const [id, at] = [...due].sort((a, b) => a[1] - b[1])[0]!;
+      vi.setSystemTime(at);
+      try {
+        await runLinkedInAction(ctx, invite(id));
+        due.delete(id);
+      } catch (err) {
+        if (!(err instanceof RescheduleError)) throw err;
+        due.set(id, at + err.retryAfterMs);
+      }
+    }
+
+    expect(linkedin.sentInvitations).toHaveLength(5);
+    const sent = ids
+      .map((id) => Date.parse(db.find("campaign_prospects", { id })!.invited_at as string))
+      .sort((a, b) => a - b);
+    const floor = inviteFloorMs({
+      firstActionAt: new Date("2026-06-01T09:00:00Z"),
+      workingHours: { start: 0, end: 24, days: [0, 1, 2, 3, 4, 5, 6] },
+    }, NOW);
+    expect(floor).toBeGreaterThan(LINKEDIN_LIMITS.maxGapMs);
+    for (let i = 1; i < sent.length; i++) expect(sent[i]! - sent[i - 1]!).toBeGreaterThanOrEqual(floor);
+  });
+
+  it("counts another invitation mid-send as one that has just gone", async () => {
+    const { ctx, linkedin, prospect } = harness();
+    prospect({ invite_claimed_at: NOW.toISOString() });
+    const id = prospect();
+
+    await expect(runLinkedInAction(ctx, invite(id))).rejects.toMatchObject({ reason: "pace" });
+    expect(linkedin.sentInvitations).toHaveLength(0);
+  });
+
+  it("measures from the last invitation, not from a profile view", async () => {
+    // A view a minute ago is not an invitation: the pace is between invitations.
+    const { ctx, linkedin, prospect } = harness({
+      account: { last_action_at: new Date(NOW.getTime() - 3 * 60_000).toISOString() },
+    });
+    prospect({ status: "invited", invited_at: new Date(NOW.getTime() - 3 * HOUR).toISOString() });
+    const id = prospect();
+
+    await runLinkedInAction(ctx, invite(id));
+    expect(linkedin.sentInvitations).toHaveLength(1);
+  });
+});
+
+describe("the loop keeps the floor between the invitations it places (rule 64)", () => {
+  it("places two warmed people ready in the same run at least the floor apart", async () => {
+    // Placed as soon as ripe, two people viewed an hour ago would both go now —
+    // two invitations in the same minute, placed by the loop itself.
+    const { db, prospect } = harness({ warmUp: true, cap: 20 });
+    const hourAgo = new Date(NOW.getTime() - HOUR).toISOString();
+    prospect({ warmed_at: hourAgo });
+    prospect({ warmed_at: hourAgo });
+    const { jobs, queues } = memoryQueue();
+
+    await runCampaignTick(db.asDb(), queues, NOW);
+
+    const delays = [...jobs.values()]
+      .filter((job) => job.data.kind === "invite")
+      .map((job) => job.delay)
+      .sort((a, b) => a - b);
+    expect(delays).toHaveLength(2);
+    const floor = inviteFloorMs(
+      { firstActionAt: new Date("2026-06-01T09:00:00Z"), workingHours: { start: 0, end: 24, days: [0, 1, 2, 3, 4, 5, 6] } },
+      NOW,
+    );
+    expect(delays[1]! - delays[0]!).toBeGreaterThanOrEqual(floor);
+  });
+
+  it("leaves a warmed person whose window closes before the floor for a fresh view, never squeezed in", async () => {
+    const { db, prospect } = harness({ warmUp: true, cap: 20 });
+    prospect({ status: "invited", invited_at: new Date(NOW.getTime() - 60_000).toISOString() });
+    // The view stops counting in about ten minutes; the floor is longer.
+    const closing = new Date(
+      NOW.getTime() - LINKEDIN_LIMITS.warmUpToInviteMaxMs + 15 * 60_000 + 10 * 60_000,
+    ).toISOString();
+    prospect({ warmed_at: closing });
+    const { jobs, queues } = memoryQueue();
+
+    await runCampaignTick(db.asDb(), queues, NOW);
+
+    expect([...jobs.values()].filter((job) => job.data.kind === "invite")).toHaveLength(0);
   });
 });

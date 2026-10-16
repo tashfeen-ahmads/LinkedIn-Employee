@@ -73,6 +73,66 @@ const MUTATIONS = [
    * Releasing one somebody is using cuts off their conversations, so every
    * signal has to be old and every lookup has to have answered.
    */
+  /*
+   * The day's pace is held at the moment of sending (rule 64), measured from
+   * the last invitation, so a backlog cannot burst and a view cannot fake one.
+   */
+  {
+    id: "pace/send-path-holds-the-floor",
+    rule: "An invitation is not sent sooner after the last one than the day's pace allows",
+    file: "apps/worker/src/jobs/linkedin-action.ts",
+    from: "    if (paceWait > 0) {",
+    to: "    if (false) {",
+    pkg: "@le/worker",
+  },
+  {
+    id: "pace/in-flight-counts-as-sent",
+    rule: "Another invitation mid-send counts as one that has just gone",
+    file: "packages/linkedin/src/rate-limit.ts",
+    from: "  if (input.inFlight) return floor;",
+    to: "  void input.inFlight;",
+    pkg: "@le/linkedin",
+  },
+  {
+    id: "pace/floor-is-half-a-day",
+    rule: "The send path's floor is half a whole day's pace, not the two-minute gap",
+    file: "packages/linkedin/src/rate-limit.ts",
+    from: "  return Math.max(LINKEDIN_LIMITS.minGapMs, Math.round((pace ?? 0) * SEND_PACE_FLOOR));",
+    to: "  return LINKEDIN_LIMITS.minGapMs + 0 * (pace ?? 0) * SEND_PACE_FLOOR;",
+    pkg: "@le/linkedin",
+  },
+  {
+    id: "pace/views-budgeted-at-the-slowest-pace",
+    rule: "Views are budgeted against the slowest the pace places invitations",
+    file: "packages/linkedin/src/rate-limit.ts",
+    from: "  return pace === null ? null : pace * SPREAD_JITTER_HIGH;",
+    to: "  return pace;",
+    pkg: "@le/linkedin",
+  },
+  {
+    id: "pace/measured-from-the-last-invitation",
+    rule: "The pace runs from the last invitation, not from a profile view",
+    file: "apps/worker/src/jobs/linkedin-action.ts",
+    from: "  return invitePaceWaitMs({ usage: input.usage, lastInviteAt: last, inFlight, now });",
+    to: "  return invitePaceWaitMs({ usage: input.usage, lastInviteAt: input.usage.lastActionAt, inFlight, now });",
+    pkg: "@le/worker",
+  },
+  {
+    id: "pace/view-wait-leaves-room",
+    rule: "The wait after a view leaves a floor of room for each invitation already waiting",
+    file: "apps/worker/src/warm.ts",
+    from: "  const reserve = Number.isFinite(reserveMs) && reserveMs > 0 ? reserveMs : 0;",
+    to: "  const reserve = 0 * reserveMs;",
+    pkg: "@le/worker",
+  },
+  {
+    id: "pace/loop-keeps-the-floor",
+    rule: "The loop never places two invitations closer than the floor, whichever clamp moved one",
+    file: "apps/worker/src/jobs/campaign-tick.ts",
+    from: "    at = Math.max(at, prevAt + floor);",
+    to: "    void prevAt;",
+    pkg: "@le/worker",
+  },
   {
     id: "idle/every-signal-must-be-old",
     rule: "An account is released only when every activity signal is older than the window",
@@ -1510,8 +1570,8 @@ const MUTATIONS = [
     id: "warmup/the-wait-after-a-view-leaves-room-to-invite",
     rule: "The wait after a profile view ends early enough that the next tick can still place the invitation inside the warm-up window, or the view is spent twice",
     file: "apps/worker/src/warm.ts",
-    from: "  const max = LINKEDIN_LIMITS.warmUpToInviteMaxMs - WARM_MARGIN_MS - 2 * PACING_TICK_MS;",
-    to: "  const max = LINKEDIN_LIMITS.warmUpToInviteMaxMs;",
+    from: "  const max = Math.max(min, LINKEDIN_LIMITS.warmUpToInviteMaxMs - WARM_MARGIN_MS - 2 * PACING_TICK_MS - reserve);",
+    to: "  const max = Math.max(min, LINKEDIN_LIMITS.warmUpToInviteMaxMs - reserve);",
     pkg: "@le/worker",
   },
   {
@@ -4612,8 +4672,8 @@ const MUTATIONS = [
     id: "warmup/invite-inside-the-window",
     rule: "A warmed invitation is never placed after the view stops counting",
     file: "apps/worker/src/jobs/campaign-tick.ts",
-    from: "      at = Math.min(next, latest);",
-    to: "      at = next;",
+    from: "      if (at > latest) continue;",
+    to: "      void latest;",
     pkg: "@le/worker",
   },
   {

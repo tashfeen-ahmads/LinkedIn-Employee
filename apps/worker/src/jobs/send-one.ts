@@ -193,6 +193,8 @@ function heldBecause(reason: string): string {
       return `This account has sent its ${LINKEDIN_LIMITS.invitesPerWeek} invitations for the last seven days, shared across all its campaigns.`;
     case "too_soon":
       return "The last invitation went out moments ago, and invitations are spaced at least two minutes apart.";
+    case "pace":
+      return "Invitations from this account are spread across the working day, and the last one went out recently.";
     case "prospect_hold":
       return "LinkedIn asked for a wait before this person is invited again.";
     case "warm_up_wait":

@@ -251,7 +251,11 @@ describe("the gap is between two sends", () => {
     // gap from now pushed a warmed person past the end of the day.
     vi.spyOn(Math, "random").mockReturnValue(0.5);
     const db = harness(10, MORNING);
-    db.find("linkedin_accounts", { id: ACCOUNT })!.last_action_at = new Date(MORNING.getTime() - 50 * 60_000).toISOString();
+    const fiftyAgo = new Date(MORNING.getTime() - 50 * 60_000).toISOString();
+    db.find("linkedin_accounts", { id: ACCOUNT })!.last_action_at = fiftyAgo;
+    db.seed("campaign_prospects", [
+      { id: "cp-sent", workspace_id: WORKSPACE, campaign_id: CAMPAIGN, prospect_id: "p-sent", status: "invited", invited_at: fiftyAgo },
+    ]);
     const { queues, added } = fakeQueues();
 
     await runCampaignTick(db.asDb(), queues, MORNING);

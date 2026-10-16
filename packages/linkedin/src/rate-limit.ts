@@ -178,6 +178,8 @@ export function jitteredRetryMs(
  * allowance still lands inside the day.
  */
 const SPREAD_JITTER_LOW = 0.6;
+/** The send path's floor as a share of a day's pace: below SPREAD_JITTER_LOW on purpose (see `inviteFloorMs`). */
+const SEND_PACE_FLOOR = 0.5;
 const SPREAD_JITTER_HIGH = 1.4;
 
 /**
@@ -254,6 +256,65 @@ export function invitePaceMs(input: InvitePace): number | null {
   if (!Number.isFinite(dayMs) || dayMs <= 0 || !Number.isFinite(allowance) || allowance < 1) return left;
   const fullDay = dayMs / (Math.floor(allowance) * SPREAD_JITTER_HIGH);
   return Math.max(left, fullDay);
+}
+
+/**
+ * The shortest gap the send path allows between two invitations from one
+ * account: half a whole day's pace, and never under the two-minute floor
+ * (rule 64). Half, not the loop's own lowest jitter (0.6): the loop places at
+ * that pace and a job fires a little late, so a floor equal to it would push
+ * ordinary placements past their warm-up window and the person is viewed
+ * twice. Half still turns a morning backlog into a spaced day.
+ *
+ * The loop places invitations at this pace, but a job does not always go when
+ * it was placed. Everything carried overnight wakes at opening, and so does
+ * everything a lifted hold released; each was refused only by the two-minute
+ * floor, so a backlog went out two to nine minutes apart — five invitations in
+ * fourteen minutes from a two-day-old account, which is the burst rule 48
+ * exists to prevent, moved to the morning. The send path is where a rule
+ * becomes a rule (rule 1), so the pace is held there too.
+ */
+export function inviteFloorMs(
+  usage: Pick<AccountUsage, "firstActionAt" | "workingHours">,
+  now: Date = new Date(),
+): number {
+  const dayMs = workingDayMs(usage.workingHours);
+  const allowance = dailyInviteCap(usage.firstActionAt, now);
+  const pace = invitePaceMs({ remaining: allowance, windowMs: dayMs, dayMs, dayAllowance: allowance });
+  return Math.max(LINKEDIN_LIMITS.minGapMs, Math.round((pace ?? 0) * SEND_PACE_FLOOR));
+}
+
+/**
+ * How long an invitation must still wait for the day's pace, or 0 to send.
+ *
+ * `inFlight` is another invitation from the same account being sent right
+ * now: two jobs waking together each read the same last invitation and would
+ * both pass, so a send already under way counts as one that has just gone.
+ */
+export function invitePaceWaitMs(input: {
+  usage: Pick<AccountUsage, "firstActionAt" | "workingHours">;
+  lastInviteAt: Date | null;
+  inFlight: boolean;
+  now: Date;
+}): number {
+  const floor = inviteFloorMs(input.usage, input.now);
+  if (input.inFlight) return floor;
+  if (!input.lastInviteAt) return 0;
+  const elapsed = input.now.getTime() - input.lastInviteAt.getTime();
+  if (!Number.isFinite(elapsed)) return 0;
+  return Math.max(0, floor - elapsed);
+}
+
+/**
+ * The slowest the pace places two invitations apart: the top of its jitter.
+ *
+ * What a view budget has to assume. Budgeted at the average, a morning's views
+ * had their last invitations drawn long and falling outside the four hours
+ * that make a view a warm-up, and those people were viewed a second time.
+ */
+export function invitePaceCeilingMs(input: InvitePace): number | null {
+  const pace = invitePaceMs(input);
+  return pace === null ? null : pace * SPREAD_JITTER_HIGH;
 }
 
 /** The length of the rep's working day, for `InvitePace.dayMs`. */
