@@ -1680,6 +1680,19 @@ tests that were verified by deliberately breaking the code.
     times away when the move forbids them, so a draft that sends one anyway is
     held by the link check (rule 30) rather than trusted.
 
+    **Stored copy is repaired, not grandfathered.** Fixing the writers changed
+    nothing anybody would receive that week: the old copy was in the database
+    and went out as stored — `{{company}}` in step 1 of most running
+    campaigns, three of every five queued notes failing. `repairCopy`
+    (`apps/worker/src/jobs/repair-copy.ts`, at boot and nightly) rewrites only
+    what fails, through `reviseForVoice`, on draft, running and paused
+    campaigns. A revision that drops `{{cta_link}}` or `{{pitch}}` or adds a
+    link is refused. Every write is conditional on the text still being what
+    was read, so a person's edit wins. Only `queued` notes change, because a
+    sent note is a record. A personal note nobody could fix is cleared so the
+    campaign's own note goes instead. Approved pitches and openers are not
+    rewritten: an approval is a statement about particular text (rule 40).
+
 ## Conventions
 
 - Agent output is validated against a zod schema before it touches the

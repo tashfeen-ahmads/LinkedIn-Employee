@@ -23,6 +23,7 @@ import { recoverAccounts } from "./accounts.js";
 import { ensureWebhooks } from "./webhooks.js";
 import { cleanFailedJobs, runMaintenance } from "./jobs/maintenance.js";
 import { fillMissingNotes } from "./jobs/rewrite-notes.js";
+import { repairCopy } from "./jobs/repair-copy.js";
 import { seedMissingAgents } from "./jobs/seed-agent.js";
 import { runDailyDigest } from "./jobs/digest.js";
 import { runWeeklyReport } from "./jobs/weekly-report.js";
@@ -173,6 +174,11 @@ if (queueOk) {
 void fillMissingNotes(ctx)
   .then((written) => console.log("filled missing invitation notes at boot", { written }))
   .catch((err) => console.error("could not fill missing notes at boot", err));
+// Copy written before the voice check existed is rewritten now rather than
+// sent as stored for another day (rule 66).
+void repairCopy(ctx)
+  .then((tally) => console.log("repaired stored copy at boot", tally))
+  .catch((err) => console.error("could not repair stored copy at boot", err));
 // Tickets nobody has looked at, looked at now rather than within the hour.
 void sweepSupportTickets(ctx)
   .then((tally) => console.log("support sweep at boot", tally))

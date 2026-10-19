@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { draftReply } from "../src/reply.js";
 import { buildCampaign, personalizeInvites } from "../src/targeting.js";
+import { reviseForVoice } from "../src/revise.js";
 import type { AgentContext } from "../src/client.js";
 import type {
   BusinessProfile,
@@ -239,5 +240,36 @@ describe("invite notes that read like a template", () => {
     const { ctx } = scriptedCtx([bad, bad]);
     const out = await personalizeInvites(ctx, input);
     expect(out.has("p1")).toBe(false);
+  });
+});
+
+describe("reviseForVoice", () => {
+  const msg = (message: string) => ({ message });
+
+  it("returns a clean rewrite of stored copy", async () => {
+    const { ctx } = scriptedCtx([msg("Hi {{first_name}}, thanks for connecting. How do you handle calls after hours?")]);
+    const out = await reviseForVoice(ctx, {
+      text: "Hi {{first_name}}, I'm reaching out about how {{company}} handles calls after hours.",
+      kind: "first_message",
+      template: true,
+    });
+    expect(out).toBe("Hi {{first_name}}, thanks for connecting. How do you handle calls after hours?");
+  });
+
+  it("never drops the link placeholder or adds a link", async () => {
+    const { ctx } = scriptedCtx([msg("Worth a look at acme.com/demo?")]);
+    const out = await reviseForVoice(ctx, {
+      text: "I'm reaching out to share this: {{cta_link}}",
+      kind: "follow_up",
+      template: true,
+    });
+    expect(out).toBeNull();
+  });
+
+  it("spends nothing on copy that already passes", async () => {
+    const { ctx, users } = scriptedCtx([msg("x")]);
+    const out = await reviseForVoice(ctx, { text: "How do you handle calls after hours?", kind: "follow_up", template: true });
+    expect(out).toBe("How do you handle calls after hours?");
+    expect(users).toHaveLength(0);
   });
 });

@@ -5234,6 +5234,38 @@ const MUTATIONS = [
     to: "  if (false) {",
     pkg: "@le/worker",
   },
+  {
+    id: "voice/repair-only-what-fails",
+    rule: "Rule 66: the repair rewrites only copy that fails the check",
+    file: "apps/worker/src/jobs/repair-copy.ts",
+    from: "  const failing = items.filter((item) => voiceProblems(item.text, item.kind, { template: item.template }).length);",
+    to: "  const failing = items;",
+    pkg: "@le/worker",
+  },
+  {
+    id: "voice/repair-never-touches-a-sent-note",
+    rule: "Rule 66: a note already sent is a record and is never rewritten",
+    file: "apps/worker/src/jobs/repair-copy.ts",
+    from: '      .eq("status", "queued")\n      .not("invite_note", "is", null),',
+    to: '      .not("invite_note", "is", null),',
+    pkg: "@le/worker",
+  },
+  {
+    id: "voice/repair-loses-to-a-human-edit",
+    rule: "Rule 66: a repair never overwrites an edit made while the model was writing",
+    file: "apps/worker/src/jobs/repair-copy.ts",
+    from: "          .eq(item.column, item.text);",
+    to: "          ;",
+    pkg: "@le/worker",
+  },
+  {
+    id: "voice/revision-keeps-the-link-placeholder",
+    rule: "Rule 66: a revision that drops {{cta_link}} or adds a link is refused",
+    file: "packages/agents/src/revise.ts",
+    from: "    if (!problems.length && keeps(input.text, revised)) return revised;",
+    to: "    if (!problems.length) return revised;",
+    pkg: "@le/agents",
+  },
 ];
 
 /**

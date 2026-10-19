@@ -10,6 +10,7 @@ import { syncCalendarFeeds } from "./calendar-feed.js";
 import { runLifecycleEmails } from "./lifecycle.js";
 import { runRetentionSweep } from "./retention.js";
 import { fillMissingNotes } from "./rewrite-notes.js";
+import { repairCopy } from "./repair-copy.js";
 import { releaseIdleAccounts } from "./idle-accounts.js";
 import { enqueueOnce, jobId } from "../queues.js";
 import type { Queues } from "../queues.js";
@@ -123,6 +124,8 @@ export async function runMaintenance(
   await step("lifecycle-emails", () => runLifecycleEmails(ctx, now));
   // Notes the writer missed when a campaign was built, before anybody launches it.
   await step("fill-missing-notes", () => fillMissingNotes(ctx));
+  // After the notes are filled, so a freshly written one is checked too (rule 66).
+  await step("repair-copy", async () => (await repairCopy(ctx)).repaired);
   // Failed jobs older than a week. `removeOnFail: { age }` only runs when
   // another job in the same queue fails, so a queue that stopped failing kept
   // its old failures indefinitely and they read as current faults.
