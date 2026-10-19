@@ -40,6 +40,7 @@ export const MESSAGE_MAX_CHARS: Record<MessageKind, number> = {
 /** The rules every writer is given, word for word. */
 export const VOICE_RULES = `HOW TO WRITE (these override anything else about style):
 - Write like a busy person texting one other person on LinkedIn from their phone. Short, plain, warm, specific.
+- Ask what a stranger can answer in one breath: a yes or no, a name, something they know off the top of their head. Never "how do you currently handle X" or "what is your process for Y": that is homework, and homework from a stranger is ignored.
 - One idea per message and at most one question. No lists of features, no "X, Y and Z" runs of benefits, no brackets full of capabilities.
 - Never repeat or summarise what they just said back to them. Respond to it.
 - Never start with "Got it", "Great question", "Thanks for sharing", "Absolutely", "Totally understand", "I hope", "I came across" or "I noticed".
@@ -193,6 +194,28 @@ export function voiceProblems(text: string, kind: MessageKind, options: VoiceOpt
         `It uses ${unsafe.map((n) => `{{${n}}}`).join(", ")}, which is empty for some people and would be sent as written. Only {{first_name}} is safe.`,
       );
     }
+  }
+
+  // The first thing a stranger reads asks them to do homework: describe a
+  // process, or answer a question that takes a paragraph. "How are inquiries
+  // passed from your marketing channels to the team that follows up?" went to
+  // real people and got nothing back.
+  if (kind === "first_message" || kind === "invite_note") {
+    const asks = body.split(/(?<=[.?!])\s+/).filter((sentence) => sentence.includes("?"));
+    const homework = asks.some(
+      (q) =>
+        /\b(currently|process|workflow|walk me through)\b/i.test(q) ||
+        (/^(hi [^,]+,\s*)?(how|what)\b/i.test(q) && q.split(/\s+/).length > 12),
+    );
+    if (homework) {
+      problems.push("Its question is homework. Ask something they can answer in one breath, like a yes or no.");
+    }
+  }
+
+  // A step that is only the offer arrives as a line of advertising with nothing
+  // to answer. The offer goes with a short, easy question.
+  if (kind !== "reply" && kind !== "invite_note" && /\{\{\s*pitch\s*\}\}/i.test(body) && !readable(body)) {
+    problems.push("It is the offer on its own. Add one short, easy question after it.");
   }
 
   if (options.theirMessage && mirrors(body, options.theirMessage)) {

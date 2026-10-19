@@ -12,6 +12,7 @@ import {
   canTransition,
   draftLinkCheck,
   extractLinks,
+  effectiveIntent,
   replyMove,
   type CampaignProspectStatus,
   type ReplyClassification,
@@ -365,7 +366,10 @@ export async function handleInboundMessage(
   const linkAlreadySent = Boolean(
     offeredLink && history.some((turn) => turn.role === "rep" && turn.text.includes(offeredLink)),
   );
-  const move = replyMove(classification.intent, job.text, { linkAlreadySent });
+  // The words win over a warm misreading: "when I can convince the owner" is
+  // not a yes, whatever the classifier said.
+  const intent = effectiveIntent(classification.intent, job.text);
+  const move = replyMove(intent, job.text, { linkAlreadySent });
   if (!move.reply && !bookedMeeting && !bookingHeld) {
     // An auto-reply or spam: answering it is a message to nobody.
     await recordEvent(db, {
@@ -392,7 +396,7 @@ export async function handleInboundMessage(
       classification,
       // Lead with the pitch when they have just said yes. The writer decides
       // the words; this decides that the link is in them.
-      intent: classification.intent,
+      intent,
       // What to offer, rather than leaving the agent to argue for the product
       // from the business profile and reach a different conclusion in every
       // conversation.
@@ -544,7 +548,7 @@ export async function handleInboundMessage(
    * Set after the draft is written, so it records what the agent acted on
    * rather than what it intended to.
    */
-  if (classification.intent === "interested" && campaignProspect) {
+  if (intent === "interested" && campaignProspect) {
     await db
       .from("campaign_prospects")
       .update({ status: "positive", status_reason: "replied with interest" })

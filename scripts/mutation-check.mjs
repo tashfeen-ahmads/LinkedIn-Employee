@@ -5266,6 +5266,38 @@ const MUTATIONS = [
     to: "    if (!problems.length) return revised;",
     pkg: "@le/agents",
   },
+  {
+    id: "voice/a-not-yet-is-not-a-yes",
+    rule: "Rule 66: a polite not-yet is answered as not_now whatever the classifier said",
+    file: "packages/shared/src/reply-playbook.ts",
+    from: '  if (NOT_READY.test(message)) return "not_now";',
+    to: "",
+    pkg: "@le/shared",
+  },
+  {
+    id: "voice/a-first-message-is-not-homework",
+    rule: "Rule 66: a first message that asks them to describe a process is a problem",
+    file: "packages/shared/src/voice.ts",
+    from: "    if (homework) {",
+    to: "    if (false) {",
+    pkg: "@le/shared",
+  },
+  {
+    id: "voice/the-offer-never-goes-alone",
+    rule: "Rule 66: a step that is only {{pitch}} is a problem",
+    file: "packages/shared/src/voice.ts",
+    from: '  if (kind !== "reply" && kind !== "invite_note" && /\\{\\{\\s*pitch\\s*\\}\\}/i.test(body) && !readable(body)) {',
+    to: "  if (false) {",
+    pkg: "@le/shared",
+  },
+  {
+    id: "voice/an-approved-offer-is-never-rewritten",
+    rule: "Rule 66: the seeded-line repair never changes an approved offer (rule 40)",
+    file: "apps/worker/src/jobs/repair-copy.ts",
+    from: "    if (row.approved_at) {\n      result.approvedLeft += 1;\n      continue;\n    }\n    try {\n      const set = await writePitch",
+    to: "    try {\n      const set = await writePitch",
+    pkg: "@le/worker",
+  },
 ];
 
 /**

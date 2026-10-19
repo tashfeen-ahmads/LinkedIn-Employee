@@ -1,6 +1,7 @@
 import {
   BusinessProfileSchema,
   DEFAULT_OPENER_TEMPLATE,
+  HOOK_MAX_CHARS,
   PITCH_MAX_CHARS,
   blankAgent,
   withRepBio,
@@ -53,6 +54,11 @@ export async function seedWorkspaceAgent(
      * agent spends nothing. Absent, or failing, falls back to the one-liner.
      */
     writeOffer?: () => Promise<string | null>;
+    /**
+     * Writes the opener the same way. Absent, or failing, falls back to the
+     * shipped greeting.
+     */
+    writeOpener?: () => Promise<string | null>;
   },
 ): Promise<string | null> {
   const { data: already } = await db
@@ -73,6 +79,17 @@ export async function seedWorkspaceAgent(
     written = null;
   }
   const offer = written && written.length <= PITCH_MAX_CHARS ? written : offerFrom(input.business);
+
+  // "Hi Sam, Tashfeen here regarding Lee Plumbing." reads like a cold caller,
+  // and it was the opener of every account that ever signed up. An opener
+  // written for the segment ("Are you taking on referral partners at the
+  // moment?") is what the accounts that rewrote theirs by hand ended up with.
+  let opener: string | null = null;
+  try {
+    opener = (await input.writeOpener?.())?.trim() || null;
+  } catch {
+    opener = null;
+  }
 
   const seed = blankAgent(input.repName);
   const { data: agent, error } = await db
@@ -131,8 +148,8 @@ export async function seedWorkspaceAgent(
     // recognises a person naming their company faster than they recognise a
     // good line, and the agent-written openers that replaced this read as
     // generic precisely because they were written to be interesting.
-    body: openerFor(input.business),
-    angle: "Names them and their company, and asks one thing",
+    body: opener && opener.length <= HOOK_MAX_CHARS ? opener : openerFor(input.business),
+    angle: opener ? "Written for the segment: one easy question" : "Names them and their company, and asks one thing",
     written_by: "agent",
     approved_at: null,
   });
@@ -217,7 +234,7 @@ function openerFor(_business: BusinessProfile): string {
  * platform that matches small businesses." Cutting at ninety characters
  * instead leaves a word in half, arriving from a stranger as a broken send.
  */
-function offerFrom(business: BusinessProfile): string {
+export function offerFrom(business: BusinessProfile): string {
   const line = (business.oneLiner ?? "").trim().replace(/\s+/g, " ");
   if (!line) return (business.companyName ?? "").slice(0, PITCH_MAX_CHARS);
   if (line.length <= PITCH_MAX_CHARS) return line;

@@ -1,6 +1,6 @@
 import { MESSAGE_MAX_CHARS, VOICE_RULES } from "@le/shared";
 
-export const CLASSIFY_PROMPT_VERSION = "reply.classify/2026-09-08";
+export const CLASSIFY_PROMPT_VERSION = "reply.classify/2026-10-19-intents";
 export const DRAFT_PROMPT_VERSION = "reply.draft/2026-10-19-human";
 
 export const CLASSIFY_SYSTEM = `You read one inbound LinkedIn message from a prospect and classify it so the system knows whether an AI may answer or a human must.
@@ -14,6 +14,19 @@ Set needsHuman true whenever any of these hold:
 - Its sentiment is negative, annoyed, or accusatory.
 - It asks a factual question about the product that the provided knowledge base does not answer.
 - You are less than 75% confident about the intent.
+
+Intent is what they want to happen next, not how polite they are. Read the whole message and pick the one that fits:
+- interested: they want to see it, talk, get the link or book, now. "Sure, send it over." "What times work?" "Tell me more, how does it work?"
+- question: they ask something specific and have not yet said they want it. "Does it work with Jobber?" "Who else uses it?"
+- not_now: friendly, but they are not ready or cannot decide yet. Somebody else has to agree, the budget or timing is not there, or they will look "when" something changes. "When I can convince the owner we can start looking." "Maybe next quarter." "Let me run it by my partner." Warmth is not interest: a kind not-yet is not_now, never interested.
+- objection: a reason it does not fit or is not needed. "We already have something for that." "Too expensive." "We do it in-house."
+- referral: they point you to somebody else.
+- not_interested: a clear no.
+- out_of_office: an automatic away message.
+- spam: unrelated selling or nonsense.
+- other: a pleasantry or statement with no ask, such as "thanks for connecting".
+
+When a message both answers a question and says they will look at it later, it is not_now. Choose interested only when they are asking for the next step themselves.
 
 Set optOut true only for an unambiguous request to stop being contacted. "Not right now" is not an opt-out; it is not_now.
 

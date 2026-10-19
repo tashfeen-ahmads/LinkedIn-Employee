@@ -1,5 +1,7 @@
-import { reviseForVoice } from "@le/agents";
-import { voiceProblems, type MessageKind } from "@le/shared";
+import { reviseForVoice, writeHooks, writePitch } from "@le/agents";
+import { DEFAULT_OPENER_TEMPLATE, voiceProblems, type MessageKind } from "@le/shared";
+import { businessFor } from "../brand.js";
+import { offerFrom } from "./seed-agent.js";
 import type { WorkerContext } from "../context.js";
 import { recordEvent } from "../context.js";
 
@@ -177,6 +179,99 @@ export async function repairCopy(ctx: WorkerContext): Promise<RepairCopyResult> 
       subjectId: workspaceId,
       payload: counts,
     }).catch((err) => console.error("could not record copy.repaired", err));
+  }
+  return result;
+}
+
+export interface RepairSeededResult {
+  offers: number;
+  openers: number;
+  /** Approved lines still holding the old seeded text: the owner's to change. */
+  approvedLeft: number;
+}
+
+/**
+ * Rewrites the offer and opener every account was seeded with, where nobody
+ * has touched them.
+ *
+ * The seed cut the business one-liner at ninety characters ("We produce and
+ * distribute short.", "Provides patient-acquisition.") and opened with "Sam
+ * here regarding Lee Plumbing." Onboarding's launch step approves exactly the
+ * words it shows, so a new customer approved a broken sentence on their first
+ * day. Only rows still holding that exact seeded text, unapproved and written
+ * by the agent, are replaced: anything a person wrote, edited or approved is
+ * theirs (rule 40), and is counted rather than changed.
+ */
+export async function repairSeededLines(ctx: WorkerContext): Promise<RepairSeededResult> {
+  const { db } = ctx;
+  const result: RepairSeededResult = { offers: 0, openers: 0, approvedLeft: 0 };
+  const [pitches, hooks] = await Promise.all([
+    db.from("pitches").select("id, workspace_id, agent_id, body, approved_at, written_by"),
+    db.from("hooks").select("id, workspace_id, agent_id, body, approved_at, written_by"),
+  ]);
+  if (pitches.error || hooks.error) {
+    throw new Error(`could not read seeded lines: ${(pitches.error ?? hooks.error)!.message}`);
+  }
+
+  for (const row of pitches.data ?? []) {
+    if (row.written_by !== "agent") continue;
+    const business = await businessFor(db, row.workspace_id as string, (row.agent_id as string | null) ?? null);
+    if (!business || row.body !== offerFrom(business)) continue;
+    if (row.approved_at) {
+      result.approvedLeft += 1;
+      continue;
+    }
+    try {
+      const set = await writePitch(ctx.agentsFor(row.workspace_id as string), { business, knowledge: [] });
+      const body = set.variants[0]?.body?.trim();
+      if (!body) continue;
+      const { error } = await db
+        .from("pitches")
+        .update({ body })
+        .eq("id", row.id as string)
+        .eq("body", row.body as string)
+        .is("approved_at", null);
+      if (!error) result.offers += 1;
+    } catch (err) {
+      console.error("could not rewrite a seeded offer", { id: row.id, reason: String(err) });
+    }
+  }
+
+  for (const row of hooks.data ?? []) {
+    if (row.written_by !== "agent" || row.body !== DEFAULT_OPENER_TEMPLATE) continue;
+    if (row.approved_at) {
+      result.approvedLeft += 1;
+      continue;
+    }
+    const workspaceId = row.workspace_id as string;
+    const business = await businessFor(db, workspaceId, (row.agent_id as string | null) ?? null);
+    if (!business) continue;
+    const { data: specs } = await db
+      .from("customer_profiles")
+      .select("spec")
+      .eq("workspace_id", workspaceId)
+      .limit(5);
+    const profiles = (specs ?? [])
+      .map((s) => s.spec as { name?: string; summary?: string; pains?: string[] } | null)
+      .filter((spec): spec is { name: string; summary?: string; pains?: string[] } => Boolean(spec?.name))
+      .map((spec) => ({ name: spec.name, summary: spec.summary ?? "", pains: spec.pains ?? [] }));
+    // An opener written for nobody in particular is the generic line this
+    // replaces; without a segment the greeting stays.
+    if (!profiles.length) continue;
+    try {
+      const set = await writeHooks(ctx.agentsFor(workspaceId), { business, profiles: profiles.slice(0, 3) });
+      const body = set.variants[0]?.body?.trim();
+      if (!body) continue;
+      const { error } = await db
+        .from("hooks")
+        .update({ body, angle: "Written for the segment: one easy question" })
+        .eq("id", row.id as string)
+        .eq("body", row.body as string)
+        .is("approved_at", null);
+      if (!error) result.openers += 1;
+    } catch (err) {
+      console.error("could not rewrite a seeded opener", { id: row.id, reason: String(err) });
+    }
   }
   return result;
 }

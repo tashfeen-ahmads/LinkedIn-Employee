@@ -54,7 +54,7 @@ describe("what a person would send", () => {
     const good = [
       ["makes sense. what do you think the owner will push back on most, the cost or the change?", "reply"],
       ["no worries, appreciate you saying so. good luck with the season.", "reply"],
-      ["Thanks for connecting, Keon. How are inquiries passed from your marketing channels to the team that follows up?", "first_message"],
+      ["Thanks for connecting, Keon. Are most of your leads coming in after hours?", "first_message"],
       ["Hi Sefina, which part of handling inbound inquiries takes the most time for your team?", "first_message"],
       ["Worth a look? {{cta_link}}", "follow_up"],
     ] as const;
@@ -89,6 +89,25 @@ describe("feature runs and templates", () => {
     expect(voiceProblems("Hi {{first_name}}, how does {{company}} do it?", "invite_note", { template: true }).join(" ")).toMatch(
       /\{\{company\}\}/,
     );
+  });
+});
+
+describe("questions a stranger will answer", () => {
+  it("flags a first message that asks them to describe a process", () => {
+    expect(
+      voiceProblems("Thanks for connecting, Joseph. How are inquiries passed from your marketing channels to the team that follows up?", "first_message").join(" "),
+    ).toMatch(/homework/);
+    expect(voiceProblems("Hi {{first_name}}, how do you currently handle missed calls?", "first_message", { template: true }).join(" ")).toMatch(/homework/);
+  });
+
+  it("lets an easy question through", () => {
+    expect(voiceProblems("Hi {{first_name}}, thanks for connecting. Are you taking on new clients at the moment?", "first_message", { template: true })).toEqual([]);
+    expect(voiceProblems("Hi {{first_name}}, thanks for connecting. How do you handle calls after hours?", "first_message", { template: true })).toEqual([]);
+  });
+
+  it("flags a step that is only the offer", () => {
+    expect(voiceProblems("{{pitch}}", "follow_up", { template: true }).join(" ")).toMatch(/offer on its own/);
+    expect(voiceProblems("{{pitch}} Worth a look?", "follow_up", { template: true })).toEqual([]);
   });
 });
 

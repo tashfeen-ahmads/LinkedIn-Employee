@@ -35,11 +35,39 @@ export interface ReplyMove {
 /** They asked to see it, book it, or get the link, in so many words. */
 const ASKS_FOR_NEXT_STEP = /\b(link|book|booking|calendar|schedule|slot|time works|times|available|availability|demo|call|meet|zoom|send (it|me|over))\b/i;
 
+/**
+ * They are not ready yet: somebody else has to agree, or it is for later.
+ * "When I can convince the owner we can start looking at systems" was read by
+ * the classifier as interested, at 0.86, and answered with a feature list and
+ * a booking link. Checked in code as well, as opt-outs are (rule 7).
+ */
+const NOT_READY =
+  /\b(when (i|we) (can|get|have|are)|convinc\w*|run (it|this) (by|past)|check with (my|the|our)|talk (it )?(over )?(with|to) (my|the|our) (boss|owner|partner|wife|husband|team|manager|board)|not (right )?now|not yet|maybe later|down the road|next (year|quarter|month|spring|summer|fall|autumn|winter)|later (this|in the) year|in a few (weeks|months)|no budget|start looking|keep (you|it) in mind|revisit|circle back)\b/i;
+
+/** They already have something that does this: a reason it may not fit, not a yes. */
+const ALREADY_HAVE =
+  /\b(we (already |currently )?(have|use|run|got) (a|an|our own|someone|something)|already (have|use|using|working with)|in-house|in house|do it ourselves)\b/i;
+
+/**
+ * The intent a reply is written for: the classifier's, unless the words say
+ * plainly that they are not ready or already covered and they have not asked
+ * for the next step themselves.
+ */
+export function effectiveIntent(intent: ReplyIntent, message: string): ReplyIntent {
+  if (ASKS_FOR_NEXT_STEP.test(message) && !NOT_READY.test(message)) return intent;
+  const softened = intent === "interested" || intent === "question" || intent === "other";
+  if (!softened) return intent;
+  if (NOT_READY.test(message)) return "not_now";
+  if (ALREADY_HAVE.test(message)) return "objection";
+  return intent;
+}
+
 export function replyMove(
-  intent: ReplyIntent,
+  classified: ReplyIntent,
   message: string,
   context: { linkAlreadySent?: boolean } = {},
 ): ReplyMove {
+  const intent = effectiveIntent(classified, message);
   const asked = ASKS_FOR_NEXT_STEP.test(message);
   // "I'll check your calendar and get back to you" after the link went out is
   // a yes that needs nothing more. Sending the pitch and the link again is

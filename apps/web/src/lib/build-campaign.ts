@@ -123,8 +123,9 @@ export async function buildCampaign(
       delay_days: input.followUpDays,
       // A pointer rather than a copy of the words, so improving the agent's
       // offer improves every campaign using it without re-reviewing copy
-      // somebody already approved.
-      message: "{{pitch}}",
+      // somebody already approved. With one easy question after it, because
+      // the offer on its own arrives as a line of advertising (rule 66).
+      message: "{{pitch}} Would that be useful for you?",
     },
   ]);
   if (stepsError) return { ok: false, reason: stepsError.message };

@@ -1693,6 +1693,22 @@ tests that were verified by deliberately breaking the code.
     campaign's own note goes instead. Approved pitches and openers are not
     rewritten: an approval is a statement about particular text (rule 40).
 
+    **The words win over a warm misreading.** "When I can convince the owner
+    we can start looking at systems" was classified `interested` at 0.86, so
+    a playbook keyed on intent alone would still have pitched her.
+    `effectiveIntent` reads a plain not-yet as `not_now` and "we already have
+    one" as `objection` unless they asked for the next step themselves,
+    checked in code as opt-outs are (rule 7), and the classifier is now told
+    what each intent means. A first message whose question is homework
+    ("how do you currently…", a fourteen-word "how are X passed to…") and a
+    step that is only `{{pitch}}` both fail the check.
+
+    The seed cut the one-liner at ninety characters ("We produce and
+    distribute short.") and opened every account with "Sam here regarding
+    Lee Plumbing." The offer and opener are now written by `writePitch` and
+    `writeHooks` at seeding, and `repairSeededLines` replaces rows still
+    holding the old seeded text, unapproved and agent-written only.
+
 ## Conventions
 
 - Agent output is validated against a zod schema before it touches the
