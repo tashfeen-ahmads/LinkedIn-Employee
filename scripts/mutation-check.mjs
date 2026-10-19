@@ -1890,8 +1890,8 @@ const MUTATIONS = [
     // Repointed: the merge values now carry the campaign's agent, so the call
     // this wrapped moved. The rule is unchanged — dropping `renderCta` leaves
     // `{{cta_link}}` in the text a real person receives.
-    from: "  const body = renderCta(\n    renderTemplate(\n      withPitch.message,\n      prospect.first_name,\n      mergeValuesFor(prospect, sender, agent),\n    ),\n    ctaUrl,\n  );",
-    to: "  const body = renderTemplate(\n    withPitch.message,\n    prospect.first_name,\n    mergeValuesFor(prospect, sender, agent),\n  );",
+    from: "  const body = renderCta(\n    renderTemplate(",
+    to: "  const body = ((text: string, _url: unknown) => text)(\n    renderTemplate(",
     pkg: "@le/worker",
   },
   {
@@ -5297,6 +5297,22 @@ const MUTATIONS = [
     from: "    if (row.approved_at) {\n      result.approvedLeft += 1;\n      continue;\n    }\n    try {\n      const set = await writePitch",
     to: "    try {\n      const set = await writePitch",
     pkg: "@le/worker",
+  },
+  {
+    id: "voice/no-doubled-stop-after-the-pitch",
+    rule: "Rule 66: a follow-up never sends a doubled full stop after {{pitch}}",
+    file: "apps/worker/src/jobs/linkedin-action.ts",
+    from: '    .replace(/([.?!])\\.(?=\\s|$)/g, "$1");',
+    to: ";",
+    pkg: "@le/worker",
+  },
+  {
+    id: "voice/sentences-start-with-a-capital",
+    rule: "Rule 66: tidying capitalises a lowercase sentence start and a lone i",
+    file: "packages/shared/src/voice.ts",
+    from: '    .replace(/(^|\\s)i(?=\\s|\'|’)/g, "$1I")',
+    to: "",
+    pkg: "@le/shared",
   },
 ];
 

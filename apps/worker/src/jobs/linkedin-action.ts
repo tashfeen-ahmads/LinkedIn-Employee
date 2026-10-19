@@ -770,7 +770,10 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
       mergeValuesFor(prospect, sender, agent),
     ),
     ctaUrl,
-  );
+  )
+    // A pitch ends its own sentence, so "{{pitch}}." reached people as
+    // "…never happen.. Want a call?" Punctuation only; no word changes.
+    .replace(/([.?!])\.(?=\s|$)/g, "$1");
 
   /*
    * Nothing goes out with a placeholder still in it.

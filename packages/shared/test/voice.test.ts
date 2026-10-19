@@ -52,8 +52,8 @@ describe("what was sent and should not have been", () => {
 describe("what a person would send", () => {
   it("passes short, plain messages", () => {
     const good = [
-      ["makes sense. what do you think the owner will push back on most, the cost or the change?", "reply"],
-      ["no worries, appreciate you saying so. good luck with the season.", "reply"],
+      ["Makes sense. What do you think the owner will push back on most, the cost or the change?", "reply"],
+      ["No worries, appreciate you saying so. Good luck with the season.", "reply"],
       ["Thanks for connecting, Keon. Are most of your leads coming in after hours?", "first_message"],
       ["Hi Sefina, which part of handling inbound inquiries takes the most time for your team?", "first_message"],
       ["Worth a look? {{cta_link}}", "follow_up"],
@@ -62,12 +62,12 @@ describe("what a person would send", () => {
   });
 
   it("does not count a link towards the length", () => {
-    const text = `great. grab any time that suits here: https://calendar.app.google/${"x".repeat(60)}`;
+    const text = `Great. Grab any time that suits here: https://calendar.app.google/${"x".repeat(60)}`;
     expect(voiceProblems(text, "reply")).toEqual([]);
   });
 
   it("does not call a reply a mirror for sharing a common word or two", () => {
-    expect(voiceProblems("is the owner more worried about cost or about the change?", "reply", { theirMessage: ALLYSON })).toEqual([]);
+    expect(voiceProblems("Is the owner more worried about cost or about the change?", "reply", { theirMessage: ALLYSON })).toEqual([]);
   });
 });
 
@@ -111,10 +111,29 @@ describe("questions a stranger will answer", () => {
   });
 });
 
+describe("what the first live repair produced", () => {
+  it("repairs a full stop after {{pitch}}, a lowercase start and a dash before a question, without a model", () => {
+    expect(tidyVoice("{{pitch}}. interested?")).toBe("{{pitch}} Interested?");
+    expect(tidyVoice("hi {{first_name}}, i help local owners. is that a priority?")).toBe(
+      "Hi {{first_name}}, I help local owners. Is that a priority?",
+    );
+    expect(tidyVoice("Hi Jackie. as Membership Director, do you track it?")).toBe("Hi Jackie. As Membership Director, do you track it?");
+    expect(tidyVoice("I create short episodes that get homeowners to call — can I send a sample?")).toBe(
+      "I create short episodes that get homeowners to call. Can I send a sample?",
+    );
+  });
+
+  it("names each of them as a problem, so the stored rows get repaired", () => {
+    expect(voiceProblems("{{pitch}}. Want a quick call?", "follow_up", { template: true }).join(" ")).toMatch(/punctuation/);
+    expect(voiceProblems("hi {{first_name}}, i help owners.", "invite_note", { template: true }).join(" ")).toMatch(/lowercase/);
+    expect(voiceProblems(tidyVoice("{{pitch}}. interested?"), "follow_up", { template: true })).toEqual([]);
+  });
+});
+
 describe("tidyVoice", () => {
   it("turns dashes into commas and drops a sign-off, and never shortens a sentence", () => {
-    expect(tidyVoice("email a one-page gap note—no call. Want that?")).toBe("email a one-page gap note, no call. Want that?");
+    expect(tidyVoice("Email a one-page gap note—no call. Want that?")).toBe("Email a one-page gap note, no call. Want that?");
     expect(tidyVoice("Happy to send it over. — Tashfeen Ahmad")).toBe("Happy to send it over.");
-    expect(tidyVoice("keep the one-page note")).toBe("keep the one-page note");
+    expect(tidyVoice("Keep the one-page note")).toBe("Keep the one-page note");
   });
 });

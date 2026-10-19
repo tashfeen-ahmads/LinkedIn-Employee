@@ -519,6 +519,19 @@ describe("campaign pipeline", () => {
     expect(String(db.rows("conversations")[0]?.needs_human_reason)).toContain("{{cta_link}}");
   });
 
+  it("never sends a doubled full stop after the pitch", async () => {
+    const { db, ctx, linkedin } = harness();
+    db.rows("campaign_steps")[0]!.message = "{{pitch}}. Worth a look?";
+    db.find("campaign_prospects", { id: CP })!.status = "accepted";
+    db.seed("pitches", [
+      { id: "pt", workspace_id: WORKSPACE, agent_id: null, body: "Most referrals never happen.", approved_at: NOW.toISOString(), is_default: true },
+    ]);
+
+    await runLinkedInAction(ctx, { kind: "follow_up", workspaceId: WORKSPACE, campaignProspectId: CP, stepNumber: 1 });
+
+    expect(linkedin.sentMessages[0]?.text).toBe("Most referrals never happen. Worth a look?");
+  });
+
   it("holds a follow-up carrying a field this prospect has no value for", async () => {
     // A raw {{company}} reached a live prospect this way.
     const { db, ctx, linkedin } = harness();

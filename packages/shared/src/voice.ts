@@ -47,7 +47,7 @@ export const VOICE_RULES = `HOW TO WRITE (these override anything else about sty
 - No em dashes (—), no en dashes (–), no semicolons. Use a full stop or a comma.
 - No exclamation marks, no emoji, no bullet points, no sign-off, no name at the end.
 - Never use: leverage, streamline, seamless, robust, elevate, unlock, empower, tailored, cutting-edge, game-changer, delve, "touch base", "circle back", "feel free", "don't hesitate", "I'd love to", "looking forward", "just following up", "just checking in", "I'm reaching out", "I'm introducing".
-- Contractions are fine and normal. Lowercase-casual is fine. Perfect corporate prose is not.
+- Contractions are fine and normal. Capitalise like a person typing on a phone does, with "I" and sentence starts capitalised. Perfect corporate prose is not the goal.
 - Never quote somebody's job title or profile back to them in quotation marks.`;
 
 const STOCK_OPENERS = [
@@ -218,6 +218,14 @@ export function voiceProblems(text: string, kind: MessageKind, options: VoiceOpt
     problems.push("It is the offer on its own. Add one short, easy question after it.");
   }
 
+  // What tidying fixes without a model, said so a stored row is repaired.
+  if (/\{\{\s*pitch\s*\}\}[.,!]/i.test(body)) {
+    problems.push("It puts punctuation straight after {{pitch}}, which already ends its own sentence.");
+  }
+  if (/(^|[.?!]\s+)[a-z]/.test(readable(body)) || /(^|\s)i(\s|'|’)/.test(body)) {
+    problems.push('It starts a sentence in lowercase or writes "i". Capitalise those.');
+  }
+
   if (options.theirMessage && mirrors(body, options.theirMessage)) {
     problems.push("It repeats their own words back to them. Respond instead of summarising.");
   }
@@ -233,7 +241,18 @@ export function voiceProblems(text: string, kind: MessageKind, options: VoiceOpt
 export function tidyVoice(text: string): string {
   return text
     .replace(/\s*[—–]\s*$/g, ".")
+    // A dash before a question is a new sentence, not a comma splice:
+    // "…get homeowners to call — can I send a sample?"
+    .replace(
+      /(\w)\s*[—–]\s*(can|could|would|will|mind|do|does|are|is|want|shall|should|any|how|what|who|when)\b/gi,
+      (_m, before: string, word: string) => `${before}. ${word[0]!.toUpperCase()}${word.slice(1)}`,
+    )
     .replace(/(\w)\s*[—–]\s*(\w)/g, "$1, $2")
+    // {{pitch}} ends its own sentence, so a full stop after it doubles up.
+    .replace(/(\{\{\s*pitch\s*\}\})[.,!]/gi, "$1")
+    .replace(/(\{\{\s*pitch\s*\}\}\s+)([a-z])/g, (_m, lead: string, ch: string) => `${lead}${ch.toUpperCase()}`)
+    .replace(/(^|\s)i(?=\s|'|’)/g, "$1I")
+    .replace(/(^|[.?!]\s+)([a-z])/g, (_m, lead: string, ch: string) => `${lead}${ch.toUpperCase()}`)
     .replace(/\s+[-—–]\s?[A-Z][a-z]+(\s[A-Z][a-z]+)?\s*$/, "")
     .replace(/[ \t]{2,}/g, " ")
     .replace(/ ,/g, ",")
