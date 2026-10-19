@@ -12,6 +12,10 @@ import {
   type ProspectCandidate,
   INVITE_NOTE_MAX_CHARS,
   clampFitScore,
+  rewriteInstruction,
+  tidyVoice,
+  voiceProblems,
+  type MessageKind,
 } from "@le/shared";
 import { callStructured, type AgentContext } from "./client.js";
 import {
@@ -203,7 +207,7 @@ export async function buildCampaign(
     cta: { kind: CtaKind; label: string | null; url: string | null };
     extraGuidance?: string;
   },
-): Promise<CampaignPlan> {
+): Promise<CheckedCampaignPlan> {
   const context = [
     `Business profile:\n${JSON.stringify(input.business, null, 2)}`,
     `Customer profile being targeted:\n${JSON.stringify(input.profile, null, 2)}`,
@@ -211,26 +215,93 @@ export async function buildCampaign(
     ctaBrief(input.cta),
   ].join("\n\n");
 
-  return callStructured(ctx, {
-    agent: "targeting.campaign",
-    model: ctx.client.models.writer,
-    promptVersion: CAMPAIGN_PROMPT_VERSION,
-    schema: CampaignPlanSchema,
-    system: [
-      { text: CAMPAIGN_SYSTEM },
-      { text: context, cached: true },
-    ],
-    userContent: [
-      `Write the campaign. Daily invite cap is ${input.dailyInviteCap}; set dailyInviteCap to that number.`,
-      input.extraGuidance ? `\nAdditional instruction from the rep:\n${input.extraGuidance}` : "",
-      "\nStop conditions should cover at minimum: prospect replies, prospect opts out, meeting booked.",
-    ].join(""),
-    // Writing, not reasoning. High effort on a copywriting task spent the whole
-    // budget thinking and returned nothing -- a live campaign died on exactly
-    // that -- and the extra thinking was never what made the copy good.
-    effort: "medium",
-    maxTokens: 16000,
-  });
+  const ask = (extra?: string) =>
+    callStructured(ctx, {
+      agent: "targeting.campaign",
+      model: ctx.client.models.writer,
+      promptVersion: CAMPAIGN_PROMPT_VERSION,
+      schema: CampaignPlanSchema,
+      system: [
+        { text: CAMPAIGN_SYSTEM },
+        { text: context, cached: true },
+      ],
+      userContent: [
+        `Write the campaign. Daily invite cap is ${input.dailyInviteCap}; set dailyInviteCap to that number.`,
+        input.extraGuidance ? `\nAdditional instruction from the rep:\n${input.extraGuidance}` : "",
+        "\nStop conditions should cover at minimum: prospect replies, prospect opts out, meeting booked.",
+        extra ? `\n\n${extra}` : "",
+      ].join(""),
+      // Writing, not reasoning. High effort on a copywriting task spent the whole
+      // budget thinking and returned nothing -- a live campaign died on exactly
+      // that -- and the extra thinking was never what made the copy good.
+      effort: "medium",
+      maxTokens: 16000,
+    });
+
+  /*
+   * Every message is checked in code (`voiceProblems`), because the prompt
+   * alone is never trusted: `callStructured` casts. A plan with problems gets
+   * one rewrite, handed the exact list. What still fails after that is
+   * returned, not hidden, so the campaign records it; a person reviews the
+   * copy before launch, and the send path holds an unfilled placeholder.
+   */
+  const first = tidyPlan(await ask());
+  const firstProblems = planVoiceProblems(first);
+  if (!firstProblems.length) return { ...first, voiceProblems: [] };
+  let second: CampaignPlan;
+  try {
+    second = tidyPlan(
+      await ask(
+        `${rewriteInstruction(firstProblems)}\n\nRewrite only the messages named above and keep everything else. Your last version was:\n${JSON.stringify(first)}`,
+      ),
+    );
+  } catch {
+    // The rewrite is an improvement, never a reason to lose the campaign.
+    return { ...first, voiceProblems: firstProblems };
+  }
+  const secondProblems = planVoiceProblems(second);
+  return secondProblems.length > firstProblems.length
+    ? { ...first, voiceProblems: firstProblems }
+    : { ...second, voiceProblems: secondProblems };
+}
+
+export type CheckedCampaignPlan = CampaignPlan & {
+  /** What still did not read like a person after the one rewrite, by message. */
+  voiceProblems: string[];
+};
+
+/** Which kind of message a step is: the first after an acceptance is held to the shortest limit. */
+function stepKind(index: number): MessageKind {
+  return index === 0 ? "first_message" : "follow_up";
+}
+
+function tidyPlan(plan: CampaignPlan): CampaignPlan {
+  return {
+    ...plan,
+    connectionNote: tidyVoice(plan.connectionNote),
+    steps: plan.steps.map((step) => ({ ...step, message: tidyVoice(step.message) })),
+    variants: plan.variants.map((variant) => ({
+      ...variant,
+      connectionNote: tidyVoice(variant.connectionNote),
+      steps: variant.steps.map((step) => ({ ...step, message: tidyVoice(step.message) })),
+    })),
+  };
+}
+
+/** Every message in a plan, checked, each problem prefixed with where it is. */
+export function planVoiceProblems(plan: CampaignPlan): string[] {
+  const out: string[] = [];
+  const check = (where: string, text: string, kind: MessageKind) => {
+    // Templates: {{first_name}} is filled per person at send time.
+    for (const problem of voiceProblems(text, kind, { template: true })) out.push(`${where}: ${problem}`);
+  };
+  check("Connection note", plan.connectionNote, "invite_note");
+  plan.steps.forEach((step, i) => check(`Follow-up ${i + 1}`, step.message, stepKind(i)));
+  for (const variant of plan.variants) {
+    check(`Angle "${variant.name}" connection note`, variant.connectionNote, "invite_note");
+    variant.steps.forEach((step, i) => check(`Angle "${variant.name}" follow-up ${i + 1}`, step.message, stepKind(i)));
+  }
+  return out;
 }
 
 /**
@@ -355,45 +426,80 @@ export async function personalizeInvites(
     batches.push(input.prospects.slice(i, i + NOTE_BATCH_SIZE));
   }
 
-  const results = await Promise.all(
-    batches.map((batch) =>
-      callStructured(ctx, {
-        agent: "targeting.invite-note",
-        // The writer, not the classifier: these words reach a real person under
-        // a real rep's name. The agent's own choice when it has one this
-        // deployment can actually serve.
-        model: input.model ?? ctx.client.models.writer,
-        promptVersion: INVITE_NOTE_PROMPT_VERSION,
-        schema: InviteNoteBatchSchema,
-        system: [
-          { text: INVITE_NOTE_SYSTEM },
-          // After the shipped rules, never instead of them, and before the
-          // cache breakpoint: it is identical for every batch in this run.
-          ...(input.voice ? [{ text: input.voice, cached: true }] : []),
-          { text: `Who is sending, and why:\n${context}`, cached: true },
-        ],
-        userContent: `Write one note per person below. Return one entry per providerId, no more, no fewer.\n\n${JSON.stringify(
-          batch.map(toScoringView),
-          null,
-          2,
-        )}`,
-        // One sentence per person, from details already selected and handed
-        // over. The judgement went into the prompt and the grounding; what is
-        // left is writing, and it was costing 2,818 output tokens a batch.
-        effort: "low",
-        maxTokens: 4000,
-      }),
-    ),
-  );
+  const write = (batch: ProspectCandidate[], extra?: string) =>
+    callStructured(ctx, {
+      agent: "targeting.invite-note",
+      // The writer, not the classifier: these words reach a real person under
+      // a real rep's name. The agent's own choice when it has one this
+      // deployment can actually serve.
+      model: input.model ?? ctx.client.models.writer,
+      promptVersion: INVITE_NOTE_PROMPT_VERSION,
+      schema: InviteNoteBatchSchema,
+      system: [
+        { text: INVITE_NOTE_SYSTEM },
+        // After the shipped rules, never instead of them, and before the
+        // cache breakpoint: it is identical for every batch in this run.
+        ...(input.voice ? [{ text: input.voice, cached: true }] : []),
+        { text: `Who is sending, and why:\n${context}`, cached: true },
+      ],
+      userContent: `Write one note per person below. Return one entry per providerId, no more, no fewer.${extra ? `\n\n${extra}` : ""}\n\n${JSON.stringify(
+        batch.map(toScoringView),
+        null,
+        2,
+      )}`,
+      // One sentence per person, from details already selected and handed
+      // over. The judgement went into the prompt and the grounding; what is
+      // left is writing, and it was costing 2,818 output tokens a batch.
+      effort: "low",
+      maxTokens: 4000,
+    });
 
+  const results = await Promise.all(batches.map((batch) => write(batch)));
+
+  // What is wrong with a note, or why it cannot be sent at all. Empty is a
+  // note that may go. LinkedIn refuses the whole invitation over its ceiling,
+  // so length is a second check on top of the schema's, because a note that
+  // fails to send is indistinguishable from a prospect who was never contacted.
+  const problemsOf = (text: string) =>
+    text.length > INVITE_NOTE_MAX_CHARS
+      ? [`It is ${text.length} characters. Keep it under ${INVITE_NOTE_MAX_CHARS}.`]
+      : voiceProblems(text, "invite_note");
+
+  const failed = new Map<string, string[]>();
   for (const batch of results) {
-    for (const note of batch.notes) {
-      // LinkedIn's ceiling, and a note over it is not truncated by them — the
-      // whole invitation is refused. The schema already caps it; this is the
-      // second check, because a note that fails to send is indistinguishable
-      // from a prospect who was never contacted.
-      if (note.note.length > INVITE_NOTE_MAX_CHARS) continue;
-      byId.set(note.providerId, { ...note, promptVersion: INVITE_NOTE_PROMPT_VERSION });
+    for (const raw of batch.notes) {
+      const note = { ...raw, note: tidyVoice(raw.note) };
+      const problems = problemsOf(note.note);
+      if (problems.length) failed.set(note.providerId, problems);
+      else byId.set(note.providerId, { ...note, promptVersion: INVITE_NOTE_PROMPT_VERSION });
+    }
+  }
+
+  /*
+   * A note that reads like a template (a quoted job title, a pitch, a dash)
+   * gets one rewrite, told exactly what was wrong with it. What still fails
+   * is left out, and the caller falls back to the angle's own note, which a
+   * person reviews before launch — never a flawed note sent anyway.
+   */
+  const retry = input.prospects.filter((p) => failed.has(p.providerId));
+  if (retry.length) {
+    const instruction = [
+      "These notes were written once and did not read like a person wrote them. Write each again so none of its problems is true:",
+      ...retry.map((p) => `- ${p.providerId}: ${failed.get(p.providerId)!.join(" ")}`),
+    ].join("\n");
+    for (let i = 0; i < retry.length; i += NOTE_BATCH_SIZE) {
+      let again;
+      try {
+        again = await write(retry.slice(i, i + NOTE_BATCH_SIZE), instruction);
+      } catch {
+        continue;
+      }
+      for (const raw of again.notes) {
+        if (!failed.has(raw.providerId) || byId.has(raw.providerId)) continue;
+        const note = { ...raw, note: tidyVoice(raw.note) };
+        if (problemsOf(note.note).length) continue;
+        byId.set(note.providerId, { ...note, promptVersion: INVITE_NOTE_PROMPT_VERSION });
+      }
     }
   }
   return byId;

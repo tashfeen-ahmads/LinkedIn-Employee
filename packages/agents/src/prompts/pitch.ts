@@ -1,6 +1,6 @@
-import { PITCH_MAX_CHARS, PITCH_VARIANTS_MAX, PITCH_VARIANTS_MIN } from "@le/shared";
+import { PITCH_MAX_CHARS, PITCH_VARIANTS_MAX, PITCH_VARIANTS_MIN, VOICE_RULES } from "@le/shared";
 
-export const PITCH_PROMPT_VERSION = "pitch/2026-09-24";
+export const PITCH_PROMPT_VERSION = "pitch/2026-10-19-human";
 
 export const PITCH_SYSTEM = `You write the one-line pitches a business uses on LinkedIn.
 
@@ -75,4 +75,6 @@ EVERY ONE OF THEM
   no "platform", no "solution", no "leverage", no "seamless".
 
 A closing question is optional at this length and usually not worth the
-characters. The agent sending it adds one when the conversation wants one.`;
+characters. The agent sending it adds one when the conversation wants one.
+
+${VOICE_RULES}`;

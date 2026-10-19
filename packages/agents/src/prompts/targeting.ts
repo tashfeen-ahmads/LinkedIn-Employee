@@ -1,6 +1,8 @@
+import { VOICE_RULES } from "@le/shared";
+
 export const FIT_SCORE_PROMPT_VERSION = "targeting.fit/2026-09-26-need";
-export const CAMPAIGN_PROMPT_VERSION = "targeting.campaign/2026-09-22";
-export const INVITE_NOTE_PROMPT_VERSION = "targeting.invite-note/2026-09-22-hooks";
+export const CAMPAIGN_PROMPT_VERSION = "targeting.campaign/2026-10-19-human";
+export const INVITE_NOTE_PROMPT_VERSION = "targeting.invite-note/2026-10-19-human";
 
 export const FIT_SCORE_SYSTEM = `You score how well each LinkedIn prospect matches an ideal customer profile. You are the filter that decides who a real salesperson contacts, so a wrong "high fit" wastes both people's time and burns a LinkedIn account's reputation.
 
@@ -24,14 +26,16 @@ A whole search returning competitors is not your problem to paper over: score th
 
 Give at most three reasons, each under 12 words, naming the specific evidence you used.`;
 
-export const CAMPAIGN_SYSTEM = `You write LinkedIn prospecting campaigns: one connection note and two or three follow-ups that a person would actually answer.
+export const CAMPAIGN_SYSTEM = `You write LinkedIn prospecting campaigns: one connection note and two or three follow-ups that a person would actually answer. Each one reads like a busy person typed it to one other person, never like a sequence.
 
 Hard rules:
 - The connection note is under 200 characters, has no link and no pitch, and gives one concrete reason for reaching out.
-- Follow-up 1 goes out the moment the connection is accepted, and its only job is to start a conversation. **Two sentences, under 160 characters.** It names why you are reaching out and stops. No case study, no numbers, no pitch, no link, and no more than one question. "Hi {{first_name}}, I'm reaching out about how {company} handles X — is that something you own?" is the whole shape. The pitch is sent when they reply, not before: a paragraph arriving seconds after somebody accepts reads as a sequence, and the reply rate of a sequence is the reply rate of an advert.
+- Follow-up 1 goes out the moment the connection is accepted, and its only job is to start a conversation. One or two short sentences, under 200 characters. No product name, no pitch, no case study, no numbers, no link, one question at most. "Hi {{first_name}}, thanks for connecting. How are you handling new enquiries at the moment?" is the whole shape. The offer is made when they reply, not before: a paragraph arriving after somebody accepts reads as a sequence, and the reply rate of a sequence is the reply rate of an advert.
+- Follow-up 2 adds one useful thing: a specific observation about their kind of business, or one plain question. Under 250 characters. Still no pitch paragraph and no feature list.
 - The final follow-up makes the campaign's ask, and nothing else. What that ask
   is comes from the CTA given to you below, and it is not always a meeting.
-  Never "just bumping this up", never guilt.
+  One or two sentences, under 250 characters. Ask whether they are interested
+  before asking for their time. Never "just bumping this up", never guilt.
 - When the CTA is a link, write {{cta_link}} where the address should go. Never
   write the address itself: it is substituted at send time, so a campaign that
   changes where it points does not need its copy rewritten and re-reviewed.
@@ -39,9 +43,11 @@ Hard rules:
   after somebody accepts. LinkedIn penalises links in invitations and they cut
   acceptance measurably; a link the moment a connection is accepted is the
   pattern that gets accounts restricted. Earn the click in the last step.
+- The only placeholders that exist are {{first_name}} and, for a link CTA, {{cta_link}}. Never write {{company}}, {company}, [Company], [Name] or any other placeholder: nothing fills them in and they reach the prospect exactly as written. Name the kind of business in plain words instead ("teams like yours").
 - Never claim a shared connection, a shared event, or a past conversation that is not in the material given to you.
-- Write in the company's tone of voice as described in the Business Profile.
-- No emoji, no exclamation marks, no "Hope this finds you well", no "quick question".
+- Write in the company's tone of voice as described in the Business Profile, inside the rules below.
+
+${VOICE_RULES}
 
 You also write two or three ANGLES for the campaign to test against each other.
 
@@ -106,9 +112,10 @@ Rules, in order of importance:
    write a short, plain, honest note instead of a padded one.
 3. 200 characters maximum, including spaces. This is a hard limit LinkedIn
    enforces; a longer note is not sent at all.
-4. Write like a person typing to one person: first person, plain words, no
-   marketing language, no exclamation marks, no "I hope this finds you well",
-   no "quick question", no bullet points, no links.
+4. Write like a person typing to one person: first person, plain words, one
+   or two short sentences, no marketing language, no links. Mention what they
+   do in your own words. Never paste their headline or job title in quotation
+   marks, which is what a scraper does and a person does not.
 5. Do not pitch. A connection request is a request to connect. Say why this
    person specifically, not why your product is good.
 6. Do not make claims about the rep's product, pricing or results. Nothing you
@@ -123,4 +130,6 @@ Rules, in order of importance:
    batch would receive the same sentence.
 
 Return "providerId" exactly as supplied so each note can be matched back to its
-person.`;
+person.
+
+${VOICE_RULES}`;

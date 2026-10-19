@@ -53,7 +53,7 @@ import { accountCampaignIds, lastInviteAt, warmedWaitingOnAccount } from "../pac
 import { syncConversationToCrm } from "../crm.js";
 import { loadExclusions } from "../exclusions.js";
 import { clearHold, flagForHuman } from "../holds.js";
-import { HELD_FOR_PITCH, pitchFor } from "../pitch.js";
+import { HELD_FOR_COPY, HELD_FOR_PITCH, pitchFor } from "../pitch.js";
 import { agentForCampaign } from "../agent.js";
 import { createBookingLink } from "./book.js";
 import { OUTREACH_PAUSE_RETRY_MS, outreachPause } from "../platform.js";
@@ -771,6 +771,34 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
     ),
     ctaUrl,
   );
+
+  /*
+   * Nothing goes out with a placeholder still in it.
+   *
+   * `{{company}}` reached a live prospect: the writer used a field this
+   * prospect has no value for, `renderMerge` left it visible so the review
+   * screen would catch it, and nothing stopped it at the one moment it
+   * mattered. The same is true of `{{cta_link}}` on a campaign with no
+   * destination. A literal pair of braces under a real rep's name reads as a
+   * mail merge that broke, which is worse than a day's delay. So it is held
+   * exactly as a missing pitch is: flagged as copy, schedule untouched, sent
+   * the moment the step is fixed.
+   */
+  const unfilled = [...new Set([...body.matchAll(/\{\{\s*[#^/]?\s*([a-z_]+)\s*\}\}/gi)].map((m) => m[1]!))];
+  if (unfilled.length) {
+    await flagForHuman(
+      db,
+      conversation.id,
+      `A follow-up still has ${unfilled.map((f) => `{{${f}}}`).join(", ")} in it, which would reach the prospect as written. Edit the step and it sends on the next run.`,
+      "copy",
+    );
+    await db
+      .from("campaign_prospects")
+      .update({ status_reason: HELD_FOR_COPY })
+      .eq("id", cp.id)
+      .eq("status", cp.status);
+    return;
+  }
 
   const result = await ctx.linkedin.sendMessage({
     accountId: accountRow.provider_account_id,

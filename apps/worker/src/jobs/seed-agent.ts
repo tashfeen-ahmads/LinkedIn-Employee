@@ -47,6 +47,12 @@ export async function seedWorkspaceAgent(
     repName: string | null;
     /** How the rep described themselves at onboarding, for the agent's voice. */
     repBio?: string | null;
+    /**
+     * Writes the offer as a real one-line pitch. Asked only once it is known a
+     * seed is needed, so a strategy run on a workspace that already has its
+     * agent spends nothing. Absent, or failing, falls back to the one-liner.
+     */
+    writeOffer?: () => Promise<string | null>;
   },
 ): Promise<string | null> {
   const { data: already } = await db
@@ -56,6 +62,17 @@ export async function seedWorkspaceAgent(
     .is("archived_at", null)
     .limit(1);
   if (already?.length) return null;
+
+  // The one-liner cut to ninety characters read as a broken sentence ("An
+  // AI-powered referral networking platform that matches small businesses."),
+  // and that line is what a warm prospect hears when they ask what this is.
+  let written: string | null = null;
+  try {
+    written = (await input.writeOffer?.())?.trim() || null;
+  } catch {
+    written = null;
+  }
+  const offer = written && written.length <= PITCH_MAX_CHARS ? written : offerFrom(input.business);
 
   const seed = blankAgent(input.repName);
   const { data: agent, error } = await db
@@ -124,7 +141,7 @@ export async function seedWorkspaceAgent(
     workspace_id: input.workspaceId,
     agent_id: agent.id,
     name: "What this is",
-    body: offerFrom(input.business),
+    body: offer,
     written_by: "agent",
     approved_at: null,
   });

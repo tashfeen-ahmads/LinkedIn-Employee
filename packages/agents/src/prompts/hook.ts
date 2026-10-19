@@ -1,6 +1,6 @@
-import { HOOK_MAX_CHARS, HOOK_VARIANTS_MAX, HOOK_VARIANTS_MIN } from "@le/shared";
+import { HOOK_MAX_CHARS, HOOK_VARIANTS_MAX, HOOK_VARIANTS_MIN, VOICE_RULES } from "@le/shared";
 
-export const HOOK_PROMPT_VERSION = "hook/2026-09-24";
+export const HOOK_PROMPT_VERSION = "hook/2026-10-19-human";
 
 export const HOOK_SYSTEM = `You write the opening lines a business uses on LinkedIn.
 
@@ -67,4 +67,6 @@ NEVER
   no "quick question", no emoji, no exclamation marks.
 - No question that is really a survey: anything beginning "how do you currently
   handle", "what is your process for", or "how are you managing" is an audit,
-  and nobody audits themselves for a stranger.`;
+  and nobody audits themselves for a stranger.
+
+${VOICE_RULES}`;

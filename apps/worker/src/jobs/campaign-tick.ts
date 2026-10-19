@@ -31,7 +31,7 @@ import type { Queues } from "../queues.js";
 import { resetCountersIfNeeded, toUsage, type AccountRecord, ACCOUNT_USAGE_COLUMNS } from "../accounts.js";
 import { recordBeat } from "../heartbeat.js";
 import { outreachPause } from "../platform.js";
-import { HELD_FOR_PITCH } from "../pitch.js";
+import { heldForCopy } from "../pitch.js";
 import { INVITE_FOLLOW_MS, WARM_FOLLOW_SPAN_MS, WARM_MARGIN_MS, viewFitsToday } from "../warm.js";
 import { lastInviteAt } from "../pace.js";
 
@@ -1231,7 +1231,7 @@ async function enqueueFollowUps(
      * stamped as the loop's last action (rule 45) — the record that exists to
      * say when something was last *sent*.
      */
-    if (outcome !== "already_pending" && row.status_reason !== HELD_FOR_PITCH) count++;
+    if (outcome !== "already_pending" && !heldForCopy(row.status_reason)) count++;
   }
   return count;
 }

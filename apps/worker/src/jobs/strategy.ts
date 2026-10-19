@@ -1,4 +1,4 @@
-import { cleanWebsiteText, runStrategyAgent } from "@le/agents";
+import { cleanWebsiteText, runStrategyAgent, writePitch } from "@le/agents";
 import { loadBusinessProfile } from "@le/db";
 import { MAX_STRATEGY_PRIORITY } from "@le/shared";
 import type { WorkerContext } from "../context.js";
@@ -179,6 +179,14 @@ async function strategy(ctx: WorkerContext, job: StrategyJob): Promise<string> {
     business: output.businessProfile,
     repName: owner?.full_name ?? null,
     repBio: owner?.bio ?? null,
+    writeOffer: async () => {
+      const set = await writePitch(ctx.agentsFor(job.workspaceId), {
+        business: output.businessProfile,
+        knowledge: [],
+        repName: owner?.full_name ?? undefined,
+      });
+      return set.variants[0]?.body ?? null;
+    },
   });
 
   await recordEvent(ctx.db, {

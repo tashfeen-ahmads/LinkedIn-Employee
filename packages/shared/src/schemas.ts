@@ -326,7 +326,7 @@ export const FitScoreBatchSchema = z.object({ scores: z.array(FitScoreSchema) })
 export const InviteNoteSchema = z.object({
   providerId: z.string(),
   /** LinkedIn's hard ceiling for a connection request note. */
-  note: z.string().max(300),
+  note: z.string().max(200),
   /** Which of this prospect's details the note used, quoted from the input. */
   grounding: z.array(z.string()).max(3),
   /**
@@ -357,7 +357,7 @@ export const CampaignVariantSchema = z.object({
   angle: z.string().max(600),
   /** The specific pain this angle names, or null when it names none. */
   painPoint: z.string().max(300).nullable(),
-  connectionNote: z.string().max(300),
+  connectionNote: z.string().max(200),
   /**
    * This angle's own follow-ups.
    *
@@ -371,7 +371,7 @@ export const CampaignVariantSchema = z.object({
     .array(
       z.object({
         delayDays: z.number().int().min(1).max(14),
-        message: z.string().max(1200),
+        message: z.string().max(400),
       }),
     )
     .min(2)
@@ -381,7 +381,7 @@ export type CampaignVariantPlan = z.infer<typeof CampaignVariantSchema>;
 
 export const CampaignPlanSchema = z.object({
   name: z.string(),
-  connectionNote: z.string().max(300),
+  connectionNote: z.string().max(200),
   /**
    * Two or three genuinely different angles, not rewordings.
    *
@@ -395,7 +395,7 @@ export const CampaignPlanSchema = z.object({
       z.object({
         kind: z.enum(["follow_up"]),
         delayDays: z.number().int().min(1).max(14),
-        message: z.string().max(1200),
+        message: z.string().max(400),
       }),
     )
     .min(2)

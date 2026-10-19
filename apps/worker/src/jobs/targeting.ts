@@ -604,6 +604,20 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
     .single();
   if (error || !campaign) throw new Error(`could not create campaign: ${error?.message}`);
 
+  // Copy that still did not read like a person after the writer's one rewrite.
+  // Recorded rather than hidden: the person reviewing before launch is who
+  // fixes it, and a placeholder left in a step is held at send time.
+  if (plan.voiceProblems?.length) {
+    await recordEvent(ctx.db, {
+      workspaceId: job.workspaceId,
+      name: "campaign.voice_problems",
+      actorUserId: job.userId,
+      subjectType: "campaign",
+      subjectId: campaign.id,
+      payload: { problems: plan.voiceProblems.slice(0, 20) },
+    });
+  }
+
   // The angles this campaign will test against each other. Created with the
   // campaign, not later: a variant added after people are already assigned
   // starts with a deficit the rotation then spends the next batch correcting,

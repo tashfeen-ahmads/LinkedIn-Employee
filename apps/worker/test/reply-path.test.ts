@@ -178,7 +178,8 @@ vi.mock("@le/agents", async (importOriginal) => {
   return {
     ...actual,
     classifyReply: (...args: unknown[]) => classifyMock(...args),
-    draftReply: (...args: unknown[]) => draftMock(...args),
+    // The real drafter checks its own voice; a mocked draft is taken as clean.
+    draftReply: async (...args: unknown[]) => ({ voiceProblems: [], ...(await draftMock(...args)) }),
   };
 });
 

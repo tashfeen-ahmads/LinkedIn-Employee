@@ -94,3 +94,14 @@ export async function pitchFor(
  * was reported as the loop's last action (rule 45).
  */
 export const HELD_FOR_PITCH = "waiting for an approved pitch";
+
+/**
+ * A follow-up whose rendered text still has a placeholder in it, for the same
+ * reason and read the same way as `HELD_FOR_PITCH`.
+ */
+export const HELD_FOR_COPY = "waiting for the message to be fixed";
+
+/** Whether a row is a follow-up held for copy, which the loop offers again but does not count. */
+export function heldForCopy(reason: string | null | undefined): boolean {
+  return reason === HELD_FOR_PITCH || reason === HELD_FOR_COPY;
+}

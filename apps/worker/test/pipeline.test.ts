@@ -174,7 +174,8 @@ vi.mock("@le/agents", async (importOriginal) => {
   return {
     ...actual,
     classifyReply: (...args: unknown[]) => classifyMock(...args),
-    draftReply: (...args: unknown[]) => draftMock(...args),
+    // The real drafter checks its own voice; a mocked draft is taken as clean.
+    draftReply: async (...args: unknown[]) => ({ voiceProblems: [], ...(await draftMock(...args)) }),
   };
 });
 
@@ -499,13 +500,11 @@ describe("campaign pipeline", () => {
     expect(linkedin.sentMessages[0]?.text).toBe("Worth a look, Jane: https://acme.test/signup");
   });
 
-  it("leaves the placeholder visible when a link campaign has no destination", async () => {
+  it("holds a follow-up whose link campaign has no destination rather than sending the placeholder", async () => {
     /*
-     * Rule 29, and still the right answer for a campaign pointing at somebody
-     * else's page. Substituting an empty string would send "Worth a look:"
-     * with nothing after it, which a prospect reads as a broken product; a
-     * visible {{cta_link}} is caught on the review screen instead. We cannot
-     * invent the customer's signup page, so there is nothing better to send.
+     * Rule 29: substituting an empty string would send "Worth a look:" with
+     * nothing after it. Sending the visible {{cta_link}} was no better — it
+     * reached a prospect as a broken mail merge. So it is held as copy.
      */
     const { db, ctx, linkedin } = harness();
     db.rows("campaigns")[0]!.cta_kind = "link";
@@ -515,7 +514,22 @@ describe("campaign pipeline", () => {
 
     await runLinkedInAction(ctx, { kind: "follow_up", workspaceId: WORKSPACE, campaignProspectId: CP, stepNumber: 1 });
 
-    expect(linkedin.sentMessages[0]?.text).toContain("{{cta_link}}");
+    expect(linkedin.sentMessages).toHaveLength(0);
+    expect(db.find("campaign_prospects", { id: CP })?.status).toBe("accepted");
+    expect(String(db.rows("conversations")[0]?.needs_human_reason)).toContain("{{cta_link}}");
+  });
+
+  it("holds a follow-up carrying a field this prospect has no value for", async () => {
+    // A raw {{company}} reached a live prospect this way.
+    const { db, ctx, linkedin } = harness();
+    db.find("prospects", { id: PROSPECT })!.company = null;
+    db.rows("campaign_steps")[0]!.message = "Hi {{first_name}}, how does {{company}} handle calls after hours?";
+    db.find("campaign_prospects", { id: CP })!.status = "accepted";
+
+    await runLinkedInAction(ctx, { kind: "follow_up", workspaceId: WORKSPACE, campaignProspectId: CP, stepNumber: 1 });
+
+    expect(linkedin.sentMessages).toHaveLength(0);
+    expect(db.rows("conversations")[0]?.needs_human_kind).toBe("copy");
   });
 
   it("uses our own booking page when a meeting campaign has no destination", async () => {
@@ -1102,6 +1116,95 @@ describe("campaign pipeline", () => {
     // Not even the rep's own booking link: this campaign asked for a reply,
     // and a scheduling link turns it into a meeting request nobody wanted.
     expect(drafted.rules.bookingLink).toBeUndefined();
+  });
+
+  it("hands no link and no times to somebody who said they are not ready", async () => {
+    // "When I can convince the owner we can start looking" was answered with a
+    // feature list and a booking link. Not ready means no pitch and no link.
+    const { db, ctx, queues } = harness();
+    db.rows("profiles")[0]!.booking_url = "https://cal.com/sam/intro";
+    classifyMock.mockResolvedValue(classification({ intent: "not_now", sentiment: "neutral" }));
+
+    await handleInboundMessage(ctx, queues, inboundJob("We're old school, I need to convince the owner first"));
+
+    const drafted = draftMock.mock.calls[0]?.[1] as {
+      availableSlots: string[];
+      rules: { bookingLink?: string };
+      move: { pitch: boolean; link: boolean };
+    };
+    expect(drafted.rules.bookingLink).toBeUndefined();
+    expect(drafted.availableSlots).toEqual([]);
+    expect(drafted.move.pitch).toBe(false);
+  });
+
+  it("holds a reply that sends the link to somebody it was not allowed to go to", async () => {
+    const { db, ctx, queues } = harness();
+    db.find("campaigns", { id: CAMPAIGN })!.reply_mode = "autopilot";
+    db.rows("profiles")[0]!.booking_url = "https://cal.com/sam/intro";
+    classifyMock.mockResolvedValue(classification({ intent: "objection", sentiment: "neutral" }));
+    draftMock.mockResolvedValue({
+      message: "Fair. Here's my calendar anyway https://cal.com/sam/intro",
+      proposesMeeting: false,
+      proposedSlots: null,
+      unansweredQuestions: [],
+    });
+
+    await handleInboundMessage(ctx, queues, inboundJob("Seems expensive for us"));
+
+    expect(db.rows("reply_drafts")[0]?.status).toBe("pending");
+  });
+
+  it("does not send the link a second time to somebody who already has it", async () => {
+    const { db, ctx, queues } = harness();
+    db.rows("profiles")[0]!.booking_url = "https://cal.com/sam/intro";
+    db.seed("conversations", [
+      { id: "conv_1", workspace_id: WORKSPACE, prospect_id: PROSPECT, linkedin_account_id: ACCOUNT, campaign_id: CAMPAIGN, provider_chat_id: "chat_1" },
+    ]);
+    db.seed("messages", [
+      {
+        id: "out_1",
+        workspace_id: WORKSPACE,
+        conversation_id: "conv_1",
+        direction: "outbound",
+        body: "Here's my calendar https://cal.com/sam/intro",
+        created_at: new Date(NOW.getTime() - 60_000).toISOString(),
+      },
+    ]);
+
+    await handleInboundMessage(ctx, queues, inboundJob("Thanks, I'll check your calendar and get back to you"));
+
+    const drafted = draftMock.mock.calls[0]?.[1] as { rules: { bookingLink?: string }; availableSlots: string[] };
+    expect(drafted.rules.bookingLink).toBeUndefined();
+    expect(drafted.availableSlots).toEqual([]);
+  });
+
+  it("does not answer an out-of-office reply", async () => {
+    const { db, ctx, queues } = harness();
+    db.find("campaigns", { id: CAMPAIGN })!.reply_mode = "autopilot";
+    classifyMock.mockResolvedValue(classification({ intent: "out_of_office", sentiment: "neutral" }));
+
+    await handleInboundMessage(ctx, queues, inboundJob("I'm away until Monday with limited access to email"));
+
+    expect(draftMock).not.toHaveBeenCalled();
+    expect(db.rows("reply_drafts")).toHaveLength(0);
+  });
+
+  it("holds a reply that still reads like a template after its rewrite", async () => {
+    const { db, ctx, queues, enqueued } = harness();
+    db.find("campaigns", { id: CAMPAIGN })!.reply_mode = "autopilot";
+    draftMock.mockResolvedValue({
+      message: "Thanks, sounds good.",
+      proposesMeeting: false,
+      proposedSlots: null,
+      unansweredQuestions: [],
+      voiceProblems: ["It lists several features or benefits. Name one thing, or none."],
+    });
+
+    await handleInboundMessage(ctx, queues, inboundJob("Sounds interesting"));
+
+    expect(db.rows("reply_drafts")[0]?.status).toBe("pending");
+    expect(String(db.rows("conversations")[0]?.needs_human_reason)).toContain("did not read like a person");
+    expect(enqueued.some((job) => (job.data as { kind?: string }).kind === "reply")).toBe(false);
   });
 
   it("sends automatically on autopilot when nothing trips the gate", async () => {

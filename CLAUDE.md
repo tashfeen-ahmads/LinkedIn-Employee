@@ -522,7 +522,9 @@ tests that were verified by deliberately breaking the code.
     rewriting three messages and re-reviewing them — and a campaign with no
     destination leaves the placeholder **visible**, because "take a look here:"
     with nothing after it reaches a prospect looking like a broken product while
-    a visible `{{cta_link}}` is caught on the review screen.
+    a visible `{{cta_link}}` is caught on the review screen. Visible on the
+    screen, never in the send: a follow-up whose rendered text still carries
+    any `{{…}}` is held as copy (rule 66).
 
     **Clicks are not measured and never will be.** It would mean wrapping the
     customer's URL in a redirect we own, which breaks the affiliate and tracking
@@ -1645,6 +1647,38 @@ tests that were verified by deliberately breaking the code.
     works. The link preview (`BRAND.promise`, the home page title) says what
     the product does — finds buyers, writes each a note, answers, books —
     rather than one of its guardrails.
+
+66. **The agent writes like a person texting one person, and code checks it.**
+    What reached prospects read as a model: a raw `{{company}}`, a first
+    message introducing "our Revenue Capture System", and a reply to somebody
+    who had just said they were not ready that mirrored their words, dashed,
+    listed three features and sent the booking link. Every writer had its own
+    rules, none mentioned a dash, and several prompts' own examples used one.
+
+    `VOICE_RULES` (`packages/shared/src/voice.ts`) is the one definition and
+    every writer's prompt carries it: replies, campaigns, invite notes,
+    openers, offers, strategies. The prompt is never trusted (`callStructured`
+    casts), so `voiceProblems` checks every message in code — length per kind
+    (`MESSAGE_MAX_CHARS`, links excluded), dashes, semicolons, stock openers,
+    the banned phrases, feature runs, quoted titles, sign-offs, unfilled
+    placeholders, and a reply that reads their own words back. A message with
+    problems is rewritten **once**, handed the exact list. `tidyVoice` makes
+    only edits that cannot change meaning, and nothing is ever truncated.
+
+    What still fails is never sent quietly: a reply is held for a person, a
+    personal note is left out so the angle's reviewed note goes instead, a
+    campaign records `campaign.voice_problems` for its reviewer, and a
+    follow-up carrying any unfilled `{{…}}` at send time is held as copy with
+    its schedule untouched (`HELD_FOR_COPY`).
+
+    **What a reply may do is decided by what they said** (`replyMove`,
+    `packages/shared/src/reply-playbook.ts`), in code. Interested: the offer
+    and the next step. A question: an answer, and a link or times only if
+    they asked. Not ready, an objection, a referral: no pitch, no link, no
+    times. Somebody who already has the link is not sent it again. An
+    auto-reply or spam is not answered. The worker takes the link and the
+    times away when the move forbids them, so a draft that sends one anyway is
+    held by the link check (rule 30) rather than trusted.
 
 ## Conventions
 

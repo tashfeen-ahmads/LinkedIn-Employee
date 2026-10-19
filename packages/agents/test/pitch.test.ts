@@ -180,8 +180,10 @@ describe("the pitch reaches the writer", () => {
       pitch: PITCH,
       availableSlots: [],
     });
-    expect(sent[0]!.system).toMatch(/Make the pitch now/i);
-    expect(sent[0]!.system).not.toMatch(/Send the link now/i);
+    // The offer is allowed for somebody interested; a link is not, because
+    // this campaign has none to give.
+    expect(sent[0]!.user).toMatch(/using the approved offer/i);
+    expect(sent[0]!.user).toMatch(/Do not write a link or web address of any kind/i);
   });
 });
 

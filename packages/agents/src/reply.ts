@@ -9,6 +9,11 @@ import {
   type ReplyClassification,
   type ReplyDraft,
   type RulesOfEngagement,
+  type ReplyMove,
+  replyMove,
+  rewriteInstruction,
+  tidyVoice,
+  voiceProblems,
 } from "@le/shared";
 import { callStructured, type AgentContext } from "./client.js";
 import { renderKnowledge } from "./knowledge.js";
@@ -194,6 +199,12 @@ export interface DraftInput {
    * the same offer.
    */
   pitch?: string;
+  /**
+   * What this reply may do, decided from what they said (`replyMove`). The
+   * worker passes the same one it used to decide the link and the times, so
+   * the prompt and the checks cannot disagree; absent, it is derived here.
+   */
+  move?: ReplyMove;
   /** Human-readable slots genuinely free on the rep's calendar. */
   availableSlots: string[];
   /** True when this reply confirms a meeting we have already put in the diary. */
@@ -221,7 +232,10 @@ export interface DraftInput {
 }
 
 /** Agent 3, step two: write the reply. */
-export async function draftReply(ctx: AgentContext, input: DraftInput): Promise<ReplyDraft> {
+/** A draft, and anything about how it reads that is still wrong after its one rewrite. */
+export type CheckedReplyDraft = ReplyDraft & { voiceProblems: string[] };
+
+export async function draftReply(ctx: AgentContext, input: DraftInput): Promise<CheckedReplyDraft> {
   const intent = input.intent ?? input.classification.intent;
   const stableContext = [
     DRAFT_SYSTEM_HEADER,
@@ -245,7 +259,7 @@ export async function draftReply(ctx: AgentContext, input: DraftInput): Promise<
      * in the workspace, so it is paid for once rather than per reply.
      */
     input.pitch
-      ? `\nTHE PITCH — the offer this business makes, approved by the salesperson:\n"""\n${input.pitch}\n"""\n\nWhen the prospect wants to know what this is, or has shown interest, make THIS offer. Adapt the wording to them and to what they actually asked; never invent a different offer, a different problem, or a benefit that is not in it. It is what your colleagues are telling every other prospect this week.`
+      ? `\nTHE OFFER, approved by the salesperson:\n"""\n${input.pitch}\n"""\n\nOnly when the move for this message allows a pitch, make THIS offer, in your own words and in one sentence. Never invent a different offer, a different problem, or a benefit that is not in it.`
       : "",
     // The rep's own words about voice, after the shipped rules and inside the
     // cached half: identical for every conversation in this workspace.
@@ -255,62 +269,67 @@ export async function draftReply(ctx: AgentContext, input: DraftInput): Promise<
           .map((q) => `- ${q.ask}${q.required ? " (needed before handing over)" : ""}`)
           .join("\n")}`
       : "",
-    `\nGoal for this conversation: ${input.rules.goal}`,
     // What the campaign is asking for, which is not always a meeting. Without
     // it the agent pursues a call in a conversation whose whole point was to
     // get somebody to look at a page.
     input.goal === "link"
-      ? "\nThis campaign is NOT asking for a meeting. Do not propose a call or offer times. The ask is that they take a look at the link above."
+      ? "\nThis campaign is NOT asking for a meeting. Do not propose a call or offer times. When a link is allowed, the ask is that they take a look at it."
       : input.goal === "reply"
-        ? "\nThis campaign is NOT asking for a meeting and has no link. The ask is a genuine reply — a conversation, an opinion, an introduction."
+        ? "\nThis campaign is NOT asking for a meeting and has no link. The ask is a genuine reply: a conversation, an opinion, an introduction."
         : "",
-    /*
-     * Interest is answered with the thing itself, not with another question.
-     *
-     * A prospect who says "sure, what is it?" has spent the only attention
-     * this conversation gets. Asking them to qualify first trades a warm reply
-     * for a second wait, and the usual outcome of the second wait is silence.
-     * So the page goes out on that message — the page is the pitch, and the
-     * conversation continues underneath it.
-     *
-     * This changes what the agent leads with, never what it is allowed to
-     * send: the link still has to be one it was actually handed, and
-     * `draftLinkCheck` still holds a draft carrying anything else. Rule 30 is
-     * untouched.
-     */
-    intent === "interested"
-      ? input.goal === "reply"
-        ? "\nThis person has just said they are interested. Make the pitch now, in this message — do not ask a qualifying question first and do not promise to send details later. Then one question that invites a reply."
-        : "\nThis person has just said they are interested. Make the pitch and send the link now, in this message — do not ask a qualifying question first and do not promise to send it later. Two or three lines of pitch, then the link. If the goal is a meeting, offer the times as well."
-      : "",
   ].join("\n");
 
-  return callStructured(ctx, {
-    agent: "reply.draft",
-    model: ctx.client.models.writer,
-    promptVersion: DRAFT_PROMPT_VERSION,
-    schema: ReplyDraftSchema,
-    // Everything above is identical for every message in a campaign; caching it
-    // means each reply mostly pays for the new conversation only.
-    system: [{ text: stableContext, cached: true }],
-    userContent: [
-      `Conversation so far:\n${renderHistory(input.history)}`,
-      `\nThe prospect just wrote:\n"""\n${input.message}\n"""`,
-      `\nClassification: ${JSON.stringify(input.classification)}`,
-      input.bookedMeeting
-        ? "\nThe meeting they accepted is already in the calendar and an invitation has been sent. Confirm it briefly and warmly. Do not offer any further times."
-        : input.availableSlots.length
-          ? `\nFree slots on the calendar (offer at most three, exactly as written here):\n${input.availableSlots.join("\n")}`
-          : `\nNo calendar availability was retrieved. Do not invent times.${
-              input.rules.bookingLink
-                ? ` The ONLY link you may send is ${input.rules.bookingLink} — copy it exactly, and never write any other address.`
-                : " You have no link to send. Do not write a URL of any kind: one you invent will 404 in front of the prospect."
-            }`,
-      "\nWrite the reply.",
-    ].join("\n"),
-    effort: "medium",
-    maxTokens: 4000,
-  });
+  const move = input.move ?? replyMove(intent, input.message);
+  const nextStep = input.bookedMeeting
+    ? "The meeting they accepted is already in the calendar and an invitation has been sent. Confirm it in one short line. Do not offer any further times."
+    : [
+        move.slots && input.availableSlots.length
+          ? `Times you may offer (at most two, exactly as written):\n${input.availableSlots.join("\n")}`
+          : "Do not mention any times or dates.",
+        move.link && input.rules.bookingLink
+          ? `The ONLY link you may send is ${input.rules.bookingLink}. Copy it exactly, and only if the move calls for it.`
+          : "Do not write a link or web address of any kind.",
+      ].join("\n");
+
+  const ask = (extra?: string) =>
+    callStructured(ctx, {
+      agent: "reply.draft",
+      model: ctx.client.models.writer,
+      promptVersion: DRAFT_PROMPT_VERSION,
+      schema: ReplyDraftSchema,
+      // Everything above is identical for every message in a campaign; caching it
+      // means each reply mostly pays for the new conversation only.
+      system: [{ text: stableContext, cached: true }],
+      userContent: [
+        `Conversation so far:\n${renderHistory(input.history)}`,
+        `\nThe prospect just wrote:\n"""\n${input.message}\n"""`,
+        `\nThe move for this message: ${move.guidance}`,
+        `\n${nextStep}`,
+        extra ? `\n${extra}` : "",
+        "\nWrite the reply.",
+      ].join("\n"),
+      effort: "medium",
+      maxTokens: 4000,
+    });
+
+  /*
+   * Checked in code, rewritten once, never trimmed.
+   *
+   * The prompt says how a person writes; `voiceProblems` is what makes it true
+   * (rule 40: the model's output is cast, not parsed). A draft that still
+   * reads like a model after one rewrite carries its problems out, and the
+   * worker holds it for a person rather than sending it under a real name.
+   */
+  const first = await ask();
+  const tidied = { ...first, message: tidyVoice(first.message) };
+  const firstProblems = voiceProblems(tidied.message, "reply", { theirMessage: input.message });
+  if (!firstProblems.length) return { ...tidied, voiceProblems: [] };
+
+  const second = await ask(
+    `${rewriteInstruction(firstProblems)}\n\nYour last version was:\n"""\n${first.message}\n"""`,
+  );
+  const retidied = { ...second, message: tidyVoice(second.message) };
+  return { ...retidied, voiceProblems: voiceProblems(retidied.message, "reply", { theirMessage: input.message }) };
 }
 
 function renderHistory(history: ConversationTurn[]): string {

@@ -12,6 +12,7 @@ import {
   canTransition,
   draftLinkCheck,
   extractLinks,
+  replyMove,
   type CampaignProspectStatus,
   type ReplyClassification,
 } from "@le/shared";
@@ -343,8 +344,9 @@ export async function handleInboundMessage(
   // Anything already in the knowledge the agent was handed is fair to quote:
   // it is the customer's own documentation, and a reply that cannot cite the
   // page it is answering from is less useful and no safer.
+  // The campaign's own link joins these only when this reply may send it
+  // (`sendableLink`, below).
   const allowedLinks = [
-    offeredLink,
     ...knowledge.flatMap((doc) => extractLinks(doc.content ?? "")),
     // The pitch is copy a person approved, so an address inside it is an
     // address they approved. Left out, a pitch that names the company's own
@@ -352,6 +354,30 @@ export async function handleInboundMessage(
     // quoting the text it was told to use.
     ...extractLinks(pitch ?? ""),
   ].filter((link): link is string => Boolean(link));
+
+  /*
+   * What this reply may do, decided by what they said (`replyMove`). Somebody
+   * who has just said they are not ready gets no pitch, no link and no times,
+   * and somebody who already has the link is not sent it a second time. The
+   * link and the times are taken away here as well as forbidden in the prompt,
+   * so a draft that pitches anyway is held by the link check, not trusted.
+   */
+  const linkAlreadySent = Boolean(
+    offeredLink && history.some((turn) => turn.role === "rep" && turn.text.includes(offeredLink)),
+  );
+  const move = replyMove(classification.intent, job.text, { linkAlreadySent });
+  if (!move.reply && !bookedMeeting && !bookingHeld) {
+    // An auto-reply or spam: answering it is a message to nobody.
+    await recordEvent(db, {
+      workspaceId: job.workspaceId,
+      name: "reply.not_answered",
+      subjectType: "conversation",
+      subjectId: conversation.id,
+      payload: { intent: classification.intent },
+    });
+    return;
+  }
+  const sendableLink = move.link ? offeredLink : null;
 
   let draft;
   try {
@@ -375,7 +401,7 @@ export async function handleInboundMessage(
         ...rules,
         // The one link it may send, decided by what the campaign is asking
         // for. Absent means it may send none.
-        ...(offeredLink ? { bookingLink: offeredLink } : { bookingLink: undefined }),
+        ...(sendableLink ? { bookingLink: sendableLink } : { bookingLink: undefined }),
       },
       // How this campaign's agent has been told to write, and what it wants to
       // learn. Without these the agent screen changes nothing about a reply,
@@ -389,8 +415,9 @@ export async function handleInboundMessage(
       // A campaign not asking for a meeting offers none at all: proposing
       // times to somebody who was asked to look at a page is the agent
       // pursuing a goal nobody set.
-      availableSlots: goal === "meeting" ? slots.readable : [],
+      availableSlots: goal === "meeting" && move.slots ? slots.readable : [],
       bookedMeeting,
+      move,
     });
   } catch (error) {
     // The prospect replied and we could not write an answer. Retrying is the
@@ -410,7 +437,7 @@ export async function handleInboundMessage(
   // Held rather than stripped. Removing the URL leaves "you can book a time
   // here:" pointing at nothing, which reads worse than the invented link did,
   // and a hallucinated link is evidence the draft as a whole drifted.
-  const linkCheck = draftLinkCheck(draft.message, allowedLinks);
+  const linkCheck = draftLinkCheck(draft.message, sendableLink ? [sendableLink, ...allowedLinks] : allowedLinks);
 
   // The times this message offers, as the prospect will read them (rule 6).
   // Storing every slot handed to the agent meant "the second one" was matched
@@ -432,8 +459,16 @@ export async function handleInboundMessage(
     });
   }
 
+  // Still reading like a template after its one rewrite: a person finishes it
+  // rather than a prospect receiving it (`voiceProblems`).
+  const voiceCheck = draft.voiceProblems.length
+    ? { ok: false as const, reason: `The reply did not read like a person wrote it: ${draft.voiceProblems.join(" ")}` }
+    : { ok: true as const };
+
   const gate: { action: "send" | "hold_for_human"; reason?: string } = !linkCheck.ok
     ? { action: "hold_for_human", reason: linkCheck.reason }
+    : !voiceCheck.ok
+    ? { action: "hold_for_human", reason: voiceCheck.reason }
     : !slotCheck.ok
       ? { action: "hold_for_human", reason: slotCheck.reason }
       : bookingHeld

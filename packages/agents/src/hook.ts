@@ -1,4 +1,12 @@
-import { HOOK_MAX_CHARS, HookSetSchema, type BusinessProfile, type CustomerProfile, type HookSet } from "@le/shared";
+import {
+  HOOK_MAX_CHARS,
+  HookSetSchema,
+  tidyVoice,
+  voiceProblems,
+  type BusinessProfile,
+  type CustomerProfile,
+  type HookSet,
+} from "@le/shared";
 import { callStructured, type AgentContext } from "./client.js";
 import { HOOK_PROMPT_VERSION, HOOK_SYSTEM } from "./prompts/hook.js";
 
@@ -60,7 +68,14 @@ export async function writeHooks(ctx: AgentContext, input: HookInput): Promise<H
    * Dropped rather than truncated: an opener cut mid-clause is a question with
    * no question mark, arriving from a stranger.
    */
-  const variants = set.variants.filter((hook) => hook.body.trim().length <= HOOK_MAX_CHARS);
+  const fits = set.variants
+    .map((hook) => ({ ...hook, body: tidyVoice(hook.body) }))
+    .filter((hook) => hook.body.trim().length <= HOOK_MAX_CHARS);
+  // A line that reads like a template is left out when a clean one survives
+  // beside it (`voiceProblems`): every conversation using it inherits the
+  // dash, the stock phrase or the feature list.
+  const clean = fits.filter((hook) => voiceProblems(hook.body, "invite_note").length === 0);
+  const variants = clean.length ? clean : fits;
   if (variants.length === 0) {
     throw new Error(
       `hook: every opener came back over ${HOOK_MAX_CHARS} characters, so there is nothing safe to send`,

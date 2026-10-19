@@ -1,5 +1,7 @@
 import {
   PITCH_MAX_CHARS,
+  tidyVoice,
+  voiceProblems,
   PitchSetSchema,
   type BusinessProfile,
   type PitchSet,
@@ -90,7 +92,14 @@ export async function writePitch(ctx: AgentContext, input: PitchInput): Promise<
    * answered from confidently, and cutting one mid-clause reaches a prospect as
    * a broken message under a real rep's name.
    */
-  const variants = set.variants.filter((pitch) => pitch.body.trim().length <= PITCH_MAX_CHARS);
+  const fits = set.variants
+    .map((pitch) => ({ ...pitch, body: tidyVoice(pitch.body) }))
+    .filter((pitch) => pitch.body.trim().length <= PITCH_MAX_CHARS);
+  // A line that reads like a template is left out when a clean one survives
+  // beside it (`voiceProblems`): every conversation using it inherits the
+  // dash, the stock phrase or the feature list.
+  const clean = fits.filter((pitch) => voiceProblems(pitch.body, "reply").length === 0);
+  const variants = clean.length ? clean : fits;
   if (variants.length === 0) {
     throw new Error(
       `pitch: every line came back over ${PITCH_MAX_CHARS} characters, so there is nothing safe to offer`,
