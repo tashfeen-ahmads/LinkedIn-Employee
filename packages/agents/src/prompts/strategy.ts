@@ -1,6 +1,6 @@
 import { VOICE_RULES } from "@le/shared";
 
-export const STRATEGY_PROMPT_VERSION = "strategy/2026-10-19-human";
+export const STRATEGY_PROMPT_VERSION = "strategy/2026-10-20-guided";
 
 export const STRATEGY_SYSTEM = `You are the Strategy Agent for a B2B sales team. You read what a company publishes about itself and produce the targeting and messaging foundation the rest of the system runs on.
 
@@ -54,9 +54,21 @@ export function strategyUserPrompt(input: {
   existingProfiles?: { name: string; summary?: string }[];
   /** How many more to write. Only read when `existingProfiles` is present. */
   want?: number;
+  /**
+   * Who the owner says they actually sell to, in their own words, after
+   * reading the suggestions and finding them wrong. It outranks the website:
+   * the owner knows who pays them and a website only implies it.
+   */
+  guidance?: string;
 }): string {
   const parts: string[] = [];
   const expanding = (input.existingProfiles?.length ?? 0) > 0;
+  const guidance = input.guidance?.trim();
+  if (guidance) {
+    parts.push(
+      `The owner read the earlier suggestions, said they were wrong, and told us who they actually sell to:\n"""\n${guidance}\n"""\nEvery new Customer Profile must sit inside what they said. Use their own titles, industries, places and company sizes exactly where they gave them, split what they said into the distinct groups it contains, and never drift back towards the segments they rejected. The listed existing profiles are the rejected ones.\n`,
+    );
+  }
 
   if (expanding) {
     parts.push(

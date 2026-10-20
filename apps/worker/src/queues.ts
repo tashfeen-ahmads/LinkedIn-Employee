@@ -65,6 +65,13 @@ export interface StrategyJob {
    * a new one, which is how a second business is added.
    */
   businessProfileId?: string;
+  /**
+   * Who the owner says they actually sell to, after reading the suggestions
+   * and finding every one wrong. The strategies it replaces are set aside once
+   * the new ones are stored, never before: a failed run must not leave them
+   * with nothing to choose from.
+   */
+  guidance?: string;
   websiteUrl?: string;
   linkedinCompanyUrl?: string;
   description?: string;

@@ -118,6 +118,8 @@ const StrategyRequest = z
      * strategies into another tenant's business.
      */
     businessProfileId: z.string().uuid().optional(),
+    /** Who the owner says they sell to, after rejecting the suggestions. */
+    guidance: z.string().trim().min(3).max(600).optional(),
   })
   // The agent refuses to invent an ICP from nothing, so a request carrying
   // nothing would enqueue a job that fails three times and dies unseen. Reject

@@ -79,6 +79,7 @@ async function strategy(ctx: WorkerContext, job: StrategyJob): Promise<string> {
     existingCustomers: job.existingCustomers,
     existingProfiles: existing?.profiles.map((p) => ({ name: p.name })),
     want: 4,
+    guidance: job.guidance,
   });
 
   let businessProfileId: string;
@@ -151,6 +152,31 @@ async function strategy(ctx: WorkerContext, job: StrategyJob): Promise<string> {
           .eq("workspace_id", job.workspaceId);
       }
       throw new Error(`could not store the strategies: ${insertError.message}`);
+    }
+
+    // The owner said the earlier suggestions were wrong, so they are set
+    // aside now that something replaces them. Only unapproved ones with no
+    // campaign: an approved strategy is somebody's decision, and one with a
+    // campaign is the record of who was contacted (rule 26).
+    if (job.guidance && existing) {
+      const rejected = existing.profiles.map((p) => p.id);
+      if (rejected.length) {
+        const { data: used } = await ctx.db
+          .from("campaigns")
+          .select("customer_profile_id")
+          .eq("workspace_id", job.workspaceId)
+          .in("customer_profile_id", rejected);
+        const keep = new Set((used ?? []).map((c) => c.customer_profile_id));
+        const aside = rejected.filter((id) => !keep.has(id));
+        if (aside.length) {
+          await ctx.db
+            .from("customer_profiles")
+            .update({ do_not_pursue: true })
+            .eq("workspace_id", job.workspaceId)
+            .is("approved_at", null)
+            .in("id", aside);
+        }
+      }
     }
   }
 
@@ -237,7 +263,7 @@ async function readExistingStrategies(
 ): Promise<{
   id: string;
   spec: unknown;
-  profiles: { name: string }[];
+  profiles: { id: string; name: string }[];
   highestPriority: number;
 } | null> {
   const business = await loadBusinessProfile(ctx.db, workspaceId, businessProfileId);
@@ -245,7 +271,7 @@ async function readExistingStrategies(
 
   const { data: profiles } = await ctx.db
     .from("customer_profiles")
-    .select("name, priority")
+    .select("id, name, priority")
     .eq("workspace_id", workspaceId)
     // This business's own. Unscoped, a workspace's second business inherits the
     // first's duplicate list and its priority numbering.
@@ -257,7 +283,7 @@ async function readExistingStrategies(
     // strategies. Without it an expanding run has only a list of names to work
     // from and writes segments for a company it can no longer describe.
     spec: business.spec,
-    profiles: (profiles ?? []).map((p) => ({ name: p.name })),
+    profiles: (profiles ?? []).map((p) => ({ id: p.id as string, name: p.name })),
     highestPriority: Math.max(0, ...(profiles ?? []).map((p) => p.priority ?? 0)),
   };
 }

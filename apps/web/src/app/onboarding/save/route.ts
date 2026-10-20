@@ -39,6 +39,7 @@ const ACTION_STEP: Record<string, WizardStepKey> = {
   voice: "voice",
   cta: "cta",
   approve: "strategy",
+  rewrite: "strategy",
   search: "prospects",
   launch: "launch",
 };
@@ -277,6 +278,21 @@ export async function POST(request: NextRequest) {
       // Approving still counts when the search could not start; the next step
       // says so and offers to start it.
       return seeOther(started.ok ? "/onboarding" : "/onboarding?step=prospects&error=search-not-started");
+    }
+
+    case "rewrite": {
+      // None of Sage's suggestions fit, so the owner says who they actually
+      // sell to and Sage writes new ones from that. The rejected ones are set
+      // aside by the worker once the new ones are stored, never before.
+      const guidance = String(form.get("guidance") ?? "").trim();
+      if (guidance.length < 3) return again("rewrite-empty");
+      const queued = await callWorker("/jobs/strategy", {
+        workspaceId,
+        userId: user.id,
+        expand: true,
+        guidance: guidance.slice(0, 600),
+      });
+      return queued.ok ? seeOther("/onboarding?step=strategy") : again("rewrite-failed");
     }
 
     case "search": {

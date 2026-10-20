@@ -33,6 +33,8 @@ describe("the profile edits every onboarding answer", () => {
     // What a campaign asks for is per strategy after onboarding, so it is
     // changed on the strategy page rather than the profile.
     const perStrategy = new Set(["ctaKind", "ctaLabel", "ctaUrl"]);
+    // A request to Sage to write new strategies, not an answer that is stored.
+    plumbing.add("guidance");
     // Who answers replies is asked on the launch step as a choice between two
     // ways of working; the profile changes the same setting as "autonomy".
     const renamed: Record<string, string> = { handling: "autonomy" };

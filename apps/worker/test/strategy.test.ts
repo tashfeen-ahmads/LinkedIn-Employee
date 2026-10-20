@@ -265,6 +265,33 @@ describe("runStrategyJob, adding to a workspace", () => {
     expect(input.want).toBeGreaterThan(0);
   });
 
+  it("writes from what the owner said, and sets the rejected ones aside once the new ones land", async () => {
+    // "The choices presented me were very far off" was a real ticket, from an
+    // owner held at the approval step with no way to change them.
+    const { db, ctx, runStrategyJob } = await started();
+    const [approved, used, plain] = db.rows("customer_profiles");
+    approved!.approved_at = "2026-10-01T00:00:00Z";
+    db.seed("campaigns", [{ id: "camp", workspace_id: WORKSPACE, customer_profile_id: used!.id }]);
+    strategyMock.mockResolvedValue({ ...OUTPUT, customerProfiles: [profile("HVAC owners in Texas", 1)] });
+
+    await runStrategyJob(ctx, { workspaceId: WORKSPACE, userId: USER, expand: true, guidance: "HVAC owners in Texas" });
+
+    const input = strategyMock.mock.calls.at(-1)![1] as { guidance?: string };
+    expect(input.guidance).toBe("HVAC owners in Texas");
+    expect(db.find("customer_profiles", { id: plain!.id })?.do_not_pursue).toBe(true);
+    // An approved strategy and one with a campaign are somebody's decisions.
+    expect(db.find("customer_profiles", { id: approved!.id })?.do_not_pursue ?? false).toBe(false);
+    expect(db.find("customer_profiles", { id: used!.id })?.do_not_pursue ?? false).toBe(false);
+    expect(db.rows("customer_profiles").find((r) => r.name === "HVAC owners in Texas")?.do_not_pursue ?? false).toBe(false);
+  });
+
+  it("leaves the old strategies alone when the guided run stores nothing", async () => {
+    const { db, ctx, runStrategyJob } = await started();
+    strategyMock.mockResolvedValue({ ...OUTPUT, customerProfiles: [] });
+    await runStrategyJob(ctx, { workspaceId: WORKSPACE, userId: USER, expand: true, guidance: "HVAC owners" });
+    expect(db.rows("customer_profiles").some((r) => r.do_not_pursue)).toBe(false);
+  });
+
   it("drops a strategy that repeats one already here", async () => {
     // Two strategies covering the same people put one person on two lists, and
     // the never-twice rule then means the second finds nobody — a strategy

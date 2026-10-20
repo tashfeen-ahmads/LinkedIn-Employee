@@ -32,6 +32,7 @@ import {
   LaunchPanel,
   LinkedInForm,
   SearchButton,
+  RewriteStrategies,
   StrategyCards,
   VoiceForm,
   type LaunchReview,
@@ -68,6 +69,8 @@ const ERRORS: Record<string, string> = {
   "launch-missing": "That campaign could not be found. Reload the page.",
   "launch-failed": "The campaign could not be launched. Nothing was sent. Try again.",
   "save-failed": "That could not be saved just now. Try again.",
+  "rewrite-empty": "Tell Sage who you sell to in a few words, like \u201cowners of HVAC companies in Texas\u201d.",
+  "rewrite-failed": "Sage could not start just now. Try again in a minute.",
   unreadable: "Your setup could not be loaded just now, so nothing was saved. Try again in a minute.",
   "sage-not-started": "Sage could not be started just now. Try again in a minute.",
   "sage-admin-only": "Only an owner or admin can change what Sage reads. Press Try again to run it on what you gave at the start.",
@@ -436,10 +439,19 @@ async function stepBody(
         </>
       );
     }
+    const rewriting = await rewriteRunning(workspaceId);
     return (
       <>
+        {rewriting ? (
+          <>
+            <div className="notice" role="status">
+              <p>Sage is writing new strategies from what you said. They appear here in a minute or two.</p>
+            </div>
+            <AutoRefresh seconds={10} />
+          </>
+        ) : null}
         <StrategyCards cards={cards} />
-        {wizard.facts.hasApprovedStrategy ? <ContinueLink /> : null}
+        {wizard.facts.hasApprovedStrategy ? <ContinueLink /> : <RewriteStrategies />}
       </>
     );
   }
@@ -528,6 +540,20 @@ async function hasBusiness(workspaceId: string): Promise<boolean> {
     .select("id", { count: "exact", head: true })
     .eq("workspace_id", workspaceId);
   return (count ?? 0) > 0;
+}
+
+/** Whether a strategy run asked for after the last one landed is still going. */
+async function rewriteRunning(workspaceId: string): Promise<boolean> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("events")
+    .select("name")
+    .eq("workspace_id", workspaceId)
+    .in("name", ["strategy.queued", "strategy.profile.created", "strategy.failed"])
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data?.name === "strategy.queued";
 }
 
 /** Sage's strategies, best first, with the competitor check on each (rule 49). */

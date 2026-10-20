@@ -477,6 +477,35 @@ export function StrategyCards({ cards }: { cards: StrategyCard[] }) {
   );
 }
 
+/**
+ * The way out when none of the suggestions fit. Without it the only choice was
+ * to approve a segment the owner knew was wrong, or stop, and setup holds the
+ * rest of the app until one is approved.
+ */
+export function RewriteStrategies() {
+  return (
+    <form action="/onboarding/save" method="post" className="card stack-4">
+      <input type="hidden" name="action" value="rewrite" />
+      <label className="field">
+        <span>
+          <strong>None of these fit?</strong> Tell {NORA} who you actually sell to.
+        </span>
+        <textarea
+          name="guidance"
+          rows={3}
+          maxLength={600}
+          required
+          placeholder="Owners of HVAC and plumbing companies in Texas with 5 to 50 staff"
+        />
+        <span className="hint">Titles, industries, places and company size all help. New strategies replace these.</span>
+      </label>
+      <PostButton className="btn secondary" pendingLabel="Asking Sage…">
+        Write new strategies
+      </PostButton>
+    </form>
+  );
+}
+
 /* ------------------------------------------------------------------ 7 */
 
 export function SearchButton({ profileId, label = "Search LinkedIn" }: { profileId: string; label?: string }) {

@@ -1641,6 +1641,13 @@ tests that were verified by deliberately breaking the code.
     defaults they had not chosen. A running meeting campaign whose owner has
     neither saved hours nor their own scheduling link is a Needs you row.
 
+    The approval step always has a way out. "None of these fit?" takes who
+    the owner actually sells to, in their words, and runs Sage again with it
+    (`guidance` on `StrategyJob`); the rejected suggestions are set aside only
+    once the new ones are stored, and never an approved one or one with a
+    campaign. Without it an owner whose suggestions were all wrong could
+    approve a segment they knew was wrong or stop, and one did stop.
+
     Launching ends on `/app?tour=1`: a ten-stop tour of the real pages
     (`WALKTHROUGH`, `components/walkthrough.tsx`), driven by `?tour=N` so each
     stop is an ordinary page load, never modal, startable again from How it

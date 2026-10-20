@@ -12,6 +12,8 @@ export interface StrategyInput {
   existingProfiles?: { name: string; summary?: string }[];
   /** How many more to write. Only read alongside `existingProfiles`. */
   want?: number;
+  /** Who the owner says they actually sell to, after rejecting the suggestions. */
+  guidance?: string;
 }
 
 /**

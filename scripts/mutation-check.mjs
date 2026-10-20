@@ -5338,6 +5338,22 @@ const MUTATIONS = [
     to: "    if (false) {",
     pkg: "@le/agents",
   },
+  {
+    id: "setup/a-guided-rewrite-never-sets-aside-an-approved-strategy",
+    rule: "Rule 65: rewriting strategies from the owner's words sets aside only unapproved ones",
+    file: "apps/worker/src/jobs/strategy.ts",
+    from: '            .eq("workspace_id", job.workspaceId)\n            .is("approved_at", null)\n            .in("id", aside);',
+    to: '            .eq("workspace_id", job.workspaceId)\n            .in("id", aside);',
+    pkg: "@le/worker",
+  },
+  {
+    id: "setup/the-owner-s-words-reach-sage",
+    rule: "Rule 65: what the owner says they sell reaches the Strategy Agent",
+    file: "apps/worker/src/jobs/strategy.ts",
+    from: "    guidance: job.guidance,\n",
+    to: "",
+    pkg: "@le/worker",
+  },
 ];
 
 /**
