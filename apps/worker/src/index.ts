@@ -24,6 +24,7 @@ import { ensureWebhooks } from "./webhooks.js";
 import { cleanFailedJobs, runMaintenance } from "./jobs/maintenance.js";
 import { fillMissingNotes } from "./jobs/rewrite-notes.js";
 import { repairCopy, repairSeededLines } from "./jobs/repair-copy.js";
+import { fillFirstMessages } from "./jobs/first-message.js";
 import { seedMissingAgents } from "./jobs/seed-agent.js";
 import { runDailyDigest } from "./jobs/digest.js";
 import { runWeeklyReport } from "./jobs/weekly-report.js";
@@ -181,7 +182,10 @@ void repairSeededLines(ctx)
   .catch((err) => console.error("could not rewrite seeded lines at boot", err))
   .then(() => repairCopy(ctx))
   .then((tally) => console.log("repaired stored copy at boot", tally))
-  .catch((err) => console.error("could not repair stored copy at boot", err));
+  .catch((err) => console.error("could not repair stored copy at boot", err))
+  .then(() => fillFirstMessages(ctx))
+  .then((written) => console.log("wrote first messages at boot", { written }))
+  .catch((err) => console.error("could not write first messages at boot", err));
 // Tickets nobody has looked at, looked at now rather than within the hour.
 void sweepSupportTickets(ctx)
   .then((tally) => console.log("support sweep at boot", tally))

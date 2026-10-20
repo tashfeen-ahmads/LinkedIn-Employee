@@ -79,7 +79,7 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
   const { data: cp } = await db
     .from("campaign_prospects")
     .select(
-      "id, workspace_id, campaign_id, prospect_id, status, last_step_sent, invitation_id, invite_note, variant_id, warmed_at, next_action_at, invite_refusals",
+      "id, workspace_id, campaign_id, prospect_id, status, last_step_sent, invitation_id, invite_note, variant_id, warmed_at, next_action_at, invite_refusals, first_message",
     )
     .eq("id", job.campaignProspectId)
     .single();
@@ -630,8 +630,13 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
   // to receive that angle, or the results table describes a group that partly
   // got something else. The fallback is not a formality — it is the whole
   // sequence for every prospect on a campaign built before angles existed.
-  const step = await stepFor(db, cp.campaign_id, cp.variant_id, job.stepNumber);
-  if (!step) return;
+  const stepRow = await stepFor(db, cp.campaign_id, cp.variant_id, job.stepNumber);
+  if (!stepRow) return;
+  // Step 1 is the message written for this person when they accepted, when
+  // there is one (rule 66). Every later step, and anybody without one, gets
+  // the campaign's own copy.
+  const personal = job.stepNumber === 1 ? (cp as { first_message?: string | null }).first_message?.trim() : null;
+  const step = personal ? { ...stepRow, message: personal } : stepRow;
 
   // The destination goes in here rather than being written into the copy, so
   // changing where a campaign points does not mean rewriting three messages and

@@ -1709,6 +1709,15 @@ tests that were verified by deliberately breaking the code.
     `writeHooks` at seeding, and `repairSeededLines` replaces rows still
     holding the old seeded text, unapproved and agent-written only.
 
+    **The first message is written for the person who accepted.** Step 1 was
+    one template for everybody, so every acceptance read the same sentence.
+    `writeFirstMessages` (`apps/worker/src/jobs/first-message.ts`) runs in the
+    acceptance poll, never on the send path, and stores
+    `campaign_prospects.first_message` (migration 0051) from their own
+    details, the note they accepted and the angle. It never names the product
+    or the company, carries no link and is voice-checked; anything it cannot
+    write cleanly is left null and step 1 goes as the campaign wrote it.
+
 ## Conventions
 
 - Agent output is validated against a zod schema before it touches the

@@ -519,6 +519,16 @@ describe("campaign pipeline", () => {
     expect(String(db.rows("conversations")[0]?.needs_human_reason)).toContain("{{cta_link}}");
   });
 
+  it("sends the message written for this person as step 1, and the campaign's copy after", async () => {
+    const { db, ctx, linkedin } = harness();
+    db.find("campaign_prospects", { id: CP })!.status = "accepted";
+    db.find("campaign_prospects", { id: CP })!.first_message = "Hi Jane, thanks for connecting. Are most of your leads coming in after hours?";
+
+    await runLinkedInAction(ctx, { kind: "follow_up", workspaceId: WORKSPACE, campaignProspectId: CP, stepNumber: 1 });
+
+    expect(linkedin.sentMessages[0]?.text).toBe("Hi Jane, thanks for connecting. Are most of your leads coming in after hours?");
+  });
+
   it("never sends a doubled full stop after the pitch", async () => {
     const { db, ctx, linkedin } = harness();
     db.rows("campaign_steps")[0]!.message = "{{pitch}}. Worth a look?";

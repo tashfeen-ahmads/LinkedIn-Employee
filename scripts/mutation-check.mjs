@@ -5314,6 +5314,30 @@ const MUTATIONS = [
     to: "",
     pkg: "@le/shared",
   },
+  {
+    id: "voice/step-one-is-written-for-the-person",
+    rule: "Rule 66: step 1 sends the message written for the person who accepted",
+    file: "apps/worker/src/jobs/linkedin-action.ts",
+    from: "  const step = personal ? { ...stepRow, message: personal } : stepRow;",
+    to: "  const step = stepRow;",
+    pkg: "@le/worker",
+  },
+  {
+    id: "voice/acceptance-writes-the-first-message",
+    rule: "Rule 66: an acceptance gets a first message written for that person",
+    file: "apps/worker/src/jobs/acceptance.ts",
+    from: "  await writeFirstMessages(ctx, account.workspace_id, acceptedIds).catch(",
+    to: "  await Promise.resolve(0).catch(",
+    pkg: "@le/worker",
+  },
+  {
+    id: "voice/first-message-never-names-the-product",
+    rule: "Rule 66: a first message that names the company is sent back, never stored",
+    file: "packages/agents/src/first-message.ts",
+    from: "    if (input.business.companyName && message.toLowerCase().includes(input.business.companyName.toLowerCase())) {",
+    to: "    if (false) {",
+    pkg: "@le/agents",
+  },
 ];
 
 /**

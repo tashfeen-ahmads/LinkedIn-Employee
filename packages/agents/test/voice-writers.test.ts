@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { draftReply } from "../src/reply.js";
 import { buildCampaign, personalizeInvites } from "../src/targeting.js";
 import { reviseForVoice } from "../src/revise.js";
+import { writeFirstMessage } from "../src/first-message.js";
 import type { AgentContext } from "../src/client.js";
 import type {
   BusinessProfile,
@@ -271,5 +272,29 @@ describe("reviseForVoice", () => {
     const out = await reviseForVoice(ctx, { text: "How do you handle calls after hours?", kind: "follow_up", template: true });
     expect(out).toBe("How do you handle calls after hours?");
     expect(users).toHaveLength(0);
+  });
+});
+
+describe("writeFirstMessage", () => {
+  const input = {
+    business: { companyName: "Glovecars", toneOfVoice: "plain" },
+    repName: "Igor",
+    angle: "after-hours leads",
+    inviteNote: "Hi Jane, I talk to a lot of RV dealers.",
+    prospect: { firstName: "Jane", company: "Lee RV", title: "GM" },
+  };
+  const msg = (message: string) => ({ message });
+
+  it("keeps a short, personal message", async () => {
+    const { ctx, users } = scriptedCtx([msg("Hi Jane, thanks for connecting. Are most leads at Lee RV coming in after hours?")]);
+    expect(await writeFirstMessage(ctx, input)).toMatch(/Lee RV/);
+    expect(users).toHaveLength(1);
+  });
+
+  it("sends back a message that names the company or pitches, and gives up rather than send it", async () => {
+    const pitch = msg("Hi Jane, Glovecars answers your leads 24/7. Want a demo?");
+    const { ctx, users } = scriptedCtx([pitch, pitch]);
+    expect(await writeFirstMessage(ctx, input)).toBeNull();
+    expect(users[1]).toMatch(/names the company/);
   });
 });

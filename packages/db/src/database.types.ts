@@ -430,6 +430,9 @@ export type CampaignProspectRow = {
    */
   invite_note: string | null;
   invite_note_prompt_version: string | null;
+  /** The first message after acceptance, written for this person (migration 0051). Null uses step 1. */
+  first_message: string | null;
+  first_message_prompt_version: string | null;
   /** Which of the prospect's own details the note leaned on. */
   invite_note_grounding: string[];
   /** The model said this prospect's details were too thin to be specific. */

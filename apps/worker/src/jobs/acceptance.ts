@@ -6,6 +6,7 @@ import {
 } from "@le/shared";
 import type { WorkerContext } from "../context.js";
 import { recordEvent } from "../context.js";
+import { writeFirstMessages } from "./first-message.js";
 
 /**
  * Notices that an invitation was accepted.
@@ -80,6 +81,7 @@ async function detectForAccount(
   if (connected.size === 0) return 0;
 
   let count = 0;
+  const acceptedIds: string[] = [];
   for (const row of outstanding) {
     const providerId = providerIdByProspect.get(row.prospect_id);
     if (!providerId || !connected.has(providerId)) continue;
@@ -110,8 +112,14 @@ async function detectForAccount(
       subjectType: "campaign_prospect",
       subjectId: row.id,
     });
+    acceptedIds.push(row.id);
     count++;
   }
+  // A message written for each person who accepted, before step 1 falls due.
+  // Never fatal: without one, step 1 is sent as the campaign wrote it.
+  await writeFirstMessages(ctx, account.workspace_id, acceptedIds).catch((err) =>
+    console.error("could not write first messages", err),
+  );
   return count;
 }
 

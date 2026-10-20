@@ -26,3 +26,4 @@ export { POST_PROMPT_VERSION } from "./prompts/post.js";
 export { SUPPORT_PROMPT_VERSION } from "./prompts/support.js";
 export * from "./agent-test.js";
 export * from "./revise.js";
+export * from "./first-message.js";
