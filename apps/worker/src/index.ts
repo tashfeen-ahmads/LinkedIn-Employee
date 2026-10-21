@@ -25,6 +25,7 @@ import { cleanFailedJobs, runMaintenance } from "./jobs/maintenance.js";
 import { fillMissingNotes } from "./jobs/rewrite-notes.js";
 import { repairCopy, repairSeededLines } from "./jobs/repair-copy.js";
 import { fillFirstMessages } from "./jobs/first-message.js";
+import { releaseDuplicateAccounts } from "./jobs/duplicate-accounts.js";
 import { seedMissingAgents } from "./jobs/seed-agent.js";
 import { runDailyDigest } from "./jobs/digest.js";
 import { runWeeklyReport } from "./jobs/weekly-report.js";
@@ -177,6 +178,10 @@ void fillMissingNotes(ctx)
   .catch((err) => console.error("could not fill missing notes at boot", err));
 // Copy written before the voice check existed is rewritten now rather than
 // sent as stored for another day (rule 66).
+// A duplicate provider account is a bill every month; the first check is now.
+void releaseDuplicateAccounts(ctx)
+  .then((tally) => console.log("released duplicate provider accounts at boot", tally))
+  .catch((err) => console.error("could not release duplicate provider accounts at boot", err));
 void repairSeededLines(ctx)
   .then((tally) => console.log("rewrote seeded offers and openers at boot", tally))
   .catch((err) => console.error("could not rewrite seeded lines at boot", err))

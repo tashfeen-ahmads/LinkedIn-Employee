@@ -1516,6 +1516,15 @@ tests that were verified by deliberately breaking the code.
     is the ordinary Connect button. It is not a fault, so it never appears in
     Issues.
 
+    **A duplicate is released the same way, and sooner.** Finishing the
+    LinkedIn sign-in twice makes the provider create a second account that
+    nothing here holds and the provider bills monthly. `releaseDuplicateAccounts`
+    (`apps/worker/src/jobs/duplicate-accounts.ts`, at boot, nightly and after
+    every claim) deletes a spare only when no row holds it, it carries the
+    same person's label as a held account, that held account is healthy, and
+    nobody with that label is part-way through connecting. A spare labelled
+    with another person's user id is never anybody's twin.
+
 64. **The day's pace is held at the moment of sending, not only when a job is
     placed.** Rule 48 spread a day's invitations when the loop placed them, and
     the send path only enforced the two-minute floor. But a job does not always

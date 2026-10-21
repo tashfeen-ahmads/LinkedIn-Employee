@@ -25,6 +25,7 @@ import { writeWorkspaceHooks } from "./jobs/write-hooks.js";
 import { writeWorkspacePosts } from "./jobs/write-posts.js";
 import { publishApprovedPosts } from "./jobs/publish-posts.js";
 import { rewriteCampaignNotes } from "./jobs/rewrite-notes.js";
+import { releaseDuplicateAccounts } from "./jobs/duplicate-accounts.js";
 import { startPendingSearches } from "./jobs/pending-searches.js";
 import type IORedis from "ioredis";
 import type { WorkerContext } from "./context.js";
@@ -2155,7 +2156,11 @@ async function claimAccount(
     .eq("user_id", input.userId)
     .in("status", ["connecting", "reauth_required", "restricted"])
     .maybeSingle();
-  if (!pending) return { status: "refused", claimed: false, reason: "no connection was started here" };
+  if (!pending) {
+    // A second sign-in for a working account: the provider made a spare.
+    void releaseDuplicateAccounts(ctx).catch((err) => console.error("could not release duplicates after a refusal", err));
+    return { status: "refused", claimed: false, reason: "no connection was started here" };
+  }
 
   await ctx.db
     .from("linkedin_accounts")
@@ -2174,6 +2179,9 @@ async function claimAccount(
     claimed: true,
     status: match.status,
   });
+  // The account this row held before is now somebody's spare at the provider,
+  // billed and unused, and so is any second sign-in of the same person.
+  void releaseDuplicateAccounts(ctx).catch((err) => console.error("could not release duplicates after a claim", err));
   return { status: "ok", claimed: true, accountStatus: match.status };
 }
 

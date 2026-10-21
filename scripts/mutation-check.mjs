@@ -5354,6 +5354,30 @@ const MUTATIONS = [
     to: "",
     pkg: "@le/worker",
   },
+  {
+    id: "accounts/a-spare-is-released-only-beside-a-healthy-twin",
+    rule: "Rule 63: a duplicate is released only when the account in use is healthy",
+    file: "apps/worker/src/jobs/duplicate-accounts.ts",
+    from: '  const healthyHeld = accounts.filter((a) => heldBy.has(a.providerAccountId) && a.status === "ok");',
+    to: "  const healthyHeld = accounts.filter((a) => heldBy.has(a.providerAccountId));",
+    pkg: "@le/worker",
+  },
+  {
+    id: "accounts/never-somebody-else-s-account",
+    rule: "Rule 63: an account labelled with another person's id is never their twin",
+    file: "apps/worker/src/jobs/duplicate-accounts.ts",
+    from: "      if (UUID.test(spare.reference)) return spare.reference === owner?.user_id;",
+    to: "",
+    pkg: "@le/worker",
+  },
+  {
+    id: "accounts/never-mid-connect",
+    rule: "Rule 63: nobody part-way through connecting loses their new account",
+    file: "apps/worker/src/jobs/duplicate-accounts.ts",
+    from: "    if (!owner || connecting.has(owner.user_id as string)) continue;",
+    to: "    if (!owner) continue;",
+    pkg: "@le/worker",
+  },
 ];
 
 /**

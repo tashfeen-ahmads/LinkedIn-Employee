@@ -13,6 +13,7 @@ import { fillMissingNotes } from "./rewrite-notes.js";
 import { repairCopy, repairSeededLines } from "./repair-copy.js";
 import { fillFirstMessages } from "./first-message.js";
 import { releaseIdleAccounts } from "./idle-accounts.js";
+import { releaseDuplicateAccounts } from "./duplicate-accounts.js";
 import { enqueueOnce, jobId } from "../queues.js";
 import type { Queues } from "../queues.js";
 import { recordBeat } from "../heartbeat.js";
@@ -122,6 +123,9 @@ export async function runMaintenance(
   // with no running campaign and nothing done for a fortnight is billed for
   // nothing; it is released and the rep is told to reconnect (rule 63).
   await step("release-idle-accounts", async () => (await releaseIdleAccounts(ctx, now)).released);
+  // A second account for somebody who already has a working one is billed
+  // monthly and used by nothing. After recovery, so a re-pointed row counts.
+  await step("release-duplicate-accounts", async () => (await releaseDuplicateAccounts(ctx)).released);
   await step("lifecycle-emails", () => runLifecycleEmails(ctx, now));
   // Notes the writer missed when a campaign was built, before anybody launches it.
   await step("fill-missing-notes", () => fillMissingNotes(ctx));
