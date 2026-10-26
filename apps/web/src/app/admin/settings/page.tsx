@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { BOOT_BEAT } from "@le/shared";
 import { createClient } from "@/lib/supabase-server";
 import { requirePlatformAdmin, ago, when } from "@/lib/admin";
@@ -42,7 +43,7 @@ export default async function AdminSettingsPage({ searchParams }: { searchParams
 
   return (
     <>
-      <PageHeader eyebrow="Operator" title="Settings" lede="Switches that apply to every workspace on the platform." />
+      <PageHeader title="Settings" lede="Switches that apply to every workspace on the platform." />
       <PageNotice error={params.error} notice={params.notice} />
 
       {/* Rule 59: a settings row that cannot be read counts as paused on the
@@ -125,29 +126,13 @@ export default async function AdminSettingsPage({ searchParams }: { searchParams
       </Section>
 
       <Section
-        title="Operators"
-        description="People with access to this console. Granted with a database statement only, never through the product — so a leaked session can never make another admin."
+        title="Admins"
+        description={`${admins.length} ${admins.length === 1 ? "person has" : "people have"} access to this console. Owners add, change and remove admins on the Admins page.`}
       >
-        <div className="table-scroll card-rows">
-          <table>
-            <thead>
-              <tr>
-                <th>Person</th>
-                <th>Last signed in</th>
-              </tr>
-            </thead>
-            <tbody>
-              {admins.map((a) => (
-                <tr key={a.user_id}>
-                  <td data-label="Person">
-                    <span className="small">{a.full_name ?? "—"}</span>
-                    <p className="tiny subtle">{a.email}</p>
-                  </td>
-                  <td data-label="Last signed in" className="small subtle">{ago(a.last_sign_in_at)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div>
+          <Link className="btn small secondary" href="/admin/team">
+            Manage admins
+          </Link>
         </div>
       </Section>
 

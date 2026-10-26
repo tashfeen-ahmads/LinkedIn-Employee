@@ -874,6 +874,17 @@ export type PlatformAdminRow = {
   user_id: string;
   note: string | null;
   created_at: string;
+  /** What this person may do in the console (migration 0054). */
+  role: "owner" | "admin" | "support" | "viewer";
+  added_by: string | null;
+};
+
+/** An admin invited before they had an account (migration 0054). */
+export type PlatformAdminInviteRow = {
+  email: string;
+  role: "owner" | "admin" | "support" | "viewer";
+  invited_by: string | null;
+  created_at: string;
 };
 
 /**
@@ -973,6 +984,7 @@ export type Database = {
       support_ticket_drafts: Table<SupportTicketDraftRow>;
       worker_heartbeats: Table<WorkerHeartbeatRow>;
       platform_admins: Table<PlatformAdminRow>;
+      platform_admin_invites: Table<PlatformAdminInviteRow>;
       email_sends: Table<EmailSendRow>;
       announcements: Table<AnnouncementRow>;
       platform_settings: Table<PlatformSettingsRow>;
@@ -1000,6 +1012,10 @@ export type Database = {
       is_platform_admin: {
         Args: Record<string, never>;
         Returns: boolean;
+      };
+      platform_admin_role: {
+        Args: Record<string, never>;
+        Returns: string | null;
       };
       /**
        * Per-workspace counts for the tables an operator may not read row by

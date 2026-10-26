@@ -209,7 +209,7 @@ describe("Operator console: unread is never reported as clear", () => {
     expect(overview).toMatch(/if \(!issuesRead\) \{\s*waiting\.push/);
   });
   it("reports a missing boot stamp as unknown, not up (rule 23)", () => {
-    expect(overview).toContain('!bootKnown ? "unknown"');
+    expect(overview).toMatch(/!bootKnown \? "unknown"/i);
   });
   it("sums today's sends from rolled-over counters", () => {
     for (const path of ["admin/page.tsx", "admin/accounts/page.tsx", "admin/workspaces/[id]/page.tsx"]) {

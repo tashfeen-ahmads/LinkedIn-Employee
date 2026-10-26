@@ -3,7 +3,7 @@ import { requirePlatformAdmin } from "@/lib/admin";
 import { createClient } from "@/lib/supabase-server";
 import { AppNav } from "@/components/app-nav";
 import { NavIcon } from "@/components/icons";
-import { POWERED_BY } from "@le/shared";
+import { ADMIN_ROLE_LABELS, POWERED_BY } from "@le/shared";
 
 /**
  * The operator console.
@@ -32,10 +32,13 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       <a href="#main" className="skip-link">
         Skip to content
       </a>
-      <aside className="app-aside">
+      <aside className="app-aside admin-rail">
         <div className="app-brand">
-          <Link href="/admin">Operator</Link>
-          <p className="tiny subtle">All workspaces</p>
+          <Link href="/admin" className="console-brand">
+            <span className="console-mark" aria-hidden="true">N</span>
+            <span>Nora Console</span>
+          </Link>
+          <p className="tiny subtle">{ADMIN_ROLE_LABELS[admin.role].name} · all workspaces</p>
         </div>
 
         <AppNav
@@ -65,6 +68,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
                 { href: "/admin/jobs", label: "Jobs", icon: "agents" },
                 { href: "/admin/spend", label: "AI spend", icon: "billing" },
                 { href: "/admin/announcements", label: "Announcements", icon: "posts" },
+                { href: "/admin/team", label: "Admins", icon: "lock" },
                 {
                   href: "/admin/settings",
                   label: "Settings",

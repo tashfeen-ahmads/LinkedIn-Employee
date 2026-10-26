@@ -1,4 +1,6 @@
+import { adminCan, permissionForControl } from "@le/shared";
 import { adminControl } from "@/app/admin/actions";
+import { currentAdminRole } from "@/lib/admin";
 import { SubmitButton } from "./submit-button";
 import { ConfirmButton } from "./confirm-button";
 
@@ -14,7 +16,7 @@ import { ConfirmButton } from "./confirm-button";
  * account's outreach. Its text is what the armed button says, so it should name
  * the consequence.
  */
-export function ControlButton({
+export async function ControlButton({
   op,
   back,
   label,
@@ -35,6 +37,15 @@ export function ControlButton({
   confirm?: string;
 }) {
   const className = `btn small${tone === "primary" ? "" : ` ${tone}`}`;
+  // Offered only to a role that may press it. The worker refuses it anyway;
+  // this keeps the screen from offering a button that can only say no.
+  if (!adminCan(await currentAdminRole(), permissionForControl(op))) {
+    return (
+      <button type="button" className={`${className} is-locked`} disabled title="Your role cannot do this. Ask an owner.">
+        {label}
+      </button>
+    );
+  }
   return (
     <form action={adminControl} className="control-form" title={confirm ? title : undefined}>
       <input type="hidden" name="op" value={op} />

@@ -9,7 +9,6 @@ import type { AccountRecord } from "@le/linkedin";
 import { ISSUES_TIMEOUT_MS, callWorker } from "@/lib/worker";
 import { PageHeader, Section } from "@/components/page";
 import { PageNotice, type NoticeParams } from "@/components/page-notice";
-import { Kpi } from "@/components/charts";
 import { ControlButton } from "@/components/admin-control";
 
 export const dynamic = "force-dynamic";
@@ -50,6 +49,8 @@ export default async function AdminOverviewPage({ searchParams }: { searchParams
     { data: beats },
     { data: spend },
     issues,
+    { count: repliesWeek },
+    { count: meetingsWeek },
   ] = await Promise.all([
     supabase.from("workspaces").select("id, created_at"),
     supabase.rpc("platform_users"),
@@ -63,6 +64,8 @@ export default async function AdminOverviewPage({ searchParams }: { searchParams
     supabase.from("worker_heartbeats").select("name, beat_at, detail").in("name", [PACING_LOOP, BOOT_BEAT]),
     supabase.rpc("platform_spend_breakdown", { p_days: 7 }),
     callWorker<{ issues: Issue[] }>("/admin/issues", { userId: admin.userId }, ISSUES_TIMEOUT_MS),
+    supabase.from("events").select("id", { count: "exact", head: true }).eq("name", "message.received").gte("created_at", weekAgo),
+    supabase.from("events").select("id", { count: "exact", head: true }).eq("name", "meeting.booked").gte("created_at", weekAgo),
   ]);
 
   const pacing = (beats ?? []).find((b) => b.name === PACING_LOOP);
@@ -138,7 +141,6 @@ export default async function AdminOverviewPage({ searchParams }: { searchParams
   return (
     <>
       <PageHeader
-        eyebrow="Operator"
         title="Overview"
         lede="Everything on the platform, what is waiting on you, and the switches that control it."
       />
@@ -183,111 +185,188 @@ export default async function AdminOverviewPage({ searchParams }: { searchParams
         </Section>
       )}
 
+      {/* Two rows of four, grouped by the question each answers, rather than
+          seven equal cards with one left over. Every number names what it
+          counts; the note under it is the breakdown, never a second claim. */}
       <Section title="Platform">
-        <div className="kpi-row">
-          <Kpi label="Workspaces" value={String(workspaces?.length ?? 0)} note={`${users?.length ?? 0} people · ${newWeek} new this week`} />
-          <Kpi label="Signed in this week" value={String(signedInWeek)} note="people, any workspace" />
-          <Kpi label="Running campaigns" value={String(running)} note={`${drafts} still in draft`} />
-          <Kpi
-            label="Sent today"
-            value={String(invitesToday + messagesToday)}
-            note={`${invitesToday} invitations · ${messagesToday} messages`}
-          />
-          <Kpi
-            label="LinkedIn accounts"
-            value={String(accounts?.length ?? 0)}
-            note={`${notSending} not active · ${held} held by LinkedIn`}
-            tone={notSending ? "warning" : "neutral"}
-          />
-          <Kpi label="Support" value={String(open.length)} note={`open · ${assistantWeek} answered by the assistant this week`} />
-          <Kpi
-            label="AI spend, 7 days"
-            value={formatSpend(spendWeek, callsWeek, unpricedWeek)}
-            note={
-              <Link href="/admin/spend">
-                {unpricedWeek ? `${unpricedWeek} unpriced calls, so a floor` : "by agent and model"}
-              </Link>
-            }
-          />
+        <div className="console-stat-groups">
+          <dl className="console-stats" aria-label="Customers">
+            <Stat label="Workspaces" value={workspaces?.length ?? 0} note={`${users?.length ?? 0} people · ${newWeek} new this week`} />
+            <Stat label="Signed in, 7 days" value={signedInWeek} note="people, any workspace" />
+            <Stat label="Running campaigns" value={running} note={`${drafts} still in draft`} />
+            <Stat label="Open tickets" value={open.length} note={`${assistantWeek} answered by the assistant this week`} tone={heldForYou ? "warning" : undefined} />
+          </dl>
+          <dl className="console-stats" aria-label="Sending">
+            <Stat label="Sent today" value={invitesToday + messagesToday} note={`${invitesToday} invitations · ${messagesToday} messages`} />
+            <Stat label="Replies, 7 days" value={repliesWeek ?? 0} note={`${meetingsWeek ?? 0} meetings booked`} />
+            <Stat
+              label="LinkedIn accounts"
+              value={accounts?.length ?? 0}
+              note={`${notSending} not active · ${held} held by LinkedIn`}
+              tone={notSending ? "warning" : undefined}
+            />
+            <Stat
+              label="AI spend, 7 days"
+              value={formatSpend(spendWeek, callsWeek, unpricedWeek)}
+              note={<Link href="/admin/spend">{unpricedWeek ? `${unpricedWeek} unpriced calls, so a floor` : "by agent and model"}</Link>}
+            />
+          </dl>
         </div>
       </Section>
 
       <Section title="Health">
-        <div className="table-scroll card-rows">
-          <table>
-            <tbody>
-              <tr>
-                <th scope="row">Sending loop</th>
-                <td data-label="State">
-                  <span className={`pill tiny ${loopFresh ? "positive" : "danger"}`}>{loopFresh ? "running" : "stopped"}</span>
-                </td>
-                <td data-label="Detail" className="small subtle">last run {ago(pacing?.beat_at)}</td>
-              </tr>
-              <tr>
-                <th scope="row">Worker</th>
-                <td data-label="State">
-                  {/* No boot stamp is unknown, never "up" (rule 23): it is also
-                      what a build that has not shipped the stamp looks like. */}
-                  <span
-                    className={`pill tiny ${!bootKnown ? "plain" : bootDetail.queueReachable === false ? "danger" : "positive"}`}
-                  >
-                    {!bootKnown ? "unknown" : bootDetail.queueReachable === false ? "queue unreachable" : "up"}
-                  </span>
-                </td>
-                <td data-label="Detail" className="small subtle">
-                  started {ago(boot?.beat_at)} on <span className="mono">{bootDetail.commit?.slice(0, 7) ?? "unknown build"}</span>
-                </td>
-              </tr>
-              <tr>
-                <th scope="row">Issues</th>
-                <td data-label="State">
-                  <span
-                    className={`pill tiny ${!issuesRead ? "danger" : critical ? "danger" : warnings ? "warning" : "positive"}`}
-                  >
-                    {issuesRead ? `${critical} critical · ${warnings} warning` : "could not check"}
-                  </span>
-                </td>
-                <td data-label="Detail" className="small subtle">{issues.ok ? "" : issues.error}</td>
-              </tr>
-              <tr>
-                <th scope="row">Support autopilot</th>
-                <td data-label="State">
-                  <span className={`pill tiny ${settings?.support_autopilot === false ? "plain" : "positive"}`}>
-                    {settings?.support_autopilot === false ? "off" : "on"}
-                  </span>
-                </td>
-                <td data-label="Detail" className="small subtle">
-                  {settings?.support_autopilot === false ? "every answer waits for you" : "confident answers are sent; the rest wait for you"}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <ul className="console-health">
+          <HealthTile
+            name="Sending loop"
+            tone={loopFresh ? "positive" : "danger"}
+            state={loopFresh ? "Running" : "Stopped"}
+            detail={`Last run ${ago(pacing?.beat_at)}`}
+          />
+          {/* No boot stamp is unknown, never "up" (rule 23): it is also what a
+              build that has not shipped the stamp looks like. */}
+          <HealthTile
+            name="Worker"
+            tone={!bootKnown ? "plain" : bootDetail.queueReachable === false ? "danger" : "positive"}
+            state={!bootKnown ? "Unknown" : bootDetail.queueReachable === false ? "Queue unreachable" : "Up"}
+            detail={`Started ${ago(boot?.beat_at)} · build ${bootDetail.commit?.slice(0, 7) ?? "unknown"}`}
+          />
+          <HealthTile
+            name="Issues"
+            tone={!issuesRead || critical ? "danger" : warnings ? "warning" : "positive"}
+            state={issuesRead ? (critical || warnings ? `${critical} critical · ${warnings} warning` : "None") : "Could not check"}
+            detail={issues.ok ? "Across every workspace" : issues.error}
+            href="/admin/issues"
+          />
+          <HealthTile
+            name="Support autopilot"
+            tone={settings?.support_autopilot === false ? "plain" : "positive"}
+            state={settings?.support_autopilot === false ? "Off" : "On"}
+            detail={settings?.support_autopilot === false ? "Every answer waits for you" : "Confident answers go out, the rest wait"}
+            href="/admin/settings"
+          />
+        </ul>
       </Section>
 
-      <Section title="Quick controls" description="Each one runs on the worker and says what it did. More on Jobs and Settings.">
-        <div className="cluster">
-          <ControlButton op="run-task" fields={{ task: "tick" }} back="/admin" label="Run the sending loop now" />
-          <ControlButton op="run-task" fields={{ task: "acceptance" }} back="/admin" label="Check acceptances now" />
-          <ControlButton op="run-task" fields={{ task: "inbound-poll" }} back="/admin" label="Check for replies now" />
-          <ControlButton op="support-sweep" back="/admin" label="Answer open tickets now" pendingLabel="Answering…" />
-          <ControlButton op="accounts-recover" back="/admin" label="Re-check LinkedIn accounts" pendingLabel="Checking…" />
-          {settings?.outreach_paused_at ? (
-            <ControlButton
-              op="outreach-resume"
-              back="/admin"
-              label="Resume all outreach"
-              tone="primary"
-              confirm="Resume every account's outreach"
-              pendingLabel="Resuming…"
-            />
-          ) : (
-            <Link className="btn small danger" href="/admin/settings">
-              Pause all outreach…
-            </Link>
-          )}
-        </div>
+      <Section title="Controls" description="Each runs on the worker straight away and says what it did.">
+        <ul className="console-controls">
+          <ControlRow name="Run the sending loop" detail="Places today's invitations and follow-ups now instead of at the next five-minute tick.">
+            <ControlButton op="run-task" fields={{ task: "tick" }} back="/admin" label="Run now" />
+          </ControlRow>
+          <ControlRow name="Check acceptances" detail="Asks LinkedIn who accepted since the last hourly check.">
+            <ControlButton op="run-task" fields={{ task: "acceptance" }} back="/admin" label="Check now" />
+          </ControlRow>
+          <ControlRow name="Check for replies" detail="Reads new messages on every account, as the fifteen-minute poll does.">
+            <ControlButton op="run-task" fields={{ task: "inbound-poll" }} back="/admin" label="Check now" />
+          </ControlRow>
+          <ControlRow name="Answer open tickets" detail="Hands every open ticket to the support assistant.">
+            <ControlButton op="support-sweep" back="/admin" label="Answer now" pendingLabel="Answering…" />
+          </ControlRow>
+          <ControlRow name="Re-check LinkedIn accounts" detail="Repairs accounts whose connection moved, before anyone notices.">
+            <ControlButton op="accounts-recover" back="/admin" label="Re-check" pendingLabel="Checking…" />
+          </ControlRow>
+          <ControlRow
+            name={settings?.outreach_paused_at ? "Outreach is paused" : "Pause all outreach"}
+            detail={
+              settings?.outreach_paused_at
+                ? `Paused ${ago(settings.outreach_paused_at)}. Nothing is sending on any account.`
+                : "Stops every invitation and follow-up on every account until resumed."
+            }
+            danger
+          >
+            {settings?.outreach_paused_at ? (
+              <ControlButton
+                op="outreach-resume"
+                back="/admin"
+                label="Resume all outreach"
+                tone="primary"
+                confirm="Resume every account's outreach"
+                pendingLabel="Resuming…"
+              />
+            ) : (
+              <Link className="btn small danger" href="/admin/settings">
+                Pause…
+              </Link>
+            )}
+          </ControlRow>
+        </ul>
       </Section>
     </>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  note,
+  tone,
+}: {
+  label: string;
+  value: number | string;
+  note: React.ReactNode;
+  tone?: "warning";
+}) {
+  return (
+    <div className="console-stat">
+      <dt>{label}</dt>
+      <dd className={`console-stat-value${tone ? ` is-${tone}` : ""}`}>
+        {typeof value === "number" ? value.toLocaleString() : value}
+      </dd>
+      <dd className="console-stat-note">{note}</dd>
+    </div>
+  );
+}
+
+function HealthTile({
+  name,
+  tone,
+  state,
+  detail,
+  href,
+}: {
+  name: string;
+  tone: "positive" | "warning" | "danger" | "plain";
+  state: string;
+  detail: string;
+  href?: string;
+}) {
+  const body = (
+    <>
+      <span className="console-health-name">{name}</span>
+      <span className={`pill tiny ${tone}`}>{state}</span>
+      <span className="console-health-detail">{detail}</span>
+    </>
+  );
+  return (
+    <li className={`console-health-tile is-${tone}`}>
+      {href ? (
+        <Link href={href} className="console-health-link">
+          {body}
+        </Link>
+      ) : (
+        body
+      )}
+    </li>
+  );
+}
+
+function ControlRow({
+  name,
+  detail,
+  danger,
+  children,
+}: {
+  name: string;
+  detail: string;
+  danger?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <li className={`console-control${danger ? " is-danger" : ""}`}>
+      <div className="console-control-text">
+        <p className="console-control-name">{name}</p>
+        <p className="console-control-detail">{detail}</p>
+      </div>
+      {children}
+    </li>
   );
 }

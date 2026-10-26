@@ -49,7 +49,6 @@ export default async function AdminAccountsPage({ searchParams }: { searchParams
   return (
     <>
       <PageHeader
-        eyebrow="Operator"
         title="LinkedIn accounts"
         lede={`${(accounts?.length ?? 0) - unfinished} connected · ${bad.length - unfinished} not active · ${unfinished} sign-in${unfinished === 1 ? "" : "s"} never finished.`}
         actions={

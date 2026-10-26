@@ -13,7 +13,7 @@ import {
   verifyStripeWebhook,
 } from "@le/billing";
 import type { ConnectedAccount } from "@le/linkedin";
-import { MESSAGE_WEBHOOK_BEAT } from "@le/shared";
+import { MESSAGE_WEBHOOK_BEAT, adminCan, permissionForControl } from "@le/shared";
 import { decryptJson, encryptJson } from "./crypto.js";
 import { recordBeat } from "./heartbeat.js";
 import type { MiddlewareHandler } from "hono";
@@ -44,6 +44,7 @@ import { trySend } from "./email.js";
 import { sendAccountEmails } from "./jobs/lifecycle.js";
 import { isPlatformAdmin, requestAnnouncementSend, saveAnnouncement, sendAnnouncementTest } from "./jobs/announcements.js";
 import { AdminControlSchema, queueStats, runAdminControl } from "./jobs/admin-control.js";
+import { AdminTeamSchema, adminRoleOf, runAdminTeam } from "./jobs/admins.js";
 import { answerSupportTicket } from "./jobs/support.js";
 import { emailForLogin, sendRecovery } from "./jobs/account-recovery.js";
 import { collectIssues, recentFailures, type QueueCounts } from "./jobs/issues.js";
@@ -501,6 +502,11 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
     }
     const parsed = AdminControlSchema.safeParse(body.control);
     if (!parsed.success) return c.json({ error: parsed.error.issues[0]?.message ?? "invalid request" }, 400);
+    // The role decides which controls this person may press; the console only
+    // hides what they cannot, so this is the check that counts.
+    if (!adminCan(await adminRoleOf(ctx.db, body.userId), permissionForControl(parsed.data.op))) {
+      return c.json({ error: "Your role cannot do that. Ask an owner." }, 403);
+    }
     try {
       const result = await runAdminControl(ctx, queues, body.userId, parsed.data);
       return result.ok ? c.json({ detail: result.detail }) : c.json({ error: result.error }, 409);
@@ -544,12 +550,31 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
     return c.json({ queued: true });
   });
 
+  /*
+   * Who runs the platform. Every op but `claim` needs an admin, and every
+   * change needs an owner, checked inside runAdminTeam. `claim` is the one a
+   * non-admin may ask: it turns an invitation addressed to their own email
+   * into a role, and reads that email from their profile, never the request.
+   */
+  app.post("/admin/admins", async (c) => {
+    const body = (await c.req.json().catch(() => null)) as { userId?: string; op?: unknown } | null;
+    if (!body?.userId) return c.json({ error: "invalid request" }, 400);
+    const parsed = AdminTeamSchema.safeParse(body.op);
+    if (!parsed.success) return c.json({ error: parsed.error.issues[0]?.message ?? "invalid request" }, 400);
+    const result = await runAdminTeam(ctx.db, body.userId, parsed.data);
+    if (!result.ok) return c.json({ error: result.error }, result.status);
+    return c.json(result);
+  });
+
   app.post("/admin/announcements", async (c) => {
     const parsed = AnnouncementRequest.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) {
       return c.json({ error: parsed.error.issues[0]?.message ?? "invalid request" }, 400);
     }
     const req = parsed.data;
+    if (!adminCan(await adminRoleOf(ctx.db, req.userId), "announcements")) {
+      return c.json({ error: "Your role cannot send announcements. Ask an owner." }, 403);
+    }
     if (req.op === "save") {
       if (Boolean(req.ctaLabel) !== Boolean(req.ctaUrl)) {
         return c.json({ error: "A button needs both a label and a link, or neither." }, 400);

@@ -140,7 +140,6 @@ export default async function AdminAnnouncementsPage({
   return (
     <>
       <PageHeader
-        eyebrow="Operator"
         title="Announcements"
         lede="Product updates, sent once to every user who has not unsubscribed. Write it, preview it, send yourself a test, then send it."
         actions={

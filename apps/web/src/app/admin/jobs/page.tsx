@@ -63,7 +63,6 @@ export default async function AdminJobsPage({ searchParams }: { searchParams: No
   return (
     <>
       <PageHeader
-        eyebrow="Operator"
         title="Jobs"
         lede="The worker's queues as they stand right now, the schedules behind them, and the buttons to run any of them early."
       />

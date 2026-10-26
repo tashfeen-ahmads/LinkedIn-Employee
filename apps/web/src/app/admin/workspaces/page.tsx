@@ -92,7 +92,6 @@ export default async function AdminWorkspacesPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Operator"
         title="Workspaces"
         lede={`${workspaces?.length ?? 0} total · ${everSent} have ever sent · ${formatSpend(totalSpend, totalCalls, totalUnpriced)} of model spend`}
       />

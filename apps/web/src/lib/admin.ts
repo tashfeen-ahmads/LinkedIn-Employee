@@ -1,11 +1,28 @@
+import { cache } from "react";
 import { redirect } from "next/navigation";
+import { isAdminRole, type AdminRole } from "@le/shared";
 import { createClient } from "./supabase-server";
 import { isAppConfigured } from "./config";
+import { callWorker } from "./worker";
 
 export interface AdminSession {
   userId: string;
   email: string;
+  /** What this person may press. The worker checks it again on every op. */
+  role: AdminRole;
 }
+
+/**
+ * The caller's console role, read once per request. Unreadable or unknown is
+ * `viewer`: the screen then offers nothing it cannot do, and the worker would
+ * refuse it anyway.
+ */
+export const currentAdminRole = cache(async (): Promise<AdminRole> => {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("platform_admin_role");
+  if (error) return "viewer";
+  return isAdminRole(data) ? data : "viewer";
+});
 
 /**
  * The gate on every operator page.
@@ -54,9 +71,16 @@ export async function requirePlatformAdmin(): Promise<AdminSession> {
     console.error("platform admin check failed", error);
     redirect("/app");
   }
-  if (!isAdmin) redirect("/app");
+  if (!isAdmin) {
+    // Somebody an owner invited before they had an account: the invitation is
+    // claimed here, the first time they open the console signed in with the
+    // address it was sent to. The worker reads that address from their own
+    // profile, so nobody can claim another person's invitation.
+    const claimed = await callWorker<{ role?: string }>("/admin/admins", { userId: user.id, op: { op: "claim" } }, 10_000);
+    if (!claimed.ok || !isAdminRole(claimed.data?.role)) redirect("/app");
+  }
 
-  return { userId: user.id, email: user.email ?? "" };
+  return { userId: user.id, email: user.email ?? "", role: await currentAdminRole() };
 }
 
 /** Per-workspace counts for the tables an operator may not read row by row. */
@@ -106,5 +130,11 @@ export function when(iso: string | null | undefined): string {
   if (!iso) return "—";
   const ms = Date.parse(iso);
   if (!Number.isFinite(ms)) return "—";
-  return `${new Date(ms).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: "UTC" })} UTC`;
+  // Short: a column of "Sep 16, 2026, 6:39 PM UTC" was the widest thing in
+  // every table. The year only when it is not this one.
+  const date = new Date(ms);
+  const sameYear = date.getUTCFullYear() === new Date().getUTCFullYear();
+  const day = date.toLocaleDateString("en-US", { month: "short", day: "numeric", ...(sameYear ? {} : { year: "numeric" }), timeZone: "UTC" });
+  const time = date.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
+  return `${day}, ${time} UTC`;
 }

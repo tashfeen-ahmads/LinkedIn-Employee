@@ -114,7 +114,6 @@ export default async function AdminSupportPage({ searchParams }: { searchParams:
   return (
     <>
       <PageHeader
-        eyebrow="Operator"
         title="Support"
         lede="The assistant reads every ticket first. What it answered is below; what it was not sure about waits here with its draft."
         actions={<ControlButton op="support-sweep" back="/admin/support" label="Ask the assistant now" pendingLabel="Answering…" />}

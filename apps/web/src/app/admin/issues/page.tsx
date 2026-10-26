@@ -60,7 +60,6 @@ export default async function IssuesPage({
   return (
     <>
       <PageHeader
-        eyebrow="Operator"
         title="Issues"
         lede="System faults only — the worker, the sending loop, reply delivery, the LinkedIn provider, failed background jobs, AI calls and email. Not what a customer has yet to do. Read live from the worker each time this page opens."
       />

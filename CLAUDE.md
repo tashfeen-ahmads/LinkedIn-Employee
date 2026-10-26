@@ -175,7 +175,15 @@ tests that were verified by deliberately breaking the code.
     Counts for those come from `platform_workspace_stats()`, whose
     `where is_platform_admin()` is the entire access check and is one line away
     from not being there. Nothing grants admin through the API: the table has no
-    insert policy, so it takes the service role or a SQL console.
+    insert policy, so it takes the service role. The worker is the one path
+    (`apps/worker/src/jobs/admins.ts`, migration 0054): an **owner** adds,
+    changes and removes admins from `/admin/team`, the last owner can be neither
+    demoted nor removed, and somebody without an account is invited by address
+    and claims it only when signed in with that address, read from their own
+    profile. Roles are `owner`, `admin`, `support` and `viewer`
+    (`packages/shared/src/admin-roles.ts`); the worker checks the role on every
+    control and announcement, and the console only hides what a role cannot
+    press.
 
     Test this with a workspace the admin is *not* a member of. An admin who is
     also a member reads it through the ordinary membership policy, and a test
@@ -1397,7 +1405,8 @@ tests that were verified by deliberately breaking the code.
     checking `platform_admins` itself. Two things are deliberately missing:
     **launching** a campaign (the owner's yes is the one gate with no way round
     it — the console resumes what its owner launched, never a draft) and
-    **granting admin** (rule 15).
+    **granting admin** through a control (rule 15: that is the Admins page,
+    owners only).
 
     `platform_settings.outreach_paused_at` is the kill switch. It is read on
     the send path itself (rule 1) as well as in the pacing loop, because jobs

@@ -58,7 +58,6 @@ export default async function AdminCampaignsPage({
   return (
     <>
       <PageHeader
-        eyebrow="Operator"
         title="Campaigns"
         lede={`${campaigns?.length ?? 0} across every workspace. Pause any running campaign; resume one its owner launched.`}
       />

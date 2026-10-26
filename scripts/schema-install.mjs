@@ -127,6 +127,7 @@ parts.push(
   `revoke execute on function ${schema}.answer_support_ticket(uuid, text, text) from public;`,
   `revoke execute on function ${schema}.reopen_support_ticket(uuid, text) from public, anon;`,
   `revoke execute on function ${schema}.platform_users() from public, anon;`,
+  `revoke execute on function ${schema}.platform_admin_role() from public, anon;`,
   `revoke execute on function ${schema}.platform_spend_breakdown(int) from public, anon;`,
   `revoke execute on function ${schema}.platform_campaign_stats() from public, anon;`,
   `alter default privileges in schema ${schema} revoke execute on functions from anon;`,

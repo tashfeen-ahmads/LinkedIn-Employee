@@ -94,6 +94,18 @@
   --ink-band-text:   #F4F5F9;
   --ink-band-muted:  #A7ADBF;
 
+  /* The operator console's rail: one dark world in both themes, so an operator
+     can tell at a glance they are in the console and not in a customer's app. */
+  --console-rail:             #0E1222;
+  --console-rail-raised:      #1A2036;
+  --console-rail-hover:       #1A2036;
+  --console-rail-line:        #252B42;
+  --console-rail-text:        #F4F5F9;
+  --console-rail-muted:       #C2C7D6;
+  --console-rail-subtle:      #959CB0;
+  --console-rail-accent:      #BDB9FF;
+  --console-rail-accent-soft: #2A2C5C;
+
   --accent:          #3730E8;
   --accent-hover:    #2A24C4;
   --accent-soft:     #ECEBFE;
@@ -3492,6 +3504,177 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
 /* The console's top bar holds a status, two icons and a link, which is more
    than a phone's width in one row: it wraps rather than running off the edge. */
 .app .admin-top-inner { flex-wrap: wrap; row-gap: var(--space-2); }
+
+/* ------------------------------------------------------- operator console */
+
+/*
+ * The rail is the member app's own sidebar with its tokens redefined, so the
+ * nav, its counts and its marks need no second set of rules (rule 38) and
+ * cannot drift from the app's.
+ */
+.app .admin-rail {
+  --chrome: var(--console-rail);
+  --surface: var(--console-rail-hover);
+  --surface-raised: var(--console-rail-raised);
+  --border: var(--console-rail-line);
+  --text: var(--console-rail-text);
+  --text-muted: var(--console-rail-muted);
+  --text-subtle: var(--console-rail-subtle);
+  --accent: var(--console-rail-accent);
+  --accent-soft: var(--console-rail-accent-soft);
+  --accent-border: var(--console-rail-line);
+  color: var(--text);
+  border-color: var(--console-rail-line);
+}
+.app .console-brand { display: inline-flex; align-items: center; gap: 0.6rem; color: var(--text); }
+.app .console-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--console-rail-accent);
+  color: var(--console-rail);
+  font-weight: 750;
+  font-size: 0.9rem;
+}
+
+/* Numbers in two rows of four, one panel each, divided rather than boxed. */
+.app .console-stat-groups { display: flex; flex-direction: column; gap: var(--space-3); }
+.app .console-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-xs);
+}
+.app .console-stat { padding: var(--space-4) var(--space-5); min-width: 0; }
+.app .console-stat + .console-stat { border-left: 1px solid var(--border); }
+.app .console-stat dt {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+}
+.app .console-stat-value {
+  margin: var(--space-1) 0 0;
+  font-size: 1.75rem;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+.app .console-stat-value.is-warning { color: var(--warning); }
+.app .console-stat-note { margin: var(--space-1) 0 0; font-size: 0.8125rem; color: var(--text-subtle); line-height: 1.4; }
+
+/* Health: four tiles, each a state and the one sentence that explains it. */
+.app .console-health {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+.app .console-health-tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: flex-start;
+  padding: var(--space-4);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--border-strong);
+  border-radius: var(--radius);
+  min-width: 0;
+}
+.app .console-health-tile.is-positive { border-top-color: var(--positive); }
+.app .console-health-tile.is-warning { border-top-color: var(--warning); }
+.app .console-health-tile.is-danger { border-top-color: var(--danger); }
+.app .console-health-link { display: contents; color: inherit; }
+.app .console-health-link:hover .console-health-name { color: var(--accent); }
+.app .console-health-name { font-weight: 600; font-size: 0.9375rem; }
+.app .console-health-detail { font-size: 0.8125rem; color: var(--text-subtle); overflow-wrap: anywhere; }
+
+/* Controls: what each does, beside the button, so nothing is pressed blind. */
+.app .console-controls {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.app .console-control {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-5);
+}
+.app .console-control + .console-control { border-top: 1px solid var(--border); }
+.app .console-control.is-danger { background: var(--danger-soft); border-radius: 0 0 var(--radius) var(--radius); }
+.app .console-control-text { min-width: 0; }
+.app .console-control-name { margin: 0; font-weight: 600; font-size: 0.9375rem; }
+.app .console-control-detail { margin: 0.1rem 0 0; font-size: 0.8125rem; color: var(--text-subtle); }
+
+/* A control this role cannot press: shown, so the screen is the same for
+   everybody, and plainly not pressable. */
+.app .btn.is-locked { opacity: 0.5; cursor: not-allowed; }
+
+/* Admins. */
+.app .console-add-admin { display: flex; flex-direction: column; gap: var(--space-4); max-width: 44rem; }
+.app .console-roles { border: 0; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2); }
+.app .console-roles-legend { font-size: 0.875rem; font-weight: 550; margin-bottom: var(--space-2); padding: 0; }
+.app .console-role-option {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: var(--space-2);
+  row-gap: 0.15rem;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.app .console-role-option:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.app .console-role-option input { grid-row: 1 / span 2; align-self: start; margin: 0.2rem 0 0; }
+.app .console-role-name { font-weight: 600; font-size: 0.9rem; }
+.app .console-role-does { font-size: 0.8125rem; color: var(--text-subtle); }
+.app .console-person { display: inline-flex; align-items: center; gap: var(--space-3); min-width: 0; }
+.app .console-person-text { display: flex; flex-direction: column; min-width: 0; }
+.app .console-avatar {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 650;
+  font-size: 0.875rem;
+}
+.app .console-inline-form { display: inline-flex; flex-direction: row; flex-wrap: nowrap; align-items: center; gap: var(--space-2); }
+.app .console-inline-form select { width: auto; min-width: 8.5rem; padding-block: 0.4rem; }
+.app .console-role-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.app .console-role-list li { display: flex; align-items: baseline; gap: var(--space-3); }
+.app .console-role-list .pill { min-width: 5.5rem; justify-content: center; }
+
+@media (max-width: 1100px) {
+  .app .console-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .app .console-stat:nth-child(3) { border-left: 0; }
+  .app .console-stat:nth-child(n + 3) { border-top: 1px solid var(--border); }
+  .app .console-health { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 560px) {
+  .app .console-stat { padding: var(--space-3) var(--space-4); }
+  .app .console-stat-value { font-size: 1.4rem; }
+  .app .console-health-tile { padding: var(--space-3); }
+  .app .console-control { flex-direction: column; align-items: flex-start; gap: var(--space-2); padding: var(--space-3) var(--space-4); }
+  .app .console-roles { grid-template-columns: minmax(0, 1fr); }
+}
 
 /* The two plans, side by side on the profile's billing section, stacked on a phone. */
 .app .plan-period { display: flex; flex-wrap: wrap; gap: var(--space-4); border: 0; padding: 0; margin: 0; align-items: center; }

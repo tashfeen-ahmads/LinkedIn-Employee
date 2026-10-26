@@ -488,7 +488,9 @@ describe("announcements", () => {
       headers: { "content-type": "application/json", authorization: `Bearer ${SECRET}` },
       body: body(USER),
     });
-    expect(customer.status).toBe(400);
+    // Refused by role before the op runs (rule 15): somebody who is not an
+    // admin has no role at all.
+    expect(customer.status).toBe(403);
 
     const admin = await app.request("/admin/announcements", {
       method: "POST",

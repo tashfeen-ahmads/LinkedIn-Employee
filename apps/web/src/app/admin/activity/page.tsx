@@ -37,7 +37,6 @@ export default async function AdminActivityPage() {
   return (
     <>
       <PageHeader
-        eyebrow="Operator"
         title="Activity"
         lede="The 100 most recent events across every workspace, from the same audit trail the app writes as it works."
       />

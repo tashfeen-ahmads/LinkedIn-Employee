@@ -67,7 +67,7 @@ export default async function AdminSpendPage() {
 
   return (
     <>
-      <PageHeader eyebrow="Operator" title="AI spend" lede="The last 30 days of agent calls, by day, agent and model. Customers never see this." />
+      <PageHeader title="AI spend" lede="The last 30 days of agent calls, by day, agent and model. Customers never see this." />
 
       <Section title="Last 30 days">
         <div className="kpi-row">

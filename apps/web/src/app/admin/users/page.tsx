@@ -51,7 +51,6 @@ export default async function AdminUsersPage({
   return (
     <>
       <PageHeader
-        eyebrow="Operator"
         title="Users"
         lede={`${users?.length ?? 0} people across ${workspaces?.length ?? 0} workspaces, newest first.`}
       />

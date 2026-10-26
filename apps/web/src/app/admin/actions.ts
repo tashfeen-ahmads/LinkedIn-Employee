@@ -31,3 +31,28 @@ export async function adminControl(formData: FormData): Promise<void> {
   const path = back.split("?")[0] ?? "/admin";
   redirect(result.ok ? noticeQuery(path, result.data?.detail ?? "Done.") : errorQuery(path, result.error));
 }
+
+/**
+ * Adding, changing and removing admins. The worker performs it after checking
+ * the caller is an owner, and keeps the platform from losing its last owner.
+ */
+export async function adminTeam(formData: FormData): Promise<void> {
+  const admin = await requirePlatformAdmin();
+  const back = "/admin/team";
+  const kind = String(formData.get("op") ?? "");
+  const text = (name: string) => String(formData.get(name) ?? "").trim();
+  const op =
+    kind === "add"
+      ? { op: "add", email: text("email").toLowerCase(), role: text("role") }
+      : kind === "set-role"
+        ? { op: "set-role", targetUserId: text("targetUserId"), role: text("role") }
+        : kind === "remove"
+          ? { op: "remove", targetUserId: text("targetUserId") }
+          : kind === "revoke-invite"
+            ? { op: "revoke-invite", email: text("email").toLowerCase() }
+            : null;
+  if (!op) redirect(errorQuery(back, "That request is missing something it needs."));
+  const result = await callWorker<{ detail?: string }>("/admin/admins", { userId: admin.userId, op }, 15_000);
+  revalidatePath(back);
+  redirect(result.ok ? noticeQuery(back, result.data?.detail ?? "Done.") : errorQuery(back, result.error));
+}
