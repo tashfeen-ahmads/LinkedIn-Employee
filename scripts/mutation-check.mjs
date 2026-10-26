@@ -5387,6 +5387,22 @@ const MUTATIONS = [
     pkg: "@le/web",
   },
   {
+    id: "refill/once-a-day",
+    rule: "Rule 20: a campaign refills at most once a day, because every page comes off a paid seat",
+    file: "apps/worker/src/jobs/refill.ts",
+    from: "    if (refilledToday.has(campaign.id)) continue;",
+    to: "",
+    pkg: "@le/worker",
+  },
+  {
+    id: "refill/only-when-short",
+    rule: "Rule 20: a campaign refills only once it is down to two days of people",
+    file: "apps/worker/src/jobs/refill.ts",
+    from: "    if ((waiting.get(campaign.id) ?? 0) >= REFILL_DAYS_OF_ALLOWANCE * allowance) continue;",
+    to: "",
+    pkg: "@le/worker",
+  },
+  {
     id: "search/sales-navigator-fallback",
     rule: "Rule 12: a refused Sales Navigator search still builds a list",
     file: "packages/linkedin/src/unipile.ts",

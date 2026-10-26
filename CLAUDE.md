@@ -275,6 +275,14 @@ tests that were verified by deliberately breaking the code.
     means press it again. Running out inside the industry filter is neither:
     dropping that filter is a different search over people the filtered pass
     could never have returned, so it is the next position, not the end.
+    **A running campaign refills itself.** `refillCampaigns`
+    (`apps/worker/src/jobs/refill.ts`, hourly) continues the same search under
+    Find more's own job id once a campaign has fewer than two days of
+    allowance queued, at most once a day per campaign, and never after
+    `search_exhausted`. Lists only grew when somebody pressed the button, and
+    by late October three of seven running campaigns had nobody left to invite
+    while every owner read the ramp as broken.
+
     Continuing reads the profile and the account off the campaign's own row and
     never off the request, or the endpoint is a way to graft one campaign's
     approved copy onto another profile's search. A campaign being added to

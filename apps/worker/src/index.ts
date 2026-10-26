@@ -17,6 +17,7 @@ import { runTargetingJob } from "./jobs/targeting.js";
 import { detectAcceptedInvitations } from "./jobs/acceptance.js";
 import { pollInbound } from "./jobs/inbound-poll.js";
 import { startPendingSearches } from "./jobs/pending-searches.js";
+import { refillCampaigns } from "./jobs/refill.js";
 import { publishApprovedPosts } from "./jobs/publish-posts.js";
 import { recoverThrottledProspects, unstickProspects } from "./jobs/unstick.js";
 import { recoverAccounts } from "./accounts.js";
@@ -265,6 +266,9 @@ const workers = [
             // A strategy approved before LinkedIn was connected, still waiting
             // for the search the connect should have started.
             .then(() => startPendingSearches(ctx, queues))
+            // A running campaign down to two days of people looks for more on
+            // its own, rather than waiting for somebody to press Find more.
+            .then(() => refillCampaigns(ctx, queues))
             // A throttle lifts on its own schedule, so the rows it wrote off
             // are checked on the same hourly beat rather than waiting for the
             // night.
