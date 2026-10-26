@@ -85,7 +85,7 @@ export default async function AdminJobsPage({ searchParams }: { searchParams: No
 
       <Section title="Queues">
         {queues ? (
-          <div className="table-scroll">
+          <div className="table-scroll card-rows">
             <table>
               <thead>
                 <tr>
@@ -103,13 +103,13 @@ export default async function AdminJobsPage({ searchParams }: { searchParams: No
               <tbody>
                 {Object.entries(queues).map(([name, q]) => (
                   <tr key={name}>
-                    <td className="small">{QUEUE_LABEL[name] ?? name}</td>
-                    <td className="num mono">{q.waiting}</td>
-                    <td className="num mono">{q.active}</td>
-                    <td className="num mono">{q.delayed}</td>
-                    <td className="num mono">{q.failed ? <span className="pill tiny warning">{q.failed}</span> : 0}</td>
-                    <td className="num mono">{q.completed}</td>
-                    <td>
+                    <td data-label="Queue" className="small">{QUEUE_LABEL[name] ?? name}</td>
+                    <td data-label="Waiting" className="num mono">{q.waiting}</td>
+                    <td data-label="Running" className="num mono">{q.active}</td>
+                    <td data-label="Scheduled" className="num mono">{q.delayed}</td>
+                    <td data-label="Failed" className="num mono">{q.failed ? <span className="pill tiny warning">{q.failed}</span> : 0}</td>
+                    <td data-label="Done (24h)" className="num mono">{q.completed}</td>
+                    <td data-label="Actions">
                       {q.failed ? (
                         <div className="cluster">
                           <ControlButton
@@ -144,7 +144,7 @@ export default async function AdminJobsPage({ searchParams }: { searchParams: No
 
       {queues && Object.values(queues).some((q) => q.recentFailures.length) ? (
         <Section title="Newest failures">
-          <div className="table-scroll">
+          <div className="table-scroll card-rows">
             <table>
               <thead>
                 <tr>
@@ -158,10 +158,10 @@ export default async function AdminJobsPage({ searchParams }: { searchParams: No
                 {Object.entries(queues).flatMap(([name, q]) =>
                   q.recentFailures.map((f) => (
                     <tr key={`${name}-${f.id}`}>
-                      <td className="small subtle">{f.at ? ago(new Date(f.at).toISOString()) : "—"}</td>
-                      <td className="small">{QUEUE_LABEL[name] ?? name}</td>
-                      <td className="small mono">{f.name}</td>
-                      <td className="small muted">{f.reason || "—"}</td>
+                      <td data-label="When" className="small subtle">{f.at ? ago(new Date(f.at).toISOString()) : "—"}</td>
+                      <td data-label="Queue" className="small">{QUEUE_LABEL[name] ?? name}</td>
+                      <td data-label="Job" className="small mono">{f.name}</td>
+                      <td data-label="Reason" className="small muted">{f.reason || "—"}</td>
                     </tr>
                   )),
                 )}
@@ -172,7 +172,7 @@ export default async function AdminJobsPage({ searchParams }: { searchParams: No
       ) : null}
 
       <Section title="Run now" description="Each runs once, immediately, exactly as its schedule would.">
-        <div className="table-scroll">
+        <div className="table-scroll card-rows">
           <table>
             <tbody>
               {TASKS.map((t) => (
@@ -181,7 +181,7 @@ export default async function AdminJobsPage({ searchParams }: { searchParams: No
                     <span className="small">{t.label}</span>
                     <p className="tiny subtle">{t.detail}</p>
                   </td>
-                  <td>
+                  <td data-label="Actions">
                     <ControlButton op="run-task" fields={{ task: t.task }} back={back} label="Run now" pendingLabel="Starting…" />
                   </td>
                 </tr>
@@ -192,7 +192,7 @@ export default async function AdminJobsPage({ searchParams }: { searchParams: No
       </Section>
 
       <Section title="Heartbeats" description="What each part of the worker last wrote down about itself.">
-        <div className="table-scroll">
+        <div className="table-scroll card-rows">
           <table>
             <thead>
               <tr>
@@ -204,11 +204,13 @@ export default async function AdminJobsPage({ searchParams }: { searchParams: No
             <tbody>
               {(beats ?? []).map((b) => (
                 <tr key={b.name}>
-                  <td className="small mono">{b.name}</td>
-                  <td className="small subtle" title={when(b.beat_at)}>
+                  <td data-label="Name" className="small mono">{b.name}</td>
+                  <td data-label="Last" className="small subtle" title={when(b.beat_at)}>
                     {ago(b.beat_at)}
                   </td>
-                  <td className="tiny muted mono">{JSON.stringify(b.detail ?? {}).slice(0, 220)}</td>
+                  <td data-label="Detail" className="small">
+                    <BeatDetail detail={b.detail} />
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -216,5 +218,41 @@ export default async function AdminJobsPage({ searchParams }: { searchParams: No
         </div>
       </Section>
     </>
+  );
+}
+
+/**
+ * A heartbeat's own record, field by field.
+ *
+ * It was printed as a single line of JSON cut at 220 characters, which was
+ * unreadable on a desktop and ran off the side of a phone, and the field that
+ * mattered was usually the one past the cut.
+ */
+function BeatDetail({ detail }: { detail: unknown }) {
+  const entries =
+    detail && typeof detail === "object" && !Array.isArray(detail) ? Object.entries(detail as Record<string, unknown>) : [];
+  if (!entries.length) return <span className="subtle">nothing recorded</span>;
+  const show = (value: unknown) => {
+    if (value === null || value === undefined) return "none";
+    if (typeof value === "object") {
+      const text = JSON.stringify(value);
+      return text.length > 160 ? `${text.slice(0, 160)}…` : text;
+    }
+    return String(value);
+  };
+  return (
+    <details className="beat-detail">
+      <summary>
+        {entries.length} field{entries.length === 1 ? "" : "s"}
+      </summary>
+      <dl>
+        {entries.map(([key, value]) => (
+          <div key={key}>
+            <dt>{key}</dt>
+            <dd className="mono">{show(value)}</dd>
+          </div>
+        ))}
+      </dl>
+    </details>
   );
 }

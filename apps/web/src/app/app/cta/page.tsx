@@ -290,7 +290,7 @@ export default async function CtaPage({ searchParams }: { searchParams: NoticePa
           title="Archived"
           description="Out of the picker, kept so a campaign that used one can still say what it pointed at."
         >
-          <div className="table-scroll">
+          <div className="table-scroll card-rows">
             <table>
               <thead>
                 <tr>
@@ -305,10 +305,10 @@ export default async function CtaPage({ searchParams }: { searchParams: NoticePa
               <tbody>
                 {archived.map((cta) => (
                   <tr key={cta.id}>
-                    <td>{cta.name}</td>
-                    <td className="small muted">{CTA_DEFINITIONS[cta.kind].label}</td>
-                    <td className="small mono cta-url-cell">{cta.url ?? "None"}</td>
-                    <td>
+                    <td data-label="Name">{cta.name}</td>
+                    <td data-label="Asks for" className="small muted">{CTA_DEFINITIONS[cta.kind].label}</td>
+                    <td data-label="Destination" className="small mono cta-url-cell">{cta.url ?? "None"}</td>
+                    <td data-label="Actions">
                       <form action={archiveCta}>
                         <input type="hidden" name="id" value={cta.id} />
                         <input type="hidden" name="restore" value="1" />

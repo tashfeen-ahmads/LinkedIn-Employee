@@ -4,7 +4,7 @@ import { requirePlatformAdmin, ago, when } from "@/lib/admin";
 import { isoAttr } from "@/lib/format";
 import { label } from "@/lib/labels";
 import { adminAccountPill } from "@/lib/admin-account";
-import { PageHeader, Section, Empty } from "@/components/page";
+import { PageHeader, Section, Empty, LoadFailed } from "@/components/page";
 import { PageNotice } from "@/components/page-notice";
 import { ControlButton } from "@/components/admin-control";
 
@@ -27,7 +27,7 @@ export default async function AdminUsersPage({
   await requirePlatformAdmin();
   const supabase = await createClient();
 
-  const [{ data: users }, { data: memberships }, { data: workspaces }, { data: accounts }] = await Promise.all([
+  const [{ data: users, error: usersError }, { data: memberships }, { data: workspaces }, { data: accounts }] = await Promise.all([
     supabase.rpc("platform_users"),
     supabase.from("memberships").select("workspace_id, user_id, role"),
     supabase.from("workspaces").select("id, name"),
@@ -77,10 +77,12 @@ export default async function AdminUsersPage({
       </Section>
 
       <Section title={needle ? `${shown.length} matching` : "Everyone"}>
-        {!shown.length ? (
+        {usersError ? (
+          <LoadFailed what="Users" />
+        ) : !shown.length ? (
           <Empty title="Nobody matches.">Try part of an email address.</Empty>
         ) : (
-          <div className="table-scroll">
+          <div className="table-scroll card-rows">
             <table>
               <thead>
                 <tr>
@@ -100,13 +102,13 @@ export default async function AdminUsersPage({
                   const homes = membershipsOf.get(u.user_id) ?? [];
                   return (
                     <tr key={u.user_id}>
-                      <td>
+                      <td data-label="Person">
                         <span className="small">{u.full_name ?? "—"}</span>
                         {u.is_admin ? <span className="pill tiny plain"> operator</span> : null}
                         <p className="tiny subtle">{u.email}</p>
                         {u.marketing_opt_out_at ? <p className="tiny subtle">unsubscribed from updates</p> : null}
                       </td>
-                      <td className="small">
+                      <td data-label="Workspace" className="small">
                         {homes.length ? (
                           homes.map((m) => (
                             <p key={m.workspace_id}>
@@ -118,7 +120,7 @@ export default async function AdminUsersPage({
                           <span className="subtle">none — never finished signing up</span>
                         )}
                       </td>
-                      <td>
+                      <td data-label="LinkedIn">
                         {!account ? (
                           <span className="pill tiny plain">not connected</span>
                         ) : (
@@ -128,11 +130,11 @@ export default async function AdminUsersPage({
                           })()
                         )}
                       </td>
-                      <td className="small subtle">
+                      <td data-label="Signed up" className="small subtle">
                         <time dateTime={isoAttr(u.created_at)}>{when(u.created_at)}</time>
                       </td>
-                      <td className="small subtle">{ago(u.last_sign_in_at)}</td>
-                      <td>
+                      <td data-label="Last signed in" className="small subtle">{ago(u.last_sign_in_at)}</td>
+                      <td data-label="Actions">
                         <ControlButton
                           op="user-password-reset"
                           fields={{ targetUserId: u.user_id }}

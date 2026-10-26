@@ -609,7 +609,7 @@ export default async function InboxPage({
           This is history, not a queue. Nothing here needs a decision from you.
         </Empty>
       ) : (
-        <div className="table-scroll">
+        <div className="table-scroll card-rows">
           <table>
             <thead>
               <tr>
@@ -625,7 +625,7 @@ export default async function InboxPage({
                 const when = whenOf(row);
                 return (
                   <tr key={row.id}>
-                    <td>
+                    <td data-label="Person">
                       {p?.linkedin_url ? (
                         <a href={profileHref(p.linkedin_url as string) ?? undefined} target="_blank" rel="noreferrer">
                           {nameOf(p as never)}
@@ -634,9 +634,9 @@ export default async function InboxPage({
                         nameOf(p as never)
                       )}
                     </td>
-                    <td className="muted">{(p?.company as string) || "—"}</td>
-                    <td>{STAGES.find((s) => s.key === stageOf(row.status))?.label ?? label(row.status)}</td>
-                    <td className="muted">
+                    <td data-label="Company" className="muted">{(p?.company as string) || "—"}</td>
+                    <td data-label="Stage">{STAGES.find((s) => s.key === stageOf(row.status))?.label ?? label(row.status)}</td>
+                    <td data-label="When" className="muted">
                       {when ? (
                         <time dateTime={isoAttr(when)} title={formatDateTime(when, timezone)}>
                           {formatDate(when, timezone)}

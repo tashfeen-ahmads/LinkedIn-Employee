@@ -4,7 +4,7 @@ import { countersForToday } from "@/lib/account-day";
 import { LINKEDIN_LIMITS } from "@le/shared";
 import { createClient } from "@/lib/supabase-server";
 import { requirePlatformAdmin, ago, when } from "@/lib/admin";
-import { PageHeader, Section, Empty } from "@/components/page";
+import { PageHeader, Section, Empty, LoadFailed } from "@/components/page";
 import { PageNotice, type NoticeParams } from "@/components/page-notice";
 import { ControlButton } from "@/components/admin-control";
 import { adminAccountPill } from "@/lib/admin-account";
@@ -24,7 +24,7 @@ export default async function AdminAccountsPage({ searchParams }: { searchParams
   await requirePlatformAdmin();
   const supabase = await createClient();
 
-  const [{ data: accounts }, { data: workspaces }, { data: users }, { data: zones }] = await Promise.all([
+  const [{ data: accounts, error }, { data: workspaces }, { data: users }, { data: zones }] = await Promise.all([
     supabase
       .from("linkedin_accounts")
       .select(
@@ -67,10 +67,12 @@ export default async function AdminAccountsPage({ searchParams }: { searchParams
         title="Accounts"
         description="Clearing a hold lets invitations go again at once. If LinkedIn is still refusing, the next refusal puts the hold straight back — that is the safety working, not a fault."
       >
-        {!accounts?.length ? (
+        {error ? (
+          <LoadFailed what="Accounts" />
+        ) : !accounts?.length ? (
           <Empty title="No accounts yet.">They appear here as soon as somebody connects LinkedIn.</Empty>
         ) : (
-          <div className="table-scroll">
+          <div className="table-scroll card-rows">
             <table>
               <thead>
                 <tr>
@@ -91,28 +93,28 @@ export default async function AdminAccountsPage({ searchParams }: { searchParams
                   const heldUntil = a.invites_paused_until && Date.parse(a.invites_paused_until) > now ? a.invites_paused_until : null;
                   return (
                     <tr key={a.id}>
-                      <td>
+                      <td data-label="Account">
                         <span className="small">{a.display_name ?? person.get(a.user_id) ?? "—"}</span>
                         <p className="tiny subtle">
                           <Link href={`/admin/workspaces/${a.workspace_id}`}>{workspaceName.get(a.workspace_id) ?? "—"}</Link>
                           {a.has_sales_navigator ? " · Sales Navigator" : ""}
                         </p>
                       </td>
-                      <td>
+                      <td data-label="Status">
                         {(() => {
                           const pill = adminAccountPill(a);
                           return <span className={`pill tiny ${pill.tone}`}>{pill.text}</span>;
                         })()}
                         {a.status_detail ? <p className="tiny muted">{a.status_detail}</p> : null}
                       </td>
-                      <td className="num mono">{today.invites_today}</td>
-                      <td className="num mono">{today.invites_this_week}</td>
-                      <td className="num mono">{today.messages_today}</td>
-                      <td className="small subtle">
+                      <td data-label="Invites today" className="num mono">{today.invites_today}</td>
+                      <td data-label="This week" className="num mono">{today.invites_this_week}</td>
+                      <td data-label="Messages today" className="num mono">{today.messages_today}</td>
+                      <td data-label="Cap" className="small subtle">
                         {cap}/day{a.first_action_at ? "" : ", not started"}
                       </td>
-                      <td className="small subtle">{ago(a.last_action_at)}</td>
-                      <td>
+                      <td data-label="Last action" className="small subtle">{ago(a.last_action_at)}</td>
+                      <td data-label="LinkedIn hold">
                         {heldUntil ? (
                           <div className="stack-1">
                             <span className="pill tiny warning">until {when(heldUntil)}</span>

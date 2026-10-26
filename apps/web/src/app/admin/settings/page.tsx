@@ -128,7 +128,7 @@ export default async function AdminSettingsPage({ searchParams }: { searchParams
         title="Operators"
         description="People with access to this console. Granted with a database statement only, never through the product — so a leaked session can never make another admin."
       >
-        <div className="table-scroll">
+        <div className="table-scroll card-rows">
           <table>
             <thead>
               <tr>
@@ -139,11 +139,11 @@ export default async function AdminSettingsPage({ searchParams }: { searchParams
             <tbody>
               {admins.map((a) => (
                 <tr key={a.user_id}>
-                  <td>
+                  <td data-label="Person">
                     <span className="small">{a.full_name ?? "—"}</span>
                     <p className="tiny subtle">{a.email}</p>
                   </td>
-                  <td className="small subtle">{ago(a.last_sign_in_at)}</td>
+                  <td data-label="Last signed in" className="small subtle">{ago(a.last_sign_in_at)}</td>
                 </tr>
               ))}
             </tbody>
@@ -152,7 +152,7 @@ export default async function AdminSettingsPage({ searchParams }: { searchParams
       </Section>
 
       <Section title="Deployment">
-        <div className="table-scroll">
+        <div className="table-scroll card-rows">
           <table>
             <tbody>
               <tr>

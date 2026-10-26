@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase-server";
-import { PageHeader } from "@/components/page";
+import { Empty, LoadFailed, PageHeader, Section } from "@/components/page";
 import { requirePlatformAdmin, statsByWorkspace, when, type WorkspaceStats } from "@/lib/admin";
 import { formatSpend } from "@/lib/spend-display";
 import { isoAttr } from "@/lib/format";
@@ -21,7 +21,7 @@ export default async function AdminWorkspacesPage() {
   await requirePlatformAdmin();
   const supabase = await createClient();
 
-  const [{ data: workspaces }, { data: members }, { data: accounts }, { data: campaigns }, { data: stats }, { data: spend }, { data: webhookBeat }] =
+  const [{ data: workspaces, error }, { data: members }, { data: accounts }, { data: campaigns }, { data: stats }, { data: spend }, { data: webhookBeat }] =
     await Promise.all([
       supabase.from("workspaces").select("id, name, slug, plan, seats, trial_ends_at, subscription_status, created_at").order("created_at", { ascending: false }),
       supabase.from("memberships").select("workspace_id, user_id"),
@@ -123,12 +123,13 @@ export default async function AdminWorkspacesPage() {
         </div>
       ) : null}
 
-      {!workspaces?.length ? (
-        <div className="notice">
-          <p>No workspaces yet. The first signup will appear here.</p>
-        </div>
+      <Section title="All workspaces" description="Newest first. Open one to see its members, accounts and campaigns.">
+      {error ? (
+        <LoadFailed what="Workspaces" />
+      ) : !workspaces?.length ? (
+        <Empty title="No workspaces yet.">The first signup will appear here.</Empty>
       ) : (
-        <div className="table-scroll">
+        <div className="table-scroll card-rows">
           <table>
             <thead>
               <tr>
@@ -149,23 +150,23 @@ export default async function AdminWorkspacesPage() {
                 const accs = accountsByWorkspace.get(w.id) ?? [];
                 return (
                   <tr key={w.id}>
-                    <td>
+                    <td data-label="Workspace">
                       <Link href={`/admin/workspaces/${w.id}`}>{w.name}</Link>
                       <p className="tiny subtle mono">{w.slug}</p>
                     </td>
-                    <td className="num">{memberCount.get(w.id) ?? 0}</td>
-                    <td><AccountCell accounts={accs} /></td>
-                    <td className="num">{campaignCount.get(w.id) ?? 0}</td>
-                    <td className="num">{s?.prospects ?? 0}</td>
-                    <td className="num">{s?.messages_sent ?? 0}</td>
-                    <td className="num">{s?.pending_drafts ?? 0}</td>
-                    <td className="num mono">
+                    <td data-label="People" className="num">{memberCount.get(w.id) ?? 0}</td>
+                    <td data-label="LinkedIn"><AccountCell accounts={accs} /></td>
+                    <td data-label="Running" className="num">{campaignCount.get(w.id) ?? 0}</td>
+                    <td data-label="Prospects" className="num">{s?.prospects ?? 0}</td>
+                    <td data-label="Sent" className="num">{s?.messages_sent ?? 0}</td>
+                    <td data-label="Waiting" className="num">{s?.pending_drafts ?? 0}</td>
+                    <td data-label="Spend" className="num mono">
                       {(() => {
                         const c = costs.get(w.id);
                         return c ? formatSpend(c.spend, c.calls, c.unpriced) : formatSpend(0, 0, 0);
                       })()}
                     </td>
-                    <td className="small subtle">
+                    <td data-label="Created" className="small subtle">
                       <time dateTime={isoAttr(w.created_at)}>{when(w.created_at)}</time>
                     </td>
                   </tr>
@@ -175,6 +176,7 @@ export default async function AdminWorkspacesPage() {
           </table>
         </div>
       )}
+      </Section>
 
       <p className="tiny subtle">
         Prospect names, conversations and message bodies are not readable here. Supporting a workspace

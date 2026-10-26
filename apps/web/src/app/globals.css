@@ -3470,6 +3470,103 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
 :where(.app) tbody tr:first-child td { padding-top: 0.8rem; }
 :where(.app) tbody tr + tr td { border-top-style: solid; }
 
+/* The shape of a page while its data is read (app/admin/loading.tsx). */
+.app .page-loading { display: flex; flex-direction: column; gap: var(--space-4); }
+.app .page-loading-bar,
+.app .page-loading-block {
+  display: block;
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  animation: page-loading-pulse 1.4s ease-in-out infinite;
+}
+.app .page-loading-bar.is-title { height: 1.75rem; width: min(18rem, 60%); }
+.app .page-loading-bar.is-line { height: 0.9rem; width: min(30rem, 85%); }
+.app .page-loading-block { height: 9rem; border-radius: var(--radius); }
+@keyframes page-loading-pulse { 50% { opacity: 0.55; } }
+
+/* The console's top bar holds a status, two icons and a link, which is more
+   than a phone's width in one row: it wraps rather than running off the edge. */
+.app .admin-top-inner { flex-wrap: wrap; row-gap: var(--space-2); }
+
+/* A heartbeat's record on the console, one field to a line. */
+.app .beat-detail summary { cursor: pointer; color: var(--text-muted); }
+.app .beat-detail dl { display: grid; gap: var(--space-1); margin: var(--space-2) 0 0; }
+.app .beat-detail dl > div { display: grid; grid-template-columns: minmax(6rem, max-content) minmax(0, 1fr); gap: var(--space-3); }
+.app .beat-detail dt { color: var(--text-subtle); font-size: 0.8125rem; text-align: left; }
+.app .beat-detail dd { margin: 0; font-size: 0.8125rem; overflow-wrap: anywhere; text-align: left; }
+
+/* ---- lists that become cards on a phone
+
+   A table of eight or ten columns scrolled sideways inside a 375px screen
+   showed about one column at a time, and the column with the buttons was
+   always the one off the edge. On a phone each row becomes a card: the first
+   cell as its title, then every other cell under its own column name
+   (`data-label`, written on each cell). The actions cell keeps no label and
+   sits at the foot of the card, where a thumb finds it. A new name rather than
+   a redefinition of `.table-scroll` (rule 53). */
+@media (max-width: 820px) {
+  .app .card-rows { padding: 0; }
+  .app .card-rows table { min-width: 0; }
+  .app .card-rows thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .app .card-rows tbody { display: block; }
+  .app .card-rows tr {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    padding: var(--space-3) var(--space-4);
+    border-top: 1px solid var(--border);
+  }
+  .app .card-rows tbody tr:first-child { border-top: 0; }
+  .app .card-rows td {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: var(--space-3);
+    padding: 0;
+    border: 0;
+    text-align: right;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .app .card-rows td[data-label]::before {
+    content: attr(data-label);
+    flex: none;
+    font-family: var(--font-sans);
+    color: var(--text-subtle);
+    font-size: 0.8125rem;
+    font-weight: 500;
+    text-align: left;
+  }
+  /* The row's name: a title, not a labelled value. */
+  .app .card-rows td:first-child {
+    display: block;
+    text-align: left;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    padding-bottom: var(--space-1);
+  }
+  .app .card-rows td:first-child::before { content: none; }
+  /* Buttons at the foot of the card, full size, no label. */
+  .app .card-rows td[data-label="Actions"],
+  .app .card-rows td[data-label=""] {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    text-align: left;
+    padding-top: var(--space-2);
+  }
+  .app .card-rows td[data-label="Actions"]::before { content: none; }
+  /* A cell holding a disclosure reads top to bottom, not label against value. */
+  .app .card-rows td:has(> details) { display: block; text-align: left; }
+  .app .card-rows td:has(> details)::before { display: block; margin-bottom: var(--space-1); }
+}
+
 /* A table that sits straight in a panel, edge to edge with its title, rather
    than in a second bordered box inside it. It still scrolls sideways on a
    phone, and it still needs a width to scroll to. */

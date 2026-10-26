@@ -235,7 +235,7 @@ export default async function AdminSupportPage({ searchParams }: { searchParams:
 
       {closed.length ? (
         <Section title="Answered">
-          <div className="table-scroll">
+          <div className="table-scroll card-rows">
             <table>
               <thead>
                 <tr>
@@ -249,18 +249,18 @@ export default async function AdminSupportPage({ searchParams }: { searchParams:
               <tbody>
                 {closed.map((t) => (
                   <tr key={t.id}>
-                    <td className="small subtle">
+                    <td data-label="Raised" className="small subtle">
                       <time dateTime={isoAttr(t.created_at)}>{when(t.created_at)}</time>
                     </td>
-                    <td>
+                    <td data-label="Workspace">
                       <Link href={`/admin/workspaces/${t.workspace_id}`}>{names.get(t.workspace_id) ?? "—"}</Link>
                     </td>
-                    <td className="small">
+                    <td data-label="Subject" className="small">
                       {t.subject}
                       {categoryLabel(t.category) ? <p className="tiny subtle">{categoryLabel(t.category)}</p> : null}
                     </td>
-                    <td className="small muted">{t.answer ?? "—"}</td>
-                    <td>
+                    <td data-label="Answer" className="small muted">{t.answer ?? "—"}</td>
+                    <td data-label="By">
                       <span className={`pill tiny ${t.answered_by === "agent" ? "plain" : "positive"}`}>
                         {t.answered_by === "agent" ? "assistant" : t.answered_by === "operator" ? "you" : t.status}
                       </span>

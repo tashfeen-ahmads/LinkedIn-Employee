@@ -183,7 +183,7 @@ export default async function ExclusionsPage({
             Most teams start with their customer list and the accounts their AEs already own.
           </Empty>
         ) : (
-          <div className="table-scroll">
+          <div className="table-scroll card-rows">
             <table>
               <thead>
                 <tr>
@@ -205,12 +205,12 @@ export default async function ExclusionsPage({
                     | null;
                   return (
                     <tr key={row.id}>
-                      <td>{row.raw_value}</td>
-                      <td>
+                      <td data-label="Excluded">{row.raw_value}</td>
+                      <td data-label="Type">
                         <span className="pill">{label(row.kind)}</span>
                       </td>
-                      <td className="small muted">{row.reason ?? "—"}</td>
-                      <td className="small muted">
+                      <td data-label="Why" className="small muted">{row.reason ?? "—"}</td>
+                      <td data-label="Added by" className="small muted">
                         {author?.full_name ?? author?.email ?? "—"}
                         <p className="small muted">
                           <time dateTime={isoAttr(row.created_at)}>
@@ -219,7 +219,7 @@ export default async function ExclusionsPage({
                         </p>
                       </td>
                       {manage ? (
-                        <td>
+                        <td data-label="Actions">
                           <form action={removeExclusion}>
                             <input type="hidden" name="id" value={row.id} />
                             <ConfirmButton

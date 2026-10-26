@@ -82,9 +82,9 @@ export default async function IssuesPage({
         description={result.ok && result.data?.at ? `Checked ${when(result.data.at)}.` : undefined}
       >
         {areas.length > 1 ? (
-          <div className="cluster">
+          <nav className="tabs" aria-label="Which issues to show">
             <Link
-              className={`btn small ${params.area ? "ghost" : "secondary"}`}
+              className={`pill ${params.area ? "" : "accent"}`}
               href="/admin/issues"
               aria-current={params.area ? undefined : "page"}
             >
@@ -93,14 +93,14 @@ export default async function IssuesPage({
             {areas.map((area) => (
               <Link
                 key={area}
-                className={`btn small ${params.area === area ? "secondary" : "ghost"}`}
+                className={`pill ${params.area === area ? "accent" : ""}`}
                 href={`/admin/issues?area=${encodeURIComponent(area)}`}
                 aria-current={params.area === area ? "page" : undefined}
               >
                 {area} ({all.filter((i) => i.area === area).length})
               </Link>
             ))}
-          </div>
+          </nav>
         ) : null}
 
         {!result.ok ? (
@@ -110,7 +110,7 @@ export default async function IssuesPage({
         ) : shown.length === 0 ? (
           <Empty title="No system faults.">Every check the worker runs came back clean.</Empty>
         ) : (
-          <div className="table-scroll">
+          <div className="table-scroll card-rows">
             <table>
               <thead>
                 <tr>
@@ -124,19 +124,19 @@ export default async function IssuesPage({
               <tbody>
                 {shown.map((issue) => (
                   <tr key={issue.id}>
-                    <td>
+                    <td data-label="Severity">
                       <span className={`pill tiny ${SEVERITY[issue.severity].tone}`}>
                         {SEVERITY[issue.severity].label}
                       </span>
                     </td>
-                    <td className="small">{issue.area}</td>
-                    <td>
+                    <td data-label="Area" className="small">{issue.area}</td>
+                    <td data-label="Issue">
                       <p className="small">
                         <strong>{issue.title}</strong>
                       </p>
                       <p className="small muted">{issue.detail}</p>
                     </td>
-                    <td className="small">
+                    <td data-label="Who" className="small">
                       {issue.workspaceId ? (
                         <Link href={`/admin/workspaces/${issue.workspaceId}`}>
                           {issue.workspace ?? "Workspace"}
@@ -145,7 +145,7 @@ export default async function IssuesPage({
                       {issue.person ? <p className="small muted">{issue.person}</p> : null}
                       {!issue.workspaceId && !issue.person ? <span className="subtle">Platform</span> : null}
                     </td>
-                    <td className="small subtle">{when(issue.since) ?? "—"}</td>
+                    <td data-label="Since" className="small subtle">{when(issue.since) ?? "—"}</td>
                   </tr>
                 ))}
               </tbody>

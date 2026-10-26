@@ -380,7 +380,7 @@ export default async function ProspectsPage({
       ) : null}
 
       {shown > 0 ? (
-      <div className="table-scroll">
+      <div className="table-scroll card-rows">
         <table>
           <thead>
             <tr>
@@ -411,7 +411,7 @@ export default async function ProspectsPage({
               const reasons = Array.isArray(prospect.fit_reasons) ? (prospect.fit_reasons as string[]) : [];
               return (
                 <tr key={prospect.id}>
-                  <td>
+                  <td data-label="Person">
                     {/* A name is whatever we actually know. LinkedIn's search
                         returns one `name` field and the profile endpoint splits
                         it, so a card built only from the split pair showed a
@@ -453,7 +453,7 @@ export default async function ProspectsPage({
                     Geist has real tabular figures, so the column lines up
                     without the number having to look like a terminal.
                   */}
-                  <td className="num">
+                  <td data-label="Fit" className="num">
                     {/*
                       A fit score is a fact about a person AND a strategy: 87
                       against "small B2B agencies" says nothing about how well
@@ -469,9 +469,9 @@ export default async function ProspectsPage({
                       </span>
                     ) : null}
                   </td>
-                  {anySignals ? <td className="num">{prospect.intent_score ?? 0}</td> : null}
+                  {anySignals ? <td data-label="Intent" className="num">{prospect.intent_score ?? 0}</td> : null}
                   {anySignals ? (
-                    <td className="medium">
+                    <td data-label="Why" className="medium">
                       <div className="cluster">
                         {signals.slice(0, 3).map((signal, index) => (
                           <span key={index} className="pill accent" title={signal.detail}>
@@ -482,7 +482,7 @@ export default async function ProspectsPage({
                       <span className="small muted">{reasons.join("; ")}</span>
                     </td>
                   ) : null}
-                  <td>
+                  <td data-label="Status">
                     {prospect.do_not_contact ? (
                       <span className="pill danger">Do not contact</span>
                     ) : prospect.last_contacted_at ? (
@@ -500,7 +500,7 @@ export default async function ProspectsPage({
                       <span className="pill positive">New</span>
                     )}
                   </td>
-                  <td>
+                  <td data-label="Actions">
                     {prospect.do_not_contact ? null : (
                       <form
                         action={eraseProspect}

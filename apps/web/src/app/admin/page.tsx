@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { NavIcon } from "@/components/icons";
 import { BOOT_BEAT, PACING_LOOP, PACING_STALE_MS } from "@le/shared";
 import { createClient } from "@/lib/supabase-server";
 import { requirePlatformAdmin, ago } from "@/lib/admin";
@@ -12,6 +13,15 @@ import { Kpi } from "@/components/charts";
 import { ControlButton } from "@/components/admin-control";
 
 export const dynamic = "force-dynamic";
+
+/** The sidebar's own picture for each page a waiting row opens. */
+const DESTINATION_ICON: Record<string, string> = {
+  "/admin/settings": "shield",
+  "/admin/jobs": "agents",
+  "/admin/issues": "system",
+  "/admin/support": "support",
+  "/admin/accounts": "prospects",
+};
 
 type Issue = { severity: "critical" | "warning" | "info" };
 
@@ -134,27 +144,44 @@ export default async function AdminOverviewPage({ searchParams }: { searchParams
       />
       <PageNotice error={params.error} notice={params.notice} />
 
-      <Section title="Waiting on you">
-        {waiting.length === 0 ? (
-          <div className="notice accent">
-            <p>Nothing. The loop is running, no ticket is waiting, and no account or issue needs you.</p>
-          </div>
-        ) : (
-          <ul className="stack-2">
+      {/* The same queue the member overview leads with: one panel, one row per
+          thing, the sentence and the button that clears it. A pill and a bare
+          "Open" link made the most important block on the console read as a
+          footnote. */}
+      {waiting.length === 0 ? (
+        <Section
+          id="waiting"
+          title="Nothing is waiting on you."
+          description="The loop is running, no ticket is waiting, and no account or issue needs you."
+          surface={{ className: "card needs-you-clear", eyebrow: "All clear" }}
+        />
+      ) : (
+        <Section
+          id="waiting"
+          title="Waiting on you"
+          surface={{
+            className: "needs-you",
+            headingClassName: "needs-you-heading",
+            aside: <span className="needs-you-count">{waiting.length === 1 ? "1 thing" : `${waiting.length} things`}</span>,
+          }}
+        >
+          <ul className="needs-you-list">
             {waiting.map((row) => (
-              <li key={row.text} className="between">
-                <span className="cluster">
-                  <span className={`pill tiny ${row.tone}`}>{row.tone === "danger" ? "Now" : "Soon"}</span>
-                  <span className="small">{row.text}</span>
+              <li key={row.text} className={`needs-you-item ${row.tone === "danger" ? "blocker" : "warning"}`}>
+                <span className="needs-you-icon" aria-hidden="true">
+                  <NavIcon name={DESTINATION_ICON[row.href] ?? "dot"} />
                 </span>
-                <Link className="small" href={row.href} aria-label={`Open ${destinations[row.href] ?? "the page"}: ${row.text}`}>
-                  Open
+                <div className="needs-you-text">
+                  <p className="needs-you-title">{row.text}</p>
+                </div>
+                <Link className={`btn small${row.tone === "danger" ? "" : " secondary"}`} href={row.href}>
+                  Open {destinations[row.href] ?? "the page"}
                 </Link>
               </li>
             ))}
           </ul>
-        )}
-      </Section>
+        </Section>
+      )}
 
       <Section title="Platform">
         <div className="kpi-row">
@@ -186,19 +213,19 @@ export default async function AdminOverviewPage({ searchParams }: { searchParams
       </Section>
 
       <Section title="Health">
-        <div className="table-scroll">
+        <div className="table-scroll card-rows">
           <table>
             <tbody>
               <tr>
                 <th scope="row">Sending loop</th>
-                <td>
+                <td data-label="State">
                   <span className={`pill tiny ${loopFresh ? "positive" : "danger"}`}>{loopFresh ? "running" : "stopped"}</span>
                 </td>
-                <td className="small subtle">last run {ago(pacing?.beat_at)}</td>
+                <td data-label="Detail" className="small subtle">last run {ago(pacing?.beat_at)}</td>
               </tr>
               <tr>
                 <th scope="row">Worker</th>
-                <td>
+                <td data-label="State">
                   {/* No boot stamp is unknown, never "up" (rule 23): it is also
                       what a build that has not shipped the stamp looks like. */}
                   <span
@@ -207,29 +234,29 @@ export default async function AdminOverviewPage({ searchParams }: { searchParams
                     {!bootKnown ? "unknown" : bootDetail.queueReachable === false ? "queue unreachable" : "up"}
                   </span>
                 </td>
-                <td className="small subtle">
+                <td data-label="Detail" className="small subtle">
                   started {ago(boot?.beat_at)} on <span className="mono">{bootDetail.commit?.slice(0, 7) ?? "unknown build"}</span>
                 </td>
               </tr>
               <tr>
                 <th scope="row">Issues</th>
-                <td>
+                <td data-label="State">
                   <span
                     className={`pill tiny ${!issuesRead ? "danger" : critical ? "danger" : warnings ? "warning" : "positive"}`}
                   >
                     {issuesRead ? `${critical} critical · ${warnings} warning` : "could not check"}
                   </span>
                 </td>
-                <td className="small subtle">{issues.ok ? "" : issues.error}</td>
+                <td data-label="Detail" className="small subtle">{issues.ok ? "" : issues.error}</td>
               </tr>
               <tr>
                 <th scope="row">Support autopilot</th>
-                <td>
+                <td data-label="State">
                   <span className={`pill tiny ${settings?.support_autopilot === false ? "plain" : "positive"}`}>
                     {settings?.support_autopilot === false ? "off" : "on"}
                   </span>
                 </td>
-                <td className="small subtle">
+                <td data-label="Detail" className="small subtle">
                   {settings?.support_autopilot === false ? "every answer waits for you" : "confident answers are sent; the rest wait for you"}
                 </td>
               </tr>

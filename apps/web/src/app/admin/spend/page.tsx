@@ -2,7 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase-server";
 import { requirePlatformAdmin, formatUsd, when } from "@/lib/admin";
 import { formatSpend } from "@/lib/spend-display";
-import { PageHeader, Section, Empty } from "@/components/page";
+import { PageHeader, Section, Empty, LoadFailed } from "@/components/page";
 import { Kpi, RankedBars, TrendChart } from "@/components/charts";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +19,7 @@ export default async function AdminSpendPage() {
   await requirePlatformAdmin();
   const supabase = await createClient();
 
-  const [{ data: rows }, { data: byWorkspace }, { data: workspaces }, { data: failures }] = await Promise.all([
+  const [{ data: rows, error }, { data: byWorkspace }, { data: workspaces }, { data: failures }] = await Promise.all([
     supabase.rpc("platform_spend_breakdown", { p_days: 30 }),
     supabase.rpc("platform_workspace_spend"),
     supabase.from("workspaces").select("id, name"),
@@ -97,13 +97,15 @@ export default async function AdminSpendPage() {
                 note: `${formatSpend(v.spend, v.calls, v.unpriced)} · ${v.calls.toLocaleString()} calls${v.failed ? ` · ${v.failed} failed` : ""}`,
               }))}
           />
+        ) : error ? (
+          <LoadFailed what="AI spend" />
         ) : (
           <Empty title="No calls yet.">Agent calls appear here as soon as one runs.</Empty>
         )}
       </Section>
 
       <Section title="By model">
-        <div className="table-scroll">
+        <div className="table-scroll card-rows">
           <table>
             <thead>
               <tr>
@@ -118,10 +120,10 @@ export default async function AdminSpendPage() {
                 .sort((a, b) => b[1].spend - a[1].spend)
                 .map(([model, v]) => (
                   <tr key={model}>
-                    <td className="small mono">{model}</td>
-                    <td className="num mono">{v.calls.toLocaleString()}</td>
-                    <td className="num mono">{formatSpend(v.spend, v.calls, v.unpriced)}</td>
-                    <td className="num mono">{v.unpriced}</td>
+                    <td data-label="Model" className="small mono">{model}</td>
+                    <td data-label="Calls" className="num mono">{v.calls.toLocaleString()}</td>
+                    <td data-label="Spend" className="num mono">{formatSpend(v.spend, v.calls, v.unpriced)}</td>
+                    <td data-label="Unpriced" className="num mono">{v.unpriced}</td>
                   </tr>
                 ))}
             </tbody>
@@ -130,7 +132,7 @@ export default async function AdminSpendPage() {
       </Section>
 
       <Section title="By workspace, all time">
-        <div className="table-scroll">
+        <div className="table-scroll card-rows">
           <table>
             <thead>
               <tr>
@@ -142,11 +144,11 @@ export default async function AdminSpendPage() {
             <tbody>
               {topWorkspaces.map((w) => (
                 <tr key={w.workspace_id}>
-                  <td>
+                  <td data-label="Workspace">
                     <Link href={`/admin/workspaces/${w.workspace_id}`}>{names.get(w.workspace_id) ?? "—"}</Link>
                   </td>
-                  <td className="num mono">{Number(w.calls).toLocaleString()}</td>
-                  <td className="num mono">
+                  <td data-label="Calls" className="num mono">{Number(w.calls).toLocaleString()}</td>
+                  <td data-label="Spend" className="num mono">
                     {formatSpend(Number(w.spend_usd), Number(w.calls), Number(w.calls) - Number(w.priced_calls))}
                   </td>
                 </tr>
@@ -158,7 +160,7 @@ export default async function AdminSpendPage() {
 
       {failures?.length ? (
         <Section title="Failed calls" description="The most recent 25. A refusal or a schema failure here is a draft, a note or a strategy that never appeared.">
-          <div className="table-scroll">
+          <div className="table-scroll card-rows">
             <table>
               <thead>
                 <tr>
@@ -171,14 +173,14 @@ export default async function AdminSpendPage() {
               <tbody>
                 {failures.map((f) => (
                   <tr key={f.id}>
-                    <td className="small subtle">{when(f.created_at)}</td>
-                    <td className="small">
+                    <td data-label="When" className="small subtle">{when(f.created_at)}</td>
+                    <td data-label="Workspace" className="small">
                       {f.workspace_id ? <Link href={`/admin/workspaces/${f.workspace_id}`}>{names.get(f.workspace_id) ?? "—"}</Link> : "—"}
                     </td>
-                    <td className="small">
+                    <td data-label="Agent" className="small">
                       {f.agent} <span className="tiny subtle mono">{f.model}</span>
                     </td>
-                    <td className="small muted">{f.error}</td>
+                    <td data-label="Error" className="small muted">{f.error}</td>
                   </tr>
                 ))}
               </tbody>

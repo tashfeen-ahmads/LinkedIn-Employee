@@ -265,7 +265,7 @@ export default async function AdminAnnouncementsPage({
 
       <Section title="Sent and drafts" description="Newest first. Times are UTC.">
         {history?.length ? (
-          <div className="table-scroll">
+          <div className="table-scroll card-rows">
             <table>
               <thead>
                 <tr>
@@ -278,12 +278,12 @@ export default async function AdminAnnouncementsPage({
               <tbody>
                 {history.map((row) => (
                   <tr key={row.id}>
-                    <td>
+                    <td data-label="Subject">
                       <Link href={`${PATH}?id=${row.id}`}>{row.subject}</Link>
                     </td>
-                    <td className="num">{when(row.created_at)}</td>
-                    <td>{statusOf(row)}</td>
-                    <td className="num">{when(row.sent_at)}</td>
+                    <td data-label="Written" className="num">{when(row.created_at)}</td>
+                    <td data-label="Status">{statusOf(row)}</td>
+                    <td data-label="Finished" className="num">{when(row.sent_at)}</td>
                   </tr>
                 ))}
               </tbody>

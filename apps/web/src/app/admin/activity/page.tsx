@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase-server";
-import { PageHeader } from "@/components/page";
+import { Empty, LoadFailed, PageHeader, Section } from "@/components/page";
 import { requirePlatformAdmin, when } from "@/lib/admin";
 import { isoAttr } from "@/lib/format";
 
@@ -21,7 +21,7 @@ export default async function AdminActivityPage() {
   await requirePlatformAdmin();
   const supabase = await createClient();
 
-  const [{ data: events }, { data: workspaces }, { data: profiles }] = await Promise.all([
+  const [{ data: events, error }, { data: workspaces }, { data: profiles }] = await Promise.all([
     supabase
       .from("events")
       .select("id, workspace_id, name, actor_user_id, subject_type, created_at")
@@ -42,12 +42,13 @@ export default async function AdminActivityPage() {
         lede="The 100 most recent events across every workspace, from the same audit trail the app writes as it works."
       />
 
-      {!events?.length ? (
-        <div className="notice">
-          <p>Nothing has happened yet.</p>
-        </div>
+      <Section title="Latest events">
+      {error ? (
+        <LoadFailed what="Activity" />
+      ) : !events?.length ? (
+        <Empty title="Nothing has happened yet.">Events appear here as people and agents work.</Empty>
       ) : (
-        <div className="table-scroll">
+        <div className="table-scroll card-rows">
           <table>
             <thead>
               <tr>
@@ -61,25 +62,26 @@ export default async function AdminActivityPage() {
             <tbody>
               {events.map((e) => (
                 <tr key={e.id}>
-                  <td className="small subtle">
+                  <td data-label="When" className="small subtle">
                     <time dateTime={isoAttr(e.created_at)}>{when(e.created_at)}</time>
                   </td>
-                  <td>
+                  <td data-label="Workspace">
                     <Link href={`/admin/workspaces/${e.workspace_id}`}>
                       {workspaceName.get(e.workspace_id) ?? "—"}
                     </Link>
                   </td>
-                  <td className="small mono">{e.name}</td>
-                  <td className="small">
+                  <td data-label="Event" className="small mono">{e.name}</td>
+                  <td data-label="Who" className="small">
                     {e.actor_user_id ? (who.get(e.actor_user_id) ?? "—") : <span className="subtle">agent</span>}
                   </td>
-                  <td className="small subtle">{e.subject_type ?? "—"}</td>
+                  <td data-label="Subject" className="small subtle">{e.subject_type ?? "—"}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
+      </Section>
     </>
   );
 }

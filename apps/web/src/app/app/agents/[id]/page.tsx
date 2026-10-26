@@ -608,7 +608,7 @@ export default async function AgentPage({
               recognizable line beats a clever one: <code>{DEFAULT_OPENER_TEMPLATE}</code>
             </Empty>
           ) : approvedOpeners.length === 0 ? null : (
-            <div className="table-scroll">
+            <div className="table-scroll card-rows">
               <table className="table">
                 <thead>
                   <tr>
@@ -622,12 +622,12 @@ export default async function AgentPage({
                 <tbody>
                   {approvedOpeners.map((opener) => (
                     <tr key={opener.id}>
-                      <td>
+                      <td data-label="Opener">
                         {opener.body}
                         {opener.angle ? <div className="small muted">{opener.angle}</div> : null}
                       </td>
-                      <td className="small muted">{opener.written_by === "agent" ? "The agent" : "You"}</td>
-                      <td className="row-actions">
+                      <td data-label="Written by" className="small muted">{opener.written_by === "agent" ? "The agent" : "You"}</td>
+                      <td data-label="Actions" className="row-actions">
                         <form action={retireLine}>
                           <input type="hidden" name="id" value={id} />
                           <input type="hidden" name="table" value="hooks" />
@@ -707,7 +707,7 @@ export default async function AgentPage({
               hears a different proposition, and none of them was read by anyone.
             </Empty>
           ) : approvedOffers.length === 0 ? null : (
-            <div className="table-scroll">
+            <div className="table-scroll card-rows">
               <table className="table">
                 <thead>
                   <tr>
@@ -720,8 +720,8 @@ export default async function AgentPage({
                 <tbody>
                   {approvedOffers.map((offer) => (
                     <tr key={offer.id}>
-                      <td>{offer.body}</td>
-                      <td className="row-actions">
+                      <td data-label="Offer line">{offer.body}</td>
+                      <td data-label="Actions" className="row-actions">
                         <form action={retireLine}>
                           <input type="hidden" name="id" value={id} />
                           <input type="hidden" name="table" value="pitches" />
@@ -825,7 +825,7 @@ export default async function AgentPage({
             Always available: {MERGE_FIELDS.map((f) => `{{${f}}}`).join(", ")}
           </p>
           {customFields.length > 0 ? (
-            <div className="table-scroll">
+            <div className="table-scroll card-rows">
               <table className="table">
                 <thead>
                   <tr>
@@ -840,14 +840,14 @@ export default async function AgentPage({
                 <tbody>
                   {customFields.map((field) => (
                     <tr key={field.key}>
-                      <td>
+                      <td data-label="Field">
                         <code>{`{{${field.key}}}`}</code>
                       </td>
-                      <td>{field.label}</td>
-                      <td className="small muted">
+                      <td data-label="Means">{field.label}</td>
+                      <td data-label="When empty" className="small muted">
                         {field.fallback || <span className="warning-text">placeholder stays visible</span>}
                       </td>
-                      <td className="row-actions">
+                      <td data-label="Actions" className="row-actions">
                         <form action={removeCustomField}>
                           <input type="hidden" name="id" value={id} />
                           <input type="hidden" name="key" value={field.key} />

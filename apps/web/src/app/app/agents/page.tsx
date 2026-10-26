@@ -260,7 +260,7 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
               : "Yours is built from your business profile the first time your strategy is written, so there is nothing to fill in by hand."}
           </Empty>
         ) : (
-          <div className="table-scroll">
+          <div className="table-scroll card-rows">
             <table className="table">
               <thead>
                 <tr>
@@ -280,14 +280,14 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
                   const offerCount = offerCounts.get(agent.id) ?? 0;
                   return (
                     <tr key={agent.id}>
-                      <td>
+                      <td data-label="Agent">
                         <Link href={`/app/agents/${agent.id}`}>{agent.name}</Link>
                         {agent.is_default ? <span className="small subtle"> · default</span> : null}
                         {agent.from_name ? (
                           <div className="small muted">Writes as {agent.from_name}</div>
                         ) : null}
                       </td>
-                      <td>
+                      <td data-label="Model">
                         {/* A model nobody can price cannot be run, because its spend
                             reports as null and a reader takes that for free. */}
                         {agent.model === null ? (
@@ -298,10 +298,10 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
                           <span className="small warning-text">Pick a model</span>
                         )}
                       </td>
-                      <td className="num">{openerCount || <span className="small warning-text">none</span>}</td>
-                      <td className="num">{offerCount}</td>
-                      <td className="num">{campaignCounts.get(agent.id) ?? 0}</td>
-                      <td className="row-actions">
+                      <td data-label="Openers" className="num">{openerCount || <span className="small warning-text">none</span>}</td>
+                      <td data-label="Offer lines" className="num">{offerCount}</td>
+                      <td data-label="Campaigns" className="num">{campaignCounts.get(agent.id) ?? 0}</td>
+                      <td data-label="Actions" className="row-actions">
                         {agent.is_default ? null : (
                           <form action={makeDefault}>
                             <input type="hidden" name="id" value={agent.id} />
@@ -335,7 +335,7 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
           title="Retired"
           description="Kept so the campaigns that ran on them can still say what they were. Restoring one makes it available to campaigns again; it does not become the default."
         >
-          <div className="table-scroll">
+          <div className="table-scroll card-rows">
             <table className="table">
               <thead>
                 <tr>
@@ -349,13 +349,13 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
               <tbody>
                 {(retired ?? []).map((agent) => (
                   <tr key={agent.id}>
-                    <td>{agent.name}</td>
-                    <td className="small muted">
+                    <td data-label="Agent">{agent.name}</td>
+                    <td data-label="Retired" className="small muted">
                       <time dateTime={isoAttr(agent.archived_at)}>
                         {formatDate(agent.archived_at, me?.timezone)}
                       </time>
                     </td>
-                    <td className="row-actions">
+                    <td data-label="Actions" className="row-actions">
                       <form action={restoreAgent}>
                         <input type="hidden" name="id" value={agent.id} />
                         <SubmitButton className="btn secondary small" pendingLabel="Restoring…">

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase-server";
 import { requirePlatformAdmin, ago } from "@/lib/admin";
-import { PageHeader, Section, Empty } from "@/components/page";
+import { PageHeader, Section, Empty, LoadFailed } from "@/components/page";
 import { PageNotice } from "@/components/page-notice";
 import { ControlButton } from "@/components/admin-control";
 import { label } from "@/lib/labels";
@@ -31,7 +31,7 @@ export default async function AdminCampaignsPage({
   await requirePlatformAdmin();
   const supabase = await createClient();
 
-  const [{ data: campaigns }, { data: stats }, { data: workspaces }, { data: accounts }] = await Promise.all([
+  const [{ data: campaigns, error }, { data: stats }, { data: workspaces }, { data: accounts }] = await Promise.all([
     supabase
       .from("campaigns")
       .select("id, workspace_id, name, status, launched_at, created_at, linkedin_account_id, daily_invite_cap")
@@ -64,9 +64,9 @@ export default async function AdminCampaignsPage({
       />
       <PageNotice error={params.error} notice={params.notice} />
 
-      <div className="cluster">
+      <nav className="tabs" aria-label="Which campaigns to show">
         <Link
-          className={`btn small ${filter ? "ghost" : "secondary"}`}
+          className={`pill ${filter ? "" : "accent"}`}
           href="/admin/campaigns"
           aria-current={filter ? undefined : "page"}
         >
@@ -78,7 +78,7 @@ export default async function AdminCampaignsPage({
           return (
             <Link
               key={status}
-              className={`btn small ${filter === status ? "secondary" : "ghost"}`}
+              className={`pill ${filter === status ? "accent" : ""}`}
               href={`/admin/campaigns?status=${status}`}
               aria-current={filter === status ? "page" : undefined}
             >
@@ -86,13 +86,15 @@ export default async function AdminCampaignsPage({
             </Link>
           );
         })}
-      </div>
+      </nav>
 
       <Section title={filter ? `${label(filter)} (${shown.length})` : "Every campaign"}>
-        {!shown.length ? (
-          <Empty title="None.">No campaign has this status.</Empty>
+        {error ? (
+          <LoadFailed what="Campaigns" />
+        ) : !shown.length ? (
+          <Empty title="No campaign has this status.">Choose another filter above.</Empty>
         ) : (
-          <div className="table-scroll">
+          <div className="table-scroll card-rows">
             <table>
               <thead>
                 <tr>
@@ -117,7 +119,7 @@ export default async function AdminCampaignsPage({
                   const account = accountStatus.get(c.linkedin_account_id);
                   return (
                     <tr key={c.id}>
-                      <td>
+                      <td data-label="Campaign">
                         <span className="small">{c.name}</span>
                         <p className="tiny subtle">
                           <Link href={`/admin/workspaces/${c.workspace_id}`}>{workspaceName.get(c.workspace_id) ?? "—"}</Link>
@@ -126,21 +128,21 @@ export default async function AdminCampaignsPage({
                           ) : null}
                         </p>
                       </td>
-                      <td>
+                      <td data-label="Status">
                         <span
                           className={`pill tiny ${c.status === "running" ? "positive" : c.status === "paused" ? "warning" : "plain"}`}
                         >
                           {label(c.status)}
                         </span>
                       </td>
-                      <td className="num mono">{total}</td>
-                      <td className="num mono">{n.queued ?? 0}</td>
-                      <td className="num mono">{sum(n, CONTACTED)}</td>
-                      <td className="num mono">{sum(n, ACCEPTED)}</td>
-                      <td className="num mono">{sum(n, REPLIED)}</td>
-                      <td className="num mono">{n.failed ?? 0}</td>
-                      <td className="small subtle">{c.launched_at ? ago(c.launched_at) : "never"}</td>
-                      <td>
+                      <td data-label="People" className="num mono">{total}</td>
+                      <td data-label="Waiting" className="num mono">{n.queued ?? 0}</td>
+                      <td data-label="Contacted" className="num mono">{sum(n, CONTACTED)}</td>
+                      <td data-label="Accepted" className="num mono">{sum(n, ACCEPTED)}</td>
+                      <td data-label="Replied" className="num mono">{sum(n, REPLIED)}</td>
+                      <td data-label="Failed" className="num mono">{n.failed ?? 0}</td>
+                      <td data-label="Launched" className="small subtle">{c.launched_at ? ago(c.launched_at) : "never"}</td>
+                      <td data-label="Actions">
                         {c.status === "running" ? (
                           <ControlButton op="campaign-pause" fields={{ campaignId: c.id }} back={back} label="Pause" tone="ghost" />
                         ) : c.status === "paused" && c.launched_at ? (

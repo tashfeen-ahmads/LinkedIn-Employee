@@ -229,7 +229,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
         }
       >
         {profiles?.length ? (
-          <div className="table-scroll">
+          <div className="table-scroll card-rows">
             <table>
               <thead>
                 <tr>
@@ -242,15 +242,15 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
               <tbody>
                 {profiles.map((profile) => (
                   <tr key={profile.id}>
-                    <td>{profile.name}</td>
-                    <td className="num">{profile.priority}</td>
-                    <td className="num">
+                    <td data-label="Strategy">{profile.name}</td>
+                    <td data-label="Priority" className="num">{profile.priority}</td>
+                    <td data-label="Prospects" className="num">
                       {/* What it has actually produced, which is the only way
                           to tell an approved strategy that is working from one
                           that has never been given a campaign. */}
                       {(byProfile.get(profile.id) ?? 0).toLocaleString()}
                     </td>
-                    <td>
+                    <td data-label="Status">
                       {profile.do_not_pursue ? (
                         <span className="pill">Not pursuing</span>
                       ) : profile.approved_at ? (

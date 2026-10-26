@@ -216,7 +216,7 @@ export async function ResultsSection() {
         title="Every number"
         description={`A rate appears once there are ${MIN_FOR_RATE} in its denominator. Below that a percentage says more about the sample than the work.`}
       >
-        <div className="table-scroll">
+        <div className="table-scroll card-rows">
           <table>
             <thead>
               <tr>
@@ -237,8 +237,8 @@ export async function ResultsSection() {
                 const reachable = new Set(stagesForGoals([...entry.goals]).map((s) => s.key));
                 return (
                   <tr key={id}>
-                    <td>{entry.name}</td>
-                    <td className="small muted">
+                    <td data-label="Strategy">{entry.name}</td>
+                    <td data-label="Asking for" className="small muted">
                       {[...entry.goals].map((g) => CTA_DEFINITIONS[g].label).join(", ")}
                     </td>
                     {report.stages.map((stage) =>
@@ -247,7 +247,7 @@ export async function ResultsSection() {
                           {counts[stage.key].toLocaleString()}
                         </td>
                       ) : (
-                        <td
+                        <td data-label="Acceptance"
                           key={stage.key}
                           className="num subtle"
                           title="Not what these campaigns are asking for"
@@ -256,7 +256,7 @@ export async function ResultsSection() {
                         </td>
                       ),
                     )}
-                    <td className="num">
+                    <td data-label="Reply" className="num">
                       <RatePill rate={rate(counts.accepted, counts.invited, RATE_TARGETS.acceptance)} />
                     </td>
                     <td className="num">
@@ -266,19 +266,19 @@ export async function ResultsSection() {
                 );
               })}
               <tr className="row-total">
-                <td>
+                <td data-label="Strategy">
                   <strong>All</strong>
                 </td>
-                <td />
+                <td data-label="Asking for" />
                 {report.stages.map((stage) => (
                   <td key={stage.key} className="num">
                     <strong>{countFunnel(visibleRows)[stage.key].toLocaleString()}</strong>
                   </td>
                 ))}
-                <td className="num">
+                <td data-label="Acceptance" className="num">
                   <RatePill rate={report.acceptance} />
                 </td>
-                <td className="num">
+                <td data-label="Reply" className="num">
                   <RatePill rate={report.reply} />
                 </td>
               </tr>

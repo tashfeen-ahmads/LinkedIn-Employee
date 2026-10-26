@@ -1207,7 +1207,7 @@ export default async function CampaignPage({
                       [prospect.first_name, prospect.last_name].filter(Boolean).join(" ") || "Unnamed";
                     return (
                       <tr key={row.id}>
-                        <td>
+                        <td data-label="Prospect">
                           <span className="prospect-who">
                             <span className="prospect-initials" aria-hidden="true">
                               {initialsOf(name)}
@@ -1215,11 +1215,11 @@ export default async function CampaignPage({
                             <span className="strongish">{name}</span>
                           </span>
                         </td>
-                        <td className="muted prospect-company">{prospect.company ?? ""}</td>
-                        <td>
+                        <td data-label="Company" className="muted prospect-company">{prospect.company ?? ""}</td>
+                        <td data-label="Stage">
                           <span className={`pill plain tiny ${stageTone(row.status)}`}>{label(row.status)}</span>
                         </td>
-                        <td className="muted nums">
+                        <td data-label="Last touch" className="muted nums">
                           {touched ? (
                             <time dateTime={isoAttr(touched)}>{formatDate(touched, viewerTimezone)}</time>
                           ) : (
@@ -1405,7 +1405,7 @@ export default async function CampaignPage({
             already receives a note written from their own headline and company,
             so a test of literal text would be comparing one-off sentences.
           */}
-          <div className="table-scroll">
+          <div className="table-scroll card-rows">
             <table>
               <thead>
                 <tr>
@@ -1421,7 +1421,7 @@ export default async function CampaignPage({
                   const variant = (variantRows ?? []).find((v) => v.id === standing.id);
                   return (
                     <tr key={standing.id}>
-                      <td>
+                      <td data-label="Angle">
                         <strong>{standing.name}</strong>
                         {!variant?.enabled ? (
                           <>
@@ -1431,9 +1431,9 @@ export default async function CampaignPage({
                         ) : null}
                         <span className="tiny subtle block">{variant?.angle}</span>
                       </td>
-                      <td className="small muted">{variant?.pain_point ?? "Not named"}</td>
-                      <td className="num">{standing.sent}</td>
-                      <td className="num">
+                      <td data-label="Pain it names" className="small muted">{variant?.pain_point ?? "Not named"}</td>
+                      <td data-label="Sent" className="num">{standing.sent}</td>
+                      <td data-label="Accepted" className="num">
                         {standing.accepted}
                         {/*
                           The rate is only shown once there is enough behind it
@@ -1454,7 +1454,7 @@ export default async function CampaignPage({
                           </span>
                         )}
                       </td>
-                      <td className="num">{standing.replied}</td>
+                      <td data-label="Replied" className="num">{standing.replied}</td>
                     </tr>
                   );
                 })}

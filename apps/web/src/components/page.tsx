@@ -252,3 +252,23 @@ export function PageGroup({ id, children }: { id?: string; children: ReactNode }
     </div>
   );
 }
+
+/**
+ * What a list says when it could not be read, which is not what it says when
+ * it is empty.
+ *
+ * Seven console pages read a failed query as no rows and said "No workspaces
+ * yet" or "Nothing has happened yet". An operator believing that goes to
+ * investigate a platform with no customers rather than a database that did not
+ * answer (rule 17).
+ */
+export function LoadFailed({ what }: { what: string }) {
+  return (
+    <div className="notice danger" role="alert">
+      <p>
+        <strong>{what} could not be loaded.</strong> The database did not answer, so this is not an empty list.
+        Reload in a minute.
+      </p>
+    </div>
+  );
+}

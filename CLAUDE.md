@@ -1248,6 +1248,12 @@ tests that were verified by deliberately breaking the code.
     name with an unscoped rule is an accident. The fix is a different word for a
     different thing, never more specificity.
 
+    **On a phone a list is cards, not a table** (`.card-rows`). Each cell
+    after the first carries `data-label`, the first becomes the card's title,
+    and an `Actions` cell sits at its foot; `apps/web/test/admin-console.test.ts`
+    holds the console to it. A console list that could not be read says so
+    (`LoadFailed`), never "No workspaces yet" (rule 17).
+
 54. **A screen says what a fault costs the person reading it, not the name of
     the vendor we buy from.** `/app/system` is gated on a session and nothing
     else, so the person reading it is normally the business owner whose

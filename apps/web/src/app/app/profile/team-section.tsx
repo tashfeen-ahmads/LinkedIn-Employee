@@ -301,7 +301,7 @@ export async function TeamSection({
         title="Team"
         description="Who is on this workspace, and who has been asked. A rep whose LinkedIn is not connected can be given campaigns, but nothing will leave their account."
       >
-        <div className="table-scroll">
+        <div className="table-scroll card-rows">
           <table>
             <thead>
               <tr>
@@ -325,15 +325,15 @@ export async function TeamSection({
                 const broken = !account || cannotSend(account.status) || account.status !== "active";
                 return (
                   <tr key={member.id}>
-                    <td>
+                    <td data-label="Member">
                       {person?.full_name ?? person?.email ?? "Unknown"}
                       {member.user_id === session.userId ? (
                         <span className="small subtle"> · you</span>
                       ) : null}
                       <p className="small muted">{person?.email}</p>
                     </td>
-                    <td className="small">{label(member.role)}</td>
-                    <td>
+                    <td data-label="Role" className="small">{label(member.role)}</td>
+                    <td data-label="LinkedIn">
                       {linkedInState(account).kind !== "attached" ? (
                         <span className="pill tiny">not connected</span>
                       ) : (
@@ -354,8 +354,8 @@ export async function TeamSection({
                         </>
                       ) : null}
                     </td>
-                    <td className="num mono">{counts?.invites_today ?? "—"}</td>
-                    <td className="num mono">{counts?.invites_this_week ?? "—"}</td>
+                    <td data-label="Invites today" className="num mono">{counts?.invites_today ?? "—"}</td>
+                    <td data-label="This week" className="num mono">{counts?.invites_this_week ?? "—"}</td>
                   </tr>
                 );
               })}
@@ -398,7 +398,7 @@ export async function TeamSection({
           </div>
 
           {invitations?.length ? (
-            <div className="table-scroll">
+            <div className="table-scroll card-rows">
               <table>
                 <thead>
                   <tr>
@@ -411,9 +411,9 @@ export async function TeamSection({
                 <tbody>
                   {invitations.map((invitation) => (
                     <tr key={invitation.id}>
-                      <td>{invitation.email}</td>
-                      <td className="small">{label(invitation.role)}</td>
-                      <td className="small subtle">
+                      <td data-label="Email">{invitation.email}</td>
+                      <td data-label="Role" className="small">{label(invitation.role)}</td>
+                      <td data-label="Expires" className="small subtle">
                         {/*
                           `new Date(x).toLocaleDateString()` prints the literal
                           words "Invalid Date" for anything it cannot parse,
@@ -425,7 +425,7 @@ export async function TeamSection({
                           {formatExpiry(invitation.expires_at, myTimezone)}
                         </time>
                       </td>
-                      <td>
+                      <td data-label="Link">
                         <div className="row">
                           <CopyButton value={`${appUrl}/invite/${invitation.token}`} />
                           <form action={revokeInvitation}>

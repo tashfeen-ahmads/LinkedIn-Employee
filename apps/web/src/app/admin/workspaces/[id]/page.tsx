@@ -9,7 +9,8 @@ import { isoAttr } from "@/lib/format";
 import { label as statusLabel } from "@/lib/labels";
 import { dailyInviteCap } from "@le/linkedin";
 import { LINKEDIN_LIMITS } from "@le/shared";
-import { PageHeader, Section } from "@/components/page";
+import { Empty, PageHeader, Section } from "@/components/page";
+import { Kpi } from "@/components/charts";
 import { PageNotice } from "@/components/page-notice";
 import { ControlButton } from "@/components/admin-control";
 import { adminAccountPill } from "@/lib/admin-account";
@@ -84,7 +85,7 @@ export default async function AdminWorkspacePage({
   return (
     <>
       <PageHeader
-        eyebrow="Operator"
+        crumbs={[{ href: "/admin/workspaces", label: "Workspaces" }]}
         title={workspace.name}
         lede={<span className="mono tiny subtle">{workspace.slug}</span>}
         actions={
@@ -100,9 +101,6 @@ export default async function AdminWorkspacePage({
                 pendingLabel="Pausing…"
               />
             ) : null}
-            <Link href="/admin/workspaces" className="btn ghost small">
-              All workspaces
-            </Link>
           </>
         }
       />
@@ -111,9 +109,9 @@ export default async function AdminWorkspacePage({
       {/* NORA is free for everyone for now, so there is no plan, seat count or
           trial clock to show — only when the workspace began. */}
       <Section title="Workspace">
-        <div className="grid grid-4">
-          <Stat label="Signed up" value={when(workspace.created_at)} />
-          <Stat label="Open support tickets" value={String(openTickets ?? 0)} />
+        <div className="kpi-row">
+          <Kpi label="Signed up" value={when(workspace.created_at)} />
+          <Kpi label="Open support tickets" value={String(openTickets ?? 0)} />
         </div>
         {openTickets ? (
           <p className="small">
@@ -124,9 +122,9 @@ export default async function AdminWorkspacePage({
 
       <Section title="People">
         {!members?.length ? (
-          <p className="small muted">No members. This workspace cannot be used by anyone.</p>
+          <Empty title="No members.">This workspace cannot be used by anyone.</Empty>
         ) : (
-          <div className="table-scroll">
+          <div className="table-scroll card-rows">
             <table>
               <thead>
                 <tr>
@@ -147,12 +145,12 @@ export default async function AdminWorkspacePage({
                   const counts = a ? countersForToday(a as unknown as AccountRecord, p?.timezone ?? "UTC") : null;
                   return (
                     <tr key={m.id}>
-                      <td>
+                      <td data-label="Person">
                         <span className="small">{p?.full_name ?? "—"}</span>
                         <p className="tiny subtle">{p?.email ?? "—"}</p>
                       </td>
-                      <td className="small">{statusLabel(m.role)}</td>
-                      <td>
+                      <td data-label="Role" className="small">{statusLabel(m.role)}</td>
+                      <td data-label="LinkedIn">
                         {!a ? (
                           <span className="pill plain tiny">not connected</span>
                         ) : (
@@ -172,9 +170,9 @@ export default async function AdminWorkspacePage({
                           </>
                         )}
                       </td>
-                      <td className="num mono">{counts ? counts.invites_today : "—"}</td>
-                      <td className="num mono">{counts ? counts.invites_this_week : "—"}</td>
-                      <td className="small subtle">
+                      <td data-label="Today" className="num mono">{counts ? counts.invites_today : "—"}</td>
+                      <td data-label="This week" className="num mono">{counts ? counts.invites_this_week : "—"}</td>
+                      <td data-label="Cap" className="small subtle">
                         {a === undefined
                           ? "—"
                           : a.first_action_at
@@ -191,11 +189,11 @@ export default async function AdminWorkspacePage({
       </Section>
 
       <Section title="Work done">
-        <div className="grid grid-4">
-          <Stat label="Prospects" value={String(s?.prospects ?? 0)} />
-          <Stat label="Messages sent" value={String(s?.messages_sent ?? 0)} />
-          <Stat label="Conversations" value={String(s?.conversations ?? 0)} />
-          <Stat label="Waiting for a human" value={String(s?.pending_drafts ?? 0)} />
+        <div className="kpi-row">
+          <Kpi label="Prospects" value={String(s?.prospects ?? 0)} />
+          <Kpi label="Messages sent" value={String(s?.messages_sent ?? 0)} />
+          <Kpi label="Conversations" value={String(s?.conversations ?? 0)} />
+          <Kpi label="Waiting for a human" value={String(s?.pending_drafts ?? 0)} />
         </div>
         <p className="tiny subtle">
           Counts only. The rows behind these are the workspace&rsquo;s own customers&rsquo; data and are not
@@ -205,12 +203,9 @@ export default async function AdminWorkspacePage({
 
       <Section title="Campaigns">
         {!campaigns?.length ? (
-          <p className="small muted">
-            None built yet. A campaign is created by the Targeting Agent once a customer profile is
-            approved on /app/strategy.
-          </p>
+          <Empty title="No campaigns yet.">One is built once this workspace approves a strategy and its search finds people.</Empty>
         ) : (
-          <div className="table-scroll">
+          <div className="table-scroll card-rows">
             <table>
               <thead>
                 <tr>
@@ -227,16 +222,16 @@ export default async function AdminWorkspacePage({
               <tbody>
                 {campaigns.map((c) => (
                   <tr key={c.id}>
-                    <td className="small">{c.name}</td>
-                    <td>
+                    <td data-label="Name" className="small">{c.name}</td>
+                    <td data-label="Status">
                       <span className={`pill tiny ${c.status === "running" ? "positive" : "plain"}`}>{statusLabel(c.status)}</span>
                     </td>
-                    <td className="small">{c.reply_mode}</td>
-                    <td className="num mono">{c.daily_invite_cap ?? "—"}</td>
-                    <td className="small subtle">
+                    <td data-label="Replies" className="small">{c.reply_mode}</td>
+                    <td data-label="Cap" className="num mono">{c.daily_invite_cap ?? "—"}</td>
+                    <td data-label="Launched" className="small subtle">
                       {c.launched_at ? <time dateTime={isoAttr(c.launched_at)}>{when(c.launched_at)}</time> : "never"}
                     </td>
-                    <td>
+                    <td data-label="Actions">
                       {c.status === "running" ? (
                         <ControlButton op="campaign-pause" fields={{ campaignId: c.id }} back={back} label="Pause" tone="ghost" />
                       ) : c.status === "paused" && c.launched_at ? (
@@ -252,11 +247,11 @@ export default async function AdminWorkspacePage({
       </Section>
 
       <Section title="Model spend">
-        <div className="grid grid-4">
-          <Stat label="Total" value={formatSpend(totalSpend, callCount, unpriced)} />
-          <Stat label="Calls" value={String(callCount)} />
-          <Stat label="Failed" value={String(failedCalls ?? 0)} />
-          <Stat label="Unpriced" value={String(unpriced)} />
+        <div className="kpi-row">
+          <Kpi label="Total" value={formatSpend(totalSpend, callCount, unpriced)} />
+          <Kpi label="Calls" value={String(callCount)} />
+          <Kpi label="Failed" value={String(failedCalls ?? 0)} />
+          <Kpi label="Unpriced" value={String(unpriced)} />
         </div>
         {unpriced ? (
           <p className="tiny subtle">
@@ -268,7 +263,7 @@ export default async function AdminWorkspacePage({
 
       <Section title="Recent activity">
         {!events?.length ? (
-          <p className="small muted">Nothing recorded yet.</p>
+          <Empty title="Nothing recorded yet.">Events appear here as this workspace is used.</Empty>
         ) : (
           <ul className="bullets">
             {events.map((e) => (
@@ -283,14 +278,5 @@ export default async function AdminWorkspacePage({
         )}
       </Section>
     </>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="stat">
-      <span className="stat-label">{label}</span>
-      <span className="stat-value">{value}</span>
-    </div>
   );
 }
