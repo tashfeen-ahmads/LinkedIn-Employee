@@ -22,6 +22,12 @@
 export const BRAND = {
   name: "Nora",
   full: "Nora SDR",
+  /**
+   * The company behind the product, named on every surface Nora owns: the
+   * site footer, the sign-in pages and the app's rail. Never in a message to
+   * a prospect, which goes out under the rep's own name.
+   */
+  maker: "Nova First Technologies",
   tagline: "AI SDR that books meetings from LinkedIn",
   /**
    * The marketing site. Two hosts on purpose: a dashboard worked in daily and
@@ -60,6 +66,9 @@ export const BRAND = {
     goal: "#12A5A0",
   },
 } as const;
+
+/** The one line that names the company behind the product. */
+export const POWERED_BY = `Powered by ${BRAND.maker}`;
 
 /**
  * The marketing site's origin, given whatever `NEXT_PUBLIC_SITE_URL` holds, so

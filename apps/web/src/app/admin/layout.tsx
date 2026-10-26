@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requirePlatformAdmin } from "@/lib/admin";
 import { createClient } from "@/lib/supabase-server";
 import { AppNav } from "@/components/app-nav";
+import { POWERED_BY } from "@le/shared";
 
 /**
  * The operator console.
@@ -84,6 +85,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <Link href="/app" className="btn ghost small">
             Back to the app
           </Link>
+          <p className="tiny subtle">{POWERED_BY}</p>
         </div>
       </aside>
 

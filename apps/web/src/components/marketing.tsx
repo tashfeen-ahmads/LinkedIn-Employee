@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { SiteMenu, SiteNav } from "./site-nav";
-import { BRAND, FREE_NOTES_PER_MONTH, LINKEDIN_LIMITS, alwaysHoldsSentence } from "@le/shared";
+import { BRAND, FREE_NOTES_PER_MONTH, POWERED_BY, LINKEDIN_LIMITS, SUSTAINED_INVITES_PER_DAY, WEEKS_TO_SUSTAINED, alwaysHoldsSentence } from "@le/shared";
 import { SITE } from "@/lib/site";
 import { Wordmark } from "./logo";
 
@@ -151,7 +151,7 @@ export const FAQ_ITEMS = [
   },
   {
     q: "Is this safe for my LinkedIn account?",
-    a: `It is the constraint we designed around. Sending starts at ${LINKEDIN_LIMITS.invitesPerDayStart} connection requests a day and ramps to ${LINKEDIN_LIMITS.invitesPerDayMax} over ${Math.round(LINKEDIN_LIMITS.warmupDays / 7)} weeks, never exceeds ${LINKEDIN_LIMITS.invitesPerWeek} a week, and is spread across your working hours. If LinkedIn shows a warning, a captcha or an unusual login screen, the account pauses itself and tells you. No tool can promise zero risk, because LinkedIn's user agreement prohibits automation, so we say that plainly and keep the volume well under the line.`,
+    a: `It is the constraint we designed around. Sending starts at ${LINKEDIN_LIMITS.invitesPerDayStart} connection requests a day and grows to ${SUSTAINED_INVITES_PER_DAY} a day over ${WEEKS_TO_SUSTAINED} weeks, never exceeds ${LINKEDIN_LIMITS.invitesPerWeek} a week, and is spread across your working hours. If LinkedIn shows a warning, a captcha or an unusual login screen, the account pauses itself and tells you. No tool can promise zero risk, because LinkedIn's user agreement prohibits automation, so we say that plainly and keep the volume well under the line.`,
   },
   {
     q: "Do I need Sales Navigator?",
@@ -313,7 +313,7 @@ export function SiteFooter() {
 
         <div className="footer-base">
           <span>
-            © {new Date().getFullYear()} {BRAND.name}
+            © {new Date().getFullYear()} {BRAND.name}. {POWERED_BY}.
           </span>
           <span>{DISCLAIMER}</span>
         </div>
@@ -358,7 +358,7 @@ export function AuthFooter() {
           <a href={`${SITE.url}/terms`}>Terms</a>
         </nav>
         <p>
-          © {new Date().getFullYear()} {BRAND.name}. {DISCLAIMER}
+          © {new Date().getFullYear()} {BRAND.name}. {POWERED_BY}. {DISCLAIMER}
         </p>
       </div>
     </footer>

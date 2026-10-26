@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { BRAND, LINKEDIN_LIMITS, appOrigin, siteOrigin } from "@le/shared";
+import { BRAND, LINKEDIN_LIMITS, SUSTAINED_INVITES_PER_DAY, WEEKS_TO_SUSTAINED, appOrigin, siteOrigin } from "@le/shared";
 
 /**
  * One description of the site, used by every page's metadata, the sitemap, the
@@ -101,9 +101,19 @@ export const PAGES = [
  */
 export const PUBLIC_LIMITS = {
   invitesPerDayStart: LINKEDIN_LIMITS.invitesPerDayStart,
-  invitesPerDayMax: LINKEDIN_LIMITS.invitesPerDayMax,
+  /**
+   * What a warmed account actually sends on a working day. The daily cap goes
+   * higher, but on a five-day week the weekly cap stops it here, and every page
+   * that said "rising to 35" promised a number nobody could reach.
+   */
+  invitesPerDayMax: SUSTAINED_INVITES_PER_DAY,
+  /** The daily cap itself, for the few places that mean the ceiling of a single day. */
+  invitesPerDayCeiling: LINKEDIN_LIMITS.invitesPerDayMax,
   invitesPerWeek: LINKEDIN_LIMITS.invitesPerWeek,
   messagesPerDay: LINKEDIN_LIMITS.messagesPerDay,
-  warmupWeeks: Math.round(LINKEDIN_LIMITS.warmupDays / 7),
+  /** Weeks until the ramp reaches the working-day pace. */
+  warmupWeeks: WEEKS_TO_SUSTAINED,
+  /** Weeks until the daily cap reaches its ceiling. */
+  ceilingWeeks: Math.round(LINKEDIN_LIMITS.warmupDays / 7),
   healthyAcceptance: Math.round(LINKEDIN_LIMITS.minHealthyAcceptanceRate * 100),
 } as const;

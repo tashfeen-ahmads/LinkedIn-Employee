@@ -1,5 +1,6 @@
 import { ONBOARDING_STEPS, type OnboardingState } from "./onboarding.js";
 import { LINKEDIN_LIMITS } from "./constants.js";
+import { SUSTAINED_INVITES_PER_DAY, WEEKS_TO_SUSTAINED } from "./ramp.js";
 import { alwaysHoldsSentence } from "./autopilot.js";
 
 /**
@@ -169,7 +170,7 @@ export const TOUR_STAGES: readonly TourStage[] = [
     title: "It sends, slowly and inside your hours",
     owner: "agent",
     youDo: null,
-    weDo: `A day's invitations are spread across your working hours, never closer than ${Math.round(LINKEDIN_LIMITS.minGapMs / 60_000)} minutes apart, starting at ${LINKEDIN_LIMITS.invitesPerDayStart} a day and ramping to ${LINKEDIN_LIMITS.invitesPerDayMax} over ${LINKEDIN_LIMITS.warmupDays} days.`,
+    weDo: `A day's invitations are spread across your working hours, never closer than ${Math.round(LINKEDIN_LIMITS.minGapMs / 60_000)} minutes apart, starting at ${LINKEDIN_LIMITS.invitesPerDayStart} a day and growing to ${SUSTAINED_INVITES_PER_DAY} a day over ${WEEKS_TO_SUSTAINED} weeks, never more than ${LINKEDIN_LIMITS.invitesPerWeek} a week.`,
     caveat:
       "A quiet afternoon is usually the system working. The campaign page says which (waiting out the gap, outside your hours, allowance spent, or nothing running at all), because those look identical otherwise.",
     step: null,

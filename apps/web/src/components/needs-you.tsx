@@ -20,6 +20,7 @@ const ICON: Record<NeedsYouKind, string> = {
   campaign_unlaunched: "campaigns",
   thin_notes: "posts",
   cta_missing: "cta",
+  setup_unfinished: "campaigns",
 };
 
 /**

@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase-server";
 import { AppNav, type NavGroup } from "@/components/app-nav";
 import { AppSearch } from "@/components/app-search";
 import { NavIcon } from "@/components/icons";
-import { BRAND } from "@le/shared";
+import { BRAND, POWERED_BY } from "@le/shared";
 import { BRAND_QUALIFIER, LogoMark } from "@/components/logo";
 import { readSetupState } from "@/lib/setup-state";
 import { markFor, type NavMarks } from "@/lib/nav-marks";
@@ -286,10 +286,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           above the page, which is the right shape for something broken.
         */}
 
-        <form action={signOut} className="app-signout">
+        <form action={signOut} className="app-signout stack-1">
           <button className="btn ghost small" type="submit">
             Sign out
           </button>
+          <p className="tiny subtle">{POWERED_BY}</p>
         </form>
       </aside>
 
