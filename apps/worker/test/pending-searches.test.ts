@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { FakeDb } from "./fake-db.js";
+import { TARGETING_BUILD } from "../src/jobs/targeting.js";
 import { startPendingSearches } from "../src/jobs/pending-searches.js";
 import type { WorkerContext } from "../src/context.js";
 import type { Queues } from "../src/queues.js";
@@ -48,11 +49,31 @@ describe("startPendingSearches", () => {
         { id: "dropped", workspace_id: WS, approved_at: "2026-10-05T00:00:00Z", do_not_pursue: true },
       ]);
       db.seed("campaigns", [{ id: "c1", workspace_id: WS, customer_profile_id: "has-campaign" }]);
-      // A search that ran and found nobody is an answer, not a job to repeat.
-      db.seed("events", [{ workspace_id: WS, name: "targeting.stopped", subject_id: "tried", payload: {} }]);
+      // A search that ran under this build and stopped is an answer, not a job to repeat.
+      db.seed("events", [
+        { workspace_id: WS, name: "targeting.stopped", subject_id: "tried", payload: { build: TARGETING_BUILD }, created_at: "2026-10-26T10:00:00Z" },
+      ]);
     });
     expect(await run()).toBe(0);
     expect(added).toHaveLength(0);
+  });
+
+  it("tries once more a search that stopped under an older build, and only once", async () => {
+    // ShyMarketing: refused on 22 October, fixed on the 26th, and nothing asked again.
+    const { db, added, run } = harness((db) => {
+      db.seed("customer_profiles", [{ id: "refused", workspace_id: WS, approved_at: "2026-10-22T00:00:00Z", do_not_pursue: false }]);
+      db.seed("events", [
+        { workspace_id: WS, name: "targeting.queued", subject_id: "refused", payload: {}, created_at: "2026-10-22T17:24:12Z" },
+        { workspace_id: WS, name: "targeting.stopped", subject_id: "refused", payload: { build: "2026-09-17.continuable-search" }, created_at: "2026-10-22T17:24:15Z" },
+      ]);
+    });
+    expect(await run()).toBe(1);
+    expect(added[0]?.data.customerProfileId).toBe("refused");
+    // The retry stops again under this build: that is the answer, so no loop.
+    db.seed("events", [
+      { workspace_id: WS, name: "targeting.stopped", subject_id: "refused", payload: { build: TARGETING_BUILD }, created_at: "2099-01-01T00:00:00Z" },
+    ]);
+    expect(await run()).toBe(0);
   });
 
   it("does nothing for a workspace with no working LinkedIn account", async () => {

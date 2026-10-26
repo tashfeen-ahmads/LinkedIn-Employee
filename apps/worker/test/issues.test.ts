@@ -112,6 +112,24 @@ describe("collectIssues", () => {
     expect(ids(filled)).not.toContain("campaigns:notes:c9");
   });
 
+  it("lists repeated search stops once, and clears them when a later search starts", async () => {
+    const stop = (at: string) => ({ workspace_id: WS, name: "targeting.stopped", subject_id: "cp1", payload: { reason: "LinkedIn refused the search." }, created_at: at });
+    const repeated = await harness((db) =>
+      db.seed("events", [stop("2026-10-03T17:24:00Z"), stop("2026-10-03T17:25:00Z"), stop("2026-10-04T15:48:00Z")]),
+    );
+    const rows = repeated.filter((i) => i.id.startsWith("campaigns:targeting:"));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.title).toContain("3 times");
+
+    const retried = await harness((db) =>
+      db.seed("events", [
+        stop("2026-10-03T17:24:00Z"),
+        { workspace_id: WS, name: "targeting.queued", subject_id: "cp1", payload: {}, created_at: "2026-10-05T10:00:00Z" },
+      ]),
+    );
+    expect(retried.filter((i) => i.id.startsWith("campaigns:targeting:"))).toHaveLength(0);
+  });
+
   it("reports failing AI calls", async () => {
     const issues = await harness((db) =>
       db.seed("llm_calls", [{ workspace_id: WS, agent: "targeting.invite-note", error: "model returned no parsable output", created_at: "2026-10-05T17:00:00Z" }]),

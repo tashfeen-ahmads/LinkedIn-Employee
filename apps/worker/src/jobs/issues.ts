@@ -125,6 +125,9 @@ export async function collectIssues(
       .in("name", [
         "campaign.notes_missing",
         "targeting.stopped",
+        "targeting.queued",
+        "campaign.created",
+        "campaign.extended",
         "linkedin.account.reauth_required",
         SALES_NAVIGATOR_PROBE_EVENT,
       ])
@@ -321,9 +324,32 @@ export async function collectIssues(
       add({ id: `campaigns:failed:${campaign.id}`, severity: "warning", area: "Campaigns", title: `${c.failed} failed in "${campaign.name}"`, detail: "Rows marked failed are not retried; read the campaign's failures.", ...base });
     }
   }
-  for (const event of (events ?? []).filter((e) => e.name === "targeting.stopped")) {
+  // One row per workspace, for its latest stop, and only while nothing has
+  // happened since: a later search queued or a list built means it was dealt
+  // with. One row per attempt listed a single refusal six times and never
+  // cleared, so the list looked worse the more somebody tried.
+  const searchEvents = [...(events ?? [])].sort((a, b) => a.created_at.localeCompare(b.created_at));
+  const stops = new Map<string, { event: (typeof searchEvents)[number]; count: number }>();
+  for (const event of searchEvents) {
+    if (!event.workspace_id) continue;
+    if (event.name === "targeting.stopped") {
+      const prior = stops.get(event.workspace_id);
+      stops.set(event.workspace_id, { event, count: (prior?.count ?? 0) + 1 });
+    } else if (["targeting.queued", "campaign.created", "campaign.extended"].includes(event.name)) {
+      stops.delete(event.workspace_id);
+    }
+  }
+  for (const [workspaceId, { event, count }] of stops) {
     const payload = (event.payload ?? {}) as Record<string, unknown>;
-    add({ id: `campaigns:targeting:${event.workspace_id}:${event.created_at}`, severity: "warning", area: "Campaigns", title: "Finding prospects stopped", detail: String(payload.reason ?? "No reason recorded."), ...at(event.workspace_id), since: event.created_at });
+    add({
+      id: `campaigns:targeting:${workspaceId}`,
+      severity: "warning",
+      area: "Campaigns",
+      title: count > 1 ? `Finding prospects stopped (${count} times this week)` : "Finding prospects stopped",
+      detail: String(payload.reason ?? "No reason recorded."),
+      ...at(workspaceId),
+      since: event.created_at,
+    });
   }
   // Read from the campaign as it is now, not from the event. Nightly
   // maintenance fills the missing notes (`fillMissingNotes`), and a row that

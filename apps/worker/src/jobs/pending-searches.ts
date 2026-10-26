@@ -1,6 +1,7 @@
 import type { WorkerContext } from "../context.js";
 import { recordEvent } from "../context.js";
 import { enqueueOnce, jobId, type Queues } from "../queues.js";
+import { TARGETING_BUILD } from "./targeting.js";
 
 /** How many people a first search looks for — the same as the strategy screen's button. */
 export const FIRST_SEARCH_SIZE = 50;
@@ -23,6 +24,13 @@ export const FIRST_SEARCH_SIZE = 50;
  *
  * Called as soon as an account is connected, and hourly so that nothing
  * depends on that moment going right (rule 8).
+ *
+ * A search that **stopped** under an older build of the search is tried once
+ * more under the current one. ShyMarketing's four approved strategies were
+ * refused by Sales Navigator on 22 October; the fix shipped four days later
+ * and nothing asked again, so a customer whose problem was fixed still had no
+ * list. Keyed to `TARGETING_BUILD`, so it is one retry per change to the
+ * search and never a loop: the retry's own stop carries the current build.
  */
 export async function startPendingSearches(
   ctx: WorkerContext,
@@ -56,13 +64,22 @@ export async function startPendingSearches(
     ctx.db.from("campaigns").select("customer_profile_id").in("customer_profile_id", profileIds),
     ctx.db
       .from("events")
-      .select("subject_id")
+      .select("subject_id, name, payload, created_at")
       .in("name", ["targeting.queued", "targeting.stopped"])
       .in("subject_id", profileIds),
   ]);
+  // The latest attempt per strategy decides: none, or a stop from an older
+  // build of the search, means it is waiting; anything else is an answer.
+  const latest = new Map<string, { name: string; build: unknown }>();
+  for (const row of [...(attempts ?? [])].sort((a, b) => a.created_at.localeCompare(b.created_at))) {
+    if (!row.subject_id) continue;
+    latest.set(row.subject_id, { name: row.name, build: (row.payload as { build?: unknown } | null)?.build });
+  }
   const done = new Set([
     ...(campaigns ?? []).map((row) => row.customer_profile_id),
-    ...(attempts ?? []).map((row) => row.subject_id),
+    ...[...latest.entries()]
+      .filter(([, last]) => !(last.name === "targeting.stopped" && last.build !== TARGETING_BUILD))
+      .map(([id]) => id),
   ]);
 
   let started = 0;
@@ -87,7 +104,11 @@ export async function startPendingSearches(
       actorUserId: account.user_id,
       subjectType: "customer_profile",
       subjectId: profile.id,
-      payload: { limit: FIRST_SEARCH_SIZE, campaignId: null, trigger: "account-connected" },
+      payload: {
+        limit: FIRST_SEARCH_SIZE,
+        campaignId: null,
+        trigger: latest.has(profile.id) ? "retry-after-fix" : "account-connected",
+      },
     }).catch((err) => console.error("could not record targeting.queued", err));
     started += 1;
   }

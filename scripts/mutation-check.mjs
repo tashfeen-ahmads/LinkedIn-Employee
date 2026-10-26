@@ -5515,6 +5515,22 @@ const MUTATIONS = [
     pkg: "@le/worker",
   },
   {
+    id: "search/retry-after-a-fix",
+    rule: "Rule 58: a search that stopped under an older build is tried once more, so a fixed problem is not left standing",
+    file: "apps/worker/src/jobs/pending-searches.ts",
+    from: "      .filter(([, last]) => !(last.name === \"targeting.stopped\" && last.build !== TARGETING_BUILD))",
+    to: "      .filter(() => true)",
+    pkg: "@le/worker",
+  },
+  {
+    id: "issues/search-stop-clears",
+    rule: "Rule 56: a search stop leaves Issues once a later search starts",
+    file: "apps/worker/src/jobs/issues.ts",
+    from: "      stops.delete(event.workspace_id);",
+    to: "      void 0;",
+    pkg: "@le/worker",
+  },
+  {
     id: "billing/send-path-checks-the-plan",
     rule: "Rule 67: an invitation queued during a trial does not go out after it ends",
     file: "apps/worker/src/jobs/linkedin-action.ts",

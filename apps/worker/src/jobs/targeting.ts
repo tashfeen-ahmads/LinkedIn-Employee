@@ -32,7 +32,7 @@ import type { TargetingJob } from "../queues.js";
  * produced it is a report that costs a deploy to interpret. Bump it whenever
  * the search behaviour changes.
  */
-const TARGETING_BUILD = "2026-09-17.continuable-search";
+export const TARGETING_BUILD = "2026-10-26.sales-navigator-fallback";
 
 /**
  * Why the job stopped, written where anyone can read it.
