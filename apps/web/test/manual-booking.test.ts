@@ -84,3 +84,71 @@ describe("the inbox's Mark booked", () => {
     expect(recorded).toBeLessThan(action.indexOf("clearConversationHold("));
   });
 });
+
+describe("confirming a time that was held for a person (Pro)", () => {
+  const HELD = "2026-09-08T14:00:00Z";
+
+  function held(status = "positive") {
+    const db = seeded(status);
+    Object.assign(db.find("conversations", { id: "conv-1" })!, {
+      held_slot_starts_at: HELD,
+      held_slot_ends_at: "2026-09-08T14:30:00.000Z",
+      held_slot_rep_user_id: USER,
+    });
+    return db;
+  }
+
+  it("writes the meeting for the held time, so the half hour is no longer offered", async () => {
+    const db = held();
+
+    const result = await recordManualBooking(db.asDb(), input);
+
+    expect(result).toEqual({ ok: true, counted: true });
+    expect(db.rows("meetings")).toHaveLength(1);
+    expect(db.rows("meetings")[0]).toMatchObject({ starts_at: HELD, rep_user_id: USER, prospect_id: "p-1", status: "scheduled" });
+    expect(db.find("conversations", { id: "conv-1" })?.held_slot_starts_at).toBeNull();
+  });
+
+  it("refuses, in words, a time somebody else has taken since, and books nothing", async () => {
+    const db = held();
+    // `meetings_one_per_rep_slot` refusing the insert, as Postgres would.
+    const real = db.asDb();
+    const clashing = new Proxy(real, {
+      get(target, prop, receiver) {
+        if (prop !== "from") return Reflect.get(target, prop, receiver);
+        return (table: string) => {
+          const builder = (target as unknown as { from: (t: string) => object }).from(table);
+          if (table !== "meetings") return builder;
+          return new Proxy(builder, {
+            get(b, p, r) {
+              if (p === "insert") {
+                return async () => ({
+                  data: null,
+                  error: { message: 'duplicate key value violates unique constraint "meetings_one_per_rep_slot"' },
+                });
+              }
+              const value = Reflect.get(b, p, r);
+              return typeof value === "function" ? value.bind(b) : value;
+            },
+          });
+        };
+      },
+    });
+
+    const result = await recordManualBooking(clashing, input);
+
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.message).toMatch(/taken by another meeting/);
+    expect(db.find("campaign_prospects", { id: "cp-1" })?.status).toBe("positive");
+    expect(db.rows("events").filter((e) => e.name === "meeting.booked")).toHaveLength(0);
+    expect(db.find("conversations", { id: "conv-1" })?.held_slot_starts_at).toBeNull();
+  });
+
+  it("never puts an opted-out prospect in anybody's diary", async () => {
+    const db = held("opted_out");
+
+    await recordManualBooking(db.asDb(), input);
+
+    expect(db.rows("meetings")).toHaveLength(0);
+  });
+});

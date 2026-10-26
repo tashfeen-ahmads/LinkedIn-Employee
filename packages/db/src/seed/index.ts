@@ -283,7 +283,7 @@ async function resetWorkspace(db: Db, userId: string): Promise<string> {
     name: DEMO.workspace.name,
     slug: DEMO.workspace.slug,
     plan: DEMO.workspace.plan,
-    trial_ends_at: new Date(Date.now() + 5 * DAY).toISOString(),
+    trial_ends_at: null,
     seats: 1,
   });
 

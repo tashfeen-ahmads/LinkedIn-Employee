@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/workspace";
 import { planFlags } from "@/lib/approve";
 import { AUTONOMY_ROLES, setAutonomy } from "@/lib/autonomy";
+import { readWorkspaceEntitlement, replyPlanNote } from "@/lib/entitlement";
 import { carryVoiceToAgent } from "@/lib/agent-voice";
 import { createClient } from "@/lib/supabase-server";
 import { callWorker, errorQuery, noticeQuery, startedNotice } from "@/lib/worker";
@@ -433,7 +434,7 @@ function isKnownTimezone(value: string): boolean {
 export default async function ProfilePage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; notice?: string; connected?: string; edit?: string }>;
+  searchParams: Promise<{ error?: string; notice?: string; connected?: string; edit?: string; checkout?: string }>;
 }) {
   const params = await searchParams;
   const session = await requireSession();
@@ -451,10 +452,15 @@ export default async function ProfilePage({
    * ask. Saving writes both, so the two cannot drift; a workspace from before
    * that still falls back to its campaigns rather than to a guess.
    */
-  const [{ data: wsRow }, { data: ruleRows }] = await Promise.all([
+  const [{ data: wsRow }, { data: ruleRows }, entitlement] = await Promise.all([
     supabase.from("workspaces").select("name, onboarding").eq("id", session.workspaceId).maybeSingle(),
     supabase.from("campaigns").select("rules").eq("workspace_id", session.workspaceId),
+    readWorkspaceEntitlement(supabase, session.workspaceId),
   ]);
+  // A Pro workspace that picks "on its own" is held anyway (`rulesForPlan` in
+  // the worker), so the screen says so rather than letting the choice look
+  // like it took.
+  const planNote = replyPlanNote(entitlement);
   const stated = (wsRow?.onboarding as { autonomy?: string } | null)?.autonomy;
   const autonomy =
     stated === "autonomous" || stated === "supervised"
@@ -791,6 +797,7 @@ export default async function ProfilePage({
                     <option value="supervised">Hold anything uncertain for me to read first</option>
                   </select>
                   <span className="hint">{alwaysHoldsSentence()}</span>
+                  {planNote ? <span className="hint">{planNote}</span> : null}
                 </label>
               </Panel>
             </Section>
@@ -900,6 +907,7 @@ export default async function ProfilePage({
                     ? "The agent answers and books on its own."
                     : "Anything uncertain is held for you to read first."}{" "}
                   <span className="subtle">{alwaysHoldsSentence()}</span>
+                  {planNote ? <span className="subtle"> {planNote}</span> : null}
                 </Fact>
               </dl>
             </Panel>
@@ -1081,7 +1089,7 @@ export default async function ProfilePage({
         <TeamSection searchParams={searchParams} />
       </PageGroup>
       <PageGroup id="billing">
-        <BillingSection />
+        <BillingSection checkout={params.checkout} />
       </PageGroup>
     </>
   );

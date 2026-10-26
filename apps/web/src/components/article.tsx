@@ -18,7 +18,7 @@ import {
 } from "@/lib/seo-content";
 import { formatDate } from "@/lib/format";
 import { TRIAL_DAYS } from "@/lib/plans";
-import { BRAND, INVITE_NOTE_MAX_CHARS, LINKEDIN_LIMITS, SUSTAINED_INVITES_PER_DAY, WEEKS_TO_SUSTAINED } from "@le/shared";
+import { BRAND, INVITE_NOTE_MAX_CHARS, LINKEDIN_LIMITS, WEEKS_TO_CEILING } from "@le/shared";
 import { RampChart } from "./diagrams";
 
 /**
@@ -419,8 +419,8 @@ function ToolPreview({ path }: { path: string }) {
       <p className="hub-preview-row">
         <span>Daily cap</span>
         <span className="mk-num">
-          {LINKEDIN_LIMITS.invitesPerDayStart} rising to {SUSTAINED_INVITES_PER_DAY} over{" "}
-          {WEEKS_TO_SUSTAINED} weeks
+          {LINKEDIN_LIMITS.invitesPerDayStart} rising to {LINKEDIN_LIMITS.invitesPerDayMax} over{" "}
+          {WEEKS_TO_CEILING} weeks
         </span>
       </p>
       <RampChart />

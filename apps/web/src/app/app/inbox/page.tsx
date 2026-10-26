@@ -208,7 +208,9 @@ async function markBooked(formData: FormData) {
   });
   if (!booked.ok) {
     console.error(`[inbox] mark booked: ${booked.reason}`);
-    redirect(errorQuery("/app/inbox", "That booking could not be saved. Reload the inbox and try again."));
+    redirect(
+      errorQuery("/app/inbox", booked.message ?? "That booking could not be saved. Reload the inbox and try again."),
+    );
   }
   await clearConversationHold(conversationId, session.workspaceId, "booking");
   revalidatePath("/app/inbox");

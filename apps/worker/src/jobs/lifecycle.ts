@@ -1,5 +1,5 @@
 import { countFunnel, isValidTimezone, zonedParts } from "@le/shared";
-import { trialLimitEnforced } from "@le/billing";
+import { trialDaysLeft, trialEnforced } from "@le/billing";
 import {
   adminNotifyEmail,
   approveStrategiesEmail,
@@ -516,7 +516,9 @@ async function runTrialWarnings(ctx: WorkerContext, now: Date): Promise<number> 
   // No "your trial ends in 3 days" while the trial does not end. The email
   // would be a threat the product does not carry out — and the next one, when
   // it does, would be read as another false alarm.
-  if (!trialLimitEnforced(process.env.TRIAL_LIMIT_ENFORCED)) return 0;
+  // Nor on a deployment that cannot take a payment, where the trial never
+  // ends either (`trialEnforced`, the same reading the send path makes).
+  if (!trialEnforced(process.env)) return 0;
 
   const { data: workspaces } = await ctx.db
     .from("workspaces")
@@ -537,8 +539,9 @@ async function maybeTrialWarning(ctx: WorkerContext, workspace: WorkspaceRow, no
   // has chosen already.
   if (workspace.plan !== "trial" || workspace.subscription_status || !workspace.trial_ends_at) return 0;
 
-  const daysLeft = Math.ceil((Date.parse(workspace.trial_ends_at) - now.getTime()) / 86_400_000);
-  if (!TRIAL_WARNING_DAYS.includes(daysLeft)) return 0;
+  // The banner's count, floored, so the email and the sidebar never disagree.
+  const daysLeft = trialDaysLeft(workspace.trial_ends_at, now);
+  if (daysLeft === null || !TRIAL_WARNING_DAYS.includes(daysLeft)) return 0;
 
   const eventName = `trial.warned.${daysLeft}`;
 

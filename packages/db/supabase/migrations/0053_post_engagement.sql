@@ -68,7 +68,9 @@ create table if not exists engagement_actions (
   body text,
   grounding text,
   prompt_version text,
-  status text not null default 'queued' check (status in ('queued', 'sent', 'skipped', 'failed')),
+  -- `sending` is the claim taken immediately before the provider call, so a
+  -- retried job never posts the same comment twice.
+  status text not null default 'queued' check (status in ('queued', 'sending', 'sent', 'skipped', 'failed')),
   reason text,
   scheduled_for timestamptz,
   sent_at timestamptz,
@@ -89,6 +91,11 @@ create policy engagement_actions_read on engagement_actions
 -- When this workspace last engaged with each person, so nobody is liked
 -- twice in a week.
 alter table prospects add column if not exists last_engaged_at timestamptz;
+
+-- When this workspace last read the person's posts, found or not, so the
+-- hourly planner moves down the list instead of reading the same few people
+-- every hour off the rep's seat.
+alter table prospects add column if not exists posts_checked_at timestamptz;
 
 -- On by default: liking and commenting is part of what the agent does. A
 -- workspace that does not want it turns it off on its profile.

@@ -64,7 +64,9 @@ export const DEMO: {
   workspace: {
     name: "Northwind Systems",
     slug: "northwind-demo",
-    plan: "trial",
+    // The free plan, which no trial clock touches: a demo whose trial ended
+    // five days after seeding paused its own worked example (rule 67).
+    plan: "free",
   },
   rep: {
     email: "demo@northwind.test",

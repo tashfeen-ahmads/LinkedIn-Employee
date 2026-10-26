@@ -152,4 +152,34 @@ describe("collectIssues", () => {
     const issues = await harness(() => undefined, { EMAIL_PROVIDER: "off" });
     expect(issues[0]?.severity).toBe("critical");
   });
+
+  it("says which Sales Navigator fields the latest weekly probe saw refused", async () => {
+    const probe = (created_at: string, payload: Record<string, string>) => ({
+      workspace_id: WS,
+      name: "targeting.sales_navigator_probe",
+      subject_id: "cp1",
+      payload,
+      created_at,
+    });
+    const issues = await harness((db) =>
+      db.seed("events", [
+        probe("2026-10-01T09:00:00Z", { "SN keywords only": "1", "SN title": "refused: Invalid parameters" }),
+        probe("2026-10-04T09:00:00Z", { "SN keywords only": "1", "SN role": "1", "SN seniority owner/partner": "refused: Invalid parameters" }),
+      ]),
+    );
+    const row = issues.find((i) => i.id === `unipile:sales-navigator-probe:${WS}`);
+    expect(row?.detail).toContain("SN seniority owner/partner (Invalid parameters)");
+    // The latest probe only: a field refused last week and accepted since is fixed.
+    expect(row?.detail).not.toContain("SN title");
+    expect(row?.since).toBe("2026-10-04T09:00:00Z");
+  });
+
+  it("says nothing about a probe that saw every field accepted", async () => {
+    const issues = await harness((db) =>
+      db.seed("events", [
+        { workspace_id: WS, name: "targeting.sales_navigator_probe", subject_id: "cp1", payload: { "SN keywords only": "1" }, created_at: "2026-10-04T09:00:00Z" },
+      ]),
+    );
+    expect(ids(issues).some((id) => id.startsWith("unipile:sales-navigator-probe"))).toBe(false);
+  });
 });

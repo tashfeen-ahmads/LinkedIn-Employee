@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  daysLeft,
+  billingConfigured,
+  trialDaysLeft as daysLeft,
+  trialEnforced,
   entitlementFor as entitlementForAnyMode,
   entitlementMessage,
   TIER_FEATURES,
@@ -205,5 +207,62 @@ describe("plans", () => {
 
   it("reads the old plan names as Pro", () => {
     expect(entitlementFor(billing({ plan: "solo", subscriptionStatus: "active" }), NOW).tier).toBe("pro");
+  });
+});
+
+describe("choosing a plan during the trial", () => {
+  it("keeps Autopilot until the trial ends, even on Pro", () => {
+    // Stripe's first charge is the trial's end; until then the workspace has
+    // what it was promised.
+    const result = entitlementFor(
+      billing({ plan: "pro", subscriptionStatus: "trialing", trialEndsAt: inDays(9) }),
+      NOW,
+    );
+    expect(result).toMatchObject({ canSend: true, reason: "active_subscription", tier: "autopilot" });
+    expect(result.features).toEqual(TIER_FEATURES.autopilot);
+  });
+
+  it("drops to Pro once the trial's end has passed", () => {
+    const result = entitlementFor(
+      billing({ plan: "pro", subscriptionStatus: "trialing", trialEndsAt: inDays(-1) }),
+      NOW,
+    );
+    expect(result.tier).toBe("pro");
+  });
+
+  it("is Pro on an active Pro subscription, whatever the old trial date says", () => {
+    const result = entitlementFor(billing({ plan: "pro", subscriptionStatus: "active", trialEndsAt: inDays(9) }), NOW);
+    expect(result.tier).toBe("pro");
+  });
+});
+
+describe("whether the trial is enforced on a deployment", () => {
+  const configured = {
+    STRIPE_SECRET_KEY: "sk_test",
+    STRIPE_WEBHOOK_SECRET: "whsec",
+    STRIPE_PRICE_PRO_MONTHLY: "price_1",
+    STRIPE_PRICE_PRO_YEARLY: "price_2",
+    STRIPE_PRICE_AUTOPILOT_MONTHLY: "price_3",
+    STRIPE_PRICE_AUTOPILOT_YEARLY: "price_4",
+  };
+
+  it("is on only when somebody could actually pay", () => {
+    expect(billingConfigured(configured)).toBe(true);
+    expect(trialEnforced(configured)).toBe(true);
+  });
+
+  it("pauses nobody when Stripe is not configured", () => {
+    // A trial ended on a deployment that cannot take a payment is a stop
+    // nobody can lift.
+    expect(trialEnforced({})).toBe(false);
+    expect(trialEnforced({ ...configured, STRIPE_SECRET_KEY: "" })).toBe(false);
+  });
+
+  it("pauses nobody when any one of the four prices is missing", () => {
+    expect(trialEnforced({ ...configured, STRIPE_PRICE_AUTOPILOT_YEARLY: undefined })).toBe(false);
+  });
+
+  it("still honours the emergency switch", () => {
+    expect(trialEnforced({ ...configured, TRIAL_LIMIT_ENFORCED: "false" })).toBe(false);
   });
 });

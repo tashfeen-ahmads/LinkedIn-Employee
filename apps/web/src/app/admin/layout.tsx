@@ -18,7 +18,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const supabase = await createClient();
   // The two things that are waiting on an operator, counted for the sidebar:
   // tickets the assistant held for a person, and whether outreach is paused.
-  const [{ count: waiting }, { data: settings }] = await Promise.all([
+  const [{ count: waiting, error: waitingError }, { data: settings, error: settingsError }] = await Promise.all([
     supabase
       .from("support_tickets")
       .select("id", { count: "exact", head: true })
@@ -83,7 +83,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             classes this block used before had no styles left in the sheet. */}
         <div className="app-signout stack-1">
           <p className="tiny subtle">{admin.email}</p>
-          <p className="tiny subtle">{POWERED_BY}</p>
+          <p className="tiny subtle powered-by">{POWERED_BY}</p>
         </div>
       </aside>
 
@@ -95,7 +95,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         <header className="app-top">
           <div className="app-top-inner admin-top-inner">
             <div className="cluster">
-              {settings?.outreach_paused_at ? (
+              {/* Unreadable is not "running": the send path counts it as paused (rule 59). */}
+              {settingsError ? (
+                <Link className="pill danger" href="/admin/settings">
+                  Could not check outreach
+                </Link>
+              ) : settings?.outreach_paused_at ? (
                 <Link className="pill danger" href="/admin/settings">
                   Outreach is paused
                 </Link>
@@ -110,10 +115,16 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               <Link
                 className="app-top-icon"
                 href="/admin/support"
-                aria-label={waiting ? `Support, ${waiting} waiting` : "Support"}
+                aria-label={
+                  waitingError ? "Support, waiting count unavailable" : waiting ? `Support, ${waiting} waiting` : "Support"
+                }
               >
                 <NavIcon name="support" className="nav-icon" />
-                {waiting ? <span className="app-top-count">{waiting}</span> : null}
+                {waitingError ? (
+                  <span className="app-top-count">?</span>
+                ) : waiting ? (
+                  <span className="app-top-count">{waiting}</span>
+                ) : null}
               </Link>
               <Link className="btn ghost small" href="/app">
                 Back to the app
@@ -121,7 +132,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             </div>
           </div>
         </header>
-        <main id="main" className="app-body">{children}</main>
+        <main id="main" className="app-body">
+          {children}
+          <p className="tiny subtle app-foot-maker">{POWERED_BY}</p>
+        </main>
       </div>
     </div>
   );

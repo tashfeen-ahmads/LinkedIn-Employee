@@ -225,19 +225,21 @@ export class MockLinkedInProvider implements LinkedInProvider {
   comments: Array<{ accountId: string; postId: string; text: string }> = [];
   /** Set to make the next reaction or comment fail with this provider sentence. */
   engageError: string | null = null;
+  /** What the provider says about the account alongside a refusal. */
+  engageHealth: ActionResult["health"] | undefined = undefined;
 
   async listPosts(input: { accountId: string; userId: string; limit?: number }): Promise<ProviderPost[]> {
     return (this.posts[input.userId] ?? []).slice(0, input.limit ?? 5);
   }
 
   async reactToPost(input: { accountId: string; postId: string; reaction: PostReaction }): Promise<ActionResult> {
-    if (this.engageError) return { ok: false, error: this.engageError };
+    if (this.engageError) return { ok: false, error: this.engageError, health: this.engageHealth };
     this.reactions.push(input);
     return { ok: true };
   }
 
   async commentOnPost(input: { accountId: string; postId: string; text: string }): Promise<ActionResult> {
-    if (this.engageError) return { ok: false, error: this.engageError };
+    if (this.engageError) return { ok: false, error: this.engageError, health: this.engageHealth };
     this.comments.push(input);
     return { ok: true };
   }

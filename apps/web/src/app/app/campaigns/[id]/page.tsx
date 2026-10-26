@@ -24,7 +24,6 @@ import { restoreFromFailure } from "@/lib/retry-failed";
 import { requireSession } from "@/lib/workspace";
 import { launch } from "@/lib/launch";
 import { readWizard } from "@/lib/wizard-state";
-import { currentStep } from "@/lib/wizard";
 import { createClient } from "@/lib/supabase-server";
 import { callWorker, errorQuery, noticeQuery, startedNotice } from "@/lib/worker";
 import { SubmitButton } from "@/components/submit-button";
@@ -38,6 +37,7 @@ import { formatDate, isoAttr } from "@/lib/format";
 import { label } from "@/lib/labels";
 import { SKIPPED_AT_SEND_REASONS, actionableQueue, launchBlockers, sendEstimate } from "@/lib/campaign";
 import { isPlatformAdmin } from "@/lib/admin";
+import { readWorkspaceEntitlement, replyPlanNote } from "@/lib/entitlement";
 
 /**
  * How many people one press of "Find more" reads.
@@ -345,13 +345,16 @@ async function launchCampaign(
   const wizard = await readWizard(supabase, session.userId);
   // A read that failed is not permission: onboarding says it could not load,
   // which is better than a first campaign going live past unconfirmed steps.
-  // Somebody who opened the app before launching launches from here (rule 65);
-  // every blocker is still checked by `launch`.
-  if (
-    wizard.unreadable ||
-    (!wizard.facts.hasLaunchedCampaign && currentStep(wizard.facts) !== "launch" && !wizard.facts.deferred)
-  ) {
-    redirect("/onboarding");
+  if (wizard.unreadable) redirect("/onboarding");
+  // The first launch, however this page was reached, is made on the launch
+  // step, including by somebody who opened the app before launching. That
+  // step asks who answers the replies and approves the opener and offer the
+  // campaign sends; launching from here went live with neither, so a
+  // follow-up built from {{pitch}} would wait on an approval nobody had been
+  // asked for. A step still not done is where the launch step sends them
+  // instead (`stepToShow`).
+  if (!wizard.facts.hasLaunchedCampaign) {
+    redirect(`/onboarding?step=launch&campaign=${encodeURIComponent(campaignId)}`);
   }
 
   const outcome = await launch(campaignId, session);
@@ -769,6 +772,10 @@ export default async function CampaignPage({
   // and negative replies are answered rather than held (rule 41), so the
   // sentence under the reply setting has to say which rules are in force.
   const autonomous = (campaign.rules as { autonomy?: string } | null)?.autonomy === "autonomous";
+  // Pro holds every reply whatever this campaign says (`rulesForPlan`), so
+  // "Send clean replies for me" on Pro is said to do nothing, not left to look
+  // like it took.
+  const planNote = replyPlanNote(await readWorkspaceEntitlement(supabase, session.workspaceId));
 
   const rows = members ?? [];
   /*
@@ -1079,7 +1086,19 @@ export default async function CampaignPage({
         </div>
       ) : null}
 
-      {dropped.length > 0 ? (
+      {dropped.length > 0 && sendingPlan === "sales_navigator" ? (
+        // A seat that refused part of the search, or a word with no Sales
+        // Navigator level. Neither is "built without Sales Navigator", and
+        // telling somebody who has it to turn it on is advice they cannot take.
+        <div className="notice">
+          <strong>Some of your customer profile was not applied</strong>
+          <p className="small">
+            This search did not filter on {listInWords(dropped)}. Each person was still scored
+            against the full profile, and the notes below say what changed. Read the names before
+            launching.
+          </p>
+        </div>
+      ) : dropped.length > 0 ? (
         <div className="notice">
           <strong>This list was built without Sales Navigator</strong>
           <p className="small">
@@ -1384,6 +1403,7 @@ export default async function CampaignPage({
             The ceiling of {LINKEDIN_LIMITS.invitesPerDayMax} a day is a safety limit, not a preference.
             {running ? "" : " Launch campaign saves anything changed here first."}
           </p>
+          {planNote ? <p className="small muted">{planNote}</p> : null}
         </div>
       </form>
       </Section>

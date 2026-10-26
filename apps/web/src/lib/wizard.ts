@@ -233,3 +233,31 @@ export function retryBackToOnboarding(path: string): string {
       : "sage-not-started";
   return `/onboarding?step=strategy&error=${code}`;
 }
+
+/** The notice the list step shows when a press found its own search still running. */
+export const ALREADY_RUNNING_NOTICE = "already-running";
+
+/** As long as the list step waits on a search before saying it has not finished (`STALLED_MS`). */
+const ALREADY_RUNNING_WINDOW_MS = 10 * 60 * 1000;
+
+/**
+ * Whether "that search is already running" is still true enough to say, and
+ * to keep the page refreshing for.
+ *
+ * The notice rides in the address, so refreshing the page keeps it there for
+ * as long as the tab is open. Dated by the press that produced it and good for
+ * the window a search is given to finish; after that it is gone, and the page
+ * stops asking. An undated notice, from a link written before it was dated, is
+ * never shown: there is nothing to bound it by, and a wait with no end is the
+ * thing being prevented.
+ */
+export function alreadyRunningNotice(
+  notice: string | null | undefined,
+  since: string | null | undefined,
+  now: number = Date.now(),
+): boolean {
+  if (notice !== ALREADY_RUNNING_NOTICE) return false;
+  const at = Number(since);
+  if (!Number.isFinite(at) || at <= 0) return false;
+  return now - at >= -60_000 && now - at < ALREADY_RUNNING_WINDOW_MS;
+}

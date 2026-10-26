@@ -18,6 +18,7 @@ import {
   warmStillCounts,
   workingMsLeftToday,
   workingMsAhead,
+  type AccountHealth,
   type PostReaction,
 } from "@le/linkedin";
 import {
@@ -1523,7 +1524,9 @@ async function sendEngagement(
   const { db } = ctx;
   const { data: row } = await db
     .from("engagement_actions")
-    .select("id, workspace_id, linkedin_account_id, prospect_id, post_id, kind, reaction_type, body, status")
+    .select(
+      "id, workspace_id, linkedin_account_id, prospect_id, campaign_id, post_id, post_at, kind, reaction_type, body, status, scheduled_for",
+    )
     .eq("id", job.engagementId)
     .eq("workspace_id", job.workspaceId)
     .maybeSingle();
@@ -1532,6 +1535,25 @@ async function sendEngagement(
   const skip = async (reason: string) => {
     await db.from("engagement_actions").update({ status: "skipped", reason }).eq("id", row.id).eq("status", "queued");
   };
+
+  // Late is skipped, never sent: a pause lifting or a backlog waking must not
+  // become a burst of likes on posts from last week.
+  const nowMs = Date.now();
+  if (row.scheduled_for && nowMs - Date.parse(row.scheduled_for) > ENGAGE_LATE_MS) {
+    return skip("it could not go out near the time it was planned");
+  }
+  if (row.post_at && nowMs - Date.parse(row.post_at) > LINKEDIN_LIMITS.engagePostMaxAgeDays * 86_400_000) {
+    return skip("the post is too old now");
+  }
+  if (row.campaign_id) {
+    const { data: campaign } = await db
+      .from("campaigns")
+      .select("status")
+      .eq("id", row.campaign_id)
+      .eq("workspace_id", row.workspace_id)
+      .maybeSingle();
+    if (campaign?.status !== "running") return skip("the campaign is not running");
+  }
 
   const { data: workspace } = await db.from("workspaces").select("engage_posts").eq("id", row.workspace_id).maybeSingle();
   if (!workspace?.engage_posts) return skip("liking and commenting is turned off for this workspace");
@@ -1593,6 +1615,16 @@ async function sendEngagement(
     throw new RescheduleError(decision.reason, jitteredRetryMs(decision.retryAfterMs, decision.reason));
   }
 
+  // Claimed before the call: a job retried after a successful post, or re-run
+  // after a restart mid-call, finds the row no longer queued and posts nothing.
+  const { data: claimed } = await db
+    .from("engagement_actions")
+    .update({ status: "sending" })
+    .eq("id", row.id)
+    .eq("status", "queued")
+    .select("id");
+  if (!claimed?.length) return;
+
   const result =
     row.kind === "comment"
       ? row.body?.trim()
@@ -1603,21 +1635,46 @@ async function sendEngagement(
           postId: row.post_id,
           reaction: (row.reaction_type as PostReaction | null) ?? "like",
         });
+  // A restriction or a slow-down applies to the whole account, exactly as on
+  // every other send.
+  if (result.health) await applyHealth(db, accountRow, result.health, { email: ctx.email, appUrl: ctx.env.APP_URL });
   if (!result.ok) {
+    // The screen gets words; the provider's own text names our supplier and a
+    // route (rule 54), so it goes to an event for whoever runs the deployment.
     await db
       .from("engagement_actions")
-      .update({ status: "failed", reason: (result.error ?? "refused").slice(0, 300) })
+      .update({ status: "failed", reason: engagementRefusal(row.kind, result.health) })
       .eq("id", row.id);
+    await recordEvent(db, {
+      workspaceId: row.workspace_id,
+      name: "engagement.refused",
+      subjectType: "engagement_action",
+      subjectId: row.id,
+      payload: { kind: row.kind, cause: (result.error ?? "refused").slice(0, 500), health: result.health ?? null },
+    }).catch(() => undefined);
     return;
   }
 
-  // Counted in the same statement as every other action (rule 2).
-  await recordAction(db, accountRow.id, kind);
+  // Marked sent before it is counted: a counter that fails to write raises
+  // (rule 2) and the job is retried, and the retry must find nothing to send.
   const now = new Date().toISOString();
   await db.from("engagement_actions").update({ status: "sent", sent_at: now, reason: null }).eq("id", row.id);
+  // Counted in the same statement as every other action (rule 2).
+  await recordAction(db, accountRow.id, kind);
   if (row.prospect_id) {
     await db.from("prospects").update({ last_engaged_at: now }).eq("id", row.prospect_id).eq("workspace_id", row.workspace_id);
   }
+}
+
+/** How late a planned like or comment may still go out. */
+export const ENGAGE_LATE_MS = 3 * 60 * 60_000;
+
+function engagementRefusal(kind: string, health: AccountHealth | undefined): string {
+  if (health === "restricted") return "LinkedIn is restricting the account, so it was not sent";
+  if (health === "warning") return "LinkedIn asked the account to slow down, so it was not sent";
+  return kind === "comment"
+    ? "LinkedIn did not accept the comment. The post may be gone or closed to comments"
+    : "LinkedIn did not accept the like. The post may be gone";
 }
 
 export class RescheduleError extends Error {

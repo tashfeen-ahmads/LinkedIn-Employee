@@ -247,11 +247,6 @@ export class UnipileProvider implements LinkedInProvider {
     // Sales Navigator takes the whole profile as one structured query, which is
     // what the seat is for.
     if (tier === "sales_navigator") {
-      const params = new URLSearchParams({ account_id: input.accountId, limit: String(limit) });
-      // A classic position describes six searches and means nothing here. An
-      // account that gained a seat since the last run carries one.
-      if (input.cursor && !isClassicCursor(input.cursor)) params.set("cursor", input.cursor);
-
       // The first Sales Navigator account this product ever searched with was
       // refused six times in a row with "Invalid parameters", and the customer
       // sat on "building your campaign" with no list and no way forward. A
@@ -259,10 +254,22 @@ export class UnipileProvider implements LinkedInProvider {
       // whole profile is asked first, then the part every search accepts, and
       // only then regular search, each step named on the campaign.
       const attempts = [
-        { body, droppedFilters, note: null as string | null },
-        ...salesNavigatorFallbacks(input.query, resolved),
+        { attempt: "full" as const, body, droppedFilters, note: null as string | null },
+        { attempt: "partial" as const, ...salesNavigatorFallback(input.query, resolved) },
       ];
-      for (const attempt of attempts) {
+
+      // A position belongs to the search that produced it. The narrower search
+      // is a different result set, so a cursor from it handed to the full one
+      // (or the other way round) is a position in a list nobody asked for. The
+      // next run resumes the step that answered last time, and only that step
+      // gets the cursor. A classic position describes six searches and means
+      // nothing here; an account that gained a seat since the last run carries one.
+      const resume = readSalesNavigatorCursor(input.cursor);
+      const from = resume ? attempts.findIndex((a) => a.attempt === resume.attempt) : 0;
+
+      for (const attempt of attempts.slice(from)) {
+        const params = new URLSearchParams({ account_id: input.accountId, limit: String(limit) });
+        if (resume && resume.attempt === attempt.attempt) params.set("cursor", resume.cursor);
         try {
           const res = await this.request<{ items?: UnipileRawProfile[]; cursor?: string | null }>(
             `${ROUTES.search}?${params.toString()}`,
@@ -270,7 +277,7 @@ export class UnipileProvider implements LinkedInProvider {
           );
           return {
             items: (res.items ?? []).map(toProspectCandidate),
-            cursor: res.cursor ?? null,
+            cursor: res.cursor ? `${SALES_NAVIGATOR_CURSOR_PREFIX[attempt.attempt]}${res.cursor}` : null,
             droppedFilters: attempt.droppedFilters,
             filterNotes: attempt.note ? [...notes, attempt.note] : notes,
           };
@@ -288,7 +295,7 @@ export class UnipileProvider implements LinkedInProvider {
       });
       return {
         ...classic,
-        filterNotes: [SALES_NAVIGATOR_REFUSED_NOTE, ...(classic.filterNotes ?? [])],
+        filterNotes: [salesNavigatorRefusedNote(classic.droppedFilters), ...(classic.filterNotes ?? [])],
       };
     }
 
@@ -891,6 +898,8 @@ export class UnipileProvider implements LinkedInProvider {
    * So every candidate is asked at once and the counts are reported. One click
    * replaces six deployments. Each probe requests a single result: this is a
    * diagnostic, and it runs against a seat somebody is paying for.
+   *
+   * `salesNavigator` asks Sales Navigator's fields instead of classic's.
    */
   async probeSearch(
     accountId: string,
@@ -899,7 +908,7 @@ export class UnipileProvider implements LinkedInProvider {
     const usId = (await this.lookupParameter(accountId, "LOCATION", "United States")).found?.id;
     const sn = (extra: Record<string, unknown>) => ({ api: "sales_navigator", category: "people", keywords: "Founder", ...extra });
 
-    const candidates: Array<{ label: string; body: Record<string, unknown> }> = [
+    const classic: Array<{ label: string; body: Record<string, unknown> }> = [
       { label: "keywords only", body: { api: "classic", category: "people", keywords: "Founder" } },
       {
         label: "keywords + location",
@@ -921,22 +930,25 @@ export class UnipileProvider implements LinkedInProvider {
         label: "no filters at all",
         body: { api: "classic", category: "people" },
       },
-      // Sales Navigator, one field at a time, in each shape it might take. The
-      // first live seat had every search refused as "Invalid parameters", and
-      // the refusal names the field only here, where it is asked alone.
-      ...(options.salesNavigator
-        ? [
-            { label: "SN keywords only", body: sn({}) },
-            { label: "SN location", body: sn(usId ? { location: { include: [usId] } } : {}) },
-            { label: "SN seniority as a level", body: sn({ seniority: { include: ["owner"] } }) },
-            { label: "SN seniority as an id", body: sn({ seniority: { include: ["10"] } }) },
-            { label: "SN headcount as a range", body: sn({ company_headcount: [{ min: 11, max: 50 }] }) },
-            { label: "SN headcount as text", body: sn({ company_headcount: ["11-50"] }) },
-            { label: "SN title", body: sn({ title: { include: ["Founder"] } }) },
-            { label: "SN role", body: sn({ role: { include: ["Founder"] } }) },
-          ]
-        : []),
     ];
+    // Sales Navigator, one field at a time, in each shape it might take. The
+    // first live seat had every search refused as "Invalid parameters", and
+    // the refusal names the field only here, where it is asked alone. Asked
+    // instead of the classic probes, not as well: the question is which
+    // Sales Navigator field was refused, and every probe is a request off a
+    // paid seat.
+    const salesNavigator: Array<{ label: string; body: Record<string, unknown> }> = [
+      { label: "SN keywords only", body: sn({}) },
+      { label: "SN location", body: sn(usId ? { location: { include: [usId] } } : {}) },
+      { label: "SN role", body: sn({ role: { include: ["Founder"] } }) },
+      { label: "SN title", body: sn({ title: { include: ["Founder"] } }) },
+      { label: "SN seniority owner/partner", body: sn({ seniority: { include: ["owner/partner"] } }) },
+      { label: "SN seniority director", body: sn({ seniority: { include: ["director"] } }) },
+      { label: "SN seniority as an id", body: sn({ seniority: { include: ["220"] } }) },
+      { label: "SN headcount as a range", body: sn({ company_headcount: [{ min: 11, max: 50 }] }) },
+      { label: "SN headcount as text", body: sn({ company_headcount: ["11-50"] }) },
+    ];
+    const candidates = options.salesNavigator ? salesNavigator : classic;
 
     const params = new URLSearchParams({ account_id: accountId, limit: "1" });
     const out: Array<{ label: string; count: number | null; error?: string }> = [];
@@ -1194,20 +1206,69 @@ function anyOf(terms: Array<string | undefined>): string | undefined {
   return quoted.length === 1 ? quoted[0] : quoted.join(" OR ");
 }
 
+/**
+ * Said when Sales Navigator refused both searches and regular search built the
+ * list. The filters regular search could not apply are named from what it
+ * actually reported, because a fixed list names filters the profile never set
+ * and misses the ones it did.
+ */
+export function salesNavigatorRefusedNote(dropped: string[] = []): string {
+  return dropped.length
+    ? `${SALES_NAVIGATOR_REFUSED_NOTE} ${capitalise(listInWords(dropped))} ${dropped.length === 1 ? "was" : "were"} not applied, so read the names carefully.`
+    : `${SALES_NAVIGATOR_REFUSED_NOTE} Read the names carefully.`;
+}
+
+/** Every sentence a fully refused Sales Navigator search says begins with this. */
 export const SALES_NAVIGATOR_REFUSED_NOTE =
-  "Sales Navigator would not run this search, so regular LinkedIn search was used instead. Seniority, company size and excluded titles were not applied, so read the names carefully.";
+  "Sales Navigator would not run this search, so regular LinkedIn search was used instead.";
 
+/** Every sentence the narrower Sales Navigator search can say begins with this. */
 export const SALES_NAVIGATOR_PARTIAL_NOTE =
-  "Sales Navigator would not take the full set of filters, so it was searched by title and location only. Seniority, company size and excluded titles were not applied.";
+  "Sales Navigator would not take the full set of filters, so it was searched again with fewer.";
 
+/**
+ * Whether a filter note says Sales Navigator refused the full search, in
+ * either of its forms. The notes carry what was dropped, so they are matched
+ * by how they begin rather than as fixed strings.
+ */
+export function isSalesNavigatorFallbackNote(note: string): boolean {
+  return note.startsWith(SALES_NAVIGATOR_PARTIAL_NOTE) || note.startsWith(SALES_NAVIGATOR_REFUSED_NOTE);
+}
+
+function listInWords(items: string[]): string {
+  if (items.length <= 1) return items[0] ?? "";
+  return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
+}
+
+function quoted(words: string[]): string {
+  return listInWords(words.map((w) => `"${w}"`));
+}
+
+function capitalise(text: string): string {
+  return text ? text[0]!.toUpperCase() + text.slice(1) : text;
+}
+
+/*
+ * Sales Navigator's own vocabulary.
+ *
+ * The provider's reference (developer.unipile.com) could not be reached when
+ * this was written, so these are LinkedIn's current Sales Navigator levels and
+ * company-size buckets as Sales Navigator itself shows them, in the shape the
+ * provider's other enum filters take. Partner is no longer its own level: Sales
+ * Navigator folded it into Owner. Anything that does not map is left out and
+ * named in `droppedFilters`, never sent as the Strategy Agent's words, and a
+ * shape the provider refuses still builds a list through the narrower search.
+ * The weekly probe asks each shape alone, which is what settles it.
+ */
 const SALES_NAVIGATOR_SENIORITY: Array<[RegExp, string]> = [
-  [/\b(owner|founder|co-?founder|proprietor)\b/i, "owner"],
-  [/\bpartner\b/i, "partner"],
+  [/\b(owner|founder|co-?founder|proprietor|partner)\b/i, "owner/partner"],
+  // Before CXO: "vice president" contains "president".
+  [/\b(vp|svp|evp|vice president)\b/i, "vice_president"],
   [/\b(cxo|c-?level|c-?suite|chief|ceo|cfo|coo|cto|cmo|cro|president)\b/i, "cxo"],
-  [/\b(vp|vice president)\b/i, "vp"],
   [/\b(director|head)\b/i, "director"],
+  // Before the experienced level: "entry level manager" contains "manager".
+  [/\b(entry[- ]level manager|entry manager|first[- ]line manager)\b/i, "entry_level_manager"],
   [/\b(senior manager|experienced manager|manager)\b/i, "experienced_manager"],
-  [/\bentry manager\b/i, "entry_manager"],
   [/\bstrategic\b/i, "strategic"],
   [/\bsenior\b/i, "senior"],
   [/\b(entry|junior|associate)\b/i, "entry_level"],
@@ -1216,45 +1277,151 @@ const SALES_NAVIGATOR_SENIORITY: Array<[RegExp, string]> = [
 
 /** Seniority words as Sales Navigator's own levels; an unknown word is left out. */
 export function salesNavigatorSeniorities(words: string[] | undefined): string[] {
+  return salesNavigatorSeniorityMapping(words).levels;
+}
+
+function salesNavigatorSeniorityMapping(words: string[] | undefined): { levels: string[]; unmapped: string[] } {
   const out = new Set<string>();
+  const unmapped: string[] = [];
   for (const word of words ?? []) {
     const hit = SALES_NAVIGATOR_SENIORITY.find(([re]) => re.test(word));
     if (hit) out.add(hit[1]);
+    else if (word.trim()) unmapped.push(word.trim());
   }
-  return [...out];
+  return { levels: [...out], unmapped };
 }
 
-/** "11-50", "1,001-5,000", "10,000+" as ranges; anything else is left out. */
+/**
+ * Sales Navigator's company-size buckets. It filters on these and nothing in
+ * between: a range of its own invention is not a size Sales Navigator has.
+ */
+const SALES_NAVIGATOR_HEADCOUNT_BUCKETS: Array<{ min: number; max?: number }> = [
+  { min: 1, max: 10 },
+  { min: 11, max: 50 },
+  { min: 51, max: 200 },
+  { min: 201, max: 500 },
+  { min: 501, max: 1000 },
+  { min: 1001, max: 5000 },
+  { min: 5001, max: 10000 },
+  { min: 10001 },
+];
+
+/**
+ * "11-50", "1,001-5,000", "10,000+" snapped to the buckets they cover.
+ *
+ * A bucket is taken when the range covers more than its edge: "10-50" is the
+ * 11-50 bucket, not 1-10 as well, and "10,000+" is 10,001+, not 5,001-10,000
+ * for the sake of one number. Anything that is not a number range is left out.
+ */
 export function salesNavigatorHeadcounts(sizes: string[] | undefined): Array<{ min: number; max?: number }> {
-  const out: Array<{ min: number; max?: number }> = [];
+  return salesNavigatorHeadcountMapping(sizes).buckets;
+}
+
+function salesNavigatorHeadcountMapping(sizes: string[] | undefined): {
+  buckets: Array<{ min: number; max?: number }>;
+  unmapped: string[];
+} {
+  const picked = new Set<number>();
+  const unmapped: string[] = [];
   for (const size of sizes ?? []) {
-    const digits = size.replace(/,/g, "");
+    const digits = size.replace(/,/g, "").replace(/\s*(employees?|people|staff)\s*$/i, "");
     const range = /^\s*(\d+)\s*(?:-|–|to)\s*(\d+)\s*$/i.exec(digits);
     const open = /^\s*(\d+)\s*\+\s*$/.exec(digits);
-    if (range) out.push({ min: Number(range[1]), max: Number(range[2]) });
-    else if (open) out.push({ min: Number(open[1]) });
+    const lo = range ? Number(range[1]) : open ? Number(open[1]) : NaN;
+    const hi = range ? Number(range[2]) : open ? Infinity : NaN;
+    if (!Number.isFinite(lo) || !(hi >= lo)) {
+      if (size.trim()) unmapped.push(size.trim());
+      continue;
+    }
+    let hit = false;
+    SALES_NAVIGATOR_HEADCOUNT_BUCKETS.forEach((bucket, i) => {
+      const top = bucket.max ?? Infinity;
+      const overlap = Math.min(hi, top) - Math.max(lo, bucket.min);
+      // More than a single shared number, or a single number asked for.
+      if (overlap > 0 || (lo === hi && lo >= bucket.min && lo <= top)) {
+        picked.add(i);
+        hit = true;
+      }
+    });
+    if (!hit) unmapped.push(size.trim());
   }
-  return out;
+  return {
+    buckets: SALES_NAVIGATOR_HEADCOUNT_BUCKETS.filter((_, i) => picked.has(i)).map((b) => ({ ...b })),
+    unmapped,
+  };
 }
 
-/** What to ask Sales Navigator when the whole profile is refused: the part any search takes. */
-function salesNavigatorFallbacks(
+/**
+ * The narrower search, asked when the whole profile is refused: free-text
+ * keywords and location, the part every search takes.
+ *
+ * What it dropped is read off what the profile actually set. A fixed list named
+ * seniority on a profile that had none and said nothing about the industry and
+ * keywords it really left out, which is the filter that silently stops being
+ * applied (rule 12).
+ */
+const TITLE_AS_KEYWORDS = "job title (searched as keywords)";
+
+function salesNavigatorFallback(
   query: SearchQuery,
   resolved: ResolvedFilters,
-): Array<{ body: Record<string, unknown>; droppedFilters: string[]; note: string }> {
-  const keywords = anyOf(query.titles?.length ? query.titles : (query.keywords ?? []));
-  return [
-    {
-      body: {
-        api: "sales_navigator",
-        category: "people",
-        ...(keywords ? { keywords } : {}),
-        ...(resolved.locations.length ? { location: { include: resolved.locations } } : {}),
-      },
-      droppedFilters: ["seniority", "company size", "excluded titles"],
-      note: SALES_NAVIGATOR_PARTIAL_NOTE,
+): { body: Record<string, unknown>; droppedFilters: string[]; note: string } {
+  const titles = hasAny(query.titles);
+  const keywords = anyOf(titles ? (query.titles ?? []) : (query.keywords ?? []));
+  const located = resolved.locations.length > 0;
+
+  const droppedFilters: string[] = [];
+  if (titles) droppedFilters.push(TITLE_AS_KEYWORDS);
+  if (titles && hasAny(query.keywords)) droppedFilters.push("keywords");
+  if (hasAny(query.seniorities)) droppedFilters.push("seniority");
+  if (resolved.industries.length) droppedFilters.push("industry");
+  if (hasAny(query.companyHeadcount)) droppedFilters.push("company size");
+  if (hasAny(query.excludeTitles)) droppedFilters.push("excluded titles");
+
+  const searched = titles
+    ? "The job titles were typed in as plain keywords, so a title can match anywhere in a profile"
+    : keywords
+      ? "It was searched by keyword"
+      : "It was searched with no keywords";
+  const where = located ? " and within the chosen locations." : ".";
+  const rest = droppedFilters.filter((f) => f !== TITLE_AS_KEYWORDS);
+  const notApplied = rest.length
+    ? ` ${capitalise(listInWords(rest))} ${rest.length === 1 ? "was" : "were"} not applied.`
+    : "";
+
+  return {
+    body: {
+      api: "sales_navigator",
+      category: "people",
+      ...(keywords ? { keywords } : {}),
+      ...(located ? { location: { include: resolved.locations } } : {}),
     },
-  ];
+    droppedFilters,
+    note: `${SALES_NAVIGATOR_PARTIAL_NOTE} ${searched}${where}${notApplied}`,
+  };
+}
+
+/**
+ * Which Sales Navigator search a stored position came from.
+ *
+ * The classic composite carries its own `classic:` marker and is left alone.
+ * An unmarked cursor was written before the narrower search existed, by the
+ * full search, which is the only thing that could have produced it.
+ */
+const SALES_NAVIGATOR_CURSOR_PREFIX = { full: "sn-full:", partial: "sn-partial:" } as const;
+
+export function readSalesNavigatorCursor(
+  cursor: string | null | undefined,
+): { attempt: "full" | "partial"; cursor: string } | null {
+  if (!cursor || isClassicCursor(cursor)) return null;
+  for (const attempt of ["full", "partial"] as const) {
+    const prefix = SALES_NAVIGATOR_CURSOR_PREFIX[attempt];
+    if (cursor.startsWith(prefix)) {
+      const rest = cursor.slice(prefix.length);
+      return rest ? { attempt, cursor: rest } : null;
+    }
+  }
+  return { attempt: "full", cursor };
 }
 
 /** The provider rejected the request itself, as opposed to failing to answer it. */
@@ -1270,21 +1437,33 @@ function toUnipileSearchBody(
   if (tier === "sales_navigator") {
     // The Strategy Agent writes seniority and company size the way a person
     // would ("Founder", "11-50"). Sales Navigator takes neither as words, and
-    // sending them is what had every search refused.
-    const seniority = salesNavigatorSeniorities(query.seniorities);
-    const headcount = salesNavigatorHeadcounts(query.companyHeadcount);
+    // sending them is what had every search refused. A word with no level and
+    // a size with no bucket are left out and named, never sent.
+    const seniority = salesNavigatorSeniorityMapping(query.seniorities);
+    const headcount = salesNavigatorHeadcountMapping(query.companyHeadcount);
     const droppedFilters: string[] = [];
-    if (query.seniorities?.length && !seniority.length) droppedFilters.push("seniority");
-    if (query.companyHeadcount?.length && !headcount.length) droppedFilters.push("company size");
+    if (seniority.unmapped.length) {
+      droppedFilters.push(seniority.levels.length ? `seniority ${quoted(seniority.unmapped)}` : "seniority");
+    }
+    if (headcount.unmapped.length) {
+      droppedFilters.push(headcount.buckets.length ? `company size ${quoted(headcount.unmapped)}` : "company size");
+    }
+    const titles = (query.titles ?? []).map((t) => t.trim()).filter(Boolean);
+    const excluded = (query.excludeTitles ?? []).map((t) => t.trim()).filter(Boolean);
     return {
       body: {
         api: "sales_navigator",
         category: "people",
         keywords: anyOf(query.keywords ?? []),
-        title: query.titles?.length ? { include: query.titles, exclude: query.excludeTitles ?? [] } : undefined,
-        seniority: seniority.length ? { include: seniority } : undefined,
+        // Sales Navigator's current-job-title filter is `role`; `title` is not
+        // one of its fields, and a field it does not have refuses the request.
+        role:
+          titles.length || excluded.length
+            ? { ...(titles.length ? { include: titles } : {}), ...(excluded.length ? { exclude: excluded } : {}) }
+            : undefined,
+        seniority: seniority.levels.length ? { include: seniority.levels } : undefined,
         industry: resolved.industries.length ? { include: resolved.industries } : undefined,
-        company_headcount: headcount.length ? headcount : undefined,
+        company_headcount: headcount.buckets.length ? headcount.buckets : undefined,
         location: resolved.locations.length ? { include: resolved.locations } : undefined,
       },
       droppedFilters,

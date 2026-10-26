@@ -66,6 +66,8 @@ export async function eraseProspect(
   await db.from("meetings").delete().eq("prospect_id", prospect.id).eq("workspace_id", input.workspaceId);
   await db.from("conversations").delete().eq("prospect_id", prospect.id).eq("workspace_id", input.workspaceId);
   await db.from("campaign_prospects").delete().eq("prospect_id", prospect.id).eq("workspace_id", input.workspaceId);
+  // Their own posts' words and our comments on them identify them as surely as a name.
+  await db.from("engagement_actions").delete().eq("prospect_id", prospect.id).eq("workspace_id", input.workspaceId);
 
   // The tombstone: identity reduced to the one fact we must keep.
   await db

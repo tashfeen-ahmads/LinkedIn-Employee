@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { BRAND, DEFAULT_WORKING_HOURS, FREE_NOTES_PER_MONTH, INVITE_NOTE_MAX_CHARS, LINKEDIN_LIMITS, SUSTAINED_INVITES_PER_DAY, WEEKS_TO_SUSTAINED } from "@le/shared";
+import { BRAND, DEFAULT_WORKING_HOURS, FREE_NOTES_PER_MONTH, INVITE_NOTE_MAX_CHARS, LINKEDIN_LIMITS, SUSTAINED_INVITES_PER_DAY, WEEKS_TO_CEILING } from "@le/shared";
 import { SITE } from "@/lib/site";
 import { TRIAL_DAYS } from "@/lib/plans";
 import {
@@ -95,7 +95,7 @@ export function Hero() {
               <NavIcon name="check" className="mk-icon" />
               <span>
                 <span className="mk-num">
-                  {LINKEDIN_LIMITS.invitesPerDayStart} to {SUSTAINED_INVITES_PER_DAY}
+                  {LINKEDIN_LIMITS.invitesPerDayStart} to {LINKEDIN_LIMITS.invitesPerDayMax}
                 </span>{" "}
                 invitations a day
               </span>
@@ -499,8 +499,9 @@ export function SafetyBento() {
               <div>
                 <h3 className="mk-tile-title">Warm-up from your first send</h3>
                 <p className="mk-tile-sub">
-                  {LINKEDIN_LIMITS.invitesPerDayStart} a day at first, {SUSTAINED_INVITES_PER_DAY} a day after{" "}
-                  {WEEKS_TO_SUSTAINED} weeks, never more than {LINKEDIN_LIMITS.invitesPerWeek} a week
+                  {LINKEDIN_LIMITS.invitesPerDayStart} a day at first, up to {LINKEDIN_LIMITS.invitesPerDayMax} after{" "}
+                  {WEEKS_TO_CEILING} weeks, never more than {LINKEDIN_LIMITS.invitesPerWeek} a week (about{" "}
+                  {SUSTAINED_INVITES_PER_DAY} a working day)
                 </p>
               </div>
             </figcaption>

@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   WIZARD_STEPS,
+  alreadyRunningNotice,
   canDefer,
   currentStep,
   setupDeferred,
@@ -114,17 +115,25 @@ describe("the app waits for setup (rule 65)", () => {
     const middleware = read("middleware.ts");
     expect(middleware).toMatch(/gatesSetup\(request\.method, request\.nextUrl\.pathname\)/);
     expect(middleware).toMatch(/const redirect = NextResponse\.redirect\(target\)/);
-    // A lookup that fails lets the page through (rule 17).
-    expect(middleware).toMatch(/if \(!error && data\) \{/);
+    // A lookup that fails lets the page through (rule 17), the profile read
+    // included: it is what tells a person who deferred from one who did not.
+    expect(middleware).toMatch(/if \(!error && data && !deferredUnknown\) \{/);
+    expect(middleware).toMatch(/if \(profileError\) deferredUnknown = true;/);
     expect(read("app", "app", "layout.tsx")).not.toMatch(/setupRedirect/);
   });
 
-  it("lets the campaign page launch the first campaign only from the last step", () => {
+  it("sends the campaign page's first launch to the launch step, deferred or not", () => {
     const page = read("app", "app", "campaigns", "[id]", "page.tsx");
-    // Or after somebody chose to open the app first (rule 65).
+    // The launch step asks who answers the replies and approves the opener
+    // and offer; a first launch from the campaign page skipped both.
     expect(page).toMatch(
-      /currentStep\(wizard\.facts\) !== "launch" && !wizard\.facts\.deferred\)\s*\) \{\s*redirect\("\/onboarding"\)/,
+      /if \(!wizard\.facts\.hasLaunchedCampaign\) \{\s*redirect\(`\/onboarding\?step=launch&campaign=\$\{encodeURIComponent\(campaignId\)\}`\)/,
     );
+    expect(page).toMatch(/if \(wizard\.unreadable\) redirect\("\/onboarding"\)/);
+    // And the launch step shows that campaign rather than whichever is newest.
+    const onboarding = read("app", "onboarding", "page.tsx");
+    expect(onboarding).toMatch(/launchReview\(workspaceId, extra\.campaignId \?\? null\)/);
+    expect(onboarding).toMatch(/d\.id === preferredId && withPeople\.has\(d\.id\)/);
   });
 });
 
@@ -283,6 +292,30 @@ describe("launching later (rule 65)", () => {
 
   it("is honoured by the middleware and by the campaign page's launch", () => {
     expect(read("middleware.ts")).toMatch(/readConfirmations\(me\?\.setup_confirmed, membership\.workspace_id\)\.deferred/);
-    expect(read("app", "app", "campaigns", "[id]", "page.tsx")).toMatch(/!wizard\.facts\.deferred/);
+    // A deferred person's first launch still happens on the launch step.
+    expect(read("app", "app", "campaigns", "[id]", "page.tsx")).toMatch(/redirect\(`\/onboarding\?step=launch/);
+  });
+});
+
+describe("a search already running (rule 65)", () => {
+  const NOW = Date.parse("2026-10-26T12:00:00Z");
+
+  it("is said, and refreshed for, only while the search has time left to finish", () => {
+    expect(alreadyRunningNotice("already-running", String(NOW - 60_000), NOW)).toBe(true);
+    expect(alreadyRunningNotice("already-running", String(NOW - 11 * 60_000), NOW)).toBe(false);
+    // Undated, so unbounded: never shown.
+    expect(alreadyRunningNotice("already-running", undefined, NOW)).toBe(false);
+    expect(alreadyRunningNotice("already-running", "soon", NOW)).toBe(false);
+    expect(alreadyRunningNotice("something-else", String(NOW), NOW)).toBe(false);
+  });
+
+  it("is dated by the press and renders its own refresh", () => {
+    expect(read("app", "onboarding", "save", "route.ts")).toMatch(
+      /notice=\$\{ALREADY_RUNNING_NOTICE\}&since=\$\{Date\.now\(\)\}/,
+    );
+    const page = read("app", "onboarding", "page.tsx");
+    expect(page).toMatch(
+      /alreadyRunningNotice\(params\.notice, params\.since\)[\s\S]{0,400}<AutoRefresh seconds=\{8\} \/>/,
+    );
   });
 });

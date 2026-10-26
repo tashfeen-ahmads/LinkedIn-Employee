@@ -17,7 +17,9 @@ const NOW = new Date("2026-10-26T12:00:00Z");
 
 function harness(queuedCount: number, extra: (db: FakeDb) => void = () => {}) {
   const db = new FakeDb();
-  for (const t of ["campaigns", "campaign_prospects", "linkedin_accounts", "events"]) db.seed(t, []);
+  for (const t of ["campaigns", "campaign_prospects", "linkedin_accounts", "events", "platform_settings"]) db.seed(t, []);
+  db.seed("workspaces", [{ id: WS, plan: "free" }]);
+  db.seed("customer_profiles", [{ id: "cp1", workspace_id: WS, approved_at: "2026-10-01T00:00:00Z", do_not_pursue: false }]);
   db.seed("linkedin_accounts", [
     { id: "acct", workspace_id: WS, user_id: USER, status: "active", provider_account_id: "p1", first_action_at: null },
   ]);
@@ -95,5 +97,52 @@ describe("refillCampaigns", () => {
     });
     expect(await run()).toBe(0);
     expect(added).toHaveLength(0);
+  });
+
+  it("counts past the first thousand queued, so a campaign after a long one is not read as empty", async () => {
+    // c1 holds 1,200 queued rows; c2 has 30, enough for three days. Read with a
+    // single select, PostgREST's thousand-row cap hid every one of c2's.
+    const { added, run } = harness(1200, (db) => {
+      db.seed("campaigns", [
+        {
+          id: "c2",
+          workspace_id: WS,
+          owner_user_id: USER,
+          customer_profile_id: "cp1",
+          linkedin_account_id: "acct",
+          daily_invite_cap: 10,
+          status: "running",
+          search_exhausted: false,
+        },
+      ]);
+      db.seed(
+        "campaign_prospects",
+        Array.from({ length: 30 }, (_, i) => ({ id: `zz-${i}`, workspace_id: WS, campaign_id: "c2", status: "queued" })),
+      );
+    });
+    expect(await run()).toBe(0);
+    expect(added).toHaveLength(0);
+  });
+
+  it("searches nothing for a strategy nobody approved, a plan that does not send, or while outreach is paused", async () => {
+    const unapproved = harness(0, (db) => {
+      db.find("customer_profiles", { id: "cp1" })!.approved_at = null;
+    });
+    expect(await unapproved.run()).toBe(0);
+    const setAside = harness(0, (db) => {
+      db.find("customer_profiles", { id: "cp1" })!.do_not_pursue = true;
+    });
+    expect(await setAside.run()).toBe(0);
+    const lapsed = harness(0, (db) => {
+      // A cancelled subscription, which stops sending whether or not this
+      // deployment can take payments (an ended trial only does when it can).
+      Object.assign(db.find("workspaces", { id: WS })!, { plan: "pro", subscription_status: "canceled" });
+    });
+    expect(await lapsed.run()).toBe(0);
+    const paused = harness(0, (db) =>
+      db.seed("platform_settings", [{ id: true, outreach_paused_at: "2026-10-26T09:00:00Z" }]),
+    );
+    expect(await paused.run()).toBe(0);
+    expect([...unapproved.added, ...setAside.added, ...lapsed.added, ...paused.added]).toHaveLength(0);
   });
 });

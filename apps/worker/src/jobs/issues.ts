@@ -10,6 +10,7 @@ import type { WorkerContext } from "../context.js";
 import { OBSERVED_ACCOUNTS_BEAT } from "../accounts.js";
 import { WEBHOOKS_BEAT } from "../webhooks.js";
 import { INBOUND_POLL_BEAT } from "./inbound-poll.js";
+import { SALES_NAVIGATOR_PROBE_EVENT } from "./targeting.js";
 
 /**
  * Everything wrong across the deployment, in one list, for the operator.
@@ -125,6 +126,7 @@ export async function collectIssues(
         "campaign.notes_missing",
         "targeting.stopped",
         "linkedin.account.reauth_required",
+        SALES_NAVIGATOR_PROBE_EVENT,
       ])
       .gte("created_at", weekAgo),
     db
@@ -269,6 +271,36 @@ export async function collectIssues(
         detail: `Account ${providerAccount.providerAccountId}${providerAccount.reference ? ` labelled "${providerAccount.reference}"` : ""} is connected at the provider and attached to no member. It may be a duplicate connection worth deleting there.`,
       });
     }
+  }
+
+  // A Sales Navigator seat that refused the full search is probed field by
+  // field once a week (targeting.ts). The answer used to be an event nobody
+  // read; the latest one per workspace is said here whenever a field was
+  // refused, because the customer's list is being built from a narrower search
+  // until somebody fixes the mapping.
+  const latestProbe = new Map<string, { created_at: string; payload: unknown }>();
+  for (const event of (events ?? []).filter((e) => e.name === SALES_NAVIGATOR_PROBE_EVENT)) {
+    const prev = latestProbe.get(event.workspace_id);
+    if (!prev || event.created_at > prev.created_at) latestProbe.set(event.workspace_id, event);
+  }
+  for (const [workspaceId, event] of latestProbe) {
+    const rows = event.payload && typeof event.payload === "object" ? (event.payload as Record<string, unknown>) : {};
+    const refused = Object.entries(rows).filter(
+      ([label, value]) => label === "probeFailed" || String(value).startsWith("refused"),
+    );
+    if (!refused.length) continue;
+    const answered = Object.entries(rows)
+      .filter(([label, value]) => label !== "probeFailed" && !String(value).startsWith("refused"))
+      .map(([label]) => label);
+    add({
+      id: `unipile:sales-navigator-probe:${workspaceId}`,
+      severity: "warning",
+      area: "Unipile",
+      title: `Sales Navigator refused ${refused.length} of ${Object.keys(rows).length} search fields`,
+      detail: `Refused: ${refused.map(([label, value]) => `${label} (${String(value).replace(/^refused:\s*/, "").slice(0, 120)})`).join("; ")}.${answered.length ? ` Accepted: ${answered.join(", ")}.` : ""} Searches on this seat fall back to a narrower one until the mapping in unipile.ts is fixed.`,
+      ...at(workspaceId),
+      since: event.created_at,
+    });
   }
 
   // ── Campaigns ───────────────────────────────────────────────────────────

@@ -65,6 +65,7 @@ function harness(options: { status?: string; doNotContact?: boolean; engage?: bo
       linkedin_url: "linkedin.com/in/jane",
       do_not_contact: options.doNotContact ?? false,
       last_engaged_at: null,
+      posts_checked_at: null,
     },
   ]);
   db.seed("campaign_prospects", [
@@ -141,6 +142,41 @@ describe("planning", () => {
     expect((await planEngagement(ctx, queues, NOW)).planned).toBe(0);
   });
 
+  it("reads somebody's posts at most once in three days, so the planner moves down the list", async () => {
+    const { db, ctx, linkedin, queues } = harness();
+    // Nothing worth liking: a repost only.
+    linkedin.posts["prov-1"] = [post({ isRepost: true })];
+    const reads = vi.spyOn(linkedin, "listPosts");
+
+    await planEngagement(ctx, queues, NOW);
+    await planEngagement(ctx, queues, new Date(NOW.getTime() + 60 * 60_000));
+
+    expect(reads).toHaveBeenCalledTimes(1);
+    expect(db.find("prospects", { id: PROSPECT })?.posts_checked_at).toBeTruthy();
+  });
+
+  it("plans nothing while outreach is paused", async () => {
+    const { db, ctx, linkedin, queues } = harness();
+    db.seed("platform_settings", [{ id: true, outreach_paused_at: "2026-09-09T09:00:00Z" }]);
+    linkedin.posts["prov-1"] = [post()];
+    expect((await planEngagement(ctx, queues, NOW)).planned).toBe(0);
+  });
+
+  it("removes the row when its job could not be queued, so the post is not blocked for good", async () => {
+    const { db, ctx, linkedin } = harness();
+    linkedin.posts["prov-1"] = [post()];
+    const failing = {
+      linkedinAction: {
+        add: async () => {
+          throw new Error("queue refused the job");
+        },
+      },
+    } as unknown as Pick<Queues, "linkedinAction">;
+
+    expect((await planEngagement(ctx, failing, NOW)).planned).toBe(0);
+    expect(db.rows("engagement_actions")).toHaveLength(0);
+  });
+
   it("stays quiet while LinkedIn is holding the account's invitations", async () => {
     const { db, ctx, linkedin, queues } = harness();
     db.find("linkedin_accounts", { id: ACCOUNT })!.invites_paused_until = "2026-09-10T00:00:00Z";
@@ -192,12 +228,57 @@ describe("sending", () => {
     expect(db.find("engagement_actions", { id })?.status).toBe("skipped");
   });
 
-  it("records a refusal in the provider's words instead of throwing", async () => {
+  it("records a refusal in plain words, and keeps the provider's own text off the screen", async () => {
     const { db, ctx, linkedin, id } = await planned();
-    linkedin.engageError = "Post not found";
+    linkedin.engageError = "Unipile POST /api/v1/posts/reaction failed with 422: Post not found";
 
     await runLinkedInAction(ctx, { kind: "engage", workspaceId: WORKSPACE, engagementId: id });
 
-    expect(db.find("engagement_actions", { id })).toMatchObject({ status: "failed", reason: "Post not found" });
+    const row = db.find("engagement_actions", { id })!;
+    expect(row.status).toBe("failed");
+    expect(String(row.reason)).not.toMatch(/unipile|\/api\//i);
+    expect(db.rows("events").some((e) => e.name === "engagement.refused")).toBe(true);
+  });
+
+  it("never posts twice when the job is retried after a send", async () => {
+    const { db, ctx, linkedin, id } = await planned();
+    await runLinkedInAction(ctx, { kind: "engage", workspaceId: WORKSPACE, engagementId: id });
+    // The same job again, as BullMQ retries after a counter write that raised.
+    await runLinkedInAction(ctx, { kind: "engage", workspaceId: WORKSPACE, engagementId: id });
+    expect(linkedin.reactions).toHaveLength(1);
+    // A row somebody else claimed is not sent either.
+    db.find("engagement_actions", { id })!.status = "sending";
+    await runLinkedInAction(ctx, { kind: "engage", workspaceId: WORKSPACE, engagementId: id });
+    expect(linkedin.reactions).toHaveLength(1);
+  });
+
+  it("marks the account when LinkedIn says it is restricting it, as every other send does", async () => {
+    const { db, ctx, linkedin, id } = await planned();
+    linkedin.engageError = "failed with 403";
+    linkedin.engageHealth = "restricted";
+
+    await runLinkedInAction(ctx, { kind: "engage", workspaceId: WORKSPACE, engagementId: id });
+
+    expect(db.find("linkedin_accounts", { id: ACCOUNT })?.status).toBe("restricted");
+  });
+
+  it("skips a like for a campaign that was paused after it was planned", async () => {
+    const { db, ctx, linkedin, id } = await planned();
+    db.find("campaigns", { id: CAMPAIGN })!.status = "paused";
+
+    await runLinkedInAction(ctx, { kind: "engage", workspaceId: WORKSPACE, engagementId: id });
+
+    expect(linkedin.reactions).toHaveLength(0);
+    expect(db.find("engagement_actions", { id })?.status).toBe("skipped");
+  });
+
+  it("skips rather than sends a like that wakes hours after its time", async () => {
+    const { db, ctx, linkedin, id } = await planned();
+    vi.setSystemTime(new Date(NOW.getTime() + 5 * 60 * 60_000));
+
+    await runLinkedInAction(ctx, { kind: "engage", workspaceId: WORKSPACE, engagementId: id });
+
+    expect(linkedin.reactions).toHaveLength(0);
+    expect(db.find("engagement_actions", { id })?.status).toBe("skipped");
   });
 });

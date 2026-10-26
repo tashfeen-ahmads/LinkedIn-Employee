@@ -3,12 +3,12 @@ import { LINKEDIN_LIMITS } from "./constants.js";
 /**
  * What the caps add up to on a normal working week, said once.
  *
- * The daily cap ramps from 10 to 35 over 35 days, and every screen said so. But
- * the weekly cap is 100 across any seven days, and on a five-day week that is
- * 20 a day: from the day the ramp reaches 20, the week decides and the daily
- * number is a ceiling nobody can reach. Owners watched an account sit at 20
- * and read the ramp as broken. These numbers are computed from the caps
- * (rule 4), never typed, so they change if a cap ever does.
+ * The daily cap ramps from 10 to 35 over 35 days, and the limiter really does
+ * allow 35 on a single day (two campaigns on one account, or a raised campaign
+ * cap). But the weekly cap is 100 across any seven days, and on a five-day week
+ * that averages 20 a day, so an account that sends every working day sits near
+ * 20 and owners read the ramp as broken. The sentence says both: the ceiling,
+ * and what the week averages. Computed from the caps (rule 4), never typed.
  */
 export const WORKING_DAYS_PER_WEEK = 5;
 
@@ -34,5 +34,8 @@ export const DAYS_TO_SUSTAINED = (() => {
 
 export const WEEKS_TO_SUSTAINED = Math.max(1, Math.round(DAYS_TO_SUSTAINED / 7));
 
+/** Whole weeks until the daily cap reaches its ceiling. */
+export const WEEKS_TO_CEILING = Math.round(LINKEDIN_LIMITS.warmupDays / 7);
+
 /** The one sentence every screen uses for the pace. */
-export const RAMP_SENTENCE = `${LINKEDIN_LIMITS.invitesPerDayStart} invitations a day at first, growing to ${SUSTAINED_INVITES_PER_DAY} a day over ${WEEKS_TO_SUSTAINED} weeks, never more than ${LINKEDIN_LIMITS.invitesPerWeek} a week`;
+export const RAMP_SENTENCE = `${LINKEDIN_LIMITS.invitesPerDayStart} invitations a day at first, rising to ${LINKEDIN_LIMITS.invitesPerDayMax} over ${WEEKS_TO_CEILING} weeks, and never more than ${LINKEDIN_LIMITS.invitesPerWeek} a week, about ${SUSTAINED_INVITES_PER_DAY} a working day`;

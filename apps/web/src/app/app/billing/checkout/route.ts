@@ -34,7 +34,14 @@ export async function POST(request: NextRequest) {
     price: priceKey(plan, interval),
     ...(session.email ? { email: session.email } : {}),
   });
-  if (!result.ok || !result.data?.url) {
+  if (!result.ok) {
+    // The worker says why in the customer's words — payments not switched on
+    // yet, a plan already in place — and none of them names a supplier
+    // (rule 54). A shrug here told somebody on a deployment with payments off
+    // to keep trying something that could never work.
+    return seeOther(back(result.error || "Checkout could not be opened just now. Try again in a minute."));
+  }
+  if (!result.data?.url) {
     return seeOther(back("Checkout could not be opened just now. Try again in a minute."));
   }
   // Stripe's own page: the one redirect here meant to leave the product.

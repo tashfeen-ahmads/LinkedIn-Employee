@@ -127,6 +127,16 @@ services:
         sync: false
       - key: STRIPE_WEBHOOK_SECRET
         sync: false
+      # All four prices, by id. Missing any one, payments are off and the
+      # worker ends no trial (`trialEnforced` in @le/billing).
+      - key: STRIPE_PRICE_PRO_MONTHLY
+        sync: false
+      - key: STRIPE_PRICE_PRO_YEARLY
+        sync: false
+      - key: STRIPE_PRICE_AUTOPILOT_MONTHLY
+        sync: false
+      - key: STRIPE_PRICE_AUTOPILOT_YEARLY
+        sync: false
 
 previews:
   generation: off

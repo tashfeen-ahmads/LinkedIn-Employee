@@ -369,6 +369,10 @@ class QueryBuilder implements PromiseLike<{ data: Row[] | null; error: null | { 
     if (this.limitTo !== null) result = result.slice(0, this.limitTo);
     // After limit, as PostgREST applies it: `to` is inclusive.
     if (this.rangeTo) result = result.slice(this.rangeTo.from, this.rangeTo.to + 1);
+    // PostgREST's max-rows: a select answers at most a thousand rows whatever
+    // `.limit()` asked for, and says nothing. A query that trusted a bigger
+    // limit read a long list as a short one.
+    result = result.slice(0, POSTGREST_MAX_ROWS);
 
     if (this.countMode) {
       return { data: this.headOnly ? null : result, error: null, count: matched.length };
@@ -376,6 +380,8 @@ class QueryBuilder implements PromiseLike<{ data: Row[] | null; error: null | { 
     return { data: result, error: null };
   }
 }
+
+const POSTGREST_MAX_ROWS = 1000;
 
 function matches(row: Row, filter: Filter): boolean {
   const value = row[filter.column];

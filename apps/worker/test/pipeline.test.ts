@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MockLinkedInProvider } from "@le/linkedin";
 import { LINKEDIN_LIMITS, PACING_LAST_ACTION, PACING_LOOP, normalizeExclusionValue } from "@le/shared";
 import { FakeDb } from "./fake-db.js";
+import { setBillingEnv } from "./billing-env.js";
 import { FIRST_SEND_MAX_MS, FIRST_SEND_MIN_MS, runCampaignTick } from "../src/jobs/campaign-tick.js";
 import { runLinkedInAction } from "../src/jobs/linkedin-action.js";
 import { detectAcceptedInvitations, followUpDueAt } from "../src/jobs/acceptance.js";
@@ -1306,8 +1307,7 @@ describe("campaign pipeline", () => {
   it("stops outreach for a workspace whose trial has expired, when the limit is on", async () => {
     // The limit is suspended by default until pricing is decided; this pins it
     // on, so the gate stays proven for the day it is switched back.
-    const was = process.env.TRIAL_LIMIT_ENFORCED;
-    process.env.TRIAL_LIMIT_ENFORCED = "true";
+    const restore = setBillingEnv({ configured: true, limit: "true" });
     try {
       const { db, queues, enqueued } = harness({
         trialEndsAt: new Date(NOW.getTime() - 86_400_000).toISOString(),
@@ -1318,8 +1318,24 @@ describe("campaign pipeline", () => {
       expect(count).toBe(0);
       expect(enqueued).toHaveLength(0);
     } finally {
-      if (was === undefined) delete process.env.TRIAL_LIMIT_ENFORCED;
-      else process.env.TRIAL_LIMIT_ENFORCED = was;
+      restore();
+    }
+  });
+
+  it("pauses nobody for an expired trial on a deployment that cannot take a payment", async () => {
+    // Stripe unset: ending a trial would stop campaigns behind a plan chooser
+    // that cannot open, a pause nobody could lift.
+    const restore = setBillingEnv({ configured: false });
+    try {
+      const { db, queues, enqueued } = harness({
+        trialEndsAt: new Date(NOW.getTime() - 86_400_000).toISOString(),
+      });
+
+      await runCampaignTick(db.asDb(), queues, NOW);
+
+      expect(enqueued.length).toBeGreaterThan(0);
+    } finally {
+      restore();
     }
   });
 
@@ -1327,8 +1343,7 @@ describe("campaign pipeline", () => {
     // The emergency switch. Asserted through the real loop, not only on
     // `entitlementFor`, because the gate is the call site and a call site is
     // where a switch gets lost.
-    const was = process.env.TRIAL_LIMIT_ENFORCED;
-    process.env.TRIAL_LIMIT_ENFORCED = "false";
+    const restore = setBillingEnv({ configured: true, limit: "false" });
     try {
       const { db, queues, enqueued } = harness({
         trialEndsAt: new Date(NOW.getTime() - 30 * 86_400_000).toISOString(),
@@ -1338,8 +1353,7 @@ describe("campaign pipeline", () => {
 
       expect(enqueued.length).toBeGreaterThan(0);
     } finally {
-      if (was !== undefined) process.env.TRIAL_LIMIT_ENFORCED = was;
-      else delete process.env.TRIAL_LIMIT_ENFORCED;
+      restore();
     }
   });
 

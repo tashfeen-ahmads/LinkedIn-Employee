@@ -79,16 +79,23 @@ export async function bookAcceptedSlot(ctx: WorkerContext, input: BookingInput):
     durationMinutes: input.durationMinutes,
     workingHours: input.workingHours,
   });
+  const endsAt = new Date(Date.parse(chosen) + input.durationMinutes * 60_000).toISOString();
+
   if (!free) {
     const reason = `They accepted ${readable}, which is no longer free. Offer them another time.`;
+    await holdSlot(ctx, input, null);
     await flagForHuman(ctx.db, input.conversationId, reason, "booking");
     return { status: "held", reason };
   }
 
   // A plan where bookings are confirmed by a person: the time is free and
-  // offered, and a person puts it in the diary.
+  // offered, and a person puts it in the diary. The time is kept on the
+  // conversation, so "Mark booked" writes the meeting for it through the same
+  // one-per-slot index as this path, rather than leaving the half hour free
+  // for the next prospect to be booked into (rule 18).
   if (input.confirmFirst) {
     const reason = `They accepted ${readable}, and it is still free. Confirm it: put it in your calendar and reply to them.`;
+    await holdSlot(ctx, input, { startsAt: chosen, endsAt });
     await flagForHuman(ctx.db, input.conversationId, reason, "booking");
     return { status: "held", reason };
   }
@@ -105,7 +112,6 @@ export async function bookAcceptedSlot(ctx: WorkerContext, input: BookingInput):
     .single();
 
   const prospectName = `${prospect?.first_name ?? ""} ${prospect?.last_name ?? ""}`.trim() || "LinkedIn contact";
-  const endsAt = new Date(Date.parse(chosen) + input.durationMinutes * 60_000).toISOString();
 
   let created;
   try {
@@ -134,6 +140,9 @@ export async function bookAcceptedSlot(ctx: WorkerContext, input: BookingInput):
     // moments from now must not clear it: the meeting still is not in anyone's
     // diary, and this flag is the only thing that says so.
     const reason = "calendar write failed, book this manually";
+    // The time was free and agreed; only the calendar write failed. Kept, so
+    // marking it booked by hand writes the meeting for that time.
+    await holdSlot(ctx, input, { startsAt: chosen, endsAt });
     await flagForHuman(ctx.db, input.conversationId, reason, "booking");
     console.error("calendar write failed", error);
     return { status: "held", reason };
@@ -172,6 +181,7 @@ export async function bookAcceptedSlot(ctx: WorkerContext, input: BookingInput):
     const reason = input.binding.ownOnly
       ? `They accepted ${readable}, but the meeting could not be saved, most likely because that time was just taken. Book it by hand or offer another time.`
       : `They accepted ${readable}, but the meeting could not be saved, most likely because that time was just taken. Check your calendar for the event we created, then book it by hand or offer another time.`;
+    await holdSlot(ctx, input, null);
     await flagForHuman(ctx.db, input.conversationId, reason, "booking");
     return { status: "held", reason };
   }
@@ -199,6 +209,29 @@ export async function bookAcceptedSlot(ctx: WorkerContext, input: BookingInput):
   });
 
   return { status: "booked", meetingId: meeting.id as string };
+}
+
+/**
+ * Keeps, or forgets, the accepted time a booking hold is waiting on.
+ *
+ * Forgotten on every hold whose time is not bookable, so a stale time from an
+ * earlier acceptance can never be written as a meeting by "Mark booked".
+ */
+async function holdSlot(
+  ctx: WorkerContext,
+  input: BookingInput,
+  slot: { startsAt: string; endsAt: string } | null,
+): Promise<void> {
+  const { error } = await ctx.db
+    .from("conversations")
+    .update({
+      held_slot_starts_at: slot?.startsAt ?? null,
+      held_slot_ends_at: slot?.endsAt ?? null,
+      held_slot_rep_user_id: slot ? input.repUserId : null,
+    })
+    .eq("id", input.conversationId)
+    .eq("workspace_id", input.workspaceId);
+  if (error) console.error("could not keep the held slot", { conversationId: input.conversationId, reason: error.message });
 }
 
 /**

@@ -1,4 +1,4 @@
-import { TIER_FEATURES, entitlementFor, trialLimitEnforced, type Entitlement, type Features } from "@le/billing";
+import { TIER_FEATURES, entitlementFor, trialEnforced, type Entitlement, type Features } from "@le/billing";
 import type { Db } from "@le/db";
 
 /**
@@ -24,8 +24,10 @@ export async function workspaceEntitlement(db: Db, workspaceId: string, now: Dat
     },
     now,
     // Read per call rather than once at import, so the switch takes effect on
-    // the next job after the variable changes and a test can set it.
-    { enforceTrial: trialLimitEnforced(process.env.TRIAL_LIMIT_ENFORCED) },
+    // the next job after the variable changes and a test can set it. Only a
+    // deployment that can take a payment ends a trial: one with Stripe unset
+    // would otherwise pause campaigns behind a chooser that cannot open.
+    { enforceTrial: trialEnforced(process.env) },
   );
 }
 

@@ -1,4 +1,5 @@
-import { entitlementFor, entitlementMessage, trialLimitEnforced, type Entitlement } from "@le/billing";
+import { entitlementFor, entitlementMessage, type Entitlement } from "@le/billing";
+import { readTrialEnforced } from "@/lib/entitlement";
 import { Panel, Section } from "@/components/page";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
@@ -12,7 +13,7 @@ import { PLANS, PLAN_FEATURES, yearlyPerMonth, yearlySaving } from "@/lib/plans"
  * card, and the plans can be chosen any time during it; the charge starts when
  * the trial ends. A paid plan is managed on Stripe's own page.
  */
-export async function BillingSection() {
+export async function BillingSection({ checkout }: { checkout?: string } = {}) {
   const session = await requireSession();
   const supabase = await createClient();
 
@@ -27,10 +28,15 @@ export async function BillingSection() {
     trialEndsAt: workspace?.trial_ends_at ?? null,
     subscriptionStatus: workspace?.subscription_status ?? null,
     seats: workspace?.seats ?? 1,
-  }, new Date(), { enforceTrial: trialLimitEnforced(process.env.TRIAL_LIMIT_ENFORCED) });
+  }, new Date(), { enforceTrial: await readTrialEnforced(supabase) });
   const message = entitlementMessage(entitlement);
 
   const isAdmin = ["owner", "admin"].includes(session.role);
+  // Back from checkout before Stripe's webhook has reached the worker: the
+  // row still reads as a trial, and the chooser beneath this would ask them
+  // to pay again. Said plainly, so a minute's wait is not read as a failure.
+  const subscriptionLanded = ["active", "trialing", "past_due"].includes(workspace?.subscription_status ?? "");
+  const awaitingWebhook = checkout === "success" && !subscriptionLanded;
 
   return (
     <>
@@ -39,7 +45,12 @@ export async function BillingSection() {
         title="Plan"
         description="Both plans send the same amount on the same safe limits. What changes is how much Nora does on its own."
       >
-        {message ? (
+        {awaitingWebhook ? (
+          <div className="notice accent" role="status">
+            <p>Payment details received. Your plan switches on within a minute.</p>
+          </div>
+        ) : null}
+        {message && !awaitingWebhook ? (
           <div className={`notice ${entitlement.canSend ? "warning" : "danger"}`}>{message}</div>
         ) : null}
         <PlanState
@@ -56,7 +67,7 @@ export async function BillingSection() {
             </button>
           </form>
         ) : null}
-        {entitlement.reason !== "free_plan" && entitlement.reason !== "active_subscription" && entitlement.reason !== "payment_failed" ? (
+        {!awaitingWebhook && entitlement.reason !== "free_plan" && entitlement.reason !== "active_subscription" && entitlement.reason !== "payment_failed" ? (
           isAdmin ? (
             <PlanChooser />
           ) : (

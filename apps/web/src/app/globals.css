@@ -1812,6 +1812,8 @@ th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
 /* Sign-out sits last. `margin-top: auto` on it only reaches the bottom when
    nothing above it already claimed the slack. */
 .app-signout { padding-inline: var(--space-1); }
+/* Shown only on a phone, where the rail that carries it is a one-row bar. */
+.app .app-foot-maker { display: none; }
 .app-body {
   display: flex;
   flex-direction: column;
@@ -2117,6 +2119,9 @@ th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
   /* In a bar, sign-out sits beside the brand rather than at the foot of a
      column that no longer exists. */
   .app-signout { grid-column: 2; grid-row: 1; margin-top: 0; padding-top: 0; border-top: 0; }
+  /* The phone bar is one row: the maker line sits in the page foot instead. */
+  .app-signout .powered-by { display: none; }
+  .app .app-foot-maker { display: block; padding-block: var(--space-4); text-align: center; }
   /* The search is in the top bar, which the phone keeps. */
   .app-top-inner { padding-inline: var(--space-4); }
   .app-top-who-text { display: none; }

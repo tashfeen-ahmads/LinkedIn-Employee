@@ -81,13 +81,13 @@ export function entitlementFor(
   // No countdown anywhere while there is nothing to count down to: a sidebar
   // reading "2 days left" over an account that will keep sending on day three
   // is a screen that lies in the direction that makes people panic.
-  const trialDaysLeft = enforceTrial && billing.plan === "trial" ? daysLeft(billing.trialEndsAt, now) : null;
+  const daysLeftInTrial = enforceTrial && billing.plan === "trial" ? trialDaysLeft(billing.trialEndsAt, now) : null;
   const paidTier: Tier = billing.plan === "autopilot" ? "autopilot" : "pro";
   const result = (canSend: boolean, reason: EntitlementReason, tier: Tier): Entitlement => ({
     canSend,
     canRead: true,
     reason,
-    trialDaysLeft,
+    trialDaysLeft: daysLeftInTrial,
     tier,
     features: TIER_FEATURES[tier],
   });
@@ -97,7 +97,15 @@ export function entitlementFor(
   if (billing.plan === "free") return result(true, "free_plan", "autopilot");
 
   if (billing.subscriptionStatus === "active" || billing.subscriptionStatus === "trialing") {
-    return result(true, "active_subscription", paidTier);
+    // Choosing a plan during the trial keeps the trial (rule 67): Stripe's
+    // first charge is its end, and until then the workspace has what it was
+    // promised, which is Autopilot. Choosing Pro on day three must not take
+    // the replies it is sending on its own away eleven days early.
+    const stillInTrial =
+      billing.subscriptionStatus === "trialing" &&
+      billing.trialEndsAt !== null &&
+      Date.parse(billing.trialEndsAt) > now.getTime();
+    return result(true, "active_subscription", stillInTrial ? "autopilot" : paidTier);
   }
 
   // Past due keeps sending for now: Stripe retries a failed payment for days,
@@ -147,8 +155,50 @@ export function trialLimitEnforced(value: string | undefined): boolean {
   return value?.trim().toLowerCase() !== "false";
 }
 
-/** Whole days remaining, floored at zero. Null when there is no trial. */
-export function daysLeft(trialEndsAt: string | null, now: Date = new Date()): number | null {
+/** Every variable checkout needs. Missing any one, nobody can pay. */
+export const BILLING_ENV_KEYS = [
+  "STRIPE_SECRET_KEY",
+  "STRIPE_WEBHOOK_SECRET",
+  "STRIPE_PRICE_PRO_MONTHLY",
+  "STRIPE_PRICE_PRO_YEARLY",
+  "STRIPE_PRICE_AUTOPILOT_MONTHLY",
+  "STRIPE_PRICE_AUTOPILOT_YEARLY",
+] as const;
+
+/** The variables the two readings below look at; `process.env` and the worker's parsed env both fit. */
+export type BillingEnv = Partial<Record<(typeof BILLING_ENV_KEYS)[number] | "TRIAL_LIMIT_ENFORCED", string | undefined>>;
+
+/** Whether somebody could actually pay: Stripe's keys and all four prices are set. */
+export function billingConfigured(env: BillingEnv): boolean {
+  return BILLING_ENV_KEYS.every((key) => Boolean(env[key]?.trim()));
+}
+
+/**
+ * Whether a trial's end stops sending on this deployment.
+ *
+ * Only when somebody could pay. A deployment with Stripe unset, or one of the
+ * four prices missing, cannot take a payment, so ending a trial there pauses a
+ * customer's campaigns behind a plan chooser that answers "could not be
+ * opened" — a stop nobody can lift. And never when `TRIAL_LIMIT_ENFORCED` is
+ * "false", the emergency switch.
+ *
+ * The worker reads its own environment and is the one that decides. The web
+ * app holds no Stripe secrets, so it reads the worker's answer from the boot
+ * heartbeat rather than guessing (`apps/web/src/lib/entitlement.ts`).
+ */
+export function trialEnforced(env: BillingEnv): boolean {
+  return billingConfigured(env) && trialLimitEnforced(env.TRIAL_LIMIT_ENFORCED);
+}
+
+/**
+ * Whole days left in a trial, floored at zero. Null when there is no trial.
+ *
+ * The one definition: the sidebar, the plan section and the day-twelve email
+ * all read this, so the email can never say "2 days left" while the banner
+ * above it says one. Floored, so the final day reads "less than a day" rather
+ * than "1 day" with hours to go.
+ */
+export function trialDaysLeft(trialEndsAt: string | null, now: Date = new Date()): number | null {
   if (!trialEndsAt) return null;
   const end = Date.parse(trialEndsAt);
   if (Number.isNaN(end)) return null;

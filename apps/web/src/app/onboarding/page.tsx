@@ -25,6 +25,7 @@ import { AUTONOMY_ROLES } from "@/lib/autonomy";
 import { parseWorkingHours } from "@le/linkedin";
 import {
   WIZARD_STEPS,
+  alreadyRunningNotice,
   canDefer,
   currentStep,
   stepDone,
@@ -124,7 +125,14 @@ async function signOut() {
 export default async function OnboardingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ step?: string; error?: string; connected?: string; notice?: string }>;
+  searchParams: Promise<{
+    step?: string;
+    error?: string;
+    connected?: string;
+    notice?: string;
+    since?: string;
+    campaign?: string;
+  }>;
 }) {
   if (!isAppConfigured()) redirect("/login");
   const params = await searchParams;
@@ -201,7 +209,11 @@ export default async function OnboardingPage({
         : UNKNOWN_ERROR
     : null;
 
-  const body = await stepBody(step, wizard, user.id, { connected: params.connected === "1", repair });
+  const body = await stepBody(step, wizard, user.id, {
+    connected: params.connected === "1",
+    repair,
+    campaignId: params.campaign ?? null,
+  });
 
   return (
     <div className="auth-split">
@@ -230,9 +242,12 @@ export default async function OnboardingPage({
             {error}
           </div>
         ) : null}
-        {params.notice === "already-running" && step === "prospects" ? (
+        {step === "prospects" && alreadyRunningNotice(params.notice, params.since) ? (
+          // Refreshed while it shows, so the page really does move on, and
+          // only for as long as the search is given to finish (rule 65).
           <div className="notice" role="status">
-            <p>That search is already running. This page moves on by itself when the list is ready.</p>
+            <p>That search is already running. This page updates by itself when the list is ready.</p>
+            <AutoRefresh seconds={8} />
           </div>
         ) : null}
 
@@ -319,7 +334,7 @@ async function stepBody(
   step: WizardStepKey,
   wizard: WizardRead,
   userId: string,
-  extra: { connected: boolean; repair: ReturnType<typeof describeRepair> },
+  extra: { connected: boolean; repair: ReturnType<typeof describeRepair>; campaignId?: string | null },
 ): Promise<React.ReactNode> {
   const supabase = await createClient();
   const workspaceId = wizard.workspaceId;
@@ -588,7 +603,9 @@ async function stepBody(
   }
 
   // launch
-  const review = await launchReview(workspaceId);
+  // The campaign somebody pressed Launch on, when they came from its page;
+  // otherwise the newest draft with people on it.
+  const review = await launchReview(workspaceId, extra.campaignId ?? null);
   if (!review) {
     return (
       <div className="notice warning" role="status">
@@ -681,7 +698,7 @@ async function strategyCards(workspaceId: string): Promise<StrategyCard[]> {
 }
 
 /** The draft the search built, read for the last step. */
-async function launchReview(workspaceId: string): Promise<LaunchReview | null> {
+async function launchReview(workspaceId: string, preferredId: string | null = null): Promise<LaunchReview | null> {
   const supabase = await createClient();
   const { data: drafts } = await supabase
     .from("campaigns")
@@ -706,7 +723,10 @@ async function launchReview(workspaceId: string): Promise<LaunchReview | null> {
         .limit(1000)
     : { data: [] };
   const withPeople = new Set((peopled ?? []).map((row) => row.campaign_id));
-  const campaign = (drafts ?? []).find((d) => withPeople.has(d.id)) ?? null;
+  const campaign =
+    (drafts ?? []).find((d) => d.id === preferredId && withPeople.has(d.id)) ??
+    (drafts ?? []).find((d) => withPeople.has(d.id)) ??
+    null;
   if (!campaign) return null;
 
   const [state, { data: queued }, { data: steps }] = await Promise.all([

@@ -1,5 +1,4 @@
 import {
-  DAYS_TO_SUSTAINED,
   LINKEDIN_LIMITS,
   SUSTAINED_INVITES_PER_DAY,
   dailySends,
@@ -87,9 +86,9 @@ export async function LimitsSection() {
     ) : (
       <>
         <strong className="ramp-day">Day {day + 1}</strong> of the warm-up.{" "}
-        {day < DAYS_TO_SUSTAINED
-          ? `It rises on its own to ${SUSTAINED_INVITES_PER_DAY} a day by day ${DAYS_TO_SUSTAINED + 1}.`
-          : `On a five-day week the ${LINKEDIN_LIMITS.invitesPerWeek}-a-week limit keeps it near ${SUSTAINED_INVITES_PER_DAY} a day.`}
+        It rises on its own to {LINKEDIN_LIMITS.invitesPerDayMax} by day {LINKEDIN_LIMITS.warmupDays + 1}. The{" "}
+        {LINKEDIN_LIMITS.invitesPerWeek}-a-week limit covers all your campaigns, so a full working week averages about{" "}
+        {SUSTAINED_INVITES_PER_DAY} a day.
       </>
     );
 

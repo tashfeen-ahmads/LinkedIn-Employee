@@ -12,7 +12,8 @@ import { BRAND_QUALIFIER, LogoMark } from "@/components/logo";
 import { readSetupState } from "@/lib/setup-state";
 import { markFor, type NavMarks } from "@/lib/nav-marks";
 import { loadNeedsYou } from "@/lib/needs-you-data";
-import { entitlementFor, entitlementMessage, trialLimitEnforced } from "@le/billing";
+import { entitlementFor, entitlementMessage } from "@le/billing";
+import { readTrialEnforced } from "@/lib/entitlement";
 import { isPlatformAdmin } from "@/lib/admin";
 import { linkedInState, type LinkedInState } from "./profile/linkedin-state";
 import { label } from "@/lib/labels";
@@ -208,7 +209,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     trialEndsAt: workspace?.trial_ends_at ?? null,
     subscriptionStatus: workspace?.subscription_status ?? null,
     seats: workspace?.seats ?? 1,
-  }, new Date(), { enforceTrial: trialLimitEnforced(process.env.TRIAL_LIMIT_ENFORCED) });
+  }, new Date(), { enforceTrial: await readTrialEnforced(supabase) });
   const billingMessage = entitlementMessage(entitlement);
   // A trial says how long it has left on every page, quietly, so day fifteen
   // is never a surprise.
@@ -294,7 +295,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <button className="btn ghost small" type="submit">
             Sign out
           </button>
-          <p className="tiny subtle">{POWERED_BY}</p>
+          <p className="tiny subtle powered-by">{POWERED_BY}</p>
         </form>
       </aside>
 
@@ -419,6 +420,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <Suspense fallback={null}>
             <Walkthrough />
           </Suspense>
+          <p className="tiny subtle app-foot-maker">{POWERED_BY}</p>
         </main>
       </div>
     </div>

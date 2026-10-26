@@ -837,6 +837,51 @@ describe("a search that reached the provider and found nobody", () => {
     expect(stop?.payload?.probe).toMatchObject({ "no filters at all": "0", "keywords only": "1" });
   });
 
+  it("probes a refusing Sales Navigator seat once, even when the record of it cannot be written", async () => {
+    // Every probe is a run of requests off a paid seat. Gated only on the
+    // event, a failed write made "once a week" into "on every search".
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob, resetSalesNavigatorProbes } = await import("../src/jobs/targeting.js");
+    const { SALES_NAVIGATOR_PARTIAL_NOTE } = await import("@le/linkedin");
+    resetSalesNavigatorProbes();
+    db.find("linkedin_accounts", { id: ACCOUNT })!.has_sales_navigator = true;
+    linkedin.candidates = {
+      items: [],
+      cursor: null,
+      droppedFilters: ["seniority"],
+      filterNotes: [`${SALES_NAVIGATOR_PARTIAL_NOTE} It was searched by keyword.`],
+    };
+    const asked: Array<{ salesNavigator?: boolean } | undefined> = [];
+    (linkedin as unknown as { probeSearch: unknown }).probeSearch = async (_id: string, options?: { salesNavigator?: boolean }) => {
+      asked.push(options);
+      return [{ label: "SN role", count: null, error: "Invalid parameters" }];
+    };
+    const realFrom = ctx.db.from.bind(ctx.db);
+    (ctx as { db: unknown }).db = new Proxy(ctx.db, {
+      get(target, prop, receiver) {
+        if (prop !== "from") return Reflect.get(target, prop, receiver);
+        return (table: string) => {
+          const builder = realFrom(table as never);
+          if (table !== "events") return builder;
+          const insert = (builder as { insert: (row: { name?: string }) => unknown }).insert.bind(builder);
+          return Object.assign(builder, {
+            insert: (row: { name?: string }) =>
+              row?.name === "targeting.sales_navigator_probe"
+                ? Promise.resolve({ data: null, error: { message: "events is read-only" } })
+                : insert(row),
+          });
+        };
+      },
+    });
+
+    await runTargetingJob(ctx, job);
+    await runTargetingJob(ctx, job);
+
+    // The Sales Navigator probe on its own; the search's own empty-page probe
+    // asks classic and is a separate question.
+    expect(asked.filter((o) => o?.salesNavigator)).toHaveLength(1);
+  });
+
   it("does not probe when the provider returned people and we filtered them out", async () => {
     // A different problem entirely, and one more request against a paid seat
     // answers nothing about it.

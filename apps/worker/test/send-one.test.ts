@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MockLinkedInProvider } from "@le/linkedin";
 import { FakeDb } from "./fake-db.js";
+import { setBillingEnv } from "./billing-env.js";
 import { sendOneNow } from "../src/jobs/send-one.js";
 import type { WorkerContext } from "../src/context.js";
 
@@ -191,16 +192,25 @@ describe("sendOneNow", () => {
 
 describe("a workspace with no plan", () => {
   it("sends nothing once a trial has ended, and keeps the invitation queued for when a plan is chosen", async () => {
-    const { ctx, linkedin, db } = harness();
-    const ws = db.find("workspaces", { id: WORKSPACE })!;
-    ws.plan = "trial";
-    ws.trial_ends_at = "2026-09-01T00:00:00Z";
+    // The trial only ends on a deployment that can take a payment.
+    const restore = setBillingEnv({ configured: true, limit: "true" });
+    try {
+      const { ctx, linkedin, db } = harness();
+      const ws = db.find("workspaces", { id: WORKSPACE })!;
+      ws.plan = "trial";
+      ws.trial_ends_at = "2026-09-01T00:00:00Z";
 
-    const result = await sendOneNow(ctx, { workspaceId: WORKSPACE, campaignId: CAMPAIGN });
+      const result = await sendOneNow(ctx, { workspaceId: WORKSPACE, campaignId: CAMPAIGN });
 
-    expect(result.ok).toBe(false);
-    expect(linkedin.sentInvitations).toHaveLength(0);
-    expect(db.find("campaign_prospects", { id: CP })?.status).toBe("queued");
+      expect(result.ok).toBe(false);
+      expect(linkedin.sentInvitations).toHaveLength(0);
+      expect(db.find("campaign_prospects", { id: CP })?.status).toBe("queued");
+      // The plan, in plain words, never "LinkedIn refused this" or a code.
+      expect(result.detail).toContain("Your free trial has ended");
+      expect(result.detail).not.toMatch(/LinkedIn|not_entitled/);
+    } finally {
+      restore();
+    }
   });
 });
 

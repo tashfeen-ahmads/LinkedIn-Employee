@@ -90,7 +90,7 @@ export function SoftwareSchema() {
           "An AI assistant with four AI employees: a strategist, a prospector, a campaign writer and an outreach and booking specialist",
           "Customer strategies written from your website, approved by you before anything is searched",
           "Ranked prospect lists with the intent signals behind each score",
-          `Sending capped at ${PUBLIC_LIMITS.invitesPerDayCeiling} invitations a day and ${PUBLIC_LIMITS.invitesPerWeek} a week`,
+          `Sending capped at ${PUBLIC_LIMITS.invitesPerDayMax} invitations a day and ${PUBLIC_LIMITS.invitesPerWeek} a week`,
           "Replies answered under the rules you set, and an opt-out stops all contact",
           "Meetings booked from times you are actually available",
         ],

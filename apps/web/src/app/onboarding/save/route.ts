@@ -5,7 +5,7 @@ import { seeOther } from "@/lib/see-other";
 import { callWorker } from "@/lib/worker";
 import { mergeStash, stampConfirmation, type StashedCta } from "@/lib/onboarding-stash";
 import { readWizard } from "@/lib/wizard-state";
-import { canDefer, currentStep, stepIndex, type WizardStepKey } from "@/lib/wizard";
+import { ALREADY_RUNNING_NOTICE, canDefer, currentStep, stepIndex, type WizardStepKey } from "@/lib/wizard";
 import { queueSearch } from "@/lib/search";
 import { launch, launchState } from "@/lib/launch";
 import { launchBlockers } from "@/lib/campaign";
@@ -316,7 +316,13 @@ export async function POST(request: NextRequest) {
       if (!started.ok) return again(searchProblem(started.reason));
       // The same search still running is not a press that did nothing, and
       // the page has to say which it was.
-      return seeOther(started.alreadyRunning ? "/onboarding?step=prospects&notice=already-running" : "/onboarding?step=prospects");
+      // Dated, so the page can stop saying it (and stop refreshing) once the
+      // search has had the time it is given.
+      return seeOther(
+        started.alreadyRunning
+          ? `/onboarding?step=prospects&notice=${ALREADY_RUNNING_NOTICE}&since=${Date.now()}`
+          : "/onboarding?step=prospects",
+      );
     }
 
     case "launch": {

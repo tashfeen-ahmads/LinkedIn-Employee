@@ -43,6 +43,28 @@ describe("the operator console", () => {
     }
   });
 
+  it("labels the cells of every phone-card table in the member app too", () => {
+    // Analytics' table had its stage counts unlabelled and its two rates
+    // labelled with each other's names, so on a phone the acceptance rate
+    // read as the reply rate. This test only watched the console then.
+    const appRoot = join(here, "..", "src", "app");
+    const all = (dir: string): string[] =>
+      readdirSync(dir).flatMap((name) => {
+        const full = join(dir, name);
+        return statSync(full).isDirectory() ? all(full) : name.endsWith(".tsx") ? [full] : [];
+      });
+    for (const file of all(appRoot)) {
+      const src = readFileSync(file, "utf8");
+      if (!src.includes("card-rows")) continue;
+      for (const body of src.match(/<tbody>[\s\S]*?<\/tbody>/g) ?? []) {
+        for (const row of body.split(/<tr\b/).slice(1)) {
+          const cells = row.match(/<td\b[^>]*>/g) ?? [];
+          for (const cell of cells.slice(1)) expect(cell, `${file}: ${cell}`).toMatch(/data-label=/);
+        }
+      }
+    }
+  });
+
   it("never reads a failed list as an empty one", () => {
     for (const name of ["workspaces", "accounts", "users", "campaigns", "activity", "spend"]) {
       const src = readFileSync(join(root, name, "page.tsx"), "utf8");

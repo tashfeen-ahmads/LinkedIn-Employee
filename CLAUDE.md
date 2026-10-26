@@ -279,7 +279,9 @@ tests that were verified by deliberately breaking the code.
     (`apps/worker/src/jobs/refill.ts`, hourly) continues the same search under
     Find more's own job id once a campaign has fewer than two days of
     allowance queued, at most once a day per campaign, and never after
-    `search_exhausted`. Lists only grew when somebody pressed the button, and
+    `search_exhausted`, and never for a workspace that cannot send, while
+    outreach is paused, or for a strategy not approved or set aside. Lists only
+    grew when somebody pressed the button, and
     by late October three of seven running campaigns had nobody left to invite
     while every owner read the ramp as broken.
 
@@ -1779,7 +1781,17 @@ tests that were verified by deliberately breaking the code.
     loop (rule 1), and an unreadable plan waits rather than sends. Choosing a
     plan during the trial keeps the trial: Stripe's first charge is its end.
 
-    Stripe events are applied newest-wins (`last_billing_event_at`), and a price
+    The trial's end pauses nobody until payments are switched on: the worker
+    enforces it only with Stripe's keys and all four prices set
+    (`trialEnforced`), and states that in its boot heartbeat so the web never
+    announces a stop the worker is not making. The billing columns are written
+    by the service role only (a trigger in migration 0052; RLS cannot restrict
+    columns). On Pro a confirmed time is written as a `meetings` row, so the
+    slot is never offered twice (rule 18).
+
+    Stripe events are applied newest-wins (`last_billing_event_at`), only for
+    the subscription the workspace holds, and recorded only after they apply,
+    so a failed write is retried rather than answered as a duplicate. A price
     whose lookup key is not one of `PRICE_KEYS` leaves the plan alone rather
     than reading as a trial, which would stop a paying workspace.
 
@@ -1811,6 +1823,19 @@ tests that were verified by deliberately breaking the code.
     comment that still fails is not written and the post is only liked. Every
     like and comment, with the words of the post and of the comment, is listed
     on `/app/engagement`, where an owner or admin can turn it off.
+
+    The row is **claimed** (`sending`) immediately before the provider call and
+    marked `sent` before it is counted, so a retried job never posts a comment
+    twice. A like that wakes more than three hours late, on a post now past
+    three weeks, or for a campaign no longer running is skipped, never sent: a
+    lifted pause must not become a burst. A refusal marks the account's health
+    as every send does, and the screen gets words while the provider's text
+    goes to an event (rule 54). A person's posts are read at most once in three
+    days (`posts_checked_at`), so the planner moves down the list instead of
+    reading the same six people hourly. Nothing is planned while outreach is
+    paused, nothing past today's close, and planning runs last in the hourly
+    chain so it never delays account repair. Erasing a prospect deletes their
+    rows here too.
 
 ## Conventions
 

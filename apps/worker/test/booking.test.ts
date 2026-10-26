@@ -184,6 +184,31 @@ describe("tryBookMeeting", () => {
     expect(calendar.created[0]?.startsAt).toBe("2026-09-08T14:00:00Z");
   });
 
+  it("on Pro, holds a free accepted time and keeps it so confirming can write the meeting", async () => {
+    // "Mark booked" used to move only a status, leaving the half hour free for
+    // the next prospect to be booked into (rule 18).
+    const { db, ctx, calendar, binding } = await harness();
+    const { bookAcceptedSlot } = await import("../src/jobs/booking.js");
+    db.seed("conversations", [{ id: CONVERSATION, workspace_id: WORKSPACE, prospect_id: PROSPECT, needs_human: false }]);
+
+    const outcome = await bookAcceptedSlot(ctx, {
+      ...base(binding),
+      offeredSlots: ["2026-09-08T14:00:00Z"],
+      confirmFirst: true,
+    });
+
+    expect(outcome.status).toBe("held");
+    expect(calendar.created).toHaveLength(0);
+    expect(db.rows("meetings")).toHaveLength(0);
+    expect(db.find("conversations", { id: CONVERSATION })).toMatchObject({
+      needs_human: true,
+      needs_human_kind: "booking",
+      held_slot_starts_at: "2026-09-08T14:00:00Z",
+      held_slot_ends_at: "2026-09-08T14:30:00.000Z",
+      held_slot_rep_user_id: USER,
+    });
+  });
+
   it("hands the conversation to a human when the calendar write fails", async () => {
     const { db, ctx, binding } = await harness();
     const { tryBookMeeting } = await import("../src/jobs/booking.js");

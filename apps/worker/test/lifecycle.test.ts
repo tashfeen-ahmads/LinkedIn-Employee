@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { BRAND } from "@le/shared";
 import { MockEmailProvider, signUnsubscribeToken } from "@le/email";
 import { FakeDb } from "./fake-db.js";
+import { setBillingEnv } from "./billing-env.js";
 import {
   nextSequenceStep,
   runLifecycleEmails,
@@ -525,15 +526,11 @@ describe("trial warnings", () => {
    * check at all, which is how a mutation quietly stops biting.
    */
   describe("with the trial limit on", () => {
-    let was: string | undefined;
+    let restore: () => void = () => {};
     beforeEach(() => {
-      was = process.env.TRIAL_LIMIT_ENFORCED;
-      process.env.TRIAL_LIMIT_ENFORCED = "true";
+      restore = setBillingEnv({ configured: true, limit: "true" });
     });
-    afterEach(() => {
-      if (was === undefined) delete process.env.TRIAL_LIMIT_ENFORCED;
-      else process.env.TRIAL_LIMIT_ENFORCED = was;
-    });
+    afterEach(() => restore());
 
     it("warns on day twelve of the fourteen, once", async () => {
       const { ctx, email } = harness({ trialEndsInDays: 2, signedUpAgo: 12 * DAY });
@@ -573,15 +570,39 @@ describe("trial warnings", () => {
     // "Your trial ends in 3 days" for a trial that does not end is a threat
     // the product does not carry out, and the real one later reads as another
     // false alarm.
-    const was = process.env.TRIAL_LIMIT_ENFORCED;
-    process.env.TRIAL_LIMIT_ENFORCED = "false";
+    const restore = setBillingEnv({ configured: true, limit: "false" });
     try {
       const { ctx, email } = harness({ trialEndsInDays: 3 });
       await runLifecycleEmails(ctx, NOW);
       expect(email.sent.some((m) => m.subject.toLowerCase().includes("trial"))).toBe(false);
     } finally {
-      if (was !== undefined) process.env.TRIAL_LIMIT_ENFORCED = was;
-      else delete process.env.TRIAL_LIMIT_ENFORCED;
+      restore();
+    }
+  });
+
+  it("sends no trial-ending email on a deployment that cannot take a payment", async () => {
+    const restore = setBillingEnv({ configured: false });
+    try {
+      const { ctx, email } = harness({ trialEndsInDays: 2, signedUpAgo: 12 * DAY });
+      await runLifecycleEmails(ctx, NOW);
+      expect(email.sent.some((m) => m.subject.toLowerCase().includes("trial"))).toBe(false);
+    } finally {
+      restore();
+    }
+  });
+
+  it("counts the days left the way the banner does, floored", async () => {
+    // Two and a half days left reads "2 days" on the banner, so the email
+    // goes then and says the same; it used to round up and say 3.
+    const restore = setBillingEnv({ configured: true, limit: "true" });
+    try {
+      const { ctx, email } = harness({ trialEndsInDays: 2.5, signedUpAgo: 12 * DAY });
+      await runLifecycleEmails(ctx, NOW);
+      expect(email.sent.filter((m) => m.subject.includes("trial")).map((m) => m.subject)).toEqual([
+        "Your trial ends in 2 days",
+      ]);
+    } finally {
+      restore();
     }
   });
 

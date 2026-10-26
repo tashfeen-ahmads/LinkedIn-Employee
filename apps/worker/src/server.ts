@@ -6,6 +6,7 @@ import { exchangeHubSpotCode, exchangeSalesforceCode, hubspotConsentUrl, salesfo
 import {
   PRICE_KEYS,
   StripeClient,
+  billingConfigured,
   intervalFromPriceLookupKey,
   normalizeSubscriptionStatus,
   planFromPriceLookupKey,
@@ -1604,23 +1605,43 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
       autopilot_monthly: ctx.env.STRIPE_PRICE_AUTOPILOT_MONTHLY,
       autopilot_yearly: ctx.env.STRIPE_PRICE_AUTOPILOT_YEARLY,
     }[parsed.data.price];
-    if (!ctx.env.STRIPE_SECRET_KEY || !ctx.env.STRIPE_WEBHOOK_SECRET || !priceId) {
-      return c.json({ error: "billing is not configured" }, 501);
+    // The same reading that decides whether a trial ends (`trialEnforced`), so
+    // "payments are not switched on" and "your trial keeps sending" are one
+    // fact. The sentence reaches the customer as written: no supplier, no
+    // variable (rule 54).
+    if (!billingConfigured(ctx.env) || !priceId || !ctx.env.STRIPE_SECRET_KEY || !ctx.env.STRIPE_WEBHOOK_SECRET) {
+      return c.json(
+        { error: "Payments are not switched on yet. Your account keeps sending, and we will email you before anything changes." },
+        501,
+      );
     }
     // Only an owner or admin decides what the workspace is charged.
     if (!(await isWorkspaceAdmin(ctx.db, parsed.data.workspaceId, parsed.data.userId))) {
-      return c.json({ error: "only an owner or admin can choose a plan" }, 403);
+      return c.json({ error: "Only an owner or admin can choose the plan." }, 403);
     }
 
     const stripe = new StripeClient({
       secretKey: ctx.env.STRIPE_SECRET_KEY,
       webhookSecret: ctx.env.STRIPE_WEBHOOK_SECRET,
     });
-    const { data: workspace } = await ctx.db
+    const { data: workspace, error: readError } = await ctx.db
       .from("workspaces")
-      .select("stripe_customer_id, plan, trial_ends_at")
+      .select("stripe_customer_id, stripe_subscription_id, subscription_status, plan, trial_ends_at")
       .eq("id", parsed.data.workspaceId)
       .maybeSingle();
+    if (readError) return c.json({ error: "Checkout could not be opened just now. Try again in a minute." }, 500);
+    // A workspace with a live subscription changes it on the billing page.
+    // A second checkout would start a second subscription beside the first,
+    // and the customer would be charged for both.
+    if (
+      workspace?.stripe_subscription_id &&
+      ["active", "trialing", "past_due"].includes(workspace.subscription_status ?? "")
+    ) {
+      return c.json(
+        { error: "This workspace already has a plan. Change or cancel it from Manage billing, card and invoices." },
+        409,
+      );
+    }
     // Stripe refuses a trial that ends within two days, so a trial that close
     // to its end simply starts the paid period now.
     const trialLeftMs = workspace?.plan === "trial" && workspace.trial_ends_at ? Date.parse(workspace.trial_ends_at) - Date.now() : 0;
@@ -1643,7 +1664,7 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
       return c.json({ url: session.url });
     } catch (error) {
       console.error("checkout failed", error);
-      return c.json({ error: "could not start checkout" }, 502);
+      return c.json({ error: "Checkout could not be opened just now. Try again in a minute." }, 502);
     }
   });
 
@@ -1704,8 +1725,31 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
       return c.json({ error: "invalid signature" }, 401);
     }
 
-    // Stripe redelivers, and order is not guaranteed. Recording the event id
-    // first makes a repeat a no-op.
+    // Stripe redelivers, and order is not guaranteed. A delivery already
+    // recorded is a no-op.
+    const { data: seen, error: seenError } = await ctx.db
+      .from("billing_events")
+      .select("id")
+      .eq("id", event.id)
+      .maybeSingle();
+    if (seenError) {
+      console.error("could not read billing events", seenError.message);
+      return c.json({ error: "could not record event" }, 500);
+    }
+    if (seen) return c.json({ received: true, duplicate: true });
+
+    // Applied before it is recorded, never after. Recorded first, an apply
+    // that failed left the id behind, Stripe's retry was answered "duplicate",
+    // and the subscription change was dropped for good. Applying twice is the
+    // same write (newest-wins, ties settled the same way), so a retry after an
+    // apply that worked and a record that did not is harmless.
+    try {
+      await applyBillingEvent(ctx, event);
+    } catch (error) {
+      console.error("could not apply billing event", event.id, error instanceof Error ? error.message : error);
+      return c.json({ error: "could not apply event" }, 500);
+    }
+
     const { error: insertError } = await ctx.db.from("billing_events").insert({
       id: event.id,
       type: event.type,
@@ -1713,16 +1757,14 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
       workspace_id: workspaceIdFrom(event.data.object),
     });
     if (insertError) {
-      // Only a primary-key collision means "already handled". Treating every
-      // failure as a duplicate returns 200 to Stripe and silently drops a
-      // subscription change, so anything else asks Stripe to retry.
+      // A primary-key collision is a concurrent delivery of the same event,
+      // which applied the same thing. Anything else asks Stripe to retry,
+      // which re-applies harmlessly and records it then.
       const duplicate = /duplicate|unique|23505/i.test(insertError.message);
       if (duplicate) return c.json({ received: true, duplicate: true });
       console.error("could not record billing event", insertError.message);
       return c.json({ error: "could not record event" }, 500);
     }
-
-    await applyBillingEvent(ctx, event);
     return c.json({ received: true });
   });
 
@@ -1735,6 +1777,10 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
  * Stripe does not promise order, so an event older than the last one applied
  * is recorded and not applied: a `subscription.updated` from before a
  * cancellation arriving after it would otherwise switch sending back on.
+ *
+ * Throws when the workspace cannot be read or written, so the webhook answers
+ * 500 and Stripe retries. Returning quietly there was a 200 for a change that
+ * never landed — a paid customer left paused, or a cancelled one left sending.
  */
 export async function applyBillingEvent(
   ctx: Pick<WorkerContext, "db">,
@@ -1746,28 +1792,46 @@ export async function applyBillingEvent(
   const createdAt = typeof event.created === "number" ? new Date(event.created * 1000).toISOString() : null;
 
   if (event.type === "checkout.session.completed") {
-    await ctx.db
+    // The event that creates the subscription, so it names the one this
+    // workspace now holds, whatever was stored before.
+    const { error } = await ctx.db
       .from("workspaces")
       .update({
         stripe_customer_id: asString(object.customer),
         stripe_subscription_id: asString(object.subscription),
       })
       .eq("id", workspaceId);
+    if (error) throw new Error(`could not apply ${event.type}: ${error.message}`);
     return;
   }
 
   if (!event.type.startsWith("customer.subscription.")) return;
 
-  const { data: current } = await ctx.db
+  const { data: current, error: readError } = await ctx.db
     .from("workspaces")
-    .select("last_billing_event_at")
+    .select("last_billing_event_at, subscription_status, stripe_subscription_id")
     .eq("id", workspaceId)
     .maybeSingle();
-  if (createdAt && current?.last_billing_event_at && Date.parse(current.last_billing_event_at) > Date.parse(createdAt)) {
+  if (readError) throw new Error(`could not read workspace for ${event.type}: ${readError.message}`);
+  if (!current) return;
+
+  const status = normalizeSubscriptionStatus(asString(object.status));
+  const subscriptionId = asString(object.id);
+  const storedStatus = (current.subscription_status ?? null) as SubscriptionStatus | null;
+  if (!subscriptionEventApplies({
+    type: event.type,
+    subscriptionId,
+    status,
+    createdAt,
+    stored: {
+      subscriptionId: current.stripe_subscription_id ?? null,
+      status: storedStatus,
+      lastEventAt: current.last_billing_event_at ?? null,
+    },
+  })) {
     return;
   }
 
-  const status = normalizeSubscriptionStatus(asString(object.status));
   const items = object.items as
     | {
         data?: Array<{
@@ -1787,7 +1851,7 @@ export async function applyBillingEvent(
   const interval =
     recurring === "month" || recurring === "year" ? recurring : intervalFromPriceLookupKey(first?.price?.lookup_key);
 
-  await ctx.db
+  const { error: updateError } = await ctx.db
     .from("workspaces")
     .update({
       subscription_status: status,
@@ -1800,11 +1864,75 @@ export async function applyBillingEvent(
       cancel_at_period_end: object.cancel_at_period_end === true,
       seats: first?.quantity ?? 1,
       current_period_end: periodEnd,
-      stripe_subscription_id: asString(object.id),
+      stripe_subscription_id: subscriptionId,
       ...(asString(object.customer) ? { stripe_customer_id: asString(object.customer) } : {}),
       ...(createdAt ? { last_billing_event_at: createdAt } : {}),
     })
     .eq("id", workspaceId);
+  if (updateError) throw new Error(`could not apply ${event.type}: ${updateError.message}`);
+}
+
+type SubscriptionStatus = "active" | "trialing" | "past_due" | "canceled" | "unpaid";
+
+const LIVE_STATUSES: ReadonlyArray<SubscriptionStatus | null> = ["active", "trialing", "past_due"];
+
+/**
+ * How two events stamped in the same second are ordered. Stripe's `created`
+ * is whole seconds, and a subscription created and activated, or a trial
+ * converting, lands two events in one.
+ *
+ * `canceled` is highest because it is terminal in Stripe: a subscription
+ * never leaves it, so a same-second pair holding it can only have ended there,
+ * and ranking it low would leave a cancelled customer sending. The rest are
+ * the direction a subscription moves when a payment goes through.
+ */
+const TIE_RANK: Record<SubscriptionStatus, number> = {
+  canceled: 5,
+  active: 4,
+  trialing: 3,
+  past_due: 2,
+  unpaid: 1,
+};
+
+/**
+ * Whether a subscription event may change the workspace. Pure, so every
+ * ordering below is testable without a webhook.
+ */
+export function subscriptionEventApplies(input: {
+  type: string;
+  subscriptionId: string | null;
+  status: SubscriptionStatus | null;
+  createdAt: string | null;
+  stored: { subscriptionId: string | null; status: SubscriptionStatus | null; lastEventAt: string | null };
+}): boolean {
+  const { stored } = input;
+  const sameSubscription = !stored.subscriptionId || !input.subscriptionId || stored.subscriptionId === input.subscriptionId;
+
+  if (!sameSubscription) {
+    // Another subscription than the one this workspace holds: usually the
+    // previous one, whose late `deleted` would otherwise mark a paying
+    // workspace cancelled. It may take over only when the one held is no
+    // longer live, and only by being created or live itself — a resubscribe
+    // after a cancellation, whose events can arrive before the checkout that
+    // names it.
+    if (LIVE_STATUSES.includes(stored.status)) return false;
+    if (input.type !== "customer.subscription.created" && !LIVE_STATUSES.includes(input.status)) return false;
+  } else if (stored.status === "canceled" && input.status !== "canceled" && stored.subscriptionId) {
+    // Cancelled is terminal for a Stripe subscription. Anything else about the
+    // same one is an older event arriving late.
+    return false;
+  }
+
+  if (input.createdAt && stored.lastEventAt) {
+    const incoming = Date.parse(input.createdAt);
+    const last = Date.parse(stored.lastEventAt);
+    if (incoming < last) return false;
+    if (incoming === last && sameSubscription) {
+      const rank = (status: SubscriptionStatus | null) => (status ? TIE_RANK[status] : 0);
+      if (rank(input.status) < rank(stored.status)) return false;
+    }
+  }
+  return true;
 }
 
 function workspaceIdFrom(object: Record<string, unknown>): string | null {

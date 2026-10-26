@@ -8,11 +8,14 @@ import {
   toUsage,
   type AccountRecord,
 } from "@le/linkedin";
-import { LINKEDIN_LIMITS, choosePost, worthCommentingOn } from "@le/shared";
+import { LINKEDIN_LIMITS, choosePost, matchExclusion, workingMsLeftToday, worthCommentingOn } from "@le/shared";
 import type { WorkerContext } from "../context.js";
 import { recordEvent } from "../context.js";
 import { recordBeat } from "../heartbeat.js";
 import { rollCounters } from "@le/linkedin";
+import { loadExclusions } from "../exclusions.js";
+import { outreachPause } from "../platform.js";
+import { ENGAGE_LATE_MS } from "./linkedin-action.js";
 import { agentForCampaign, modelFor, voiceOf } from "../agent.js";
 import { businessFor } from "../brand.js";
 import { workspaceEntitlement } from "../billing.js";
@@ -26,6 +29,14 @@ const REACTIONS_PER_RUN = 3;
 const COMMENTS_PER_RUN = 1;
 /** People whose posts are read per account per run. Every read comes off the rep's seat. */
 const LOOKUPS_PER_RUN = 6;
+/**
+ * A person whose posts were read is not read again for this long, found or
+ * not. Without it the same six people at the top of the list were read every
+ * hour, forty-eight times a day, and nobody below them was ever looked at.
+ */
+export const POSTS_RECHECK_MS = 3 * 86_400_000;
+/** The most rows read to choose from; ordered, so "newest first" means the whole list. */
+const CANDIDATE_ROWS = 300;
 
 /** The people worth engaging with: in a live conversation with this account, not finished with it. */
 const ENGAGEABLE = ["invited", "accepted", "messaged_1", "messaged_2", "messaged_3", "replied", "positive"] as const;
@@ -50,6 +61,9 @@ export async function planEngagement(
   now: Date = new Date(),
 ): Promise<{ planned: number }> {
   const { db } = ctx;
+  // Nothing is read or written while the operator has outreach paused, and an
+  // unreadable setting counts as paused (rule 59).
+  if (await outreachPause(db)) return { planned: 0 };
   const { data: workspaces, error } = await db.from("workspaces").select("id").eq("engage_posts", true);
   if (error || !workspaces?.length) return { planned: 0 };
 
@@ -72,6 +86,7 @@ async function planForWorkspace(
   now: Date,
 ): Promise<number> {
   const { db } = ctx;
+  await sweepStale(ctx, workspaceId, now);
   const entitled = await workspaceEntitlement(db, workspaceId, now);
   if (!entitled?.canSend) return 0;
 
@@ -96,7 +111,11 @@ async function planForWorkspace(
     if (accountRow.invites_paused_until && Date.parse(accountRow.invites_paused_until) > now.getTime()) continue;
     const { data: owner } = await db.from("profiles").select("timezone, full_name").eq("id", accountRow.user_id).maybeSingle();
     const timezone = owner?.timezone ?? "UTC";
-    if (!isWithinWorkingHours(now, parseWorkingHours(accountRow.working_hours), timezone)) continue;
+    const hours = parseWorkingHours(accountRow.working_hours);
+    if (!isWithinWorkingHours(now, hours, timezone)) continue;
+    // Everything planned this run lands before close, never carried overnight
+    // onto a post a day older.
+    const msLeft = workingMsLeftToday(now, hours, timezone);
 
     const usage = toUsage(rollCounters(accountRow as AccountRecord, localDate(now, timezone)), timezone);
     const since = new Date(now.getTime() - 24 * 60 * 60_000).toISOString();
@@ -129,6 +148,11 @@ async function planForWorkspace(
         // spending the rest of the run's reads finding out why.
         break;
       }
+      await db
+        .from("prospects")
+        .update({ posts_checked_at: now.toISOString() })
+        .eq("id", person.prospectId)
+        .eq("workspace_id", workspaceId);
       const post = choosePost(posts, now);
       if (!post) continue;
 
@@ -144,13 +168,14 @@ async function planForWorkspace(
       };
       // Minutes apart, jittered: a handful an hour, never in a burst.
       offsetMs += (4 + Math.random() * 11) * 60_000;
+      if (offsetMs >= msLeft) break;
       const like = await insertAction(ctx, { ...base, kind: "reaction", reaction_type: "like" }, now, offsetMs);
       if (!like) continue;
-      await enqueue(queues, workspaceId, like, offsetMs);
+      if (!(await enqueue(ctx, queues, workspaceId, like, offsetMs))) continue;
       likesLeft -= 1;
       planned += 1;
 
-      if (commentsLeft > 0 && worthCommentingOn(post)) {
+      if (commentsLeft > 0 && worthCommentingOn(post) && offsetMs + 28 * 60_000 < msLeft) {
         const written = await commentFor(ctx, workspaceId, person.campaignId, post.text, person.firstName, owner?.full_name ?? null);
         if (written) {
           // A while after the like, as a person who read the post would.
@@ -161,8 +186,7 @@ async function planForWorkspace(
             now,
             commentOffset,
           );
-          if (comment) {
-            await enqueue(queues, workspaceId, comment, commentOffset);
+          if (comment && (await enqueue(ctx, queues, workspaceId, comment, commentOffset))) {
             commentsLeft -= 1;
             planned += 1;
           }
@@ -198,14 +222,19 @@ async function candidates(ctx: WorkerContext, workspaceId: string, campaignIds: 
     .eq("workspace_id", workspaceId)
     .in("campaign_id", campaignIds)
     .in("status", [...ENGAGEABLE])
-    .limit(500);
+    .order("accepted_at", { ascending: false })
+    .order("invited_at", { ascending: false })
+    .limit(CANDIDATE_ROWS);
   if (!rows?.length) return [];
   const ids = [...new Set(rows.map((r) => r.prospect_id))];
   const { data: prospects } = await db
     .from("prospects")
-    .select("id, provider_id, first_name, do_not_contact, last_engaged_at")
+    .select("id, provider_id, first_name, company, linkedin_url, do_not_contact, last_engaged_at, posts_checked_at")
     .eq("workspace_id", workspaceId)
     .in("id", ids);
+  // Checked here as well as on the send path, so an excluded person costs
+  // neither a read off the seat nor a model call.
+  const exclusions = await loadExclusions(db, workspaceId);
   const recentCutoff = now.getTime() - LINKEDIN_LIMITS.engageSamePersonEveryDays * 86_400_000;
   const { data: planned } = await db
     .from("engagement_actions")
@@ -228,6 +257,8 @@ async function candidates(ctx: WorkerContext, workspaceId: string, campaignIds: 
     const p = byId.get(row.prospect_id);
     if (!p?.provider_id || p.do_not_contact || seen.has(p.id) || plannedRecently.has(p.id)) continue;
     if (p.last_engaged_at && Date.parse(p.last_engaged_at) > recentCutoff) continue;
+    if (p.posts_checked_at && now.getTime() - Date.parse(p.posts_checked_at) < POSTS_RECHECK_MS) continue;
+    if (matchExclusion(exclusions, { company: p.company, linkedinUrl: p.linkedin_url })) continue;
     seen.add(p.id);
     out.push({ prospectId: p.id, campaignId: row.campaign_id, providerId: p.provider_id, firstName: p.first_name ?? null });
   }
@@ -278,11 +309,50 @@ async function insertAction(
   return data.id as string;
 }
 
-async function enqueue(queues: Pick<Queues, "linkedinAction">, workspaceId: string, engagementId: string, delayMs: number) {
-  await enqueueOnce(
-    queues.linkedinAction,
-    "engage",
-    { kind: "engage", workspaceId, engagementId },
-    { jobId: jobId("engage", engagementId), delay: Math.round(delayMs) },
-  );
+/**
+ * Queues the job, or removes the row it was for. A row left `queued` with no
+ * job behind it reads as "planned" for ever and, through the unique index,
+ * blocks that post for good.
+ */
+async function enqueue(
+  ctx: WorkerContext,
+  queues: Pick<Queues, "linkedinAction">,
+  workspaceId: string,
+  engagementId: string,
+  delayMs: number,
+): Promise<boolean> {
+  try {
+    await enqueueOnce(
+      queues.linkedinAction,
+      "engage",
+      { kind: "engage", workspaceId, engagementId },
+      { jobId: jobId("engage", engagementId), delay: Math.round(delayMs) },
+    );
+    return true;
+  } catch (err) {
+    console.error("could not queue a like or comment", { workspaceId, reason: String(err) });
+    await ctx.db.from("engagement_actions").delete().eq("id", engagementId).eq("workspace_id", workspaceId).eq("status", "queued");
+    return false;
+  }
+}
+
+/**
+ * Rows whose job will never run them: queued long past their time (a job that
+ * failed every retry), or claimed by a send that never finished. Closed with a
+ * reason, so the page never shows "planned" for something that is not.
+ */
+async function sweepStale(ctx: WorkerContext, workspaceId: string, now: Date): Promise<void> {
+  const cutoff = new Date(now.getTime() - 2 * ENGAGE_LATE_MS).toISOString();
+  await ctx.db
+    .from("engagement_actions")
+    .update({ status: "skipped", reason: "it could not go out near the time it was planned" })
+    .eq("workspace_id", workspaceId)
+    .eq("status", "queued")
+    .lt("scheduled_for", cutoff);
+  await ctx.db
+    .from("engagement_actions")
+    .update({ status: "failed", reason: "the send did not finish, so it was not tried again" })
+    .eq("workspace_id", workspaceId)
+    .eq("status", "sending")
+    .lt("scheduled_for", cutoff);
 }

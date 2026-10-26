@@ -32,7 +32,7 @@ const WEEKDAY_AVERAGE = Math.floor(PUBLIC_LIMITS.invitesPerWeek / 5);
 const FAQ = [
   {
     q: "How many LinkedIn connection requests can I send per day in 2026?",
-    a: `Most guidance puts it at 20 to 25 a day for an established account, with a new account starting nearer 10 and climbing over several weeks. We start every account at ${PUBLIC_LIMITS.invitesPerDayStart} and ramp it over ${PUBLIC_LIMITS.warmupWeeks} weeks. A fully warmed account may send up to ${PUBLIC_LIMITS.invitesPerDayCeiling} on a single day, but never more than ${PUBLIC_LIMITS.invitesPerWeek} in a week, which averages ${WEEKDAY_AVERAGE} a day across a five-day working week.`,
+    a: `Most guidance puts it at 20 to 25 a day for an established account, with a new account starting nearer 10 and climbing over several weeks. We start every account at ${PUBLIC_LIMITS.invitesPerDayStart} and ramp it over ${PUBLIC_LIMITS.warmupWeeks} weeks. A fully warmed account may send up to ${PUBLIC_LIMITS.invitesPerDayMax} on a single day, but never more than ${PUBLIC_LIMITS.invitesPerWeek} in a week, which averages ${WEEKDAY_AVERAGE} a day across a five-day working week.`,
   },
   {
     q: "What is the weekly connection request limit?",
@@ -141,10 +141,10 @@ export default function LimitsPage() {
             />
             <p>
               One figure is above the usual guidance on purpose: a fully warmed account may send up
-              to {PUBLIC_LIMITS.invitesPerDayCeiling} invitations on a single day. It cannot keep that
+              to {PUBLIC_LIMITS.invitesPerDayMax} invitations on a single day. It cannot keep that
               up, because the weekly ceiling of {PUBLIC_LIMITS.invitesPerWeek} averages{" "}
               {WEEKDAY_AVERAGE} a day across a five-day week, and no account reaches that daily
-              maximum until it has been sending for {PUBLIC_LIMITS.ceilingWeeks} weeks. Everything
+              maximum until it has been sending for {PUBLIC_LIMITS.warmupWeeks} weeks. Everything
               else sits at or below the commonly cited figures. That is a deliberate trade: a
               campaign that runs for a year at twenty a day reaches far more people than one that
               runs for six weeks at fifty and then loses the account.
@@ -181,7 +181,7 @@ export default function LimitsPage() {
           <section className="mk-article-block is-wide">
             <h2 className="mk-h2-sm">Move the sliders until it hits the ceiling</h2>
             <p>
-              The daily slider stops at {PUBLIC_LIMITS.invitesPerDayCeiling} because the product stops
+              The daily slider stops at {PUBLIC_LIMITS.invitesPerDayMax} because the product stops
               there, and the weekly ceiling clamps the total underneath it.
             </p>
             <Forecast />

@@ -90,13 +90,20 @@ const IMPORTANT = [
   },
 ];
 
+// Billing. Missing any one of these, nobody can pay, so the worker never ends
+// a trial (`trialEnforced` in @le/billing): every trial workspace keeps
+// sending for free, for good, until all six are set. Important, not optional.
+const BILLING = "Missing any of the six Stripe variables, payments are off and no trial ever ends.";
+IMPORTANT.push(
+  { key: "STRIPE_SECRET_KEY", why: `Taking payments. ${BILLING}`, fix: "Stripe dashboard → Developers → API keys (the secret key)." },
+  { key: "STRIPE_WEBHOOK_SECRET", why: `Without it a completed checkout never activates the plan. ${BILLING}`, fix: "Stripe dashboard → Developers → Webhooks → <WORKER_URL>/webhooks/stripe → signing secret." },
+  { key: "STRIPE_PRICE_PRO_MONTHLY", why: `Pro, monthly. ${BILLING}`, fix: "The price id (price_…) whose lookup key is pro_monthly." },
+  { key: "STRIPE_PRICE_PRO_YEARLY", why: `Pro, yearly. ${BILLING}`, fix: "The price id (price_…) whose lookup key is pro_yearly." },
+  { key: "STRIPE_PRICE_AUTOPILOT_MONTHLY", why: `Autopilot, monthly. ${BILLING}`, fix: "The price id (price_…) whose lookup key is autopilot_monthly." },
+  { key: "STRIPE_PRICE_AUTOPILOT_YEARLY", why: `Autopilot, yearly. ${BILLING}`, fix: "The price id (price_…) whose lookup key is autopilot_yearly." },
+);
+
 const OPTIONAL = [
-  ["STRIPE_SECRET_KEY", "Billing. Trials work without it; nobody can subscribe."],
-  ["STRIPE_WEBHOOK_SECRET", "Without it a completed checkout never activates the plan."],
-  ["STRIPE_PRICE_PRO_MONTHLY", "Pro, monthly. Without it nobody can choose that price."],
-  ["STRIPE_PRICE_PRO_YEARLY", "Pro, yearly. Without it nobody can choose that price."],
-  ["STRIPE_PRICE_AUTOPILOT_MONTHLY", "Autopilot, monthly. Without it nobody can choose that price."],
-  ["STRIPE_PRICE_AUTOPILOT_YEARLY", "Autopilot, yearly. Without it nobody can choose that price."],
   ["RESEND_API_KEY", "The welcome, the onboarding sequence, admin notifications, announcements, the digest and the account-paused alert. Silent without it."],
   ["GOOGLE_CLIENT_ID", "Calendar. Without it the agent offers to send times rather than proposing any."],
   ["HUBSPOT_CLIENT_ID", "CRM sync."],

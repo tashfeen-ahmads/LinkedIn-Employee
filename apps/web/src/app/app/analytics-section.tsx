@@ -243,11 +243,12 @@ export async function ResultsSection() {
                     </td>
                     {report.stages.map((stage) =>
                       reachable.has(stage.key) ? (
-                        <td key={stage.key} className="num">
+                        <td key={stage.key} data-label={stage.label} className="num">
                           {counts[stage.key].toLocaleString()}
                         </td>
                       ) : (
-                        <td data-label="Acceptance"
+                        <td
+                          data-label={stage.label}
                           key={stage.key}
                           className="num subtle"
                           title="Not what these campaigns are asking for"
@@ -256,10 +257,10 @@ export async function ResultsSection() {
                         </td>
                       ),
                     )}
-                    <td data-label="Reply" className="num">
+                    <td data-label="Acceptance" className="num">
                       <RatePill rate={rate(counts.accepted, counts.invited, RATE_TARGETS.acceptance)} />
                     </td>
-                    <td className="num">
+                    <td data-label="Reply" className="num">
                       <RatePill rate={rate(counts.replied, counts.accepted, RATE_TARGETS.reply)} />
                     </td>
                   </tr>
@@ -271,7 +272,7 @@ export async function ResultsSection() {
                 </td>
                 <td data-label="Asking for" />
                 {report.stages.map((stage) => (
-                  <td key={stage.key} className="num">
+                  <td key={stage.key} data-label={stage.label} className="num">
                     <strong>{countFunnel(visibleRows)[stage.key].toLocaleString()}</strong>
                   </td>
                 ))}

@@ -86,12 +86,24 @@ export async function middleware(request: NextRequest) {
     // Somebody who chose to open the app before launching (rule 65) is let
     // through as well. Asked only when nothing has launched, so a finished
     // workspace pays for no extra read.
+    //
+    // A profile read that failed lets the page through without remembering
+    // anything, exactly as a failed campaign read does: it cannot tell a
+    // person who deferred from one who did not, and sending somebody who chose
+    // to open the app back to setup on a bad minute is the step that did
+    // nothing (rule 17).
     let deferred = false;
+    let deferredUnknown = false;
     if (!error && data && data.length === 0 && membership) {
-      const { data: me } = await supabase.from("profiles").select("setup_confirmed").eq("id", userId).maybeSingle();
-      deferred = Boolean(readConfirmations(me?.setup_confirmed, membership.workspace_id).deferred);
+      const { data: me, error: profileError } = await supabase
+        .from("profiles")
+        .select("setup_confirmed")
+        .eq("id", userId)
+        .maybeSingle();
+      if (profileError) deferredUnknown = true;
+      else deferred = Boolean(readConfirmations(me?.setup_confirmed, membership.workspace_id).deferred);
     }
-    if (!error && data) {
+    if (!error && data && !deferredUnknown) {
       if (data.length > 0 || deferred) {
         response.cookies.set(SETUP_DONE_COOKIE, userId, {
           httpOnly: true,

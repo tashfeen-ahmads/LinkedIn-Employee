@@ -1,4 +1,4 @@
-import { LINKEDIN_LIMITS, SUSTAINED_INVITES_PER_DAY } from "@le/shared";
+import { LINKEDIN_LIMITS } from "@le/shared";
 
 /**
  * The two plans, said once for the pricing page and the in-app plan cards.
@@ -71,7 +71,7 @@ export const PLAN_FEATURES: readonly PlanFeature[] = [
   { label: "Prospecting on regular LinkedIn and Sales Navigator", pro: true, autopilot: true },
   { label: "A personal note written for every person", pro: true, autopilot: true },
   {
-    label: `Safe pacing: ${LINKEDIN_LIMITS.invitesPerDayStart} a day, growing to ${SUSTAINED_INVITES_PER_DAY}, never more than ${LINKEDIN_LIMITS.invitesPerWeek} a week`,
+    label: `Safe pacing: ${LINKEDIN_LIMITS.invitesPerDayStart} a day, rising to ${LINKEDIN_LIMITS.invitesPerDayMax}, never more than ${LINKEDIN_LIMITS.invitesPerWeek} a week`,
     pro: true,
     autopilot: true,
   },

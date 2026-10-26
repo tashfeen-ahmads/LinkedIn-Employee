@@ -1,6 +1,9 @@
+import { fetchAllRows } from "@le/db";
 import { dailyInviteCap } from "@le/linkedin";
+import { workspaceEntitlement } from "../billing.js";
 import type { WorkerContext } from "../context.js";
 import { recordEvent } from "../context.js";
+import { outreachPause } from "../platform.js";
 import { enqueueOnce, jobId, type Queues } from "../queues.js";
 
 /** How many days of invitations a running campaign keeps queued before it looks for more. */
@@ -26,6 +29,12 @@ export const REFILL_EVENT = "campaign.refill_queued";
  * everybody already known is excluded, and the copy a human approved is kept.
  * It only asks once a campaign is down to two days of allowance, at most once
  * a day per campaign, and never after LinkedIn has said there is nobody left.
+ *
+ * Nothing is searched for outreach that cannot happen: not while the operator
+ * pause is on, not for a workspace whose plan does not send, and not for a
+ * strategy nobody has approved or one set aside. Each search spends a page of
+ * the rep's seat and writes prospect rows that exclude those people for good
+ * (rule 27), so a search that cannot lead to an invitation is a loss twice.
  */
 export async function refillCampaigns(
   ctx: WorkerContext,
@@ -33,6 +42,8 @@ export async function refillCampaigns(
   now: Date = new Date(),
 ): Promise<number> {
   const { db } = ctx;
+  // Unreadable counts as paused (rule 59): a hiccup is not permission.
+  if (await outreachPause(db)) return 0;
   const { data: campaigns, error } = await db
     .from("campaigns")
     .select("id, workspace_id, owner_user_id, customer_profile_id, linkedin_account_id, daily_invite_cap")
@@ -43,9 +54,27 @@ export async function refillCampaigns(
 
   const ids = campaigns.map((c) => c.id);
   const accountIds = [...new Set(campaigns.map((c) => c.linkedin_account_id).filter(Boolean))] as string[];
+  const profileIds = [...new Set(campaigns.map((c) => c.customer_profile_id).filter(Boolean))] as string[];
   const since = new Date(now.getTime() - REFILL_EVERY_MS).toISOString();
-  const [queued, accounts, recent] = await Promise.all([
-    db.from("campaign_prospects").select("campaign_id").in("campaign_id", ids).eq("status", "queued").limit(20_000),
+  // Every queued row, page by page: PostgREST answers at most a thousand, and a
+  // campaign past the thousandth would read as empty and be refilled every day.
+  let queued: { data: Array<{ campaign_id: string }>; error: null } | { data: null; error: string };
+  try {
+    const paged = await fetchAllRows<{ id: string; campaign_id: string }>((from, to) =>
+      db
+        .from("campaign_prospects")
+        .select("id, campaign_id")
+        .in("campaign_id", ids)
+        .eq("status", "queued")
+        .order("id")
+        .range(from, to),
+    );
+    queued = paged.truncated ? { data: null, error: "too many queued rows to count" } : { data: paged.rows, error: null };
+  } catch (err) {
+    queued = { data: null, error: String(err) };
+  }
+  const [profiles, accounts, recent] = await Promise.all([
+    db.from("customer_profiles").select("id, approved_at, do_not_pursue").in("id", profileIds),
     accountIds.length
       ? db
           .from("linkedin_accounts")
@@ -56,16 +85,27 @@ export async function refillCampaigns(
   ]);
   // A count that could not be read is not an empty list: refilling on it would
   // spend a page on a campaign that may have hundreds queued.
-  if (queued.error || accounts.error || recent.error) return 0;
+  if (queued.error || profiles.error || accounts.error || recent.error) return 0;
 
   const waiting = new Map<string, number>();
   for (const row of queued.data ?? []) waiting.set(row.campaign_id, (waiting.get(row.campaign_id) ?? 0) + 1);
   const accountById = new Map((accounts.data ?? []).map((a) => [a.id, a]));
   const refilledToday = new Set((recent.data ?? []).map((e) => e.subject_id));
+  // Targeting refuses a strategy nobody approved (rule 9); asking anyway would
+  // write a fresh "stopped" banner on a running campaign every day.
+  const searchable = new Set(
+    (profiles.data ?? []).filter((p) => p.approved_at && !p.do_not_pursue).map((p) => p.id as string),
+  );
+  const canSend = new Map<string, boolean>();
 
   let started = 0;
   for (const campaign of campaigns) {
     if (refilledToday.has(campaign.id)) continue;
+    if (!searchable.has(campaign.customer_profile_id as string)) continue;
+    if (!canSend.has(campaign.workspace_id)) {
+      canSend.set(campaign.workspace_id, Boolean((await workspaceEntitlement(db, campaign.workspace_id, now))?.canSend));
+    }
+    if (!canSend.get(campaign.workspace_id)) continue;
     const account = campaign.linkedin_account_id ? accountById.get(campaign.linkedin_account_id) : undefined;
     if (!account || account.status !== "active" || !account.provider_account_id) continue;
 

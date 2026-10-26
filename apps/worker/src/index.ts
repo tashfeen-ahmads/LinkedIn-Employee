@@ -8,6 +8,7 @@ import { createWorkerContext } from "./context.js";
 import { createConnection, createQueues, QUEUE_NAMES, queueReachable, scheduleRepeatables } from "./queues.js";
 import { recordBeat } from "./heartbeat.js";
 import { BOOT_BEAT } from "@le/shared";
+import { billingConfigured, trialEnforced } from "@le/billing";
 import type { CampaignTickJob, DigestJob, InboundMessageJob, LinkedInActionJob, StrategyJob, TargetingJob } from "./queues.js";
 import { runCampaignTick } from "./jobs/campaign-tick.js";
 import { runLinkedInAction, RescheduleError } from "./jobs/linkedin-action.js";
@@ -77,6 +78,12 @@ await recordBeat(ctx.db, BOOT_BEAT, {
   queueReachable: queueOk,
   redisHost: redisHost(env.REDIS_URL),
   nodeEnv: process.env.NODE_ENV ?? null,
+  // Whether this worker ends trials, which only a deployment that can take a
+  // payment does. The web app holds no Stripe secrets and reads this, so the
+  // banner never says "your trial has ended" while this process keeps sending,
+  // or the other way round.
+  billingConfigured: billingConfigured(process.env),
+  trialEnforced: trialEnforced(process.env),
 });
 
 /*
@@ -269,10 +276,9 @@ const workers = [
             .then(() => startPendingSearches(ctx, queues))
             // A running campaign down to two days of people looks for more on
             // its own, rather than waiting for somebody to press Find more.
-            .then(() => refillCampaigns(ctx, queues))
-            // Likes and comments on prospects' recent posts, a handful an hour
-            // inside each owner's working hours (rule 68).
-            .then(() => planEngagement(ctx, queues))
+            // Caught here, so a refill that throws never costs the repairs
+            // below their hour (rule 8).
+            .then(() => refillCampaigns(ctx, queues).catch((err) => console.error("refill failed", err)))
             // A throttle lifts on its own schedule, so the rows it wrote off
             // are checked on the same hourly beat rather than waiting for the
             // night.
@@ -296,6 +302,11 @@ const workers = [
             // Support tickets the immediate hand-off missed — a worker that
             // was restarting, a model that was down.
             .then(() => sweepSupportTickets(ctx))
+            // Likes and comments on prospects' recent posts, a handful an hour
+            // inside each owner's working hours (rule 68). Last, and caught:
+            // it reads posts and writes comments for every account, and none
+            // of that may hold up the repairs above.
+            .then(() => planEngagement(ctx, queues).catch((err) => console.error("engagement planning failed", err)))
             .then(() => undefined)
         );
       }

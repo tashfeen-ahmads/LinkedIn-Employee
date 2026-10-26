@@ -4,6 +4,8 @@ import {
   SALES_NAVIGATOR_PARTIAL_NOTE,
   SALES_NAVIGATOR_REFUSED_NOTE,
   UnipileProvider,
+  isSalesNavigatorFallbackNote,
+  readSalesNavigatorCursor,
   salesNavigatorHeadcounts,
   salesNavigatorSeniorities,
 } from "../src/unipile.js";
@@ -98,18 +100,37 @@ describe("searchProspects tier", () => {
     expect(page.droppedFilters).toEqual([]);
   });
 
-  it("maps seniority words and company sizes to what Sales Navigator takes", () => {
-    expect(salesNavigatorSeniorities(["Owner", "Founder", "Partner", "CXO", "VP", "Director", "Mystery"])).toEqual([
-      "owner",
-      "partner",
-      "cxo",
-      "vp",
-      "director",
-    ]);
+  it("sends job titles as Sales Navigator's role filter, never a field it does not have", async () => {
+    const { provider, bodies } = providerWithCapturedBody();
+    await provider.searchProspects({ accountId: "a1", query: QUERY, tier: "sales_navigator" });
+    expect(bodies[0]?.role).toEqual({ include: ["Head of Operations"], exclude: ["Intern"] });
+    expect(bodies[0]).not.toHaveProperty("title");
+  });
+
+  it("maps seniority words to Sales Navigator's own levels", () => {
+    expect(
+      salesNavigatorSeniorities(["Owner", "Founder", "Partner", "CXO", "VP", "Vice President", "Director", "Mystery"]),
+    ).toEqual(["owner/partner", "cxo", "vice_president", "director"]);
+    // "Vice President" contains "president" and "Entry Level Manager" contains
+    // "manager": the narrower level has to win.
+    expect(salesNavigatorSeniorities(["Vice President"])).toEqual(["vice_president"]);
+    expect(salesNavigatorSeniorities(["Entry Level Manager"])).toEqual(["entry_level_manager"]);
+    expect(salesNavigatorSeniorities(["Senior Manager", "Senior"])).toEqual(["experienced_manager", "senior"]);
+  });
+
+  it("snaps company sizes to Sales Navigator's buckets", () => {
     expect(salesNavigatorHeadcounts(["1-10", "1,001-5,000", "10,000+", "small"])).toEqual([
       { min: 1, max: 10 },
       { min: 1001, max: 5000 },
-      { min: 10000 },
+      { min: 10001 },
+    ]);
+    // A range of the Strategy Agent's own is the buckets it covers, and an
+    // edge it shares with a bucket by one number does not pull that bucket in.
+    expect(salesNavigatorHeadcounts(["10-50"])).toEqual([{ min: 11, max: 50 }]);
+    expect(salesNavigatorHeadcounts(["20-300 employees"])).toEqual([
+      { min: 11, max: 50 },
+      { min: 51, max: 200 },
+      { min: 201, max: 500 },
     ]);
   });
 
@@ -123,6 +144,18 @@ describe("searchProspects tier", () => {
     expect(bodies[0]?.seniority).toBeUndefined();
     expect(bodies[0]?.company_headcount).toBeUndefined();
     expect(page.droppedFilters).toEqual(["seniority", "company size"]);
+  });
+
+  it("names the words it left out when only some of them can be sent", async () => {
+    const { provider, bodies } = providerWithCapturedBody();
+    const page = await provider.searchProspects({
+      accountId: "a1",
+      query: { ...QUERY, seniorities: ["Director", "Board Member"], companyHeadcount: ["51-200", "mid-market"] },
+      tier: "sales_navigator",
+    });
+    expect(bodies[0]?.seniority).toEqual({ include: ["director"] });
+    expect(bodies[0]?.company_headcount).toEqual([{ min: 51, max: 200 }]);
+    expect(page.droppedFilters).toEqual(['seniority "Board Member"', 'company size "mid-market"']);
   });
 
   it("falls back to a narrower Sales Navigator search, then to regular search, when refused", async () => {
@@ -141,12 +174,74 @@ describe("searchProspects tier", () => {
 
     const page = await provider.searchProspects({ accountId: "a1", query: QUERY, tier: "sales_navigator" });
 
-    // Full profile, then title and location only, then regular search.
+    // Full profile, then keywords and location only, then regular search.
     expect(bodies.map((b) => b.api)).toEqual(["sales_navigator", "sales_navigator", "classic", "classic"]);
     expect(bodies[1]?.seniority).toBeUndefined();
     expect(page.items).toHaveLength(1);
-    expect(page.filterNotes?.[0]).toBe(SALES_NAVIGATOR_REFUSED_NOTE);
+    expect(page.filterNotes?.[0]?.startsWith(SALES_NAVIGATOR_REFUSED_NOTE)).toBe(true);
+    // The note names what regular search actually dropped, and nothing else.
     expect(page.droppedFilters).toEqual(["seniority", "company size", "excluded titles"]);
+    expect(page.filterNotes?.[0]).toContain("Seniority, company size and excluded titles were not applied");
+    expect(isSalesNavigatorFallbackNote(page.filterNotes![0]!)).toBe(true);
+  });
+
+  it("names, after a refusal, only the filters the profile set and the narrower search dropped", async () => {
+    let refuse = 1;
+    const bodies: Record<string, unknown>[] = [];
+    const fetchImpl = (async (url: string | URL | Request, init?: RequestInit) => {
+      if (String(url).includes("/search/parameters")) {
+        const asked = new URL(String(url)).searchParams.get("keywords") ?? "";
+        return json({ items: asked === "United Kingdom" ? [{ id: "101165590", title: "United Kingdom" }] : asked === "Software" ? [{ id: "4", title: "Software" }] : [] });
+      }
+      bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      if (refuse-- > 0) return new Response(JSON.stringify({ title: "Invalid parameters" }), { status: 400 });
+      return json({ items: [{ provider_id: "p1", public_identifier: "jane" }], cursor: "sn-next" });
+    }) as typeof fetch;
+    const provider = new UnipileProvider({ dsn: "https://api.test", accessToken: "t", fetchImpl });
+
+    const page = await provider.searchProspects({ accountId: "a1", query: QUERY, tier: "sales_navigator" });
+
+    expect(bodies[1]).toEqual({
+      api: "sales_navigator",
+      category: "people",
+      keywords: '"Head of Operations"',
+      location: { include: ["101165590"] },
+    });
+    // The industry and keywords were left out too, and the titles became free
+    // text rather than a title filter: all of it is said.
+    expect(page.droppedFilters).toEqual([
+      "job title (searched as keywords)",
+      "keywords",
+      "seniority",
+      "industry",
+      "company size",
+      "excluded titles",
+    ]);
+    const note = page.filterNotes?.find(isSalesNavigatorFallbackNote) ?? "";
+    expect(note.startsWith(SALES_NAVIGATOR_PARTIAL_NOTE)).toBe(true);
+    expect(note).toMatch(/typed in as plain keywords/);
+    expect(note).not.toMatch(/searched by title/i);
+    expect(note).toMatch(/Keywords, seniority, industry, company size and excluded titles were not applied/);
+    expect(note).not.toMatch(/[–—;]|unipile/i);
+  });
+
+  it("does not name filters a profile never set when the narrower search answers", async () => {
+    let refuse = 1;
+    const fetchImpl = (async (url: string | URL | Request) => {
+      if (String(url).includes("/search/parameters")) return json({ items: [] });
+      if (refuse-- > 0) return new Response(JSON.stringify({ title: "Invalid parameters" }), { status: 400 });
+      return json({ items: [{ provider_id: "p1", public_identifier: "jane" }], cursor: null });
+    }) as typeof fetch;
+    const provider = new UnipileProvider({ dsn: "https://api.test", accessToken: "t", fetchImpl });
+
+    const page = await provider.searchProspects({
+      accountId: "a1",
+      query: { keywords: ["revops"] },
+      tier: "sales_navigator",
+    });
+
+    expect(page.droppedFilters).toEqual([]);
+    expect(page.filterNotes?.find(isSalesNavigatorFallbackNote)).toMatch(/searched by keyword\.$/);
   });
 
   it("keeps the narrower Sales Navigator list when only the full search is refused", async () => {
@@ -161,9 +256,87 @@ describe("searchProspects tier", () => {
 
     const page = await provider.searchProspects({ accountId: "a1", query: QUERY, tier: "sales_navigator" });
 
-    expect(page.cursor).toBe("sn-next");
-    expect(page.filterNotes).toContain(SALES_NAVIGATOR_PARTIAL_NOTE);
-    expect(page.droppedFilters).toEqual(["seniority", "company size", "excluded titles"]);
+    // Marked with the search that produced it, so the next run continues that one.
+    expect(page.cursor).toBe("sn-partial:sn-next");
+    expect(page.filterNotes?.some((n) => n.startsWith(SALES_NAVIGATOR_PARTIAL_NOTE))).toBe(true);
+  });
+
+  describe("a Sales Navigator position belongs to the search that produced it", () => {
+    function scripted(refuseFull: boolean) {
+      const asked: Array<{ body: Record<string, unknown>; cursor: string | null }> = [];
+      const fetchImpl = (async (url: string | URL | Request, init?: RequestInit) => {
+        if (String(url).includes("/search/parameters")) return json({ items: [] });
+        const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+        asked.push({ body, cursor: new URL(String(url)).searchParams.get("cursor") });
+        if (refuseFull && body.seniority) {
+          return new Response(JSON.stringify({ title: "Invalid parameters" }), { status: 400 });
+        }
+        return json({ items: [{ provider_id: "p1", public_identifier: "jane" }], cursor: "next" });
+      }) as typeof fetch;
+      return { provider: new UnipileProvider({ dsn: "https://api.test", accessToken: "t", fetchImpl }), asked };
+    }
+
+    it("resumes the narrower search where it stopped, and never hands its cursor to the full one", async () => {
+      const { provider, asked } = scripted(false);
+      const page = await provider.searchProspects({
+        accountId: "a1",
+        query: QUERY,
+        tier: "sales_navigator",
+        cursor: "sn-partial:page-3",
+      });
+      expect(asked).toHaveLength(1);
+      expect(asked[0]?.body.seniority).toBeUndefined();
+      expect(asked[0]?.cursor).toBe("page-3");
+      expect(page.cursor).toBe("sn-partial:next");
+    });
+
+    it("resumes the full search with its own cursor, and starts the narrower one fresh if refused", async () => {
+      const { provider, asked } = scripted(true);
+      const page = await provider.searchProspects({
+        accountId: "a1",
+        query: QUERY,
+        tier: "sales_navigator",
+        cursor: "sn-full:page-3",
+      });
+      expect(asked.map((a) => a.cursor)).toEqual(["page-3", null]);
+      expect(page.cursor).toBe("sn-partial:next");
+    });
+
+    it("reads a cursor stored before positions were marked as the full search's", async () => {
+      const { provider, asked } = scripted(false);
+      const page = await provider.searchProspects({
+        accountId: "a1",
+        query: QUERY,
+        tier: "sales_navigator",
+        cursor: "legacy-cursor",
+      });
+      expect(asked[0]?.body.seniority).toEqual({ include: ["director"] });
+      expect(asked[0]?.cursor).toBe("legacy-cursor");
+      expect(page.cursor).toBe("sn-full:next");
+    });
+
+    it("tells the attempts apart and leaves a classic position alone", () => {
+      expect(readSalesNavigatorCursor("sn-full:abc")).toEqual({ attempt: "full", cursor: "abc" });
+      expect(readSalesNavigatorCursor("sn-partial:abc")).toEqual({ attempt: "partial", cursor: "abc" });
+      expect(readSalesNavigatorCursor("abc")).toEqual({ attempt: "full", cursor: "abc" });
+      expect(readSalesNavigatorCursor("classic:xyz")).toBeNull();
+      expect(readSalesNavigatorCursor(null)).toBeNull();
+    });
+  });
+
+  it("probes only Sales Navigator's fields when asked about Sales Navigator", async () => {
+    const { provider, bodies } = providerWithCapturedBody();
+    const rows = await provider.probeSearch("a1", { salesNavigator: true });
+    // Every probe is a request off a paid seat; the classic ones answer a
+    // question nobody asked here.
+    expect(bodies.length).toBeGreaterThan(0);
+    expect(bodies.every((b) => b.api === "sales_navigator")).toBe(true);
+    expect(rows.every((r) => r.label.startsWith("SN "))).toBe(true);
+    expect(bodies.some((b) => JSON.stringify(b.seniority) === JSON.stringify({ include: ["owner/partner"] }))).toBe(true);
+
+    const classic = providerWithCapturedBody();
+    await classic.provider.probeSearch("a1");
+    expect(classic.bodies.every((b) => b.api === "classic")).toBe(true);
   });
 
   it("does not paper over a provider that failed to answer", async () => {

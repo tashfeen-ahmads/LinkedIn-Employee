@@ -102,7 +102,7 @@ export type EngagementActionRow = {
   body: string | null;
   grounding: string | null;
   prompt_version: string | null;
-  status: "queued" | "sent" | "skipped" | "failed";
+  status: "queued" | "sending" | "sent" | "skipped" | "failed";
   reason: string | null;
   scheduled_for: string | null;
   sent_at: string | null;
@@ -343,6 +343,7 @@ export type ProspectRow = {
   last_contacted_at: string | null;
   /** When this workspace last liked or commented on their posts (migration 0053). */
   last_engaged_at: string | null;
+  posts_checked_at: string | null;
   do_not_contact: boolean;
   do_not_contact_reason: string | null;
   crm_contact_id: string | null;
@@ -506,6 +507,14 @@ export type ConversationRow = {
    * manual reply cleared a hold that was never about replying.
    */
   needs_human_kind: "reply" | "booking" | "copy" | null;
+  /**
+   * The accepted time a booking hold is waiting on (migration 0052). Set when
+   * the time was free and offered and a person has to confirm it; "Mark
+   * booked" writes the meeting from it. Null on every other hold.
+   */
+  held_slot_starts_at: string | null;
+  held_slot_ends_at: string | null;
+  held_slot_rep_user_id: string | null;
   created_at: string;
 };
 

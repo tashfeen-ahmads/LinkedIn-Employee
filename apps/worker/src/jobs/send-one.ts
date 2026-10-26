@@ -1,6 +1,8 @@
 import { LINKEDIN_LIMITS, roughly } from "@le/shared";
 import { describeRefusal, plainReason, warmStillCounts } from "@le/linkedin";
+import { entitlementMessage } from "@le/billing";
 import { INVITE_CLAIM_LEASE_MS, runLinkedInAction, RescheduleError } from "./linkedin-action.js";
+import { workspaceEntitlement } from "../billing.js";
 import type { WorkerContext } from "../context.js";
 
 /**
@@ -111,6 +113,19 @@ export async function sendOneNow(
         ok: false,
         campaignProspectId: next.id,
         detail: "Sending is paused across the platform for a short while. Nothing is lost — it resumes on its own.",
+      };
+    }
+    if (err instanceof RescheduleError && err.reason.startsWith("not_entitled")) {
+      // The plan, not LinkedIn: said in the same words the plan section uses,
+      // because "LinkedIn refused this" sends somebody to the wrong place.
+      const entitlement = await workspaceEntitlement(db, input.workspaceId).catch(() => null);
+      const message = entitlement ? entitlementMessage(entitlement) : null;
+      return {
+        ok: false,
+        campaignProspectId: next.id,
+        detail: `Not sent: ${
+          message ?? "We could not confirm this workspace's plan just now, so nothing was sent. Try again in a minute."
+        } The invitation stays queued and goes out once a plan is in place.`,
       };
     }
     if (err instanceof RescheduleError) {
