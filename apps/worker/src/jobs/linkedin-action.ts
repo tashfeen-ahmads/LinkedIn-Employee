@@ -24,6 +24,7 @@ import {
 import {
   canTransition,
   containsLink,
+  hasOwnBookingLink,
   exclusionReason,
   matchExclusion,
   renderCta,
@@ -762,6 +763,16 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
    * credential per attempt, for a message that never went anywhere.
    */
   let ctaUrl = cta.url;
+  if (!ctaUrl && cta.kind === "meeting" && withPitch.message.includes(CTA_PLACEHOLDER)) {
+    // The sender's own scheduling link first (rule 31). It is asked for on
+    // the call-to-action step and stored on their profile, and the reply agent
+    // already offers it; this step sent the product's booking page instead, so
+    // a rep who gave their Calendly in setup saw it on no screen and in no
+    // follow-up, and read the call to action as never picked up.
+    const { data: rep } = await db.from("profiles").select("booking_url").eq("id", accountRow.user_id).maybeSingle();
+    // The same reading the campaign page uses, so the screen and the send agree.
+    ctaUrl = hasOwnBookingLink(rep?.booking_url) ? (rep?.booking_url?.trim() ?? null) : null;
+  }
   if (!ctaUrl && cta.kind === "meeting" && withPitch.message.includes(CTA_PLACEHOLDER)) {
     ctaUrl = await createBookingLink(ctx, {
       workspaceId: cp.workspace_id,

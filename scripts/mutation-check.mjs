@@ -5539,6 +5539,14 @@ const MUTATIONS = [
     pkg: "@le/web",
   },
   {
+    id: "cta/meeting-sends-the-reps-own-link",
+    rule: "Rule 31: a meeting with no destination sends the rep's own scheduling link before the product's booking page",
+    file: "apps/worker/src/jobs/linkedin-action.ts",
+    from: "    ctaUrl = hasOwnBookingLink(rep?.booking_url) ? (rep?.booking_url?.trim() ?? null) : null;",
+    to: "    ctaUrl = null;",
+    pkg: "@le/worker",
+  },
+  {
     id: "billing/send-path-checks-the-plan",
     rule: "Rule 67: an invitation queued during a trial does not go out after it ends",
     file: "apps/worker/src/jobs/linkedin-action.ts",

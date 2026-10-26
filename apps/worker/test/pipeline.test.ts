@@ -582,6 +582,24 @@ describe("campaign pipeline", () => {
     expect(db.rows("booking_links")).toHaveLength(1);
   });
 
+  it("sends the rep's own scheduling link when they gave one in setup", async () => {
+    // A Calendly link entered on the call-to-action step is stored on the
+    // rep's profile (rule 31). The follow-up sent the product's booking page
+    // instead, so the link the rep chose reached nobody.
+    const { db, ctx, linkedin } = harness();
+    db.rows("campaigns")[0]!.cta_kind = "meeting";
+    db.rows("campaigns")[0]!.cta_url = null;
+    db.rows("campaign_steps")[0]!.message = "Grab a time: {{cta_link}}";
+    db.find("campaign_prospects", { id: CP })!.status = "accepted";
+    const sender = db.rows("linkedin_accounts")[0]!.user_id as string;
+    db.find("profiles", { id: sender })!.booking_url = "https://calendly.com/sam/intro";
+
+    await runLinkedInAction(ctx, { kind: "follow_up", workspaceId: WORKSPACE, campaignProspectId: CP, stepNumber: 1 });
+
+    expect(linkedin.sentMessages[0]?.text ?? "").toContain("https://calendly.com/sam/intro");
+    expect(db.rows("booking_links")).toHaveLength(0);
+  });
+
   it("sends the one approved pitch rather than a copy of it in the campaign", async () => {
     /*
      * Rule 40. `{{pitch}}` is a pointer, exactly as `{{cta_link}}` is:

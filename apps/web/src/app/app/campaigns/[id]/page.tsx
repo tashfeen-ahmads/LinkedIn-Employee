@@ -29,7 +29,7 @@ import { callWorker, errorQuery, noticeQuery, startedNotice } from "@/lib/worker
 import { SubmitButton } from "@/components/submit-button";
 import { describeSearch } from "./search-state";
 import { describePacing } from "@/lib/pacing";
-import { campaignUsesOwnBookingLink } from "@/lib/booking-link";
+import { campaignBookingUrl } from "@/lib/booking-link";
 import { EXTERNAL_BOOKINGS_UNCOUNTED, FREE_NOTES_PER_MONTH, IDLE_RELEASE_TAGLINE, isIdleReleased, INVITE_NOTE_MAX_CHARS, MIN_SENDS_TO_COMPARE, alwaysHoldsSentence, comparisonReady, standings, profileHref } from "@le/shared";
 import { PageNotice, type NoticeParams } from "@/components/page-notice";
 import { ConfirmButton } from "@/components/confirm-button";
@@ -879,8 +879,8 @@ export default async function CampaignPage({
   });
   // Rule 31: a meeting campaign whose replies offer the rep's own scheduling
   // link books some meetings where this page cannot see them.
-  const ownBookingLink =
-    cta.kind === "meeting" && (await campaignUsesOwnBookingLink(supabase, session.workspaceId, campaign));
+  const bookingUrl = cta.kind === "meeting" ? await campaignBookingUrl(supabase, session.workspaceId, campaign) : null;
+  const ownBookingLink = Boolean(bookingUrl);
 
   const searchNotice = describeSearch(lastSearch);
   // How each angle is doing, and whether anything can yet be said about it.
@@ -1273,6 +1273,21 @@ export default async function CampaignPage({
             {cta.fromLibrary
               ? ". Changing it on the Calls to action page changes it here."
               : ". Carried on this campaign, set when it was built."}
+          </p>
+        ) : cta.kind === "meeting" ? (
+          // The same choice the worker makes when it fills {{cta_link}}.
+          <p className="tiny subtle">
+            {bookingUrl ? (
+              <>
+                Sends your scheduling link,{" "}
+                <a href={bookingUrl} target="_blank" rel="noreferrer noopener">
+                  {bookingUrl}
+                </a>
+                . Change it on your profile.
+              </>
+            ) : (
+              "Sends each person their own link to your Nora booking page. Add your own scheduling link on your profile to send that instead."
+            )}
           </p>
         ) : null}
 

@@ -87,7 +87,7 @@ describe("meetings booked through a rep's own scheduling link", () => {
 
   it("a meeting campaign's funnel says so", () => {
     const page = src("app/app/campaigns/[id]/page.tsx");
-    expect(page).toMatch(/cta\.kind === "meeting" && \(await campaignUsesOwnBookingLink\(/);
+    expect(page).toMatch(/cta\.kind === "meeting" \? await campaignBookingUrl\(/);
     expect(page).toMatch(/\{ownBookingLink \? <p className="tiny subtle">\{EXTERNAL_BOOKINGS_UNCOUNTED\}<\/p> : null\}/);
   });
 

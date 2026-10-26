@@ -149,6 +149,14 @@ export default async function CtaPage({ searchParams }: { searchParams: NoticePa
     usage.set(campaign.cta_id, [...(usage.get(campaign.cta_id) ?? []), campaign.name]);
   }
 
+  // A meeting with no destination of its own sends the sender's scheduling
+  // link, or Nora's booking page without one. Said here, or "No destination"
+  // reads as a call to action that was never picked up.
+  const { data: me } = await supabase.from("profiles").select("booking_url").eq("id", session.userId).maybeSingle();
+  const meetingGoesTo = me?.booking_url
+    ? `Your scheduling link (${me.booking_url}), set on your profile`
+    : "Your Nora booking page: each person gets their own link to pick a time";
+
   const live = (ctas ?? []).filter((c) => !c.archived_at);
   const archived = (ctas ?? []).filter((c) => c.archived_at);
 
@@ -250,7 +258,13 @@ export default async function CtaPage({ searchParams }: { searchParams: NoticePa
                     <div className="form-row">
                       <label className="field grow">
                         <span>Destination</span>
-                        <input type="url" name="url" defaultValue={cta.url ?? ""} placeholder="No destination" />
+                        <input
+                          type="url"
+                          name="url"
+                          defaultValue={cta.url ?? ""}
+                          placeholder={cta.kind === "meeting" ? "Optional" : "No destination"}
+                        />
+                        {cta.kind === "meeting" && !cta.url ? <span className="hint">Sends: {meetingGoesTo}</span> : null}
                       </label>
                       <label className="field grow">
                         <span>How the message refers to it</span>

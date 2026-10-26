@@ -32,6 +32,19 @@ export async function campaignUsesOwnBookingLink(
   workspaceId: string,
   campaign: { linkedin_account_id: string | null; owner_user_id: string | null },
 ): Promise<boolean> {
+  return hasOwnBookingLink(await campaignBookingUrl(supabase, workspaceId, campaign));
+}
+
+/**
+ * The scheduling link a meeting campaign sends when its call to action has no
+ * destination of its own: that of whoever owns the account it sends from, as
+ * the worker reads it on the send path. Null means Nora's own booking page.
+ */
+export async function campaignBookingUrl(
+  supabase: Client,
+  workspaceId: string,
+  campaign: { linkedin_account_id: string | null; owner_user_id: string | null },
+): Promise<string | null> {
   const { data: account } = campaign.linkedin_account_id
     ? await supabase
         .from("linkedin_accounts")
@@ -41,7 +54,7 @@ export async function campaignUsesOwnBookingLink(
         .maybeSingle()
     : { data: null };
   const userId = account?.user_id ?? campaign.owner_user_id;
-  if (!userId) return false;
+  if (!userId) return null;
   const { data: profile } = await supabase.from("profiles").select("booking_url").eq("id", userId).maybeSingle();
-  return hasOwnBookingLink(profile?.booking_url);
+  return hasOwnBookingLink(profile?.booking_url) ? (profile?.booking_url?.trim() ?? null) : null;
 }
