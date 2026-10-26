@@ -44,10 +44,16 @@ export const STALLED_MS = 10 * 60 * 1000;
 export function describeLastSearch(
   event: SearchEvent | null | undefined,
   now: number = Date.now(),
+  options: { onboarding?: boolean } = {},
 ): LastSearchNotice | null {
   if (!event) return null;
   const at = new Date(event.created_at).getTime();
-  if (!Number.isFinite(at) || now - at > RECENT_MS) return null;
+  if (!Number.isFinite(at)) return null;
+  // Onboarding keeps a stop however old it is. There the search is the only
+  // thing on the screen, and a failure that aged past six hours left a bare
+  // button above a heading saying Nora was searching.
+  const stale = now - at > RECENT_MS;
+  if (stale && !(options.onboarding && event.name === "targeting.stopped")) return null;
 
   // Finished. What it built is on the campaigns page, and an approval or a
   // Find more already said it had started; nothing here needs saying.
@@ -65,7 +71,9 @@ export function describeLastSearch(
     return {
       tone: "warning",
       title: "The last prospect search has not reported back.",
-      body: "It was started more than ten minutes ago and has not finished. Press Find prospects on the strategy to run it again — if it stops again, tell us from Support and we will look into it.",
+      body: options.onboarding
+        ? "It was started more than ten minutes ago and has not finished. Press Search again. If it stops again, tell us from Support and we will look into it."
+        : "It was started more than ten minutes ago and has not finished. Press Find prospects on the strategy to run it again. If it stops again, tell us from Support and we will look into it.",
       at: event.created_at,
     };
   }

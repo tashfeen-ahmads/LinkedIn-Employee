@@ -1650,6 +1650,18 @@ tests that were verified by deliberately breaking the code.
     defaults they had not chosen. A running meeting campaign whose owner has
     neither saved hours nor their own scheduling link is a Needs you row.
 
+    **From the strategy step on, setup can be put off.** "Launch later and
+    open the app" stamps `deferred` on the person's own confirmations
+    (`canDefer`, `defer` in `/onboarding/save`), the middleware lets them
+    through, and Needs you carries one "Finish setup" row until something
+    launches. A customer on Sales Navigator sat four days on "building your
+    campaign" because every search was refused and the only way out was a
+    launch the search had made impossible. The list step offers every approved
+    strategy with no campaign, each with its own search and its own last stop
+    (kept however old it is); a draft counts as a list only once somebody is
+    on it; a launch's blockers are checked before anything is written; and no
+    wait polls for ever.
+
     The approval step always has a way out. "None of these fit?" takes who
     the owner actually sells to, in their words, and runs Sage again with it
     (`guidance` on `StrategyJob`); the rejected suggestions are set aside only

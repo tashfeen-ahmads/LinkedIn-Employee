@@ -110,8 +110,8 @@ const MUTATIONS = [
     id: "setup/first-launch-from-the-last-step",
     rule: "The campaign page launches a first campaign only from the last onboarding step",
     file: "apps/web/src/app/app/campaigns/[id]/page.tsx",
-    from: '  if (wizard.unreadable || (!wizard.facts.hasLaunchedCampaign && currentStep(wizard.facts) !== "launch")) {',
-    to: "  if (false) {",
+    from: '    (!wizard.facts.hasLaunchedCampaign && currentStep(wizard.facts) !== "launch" && !wizard.facts.deferred)',
+    to: "    false",
     pkg: "@le/web",
   },
   {
@@ -5377,6 +5377,14 @@ const MUTATIONS = [
     from: "    if (!owner || connecting.has(owner.user_id as string)) continue;",
     to: "    if (!owner) continue;",
     pkg: "@le/worker",
+  },
+  {
+    id: "setup/defer-only-from-strategy-on",
+    rule: "Rule 65: the app opens before launching only from a step that can fail for reasons nobody there can fix",
+    file: "apps/web/src/lib/wizard.ts",
+    from: '  return step !== null && stepIndex(step) >= stepIndex("strategy");',
+    to: "  return step !== null;",
+    pkg: "@le/web",
   },
   {
     id: "search/sales-navigator-fallback",

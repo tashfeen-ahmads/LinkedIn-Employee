@@ -43,6 +43,11 @@ export interface StepConfirmations {
   voice?: string;
   cta?: string;
   /**
+   * When this person chose to open the app before launching (rule 65). Setup
+   * stays where it was; it only stops being the one screen they can reach.
+   */
+  deferred?: string;
+  /**
    * The call to action this person chose. Their own copy as well as the
    * workspace's, because only some roles may write the workspace row and the
    * approval must apply what this person confirmed, not somebody else's.
@@ -178,7 +183,7 @@ export function readConfirmations(value: unknown, workspaceId: string): StepConf
   const entry = (value as Record<string, unknown>)[workspaceId];
   if (!entry || typeof entry !== "object") return {};
   const out: StepConfirmations = {};
-  for (const key of ["hours", "voice", "cta"] as const) {
+  for (const key of ["hours", "voice", "cta", "deferred"] as const) {
     const at = (entry as Record<string, unknown>)[key];
     if (typeof at === "string" && at) out[key] = at;
   }
@@ -191,7 +196,7 @@ export function readConfirmations(value: unknown, workspaceId: string): StepConf
 export function stampConfirmation(
   value: unknown,
   workspaceId: string,
-  step: "hours" | "voice" | "cta",
+  step: "hours" | "voice" | "cta" | "deferred",
   at: string,
   extra: Pick<StepConfirmations, "ctaChoice"> = {},
 ): Record<string, StepConfirmations> {

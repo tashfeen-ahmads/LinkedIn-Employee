@@ -996,6 +996,9 @@ input, select, textarea, button { margin: 0; }
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   padding: var(--space-3);
+  /* A link or a {{cta_link}} in a message ran off a phone screen. */
+  overflow-wrap: anywhere;
+  min-width: 0;
 }
 
 /*

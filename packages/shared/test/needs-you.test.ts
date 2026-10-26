@@ -301,3 +301,15 @@ describe("readWebhookRefusal", () => {
     expect(readWebhookRefusal({ hadSignature: false })).toBeNull();
   });
 });
+
+describe("setup put off (rule 65)", () => {
+  it("asks for setup to be finished while nothing has launched", () => {
+    const [row] = needsYou({ ...CALM, setupUnfinished: true });
+    expect(row?.kind).toBe("setup_unfinished");
+    expect(row?.href).toBe("/onboarding");
+  });
+
+  it("gives way to a built campaign, whose own row is the next step", () => {
+    expect(kinds({ ...CALM, setupUnfinished: true, campaignsUnlaunched: 1 })).toEqual(["campaign_unlaunched"]);
+  });
+});

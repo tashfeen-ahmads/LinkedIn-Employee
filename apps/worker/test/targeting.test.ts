@@ -757,7 +757,7 @@ describe("targeting says why it stopped", () => {
     expect(await runTargetingJob(ctx, job)).toBeNull();
 
     const stop = db.rows("events").find((e) => e.name === "targeting.stopped");
-    expect(String(stop?.payload?.reason)).toMatch(/refused the search/i);
+    expect(String(stop?.payload?.reason)).toMatch(/would not run this search/i);
     expect(String(stop?.payload?.cause)).toContain("402");
   });
 
@@ -791,7 +791,8 @@ describe("targeting says why it stopped", () => {
     const { runTargetingJob } = await import("../src/jobs/targeting.js");
     linkedin.searchError = new UnipileError("failed with 503", 503, "upstream unavailable");
 
-    await runTargetingJob(ctx, job);
+    // Rethrown so the queue tries again, which is what the screen promises.
+    await expect(runTargetingJob(ctx, job)).rejects.toThrow(/503/);
 
     expect(db.rows("linkedin_accounts")[0]?.status).toBe("active");
   });
@@ -881,8 +882,22 @@ describe("when the job throws", () => {
 
     const stop = db.rows("events").find((e) => e.name === "targeting.stopped");
     expect(stop).toBeTruthy();
-    expect(String(stop?.payload?.reason)).toMatch(/hit an error/i);
+    // Plain words for the customer, the real cause kept for whoever fixes it.
+    expect(String(stop?.payload?.reason)).toMatch(/problem on our side/i);
+    expect(String(stop?.payload?.cause)).toBeTruthy();
     expect(stop?.payload?.threw).toBe(true);
+  });
+
+  it("says nothing while the queue still has a retry to make", async () => {
+    // A stop recorded on the first of three attempts put "stopped" on screen
+    // while the search was about to run again.
+    const { db, ctx } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    db.rows("customer_profiles")[0]!.spec = { nonsense: true };
+
+    await expect(runTargetingJob(ctx, job, { final: false })).rejects.toThrow();
+
+    expect(db.rows("events").some((e) => e.name === "targeting.stopped")).toBe(false);
   });
 
   it("still rethrows, so the queue can retry it", async () => {

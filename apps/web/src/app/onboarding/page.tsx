@@ -17,13 +17,22 @@ import { StrategyStatus } from "@/components/strategy-status";
 import { StrategyDetailsForm, StrategyRetryButton } from "@/components/strategy-retry";
 import { readStrategyState } from "@/lib/strategy-state";
 import { hasStrategySource } from "@/lib/onboarding-stash";
-import { SEARCH_EVENTS, describeLastSearch } from "@/lib/last-search";
+import { STALLED_MS, describeLastSearch } from "@/lib/last-search";
 import { launchBlockers } from "@/lib/campaign";
 import { launchState } from "@/lib/launch";
 import { readWizard, type WizardRead } from "@/lib/wizard-state";
 import { AUTONOMY_ROLES } from "@/lib/autonomy";
 import { parseWorkingHours } from "@le/linkedin";
-import { WIZARD_STEPS, currentStep, stepDone, stepIndex, stepPosition, stepToShow, type WizardStepKey } from "@/lib/wizard";
+import {
+  WIZARD_STEPS,
+  canDefer,
+  currentStep,
+  stepDone,
+  stepIndex,
+  stepPosition,
+  stepToShow,
+  type WizardStepKey,
+} from "@/lib/wizard";
 import { describeRepair, type RefreshResult } from "@/app/app/team/repair";
 import {
   BusinessForm,
@@ -64,7 +73,8 @@ const ERRORS: Record<string, string> = {
   "cta-url": "A link campaign needs a web address we can send, like yoursite.com/offer. Check it and try again.",
   "booking-url": "That scheduling link is not a web address we can send. Check it, or leave it blank.",
   "approve-failed": "That strategy could not be approved. Reload the page and try again.",
-  "search-not-started": "The search has not started yet. Press Search LinkedIn to start it.",
+  "search-not-started": "The search could not be started just now. Press Search LinkedIn again in a minute.",
+  "search-no-linkedin": "Your LinkedIn account is not connected, so nothing can be searched. Go back to the LinkedIn step and connect it.",
   "launch-blocked": "Not launched yet. Fix what is listed below first.",
   "launch-missing": "That campaign could not be found. Reload the page.",
   "launch-failed": "The campaign could not be launched. Nothing was sent. Try again.",
@@ -92,7 +102,7 @@ const LEDES: Record<WizardStepKey, string> = {
   strategy:
     "Sage wrote these from your business. Approve one and Nora searches LinkedIn for those people. Nothing is searched for until you do.",
   prospects:
-    "Nora is searching LinkedIn, scoring everyone against your strategy and writing a note for each person. It usually takes a minute or two.",
+    "Nora searches LinkedIn for each approved strategy, scores everyone it finds and writes a note for each person. A search usually takes a minute or two.",
   launch:
     "Your first campaign, ready to go. Read it, choose who answers the replies, then launch it. Nothing is sent until you press the button.",
 };
@@ -114,7 +124,7 @@ async function signOut() {
 export default async function OnboardingPage({
   searchParams,
 }: {
-  searchParams: Promise<{ step?: string; error?: string; connected?: string }>;
+  searchParams: Promise<{ step?: string; error?: string; connected?: string; notice?: string }>;
 }) {
   if (!isAppConfigured()) redirect("/login");
   const params = await searchParams;
@@ -220,6 +230,11 @@ export default async function OnboardingPage({
             {error}
           </div>
         ) : null}
+        {params.notice === "already-running" && step === "prospects" ? (
+          <div className="notice" role="status">
+            <p>That search is already running. This page moves on by itself when the list is ready.</p>
+          </div>
+        ) : null}
 
         {body}
 
@@ -238,6 +253,16 @@ export default async function OnboardingPage({
             <Link className="small" href="/app/support">
               Stuck? Ask us
             </Link>
+          ) : null}
+          {wizard.workspaceId && canDefer(current) ? (
+            // A way into the app from every step that can fail for reasons
+            // nobody on this screen can fix (rule 65).
+            <form action="/onboarding/save" method="post">
+              <input type="hidden" name="action" value="defer" />
+              <SubmitButton className="btn ghost small" pendingLabel="Opening…">
+                Launch later and open the app
+              </SubmitButton>
+            </form>
           ) : null}
           <form action={signOut}>
             <SubmitButton className="btn ghost small" pendingLabel="Signing out…">
@@ -414,93 +439,150 @@ async function stepBody(
     const businessId = await hasBusiness(workspaceId);
     const strategy = await readStrategyState(supabase, workspaceId, businessId);
     const cards = await strategyCards(workspaceId);
+    const activity = await strategyActivity(workspaceId);
     if (cards.length === 0 && strategy.phase === "ready" && businessId) {
-      // Written, and every one set aside: there is nothing here to wait for.
+      // Written, and every one set aside: Sage can write new ones from what
+      // the owner says, which used to be a ticket to us.
       return (
-        <div className="notice warning" role="status">
-          <p>
-            <strong>Every strategy has been set aside.</strong> Tell us from{" "}
-            <Link href="/app/support">Support</Link> what you sell and who buys it, and we will get Sage to write
-            new ones.
-          </p>
-        </div>
+        <>
+          {activity === "running" ? (
+            <>
+              <div className="notice" role="status">
+                <p>Sage is writing new strategies from what you said. They appear here in a minute or two.</p>
+              </div>
+              <AutoRefresh seconds={10} />
+            </>
+          ) : (
+            <div className="notice warning" role="status">
+              <p>
+                <strong>Every strategy has been set aside.</strong> Tell Sage who you sell to and it writes new ones.
+              </p>
+            </div>
+          )}
+          <RewriteStrategies />
+        </>
       );
     }
     if (cards.length === 0) {
+      // Waiting has an end. A run whose worker died left this page reloading
+      // every ten seconds for ever with nothing to say.
+      const waiting = (strategy.phase === "running" || strategy.phase === "ready") && activity !== "stalled";
       return (
         <>
           <StrategyStatus state={strategy} from="onboarding" />
           {strategy.phase === "failed" || strategy.phase === "absent" ? (
             <StrategyDetailsForm source={wizard.stash.source} from="onboarding" />
-          ) : (
+          ) : waiting ? (
             <p className="small muted">This page updates on its own when they are ready.</p>
+          ) : (
+            <div className="notice warning" role="status">
+              <p>Sage has not finished after fifteen minutes. Start it again.</p>
+              <StrategyRetryButton from="onboarding">Try again</StrategyRetryButton>
+            </div>
           )}
-          {strategy.phase === "running" || strategy.phase === "ready" ? <AutoRefresh seconds={10} /> : null}
+          {waiting ? <AutoRefresh seconds={10} /> : null}
         </>
       );
     }
-    const rewriting = await rewriteRunning(workspaceId);
     return (
       <>
-        {rewriting ? (
+        {activity === "running" ? (
           <>
             <div className="notice" role="status">
               <p>Sage is writing new strategies from what you said. They appear here in a minute or two.</p>
             </div>
             <AutoRefresh seconds={10} />
           </>
+        ) : activity === "stalled" || activity === "failed" ? (
+          <div className="notice warning" role="status">
+            <p>Sage could not write new strategies that time. Say who you sell to again and it will try once more.</p>
+          </div>
         ) : null}
         <StrategyCards cards={cards} />
-        {wizard.facts.hasApprovedStrategy ? <ContinueLink /> : <RewriteStrategies />}
+        {wizard.facts.hasApprovedStrategy ? <ContinueLink /> : null}
+        {/* Always offered. Once one strategy was approved the form went away,
+            and an owner whose approved strategies all failed to find anyone had
+            no way to ask for different ones. */}
+        <RewriteStrategies />
       </>
     );
   }
 
   if (step === "prospects") {
-    const [{ data: approved }, { data: lastEvent }] = await Promise.all([
+    // Every approved strategy that has no list yet, each with its own search
+    // and its own last word. Only the newest approved one used to be offered,
+    // so a customer with four approved strategies could only ever search one,
+    // and the stop shown under it was whichever search stopped last anywhere.
+    const [{ data: approvedRows }, { data: used }] = await Promise.all([
       supabase
         .from("customer_profiles")
         .select("id, name")
         .eq("workspace_id", workspaceId)
+        .eq("do_not_pursue", false)
         .not("approved_at", "is", null)
-        .order("approved_at", { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-      supabase
-        .from("events")
-        .select("name, payload, created_at")
-        .eq("workspace_id", workspaceId)
-        .in("name", SEARCH_EVENTS)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle(),
+        .order("priority"),
+      supabase.from("campaigns").select("customer_profile_id").eq("workspace_id", workspaceId).neq("status", "archived"),
     ]);
-    const notice = describeLastSearch(lastEvent);
-    const searching = lastEvent?.name === "targeting.queued" && notice?.tone === "muted";
+    const approved = approvedRows ?? [];
+    const taken = new Set((used ?? []).map((c) => c.customer_profile_id).filter(Boolean));
+    const open = approved.filter((p) => !taken.has(p.id));
+    const shown = open.length ? open : approved;
+    const { data: events } = shown.length
+      ? await supabase
+          .from("events")
+          .select("name, payload, created_at, subject_id")
+          .eq("workspace_id", workspaceId)
+          .in("name", ["targeting.queued", "targeting.stopped"])
+          .in(
+            "subject_id",
+            shown.map((p) => p.id),
+          )
+          .order("created_at", { ascending: false })
+          .limit(100)
+      : { data: [] };
+    const lastFor = new Map<string, NonNullable<typeof events>[number]>();
+    for (const event of events ?? []) if (event.subject_id && !lastFor.has(event.subject_id)) lastFor.set(event.subject_id, event);
+
+    const now = Date.now();
+    const rows = shown.map((profile) => {
+      const last = lastFor.get(profile.id) ?? null;
+      const notice = describeLastSearch(last, now, { onboarding: true });
+      const searching = last?.name === "targeting.queued" && now - new Date(last.created_at).getTime() < STALLED_MS;
+      return { profile, notice, searching };
+    });
+    if (rows.length === 0) {
+      return (
+        <div className="notice warning" role="status">
+          <p>No strategy is approved yet. Go back a step and approve one.</p>
+        </div>
+      );
+    }
     return (
       <>
-        {approved ? (
-          <p className="small">
-            Strategy: <strong>{approved.name}</strong>
-          </p>
-        ) : null}
-        {notice ? (
-          <div className={`notice ${notice.tone === "warning" ? "warning" : "accent"}`} role="status">
+        {rows.map(({ profile, notice, searching }) => (
+          <div key={profile.id} className="card stack-4">
             <p>
-              <strong>{notice.title}</strong>
+              <strong>{profile.name}</strong>
             </p>
-            <p className="small">{searching ? "This page moves on by itself when the list is ready." : notice.body}</p>
+            {notice ? (
+              <div className={`notice ${notice.tone === "warning" ? "warning" : "accent"}`} role="status">
+                <p>
+                  <strong>{notice.title}</strong>
+                </p>
+                <p className="small">{searching ? "This page moves on by itself when the list is ready." : notice.body}</p>
+              </div>
+            ) : null}
+            {searching ? null : (
+              <SearchButton profileId={profile.id} label={notice ? "Search again" : "Search LinkedIn"} />
+            )}
           </div>
-        ) : null}
-        {searching ? <AutoRefresh seconds={8} /> : null}
-        {!searching && approved ? (
-          <div className="cluster">
-            <SearchButton profileId={approved.id} label={notice ? "Search again" : "Search LinkedIn"} />
-            <Link className="btn secondary" href="/onboarding?step=strategy">
-              Choose another strategy
-            </Link>
-          </div>
-        ) : null}
+        ))}
+        {rows.some((r) => r.searching) ? <AutoRefresh seconds={8} /> : null}
+        <p>
+          <Link className="btn secondary" href="/onboarding?step=strategy">
+            Approve another strategy
+          </Link>
+        </p>
       </>
     );
   }
@@ -542,18 +624,28 @@ async function hasBusiness(workspaceId: string): Promise<boolean> {
   return (count ?? 0) > 0;
 }
 
-/** Whether a strategy run asked for after the last one landed is still going. */
-async function rewriteRunning(workspaceId: string): Promise<boolean> {
+/** How long a Sage run may go unanswered before the page stops waiting for it. */
+const STRATEGY_STALLED_MS = 15 * 60_000;
+
+/**
+ * What the newest strategy run is doing: still going, gone quiet, failed, or
+ * nothing at all. A run is never waited on for ever.
+ */
+async function strategyActivity(workspaceId: string): Promise<"running" | "stalled" | "failed" | null> {
   const supabase = await createClient();
   const { data } = await supabase
     .from("events")
-    .select("name")
+    .select("name, created_at")
     .eq("workspace_id", workspaceId)
     .in("name", ["strategy.queued", "strategy.profile.created", "strategy.failed"])
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  return data?.name === "strategy.queued";
+  if (!data) return null;
+  const age = Date.now() - new Date(data.created_at).getTime();
+  if (data.name === "strategy.queued") return age < STRATEGY_STALLED_MS ? "running" : "stalled";
+  if (data.name === "strategy.failed") return age < 24 * 60 * 60_000 ? "failed" : null;
+  return null;
 }
 
 /** Sage's strategies, best first, with the competitor check on each (rule 49). */
@@ -591,15 +683,30 @@ async function strategyCards(workspaceId: string): Promise<StrategyCard[]> {
 /** The draft the search built, read for the last step. */
 async function launchReview(workspaceId: string): Promise<LaunchReview | null> {
   const supabase = await createClient();
-  const { data: campaign } = await supabase
+  const { data: drafts } = await supabase
     .from("campaigns")
     .select("id, name, daily_invite_cap, cta_kind")
     .eq("workspace_id", workspaceId)
     .eq("status", "draft")
     .is("launched_at", null)
     .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(10);
+  // The newest draft with somebody on it: the step is only reached once one
+  // exists, and an empty draft beside it is a search that is still building.
+  const { data: peopled } = drafts?.length
+    ? await supabase
+        .from("campaign_prospects")
+        .select("campaign_id")
+        .eq("workspace_id", workspaceId)
+        .eq("status", "queued")
+        .in(
+          "campaign_id",
+          drafts.map((d) => d.id),
+        )
+        .limit(1000)
+    : { data: [] };
+  const withPeople = new Set((peopled ?? []).map((row) => row.campaign_id));
+  const campaign = (drafts ?? []).find((d) => withPeople.has(d.id)) ?? null;
   if (!campaign) return null;
 
   const [state, { data: queued }, { data: steps }] = await Promise.all([

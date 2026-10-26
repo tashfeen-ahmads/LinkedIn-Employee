@@ -345,7 +345,12 @@ async function launchCampaign(
   const wizard = await readWizard(supabase, session.userId);
   // A read that failed is not permission: onboarding says it could not load,
   // which is better than a first campaign going live past unconfirmed steps.
-  if (wizard.unreadable || (!wizard.facts.hasLaunchedCampaign && currentStep(wizard.facts) !== "launch")) {
+  // Somebody who opened the app before launching launches from here (rule 65);
+  // every blocker is still checked by `launch`.
+  if (
+    wizard.unreadable ||
+    (!wizard.facts.hasLaunchedCampaign && currentStep(wizard.facts) !== "launch" && !wizard.facts.deferred)
+  ) {
     redirect("/onboarding");
   }
 

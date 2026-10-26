@@ -2,6 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { DB_SCHEMA } from "@le/db";
 import { SETUP_DONE_COOKIE, gatesSetup, setupRedirect } from "@/lib/wizard";
+import { readConfirmations } from "@/lib/onboarding-stash";
 
 /*
  * Keeps a signed-in session signed in.
@@ -82,8 +83,16 @@ export async function middleware(request: NextRequest) {
           .not("launched_at", "is", null)
           .limit(1)
       : { data: null, error: membershipError ?? { message: "no workspace" } };
+    // Somebody who chose to open the app before launching (rule 65) is let
+    // through as well. Asked only when nothing has launched, so a finished
+    // workspace pays for no extra read.
+    let deferred = false;
+    if (!error && data && data.length === 0 && membership) {
+      const { data: me } = await supabase.from("profiles").select("setup_confirmed").eq("id", userId).maybeSingle();
+      deferred = Boolean(readConfirmations(me?.setup_confirmed, membership.workspace_id).deferred);
+    }
     if (!error && data) {
-      if (data.length > 0) {
+      if (data.length > 0 || deferred) {
         response.cookies.set(SETUP_DONE_COOKIE, userId, {
           httpOnly: true,
           sameSite: "lax",

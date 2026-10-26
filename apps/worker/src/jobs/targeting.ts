@@ -70,13 +70,20 @@ async function giveUp(
 }
 
 
+export const SEARCH_FAILED_ON_OUR_SIDE =
+  "The search ran into a problem on our side and stopped. We have been alerted. Press Search again in a few minutes, or tell us from Support if it keeps happening.";
+
 /**
  * Agent 2 as a job. Searches, dedupes against everything the workspace has
  * already touched, scores, and writes a draft campaign with its prospect list.
  * The campaign is left in `draft`: a human reviews the list and the copy, then
  * launches it.
  */
-export async function runTargetingJob(ctx: WorkerContext, job: TargetingJob): Promise<string | null> {
+export async function runTargetingJob(
+  ctx: WorkerContext,
+  job: TargetingJob,
+  attempt: { final: boolean } = { final: true },
+): Promise<string | null> {
   try {
     return await targeting(ctx, job);
   } catch (err) {
@@ -88,21 +95,30 @@ export async function runTargetingJob(ctx: WorkerContext, job: TargetingJob): Pr
     // at -- no banner, no event, nothing at all. That silence is worse than
     // any of the failures behind it, because it looks exactly like a button
     // that is not wired up.
+    //
+    // Said once, when the queue has given up. A stop recorded on every attempt
+    // put "stopped" on screen while a retry was still coming, and the raw error
+    // it carried named our suppliers and plumbing to the customer (rule 54):
+    // the customer is told it stopped and that we know, and the cause is kept
+    // for whoever fixes it.
     const reason = (err as { message?: string })?.message ?? "unknown";
-    console.error("targeting failed", { workspaceId: job.workspaceId, reason });
-    await recordEvent(ctx.db, {
-      workspaceId: job.workspaceId,
-      name: "targeting.stopped",
-      actorUserId: job.userId,
-      subjectType: "customer_profile",
-      subjectId: job.customerProfileId,
-      payload: {
-        reason: `The Targeting Agent hit an error: ${reason}`,
-        build: TARGETING_BUILD,
-        campaignId: job.campaignId ?? null,
-        threw: true,
-      },
-    });
+    console.error("targeting failed", { workspaceId: job.workspaceId, reason, final: attempt.final });
+    if (attempt.final) {
+      await recordEvent(ctx.db, {
+        workspaceId: job.workspaceId,
+        name: "targeting.stopped",
+        actorUserId: job.userId,
+        subjectType: "customer_profile",
+        subjectId: job.customerProfileId,
+        payload: {
+          reason: SEARCH_FAILED_ON_OUR_SIDE,
+          cause: reason,
+          build: TARGETING_BUILD,
+          campaignId: job.campaignId ?? null,
+          threw: true,
+        },
+      });
+    }
     throw err;
   }
 }
@@ -254,10 +270,16 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
     // reconnect. "Refused the search" was all four.
     const cause = (err as { message?: string })?.message ?? "";
     const said = describeRefusal(cause);
+    // A provider that did not answer is retried by the queue, which is what the
+    // sentence for it promises. Giving up here made that promise false: the
+    // search never ran again unless somebody pressed the button.
+    if (said.kind === "provider_down") throw err;
     const sentence =
-      said.kind === "unknown" || said.kind === "recipient" || said.kind === "note_quota" || said.kind === "note_too_long"
-        ? "LinkedIn refused the search."
-        : `${said.title}. ${said.detail}`;
+      said.kind === "rate_limit"
+        ? "LinkedIn asked this account to slow down, so the search stopped. Press Search again in an hour."
+        : said.kind === "unknown" || said.kind === "recipient" || said.kind === "note_quota" || said.kind === "note_too_long"
+          ? "LinkedIn would not run this search. Press Search again, or write new strategies if it keeps happening."
+          : `${said.title}. ${said.detail}`;
     return giveUp(ctx, job, sentence, {
       searchTier,
       cause: (err as { message?: string })?.message ?? "unknown",

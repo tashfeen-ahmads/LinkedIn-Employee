@@ -77,3 +77,19 @@ describe("the strategy page", () => {
     expect(page).not.toMatch(/background worker took the job/);
   });
 });
+
+describe("on onboarding", () => {
+  const stop = { name: "targeting.stopped", payload: { reason: "LinkedIn would not run this search." }, created_at: "2026-10-22T17:24:15Z" };
+  const later = Date.parse("2026-10-26T12:00:00Z");
+
+  it("keeps a stop however old it is, where the search is the only thing on screen", () => {
+    expect(describeLastSearch(stop, later)).toBeNull();
+    expect(describeLastSearch(stop, later, { onboarding: true })?.body).toBe("LinkedIn would not run this search.");
+  });
+
+  it("points a stalled search at the button onboarding actually has", () => {
+    const queued = { name: "targeting.queued", payload: {}, created_at: "2026-10-26T11:40:00Z" };
+    expect(describeLastSearch(queued, later, { onboarding: true })?.body).toMatch(/Press Search again/);
+    expect(describeLastSearch(queued, later)?.body).toMatch(/Find prospects/);
+  });
+});

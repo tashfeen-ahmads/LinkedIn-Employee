@@ -74,6 +74,11 @@ export interface WizardFacts {
   hasApprovedStrategy: boolean;
   hasCampaign: boolean;
   hasLaunchedCampaign: boolean;
+  /**
+   * This person chose to open the app before launching. The steps are still
+   * there to finish; the app simply stops being closed to them.
+   */
+  deferred?: boolean;
 }
 
 export function stepDone(key: WizardStepKey, facts: WizardFacts): boolean {
@@ -113,6 +118,26 @@ export function currentStep(facts: WizardFacts): WizardStepKey | null {
   return WIZARD_STEPS.find((step) => !stepDone(step.key, facts))?.key ?? null;
 }
 
+/**
+ * Whether somebody on this step may open the app before launching.
+ *
+ * From the strategy step on: by then the account is connected and the hours,
+ * voice and ask are settled, so what is left is finding people and launching,
+ * and those are the steps that fail for reasons nobody on the screen can fix
+ * — a search LinkedIn refuses, a list that comes back empty. A first customer
+ * on Sales Navigator sat for four days on "building your campaign" with no way
+ * into the product they had set up, because the only way out was a launch the
+ * search had made impossible.
+ */
+export function canDefer(step: WizardStepKey | null): boolean {
+  return step !== null && stepIndex(step) >= stepIndex("strategy");
+}
+
+/** Setup is not finished, but this person has chosen to work in the app meanwhile. */
+export function setupDeferred(facts: WizardFacts): boolean {
+  return Boolean(facts.deferred) && !facts.hasLaunchedCampaign;
+}
+
 export function stepIndex(key: WizardStepKey): number {
   return WIZARD_STEPS.findIndex((step) => step.key === key);
 }
@@ -148,7 +173,9 @@ export function stepPosition(key: WizardStepKey): { n: number; of: number } {
  */
 export function openDuringSetup(path: string): boolean {
   const bare = path.split(/[?#]/)[0] ?? "";
-  return bare === "/app/support" || /^\/app\/campaigns\/[^/]+$/.test(bare);
+  // A campaign's own page, never the screen that makes a new one: "new" fits
+  // the same pattern and opened the campaign builder to somebody still setting up.
+  return bare === "/app/support" || (/^\/app\/campaigns\/[^/]+$/.test(bare) && bare !== "/app/campaigns/new");
 }
 
 /**

@@ -103,7 +103,8 @@ export type NeedsYouKind =
   | "meeting_hours_unset"
   | "campaign_unlaunched"
   | "thin_notes"
-  | "cta_missing";
+  | "cta_missing"
+  | "setup_unfinished";
 
 export interface NeedsYouItem {
   kind: NeedsYouKind;
@@ -181,6 +182,8 @@ export interface NeedsYouFacts {
   campaignsWithThinNotes: number;
   /** Campaigns whose copy carries {{cta_link}} with no destination (rule 29). */
   campaignsMissingCta: number;
+  /** Nothing in the workspace has launched yet (rule 65). */
+  setupUnfinished?: boolean;
 }
 
 function plural(n: number, one: string, many = `${one}s`): string {
@@ -402,6 +405,24 @@ export function needsYou(facts: NeedsYouFacts): NeedsYouItem[] {
       action: "Read and approve",
       tone: "warning",
       count: facts.strategiesUnapproved,
+    });
+  }
+
+  /*
+   * Setup put off. The app opens before launching for somebody whose search
+   * failed or who wants to look around first (rule 65), and the steps left are
+   * still the only way anything is ever sent. Said once, here, so the way back
+   * is never a screen somebody has to remember.
+   */
+  if (facts.setupUnfinished && facts.campaignsUnlaunched === 0) {
+    items.push({
+      kind: "setup_unfinished",
+      title: "Setup is not finished.",
+      why: "Nobody is invited until your first campaign is launched. The steps you have done are saved.",
+      href: "/onboarding",
+      action: "Finish setup",
+      tone: "warning",
+      count: 1,
     });
   }
 

@@ -4,7 +4,9 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   WIZARD_STEPS,
+  canDefer,
   currentStep,
+  setupDeferred,
   gatesSetup,
   openDuringSetup,
   retryBackToOnboarding,
@@ -82,7 +84,7 @@ describe("the app waits for setup (rule 65)", () => {
   it("opens only support and a campaign's own review page before the first launch", () => {
     expect(openDuringSetup("/app/support")).toBe(true);
     expect(openDuringSetup("/app/campaigns/7d3c?notice=x")).toBe(true);
-    for (const closed of ["/app", "/app/strategy", "/app/agents", "/app/campaigns", "/app/campaigns/new/x", "/app/profile"]) {
+    for (const closed of ["/app", "/app/strategy", "/app/agents", "/app/campaigns", "/app/campaigns/new", "/app/campaigns/new/x", "/app/profile"]) {
       expect(openDuringSetup(closed), closed).toBe(false);
     }
   });
@@ -119,7 +121,10 @@ describe("the app waits for setup (rule 65)", () => {
 
   it("lets the campaign page launch the first campaign only from the last step", () => {
     const page = read("app", "app", "campaigns", "[id]", "page.tsx");
-    expect(page).toMatch(/currentStep\(wizard\.facts\) !== "launch"\)\) \{\s*redirect\("\/onboarding"\)/);
+    // Or after somebody chose to open the app first (rule 65).
+    expect(page).toMatch(
+      /currentStep\(wizard\.facts\) !== "launch" && !wizard\.facts\.deferred\)\s*\) \{\s*redirect\("\/onboarding"\)/,
+    );
   });
 });
 
@@ -253,5 +258,31 @@ describe("meeting hours are set during setup", () => {
     const route = read("app", "onboarding", "save", "route.ts");
     expect(route).toMatch(/await saveAvailability\(supabase, workspaceId, user\.id, meetings\)/);
     expect(read("app", "app", "meetings", "availability.tsx")).toMatch(/await writeAvailability\(supabase, session\.workspaceId, session\.userId, input\)/);
+  });
+});
+
+describe("launching later (rule 65)", () => {
+  it("is offered from the strategy step on, where a step can fail for reasons nobody here can fix", () => {
+    for (const key of ["business", "linkedin", "hours", "voice", "cta"] as const) expect(canDefer(key), key).toBe(false);
+    for (const key of ["strategy", "prospects", "launch"] as const) expect(canDefer(key), key).toBe(true);
+    expect(canDefer(null)).toBe(false);
+  });
+
+  it("is a stamp on the person's own confirmations, read back as deferred", () => {
+    const stamped = stampConfirmation({}, "ws1", "deferred", "2026-10-26T10:00:00Z");
+    expect(readConfirmations(stamped, "ws1").deferred).toBe("2026-10-26T10:00:00Z");
+    expect(readConfirmations(stamped, "ws2").deferred).toBeUndefined();
+  });
+
+  it("leaves the steps where they were, and ends once something launches", () => {
+    const facts = { ...ALL_BUT_LAUNCH, hasCampaign: false, deferred: true };
+    expect(currentStep(facts)).toBe("prospects");
+    expect(setupDeferred(facts)).toBe(true);
+    expect(setupDeferred({ ...facts, hasLaunchedCampaign: true })).toBe(false);
+  });
+
+  it("is honoured by the middleware and by the campaign page's launch", () => {
+    expect(read("middleware.ts")).toMatch(/readConfirmations\(me\?\.setup_confirmed, membership\.workspace_id\)\.deferred/);
+    expect(read("app", "app", "campaigns", "[id]", "page.tsx")).toMatch(/!wizard\.facts\.deferred/);
   });
 });

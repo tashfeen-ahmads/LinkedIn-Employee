@@ -66,6 +66,7 @@ export async function readWizard(supabase: Db, userId: string): Promise<WizardRe
         hasApprovedStrategy: false,
         hasCampaign: false,
         hasLaunchedCampaign: false,
+        deferred: false,
       },
     };
   }
@@ -80,17 +81,36 @@ export async function readWizard(supabase: Db, userId: string): Promise<WizardRe
       .eq("user_id", userId)
       .maybeSingle(),
     supabase.from("profiles").select("setup_confirmed").eq("id", userId).maybeSingle(),
-    supabase.from("customer_profiles").select("id", head).eq("workspace_id", workspaceId).not("approved_at", "is", null),
+    // Set aside is not approved: the worker refuses to search one, and
+    // counting it offered a search that could only ever fail.
+    supabase
+      .from("customer_profiles")
+      .select("id", head)
+      .eq("workspace_id", workspaceId)
+      .eq("do_not_pursue", false)
+      .not("approved_at", "is", null),
     // A list somebody can still launch: an archived draft is not one, and
     // counting it left the last step with nothing on it and no way back.
-    supabase.from("campaigns").select("id", head).eq("workspace_id", workspaceId).eq("status", "draft"),
+    supabase.from("campaigns").select("id").eq("workspace_id", workspaceId).eq("status", "draft"),
     supabase.from("campaigns").select("id", head).eq("workspace_id", workspaceId).not("launched_at", "is", null),
     supabase.from("availability").select("id", head).eq("workspace_id", workspaceId).eq("user_id", userId),
   ]);
   // The profile read is left out on purpose: confirmations missing only means
   // a step is asked again, which costs a click, while "unreadable" stops the
   // whole page. Everything that decides whether setup is finished is in.
-  const unreadable = [workspace, account, approved, campaigns, launched].some((r) => Boolean(r.error));
+  // A draft with nobody on it is not a list. The search inserts the campaign
+  // before it attaches anyone, so a refresh mid-build, or a run that died
+  // between the two, opened the launch step on a campaign of nobody.
+  const draftIds = (campaigns.data ?? []).map((c) => c.id);
+  const peopled = draftIds.length
+    ? await supabase
+        .from("campaign_prospects")
+        .select("id", head)
+        .eq("workspace_id", workspaceId)
+        .eq("status", "queued")
+        .in("campaign_id", draftIds)
+    : { count: 0, error: null };
+  const unreadable = [workspace, account, approved, campaigns, launched, peopled].some((r) => Boolean(r.error));
 
   const stash = readOnboardingStash(workspace.data?.onboarding);
   const mine = me.error ? {} : readConfirmations(me.data?.setup_confirmed, workspaceId);
@@ -114,8 +134,9 @@ export async function readWizard(supabase: Db, userId: string): Promise<WizardRe
       // facts that decide whether setup is finished).
       hasMeetingHours: meetingHours.error ? true : (meetingHours.count ?? 0) > 0,
       hasApprovedStrategy: (approved.count ?? 0) > 0,
-      hasCampaign: (campaigns.count ?? 0) > 0,
+      hasCampaign: (peopled.count ?? 0) > 0,
       hasLaunchedCampaign: (launched.count ?? 0) > 0,
+      deferred: Boolean(mine.deferred),
     },
   };
 }

@@ -213,7 +213,7 @@ const workers = [
     connection,
     concurrency: 4,
   }),
-  new Worker<TargetingJob>(QUEUE_NAMES.targeting, (job) => runTargetingJob(ctx, job.data), {
+  new Worker<TargetingJob>(QUEUE_NAMES.targeting, (job) => runTargetingJob(ctx, job.data, { final: job.attemptsMade + 1 >= (job.opts.attempts ?? 1) }), {
     connection,
     concurrency: 2,
   }),

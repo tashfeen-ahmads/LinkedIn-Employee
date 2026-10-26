@@ -52,6 +52,7 @@ export async function loadNeedsYou(
     { data: unlaunched },
     { data: thin },
     released,
+    launched,
   ] = await Promise.all([
     supabase.from("worker_heartbeats").select("beat_at").eq("name", PACING_LOOP).maybeSingle(),
     // What the webhook endpoint itself recorded, not whether a secret is set
@@ -125,6 +126,9 @@ export async function loadNeedsYou(
       .eq("workspace_id", workspaceId)
       .eq("status", "disconnected")
       .eq("status_detail", IDLE_RELEASE_DETAIL),
+    // Nothing launched yet: somebody who opened the app before launching
+    // (rule 65) still has setup to finish, and the list says so.
+    supabase.from("campaigns").select("id", head).eq("workspace_id", workspaceId).not("launched_at", "is", null),
   ]);
 
   const stamped = beat?.beat_at ? Date.parse(beat.beat_at) : null;
@@ -228,6 +232,9 @@ export async function loadNeedsYou(
     campaignsUnlaunched: (unlaunched ?? []).length,
     campaignsWithThinNotes: new Set((thin ?? []).map((row) => row.campaign_id)).size,
     campaignsMissingCta,
+    // A read that failed is not "never launched": that would put a setup row
+    // on a workspace with live campaigns.
+    setupUnfinished: !launched.error && (launched.count ?? 0) === 0,
   };
 
   return { items: needsYou(facts), facts };

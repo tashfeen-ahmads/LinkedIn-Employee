@@ -5,9 +5,10 @@ import { seeOther } from "@/lib/see-other";
 import { callWorker } from "@/lib/worker";
 import { mergeStash, stampConfirmation, type StashedCta } from "@/lib/onboarding-stash";
 import { readWizard } from "@/lib/wizard-state";
-import { currentStep, stepIndex, type WizardStepKey } from "@/lib/wizard";
+import { canDefer, currentStep, stepIndex, type WizardStepKey } from "@/lib/wizard";
 import { queueSearch } from "@/lib/search";
-import { launch } from "@/lib/launch";
+import { launch, launchState } from "@/lib/launch";
+import { launchBlockers } from "@/lib/campaign";
 import { approveStrategy, planFlags } from "@/lib/approve";
 import { AUTONOMY_ROLES, setReplyHandling } from "@/lib/autonomy";
 import { carryVoiceToAgent } from "@/lib/agent-voice";
@@ -44,9 +45,15 @@ const ACTION_STEP: Record<string, WizardStepKey> = {
   launch: "launch",
 };
 
+/** Why a search did not start, as a code the page words. */
+function searchProblem(reason: string): string {
+  return reason.startsWith("Connect your LinkedIn") ? "search-no-linkedin" : "search-not-started";
+}
+
 export async function POST(request: NextRequest) {
   const form = await request.formData();
   const action = String(form.get("action") ?? "");
+  if (action === "defer") return defer();
   const step = ACTION_STEP[action];
   if (!step) return seeOther("/onboarding");
 
@@ -277,7 +284,7 @@ export async function POST(request: NextRequest) {
       const started = await queueSearch(workspaceId, user.id, supabase, profileId);
       // Approving still counts when the search could not start; the next step
       // says so and offers to start it.
-      return seeOther(started.ok ? "/onboarding" : "/onboarding?step=prospects&error=search-not-started");
+      return seeOther(started.ok ? "/onboarding" : `/onboarding?step=prospects&error=${searchProblem(started.reason)}`);
     }
 
     case "rewrite": {
@@ -306,7 +313,10 @@ export async function POST(request: NextRequest) {
         .maybeSingle();
       if (!profile) return again("search-not-started");
       const started = await queueSearch(workspaceId, user.id, supabase, profileId);
-      return started.ok ? seeOther("/onboarding") : again("search-not-started");
+      if (!started.ok) return again(searchProblem(started.reason));
+      // The same search still running is not a press that did nothing, and
+      // the page has to say which it was.
+      return seeOther(started.alreadyRunning ? "/onboarding?step=prospects&notice=already-running" : "/onboarding?step=prospects");
     }
 
     case "launch": {
@@ -321,6 +331,12 @@ export async function POST(request: NextRequest) {
         .eq("status", "draft")
         .maybeSingle();
       if (!draft) return again("launch-missing");
+      // Checked before anything is written. A refused launch used to have set
+      // the reply handling and approved the opener and offer already, so a
+      // press that launched nothing still changed what the campaign would do.
+      const state = await launchState(campaignId, workspaceId);
+      if (!state) return again("launch-missing");
+      if (launchBlockers(state).length > 0) return again("launch-blocked");
       // Who answers replies is asked here, at the moment it starts to matter,
       // and set before the launch so the first reply is handled as chosen.
       const handling = form.get("handling");
@@ -368,6 +384,35 @@ export async function POST(request: NextRequest) {
     }
   }
   return seeOther("/onboarding");
+}
+
+/**
+ * Open the app before launching (rule 65).
+ *
+ * A stamp on this person's own profile row, like every other confirmation, so
+ * a teammate can use it as well as an owner. Only from a step that may be
+ * deferred: before the strategy step the app has nothing to show, and the
+ * steps there take a minute each.
+ */
+async function defer(): Promise<Response> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return seeOther("/login");
+  const wizard = await readWizard(supabase, user.id);
+  if (!wizard.workspaceId || wizard.unreadable) return seeOther("/onboarding?error=unreadable");
+  const current = currentStep(wizard.facts);
+  if (!current) return seeOther("/app");
+  if (!canDefer(current)) return seeOther("/onboarding");
+  const { data: me } = await supabase.from("profiles").select("setup_confirmed").eq("id", user.id).maybeSingle();
+  const stamped = stampConfirmation(me?.setup_confirmed, wizard.workspaceId, "deferred", new Date().toISOString());
+  const { data: saved } = await supabase
+    .from("profiles")
+    .update({ setup_confirmed: stamped as never })
+    .eq("id", user.id)
+    .select("id");
+  return seeOther(saved?.length ? "/app" : `/onboarding?step=${current}&error=save-failed`);
 }
 
 /** "cal.com/sam" as most people type it, with the scheme the check requires. */
