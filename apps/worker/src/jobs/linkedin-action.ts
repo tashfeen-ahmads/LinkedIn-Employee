@@ -57,6 +57,10 @@ import { HELD_FOR_COPY, HELD_FOR_PITCH, pitchFor } from "../pitch.js";
 import { agentForCampaign } from "../agent.js";
 import { createBookingLink } from "./book.js";
 import { OUTREACH_PAUSE_RETRY_MS, outreachPause } from "../platform.js";
+import { workspaceEntitlement } from "../billing.js";
+
+/** How long an invitation waits for a plan to be chosen before it looks again. */
+const NOT_ENTITLED_RETRY_MS = 6 * 60 * 60_000;
 import type { LinkedInActionJob } from "../queues.js";
 
 /**
@@ -184,6 +188,21 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
   const paused = await outreachPause(db);
   if (paused) {
     throw new RescheduleError(`outreach_paused: ${paused}`, jitteredRetryMs(OUTREACH_PAUSE_RETRY_MS, "outreach_paused"));
+  }
+
+  /*
+   * The plan, checked here as well as in the pacing loop, for the same reason
+   * as the switch above: an invitation queued on day fourteen of a trial would
+   * otherwise go out on day fifteen. Waiting, never failing, so choosing a plan
+   * is the whole of what it takes for the queue to carry on; and a plan that
+   * could not be read waits too, because a failed read is not permission.
+   */
+  const entitled = await workspaceEntitlement(db, job.workspaceId);
+  if (!entitled?.canSend) {
+    throw new RescheduleError(
+      `not_entitled: ${entitled?.reason ?? "plan unreadable"}`,
+      jitteredRetryMs(NOT_ENTITLED_RETRY_MS, "not_entitled"),
+    );
   }
 
   const { data: profile } = await db.from("profiles").select("timezone").eq("id", accountRow.user_id).single();

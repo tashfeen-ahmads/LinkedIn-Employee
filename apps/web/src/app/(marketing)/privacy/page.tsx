@@ -111,7 +111,11 @@ const SECTIONS: ReadonlyArray<LegalSection> = [
             never sent twice, and whether you have unsubscribed from product emails.
           </li>
         </ul>
-        <p>Nora is free while we grow and we do not ask for a payment card.</p>
+        <p>
+          You do not need a payment card for the free trial. When you choose a paid plan, your payment
+          details are handled by our payment processor, Stripe, at checkout. We never see or store your
+          full card number.
+        </p>
       </>
     ),
   },
@@ -222,6 +226,7 @@ const SECTIONS: ReadonlyArray<LegalSection> = [
           <li>a managed database and authentication service;</li>
           <li>a job queue, which holds background work such as a message waiting to be sent;</li>
           <li>email delivery;</li>
+          <li>payment processing, for paid plans;</li>
           <li>AI model providers;</li>
           <li>
             a LinkedIn integration provider, which connects to LinkedIn on your behalf and holds the

@@ -7,6 +7,7 @@ import { Sequence, sequenceFor } from "@/components/sequence";
 import { GateSimulator } from "@/components/gate-simulator";
 import { NavIcon } from "@/components/icons";
 import { PUBLIC_LIMITS, SITE, pageMeta } from "@/lib/site";
+import { TRIAL_DAYS } from "@/lib/plans";
 import { TOUR_STAGES, YOUR_DECISIONS } from "@le/shared";
 import { TEAM_MEMBER, type MemberKey } from "@/lib/team";
 import { BRAND } from "@le/shared";
@@ -128,7 +129,7 @@ export default function HowItWorksPage() {
             </div>
             <div className="mk-actions">
               <Link href={`${SITE.app}/signup`} className="btn large">
-                Sign up free
+                Start a {TRIAL_DAYS}-day free trial
               </Link>
               <Link href="/linkedin-automation-limits" className="mk-textlink">
                 Read the limits <span aria-hidden="true">→</span>

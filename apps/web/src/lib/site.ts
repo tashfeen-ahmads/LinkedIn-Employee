@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { TRIAL_DAYS } from "@/lib/plans";
 import { BRAND, LINKEDIN_LIMITS, SUSTAINED_INVITES_PER_DAY, WEEKS_TO_SUSTAINED, appOrigin, siteOrigin } from "@le/shared";
 
 /**
@@ -26,7 +27,7 @@ export const SITE = {
   app: appOrigin(process.env.APP_URL),
   tagline: BRAND.tagline,
   description:
-    "Nora is an AI SDR for LinkedIn. It finds your buyers, writes each one a personal note, answers their replies and books the meetings. Free, no card.",
+    `Nora is an AI SDR for LinkedIn. It finds your buyers, writes each one a personal note, answers their replies and books the meetings. ${TRIAL_DAYS}-day free trial, no card.`,
   locale: "en_US",
 } as const;
 

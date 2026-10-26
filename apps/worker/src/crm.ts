@@ -12,6 +12,7 @@ import { BRAND } from "@le/shared";
 import type { Db } from "@le/db";
 import type { Env } from "./config.js";
 import { loadRefreshedCredential } from "./oauth-credentials.js";
+import { workspaceFeatures } from "./billing.js";
 
 export interface CrmBinding {
   provider: CrmProvider;
@@ -24,6 +25,9 @@ export interface CrmBinding {
  * its absence must never block an outreach action.
  */
 export async function resolveCrm(db: Db, env: Env, workspaceId: string): Promise<CrmBinding | null> {
+  // CRM sync is an Autopilot feature. A plan without it syncs nothing, which
+  // is the same answer as no CRM connected and blocks nothing.
+  if (!(await workspaceFeatures(db, workspaceId)).crmSync) return null;
   if (env.CRM_PROVIDER === "mock") {
     return { provider: new MockCrmProvider(), accessToken: "mock" };
   }

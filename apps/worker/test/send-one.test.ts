@@ -26,6 +26,7 @@ function harness(options: { cpStatus?: string; campaignStatus?: string } = {}) {
   const linkedin = new MockLinkedInProvider();
 
   db.seed("profiles", [{ id: USER, full_name: "Sam Patel", timezone: "UTC" }]);
+  db.seed("workspaces", [{ id: WORKSPACE, plan: "free" }]);
   db.seed("linkedin_accounts", [
     {
       id: ACCOUNT,
@@ -187,3 +188,19 @@ describe("sendOneNow", () => {
     expect(result.detail).toMatch(/do not contact/);
   });
 });
+
+describe("a workspace with no plan", () => {
+  it("sends nothing once a trial has ended, and keeps the invitation queued for when a plan is chosen", async () => {
+    const { ctx, linkedin, db } = harness();
+    const ws = db.find("workspaces", { id: WORKSPACE })!;
+    ws.plan = "trial";
+    ws.trial_ends_at = "2026-09-01T00:00:00Z";
+
+    const result = await sendOneNow(ctx, { workspaceId: WORKSPACE, campaignId: CAMPAIGN });
+
+    expect(result.ok).toBe(false);
+    expect(linkedin.sentInvitations).toHaveLength(0);
+    expect(db.find("campaign_prospects", { id: CP })?.status).toBe("queued");
+  });
+});
+

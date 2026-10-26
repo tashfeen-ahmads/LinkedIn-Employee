@@ -20,6 +20,8 @@ export interface BookingInput {
   durationMinutes: number;
   /** The hours the slots were offered within, when the caller had its own. */
   workingHours?: { start: number; end: number; days: number[] };
+  /** Hold a free, accepted time for a person to book rather than booking it. */
+  confirmFirst?: boolean;
 }
 
 /**
@@ -79,6 +81,14 @@ export async function bookAcceptedSlot(ctx: WorkerContext, input: BookingInput):
   });
   if (!free) {
     const reason = `They accepted ${readable}, which is no longer free. Offer them another time.`;
+    await flagForHuman(ctx.db, input.conversationId, reason, "booking");
+    return { status: "held", reason };
+  }
+
+  // A plan where bookings are confirmed by a person: the time is free and
+  // offered, and a person puts it in the diary.
+  if (input.confirmFirst) {
+    const reason = `They accepted ${readable}, and it is still free. Confirm it: put it in your calendar and reply to them.`;
     await flagForHuman(ctx.db, input.conversationId, reason, "booking");
     return { status: "held", reason };
   }

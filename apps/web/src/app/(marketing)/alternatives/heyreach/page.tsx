@@ -77,7 +77,7 @@ export default function Page() {
       <h2 id="short-answer">Nora or HeyReach: the short answer</h2>
       <Verdict
         rival="HeyReach"
-        nora={["You send from your own profile, or a few teammates send from theirs.", "You want a note written for each prospect and a person approving the launch.", "You want caps that can only be lowered, and to start free."]}
+        nora={["You send from your own profile, or a few teammates send from theirs.", "You want a note written for each prospect and a person approving the launch.", "You want caps that can only be lowered, and a 14-day free trial to start."]}
         them={["You run outreach for clients from many LinkedIn accounts and want one campaign spread across them.", "LinkedIn is one step in a sequence that also sends email through a tool you already use.", "Your lists and personalization come from an enrichment workflow, and you need a reliable sender."]}
       />
       <p>

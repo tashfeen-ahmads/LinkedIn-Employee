@@ -8,7 +8,6 @@ import {
   PACING_LOOP,
   type CampaignProspectStatus,
 } from "@le/shared";
-import { entitlementFor, trialLimitEnforced } from "@le/billing";
 import {
   checkAction,
   dailyInviteCap,
@@ -34,6 +33,7 @@ import { outreachPause } from "../platform.js";
 import { heldForCopy } from "../pitch.js";
 import { INVITE_FOLLOW_MS, WARM_FOLLOW_SPAN_MS, WARM_MARGIN_MS, viewFitsToday } from "../warm.js";
 import { lastInviteAt } from "../pace.js";
+import { workspaceEntitlement } from "../billing.js";
 
 /**
  * How soon the first invitation of a run goes when the account has no gap to
@@ -1238,25 +1238,7 @@ async function enqueueFollowUps(
 
 /** Whether billing permits this workspace to start new outreach. */
 async function canWorkspaceSend(db: Db, workspaceId: string, now: Date): Promise<boolean> {
-  const { data } = await db
-    .from("workspaces")
-    .select("plan, trial_ends_at, subscription_status, seats")
-    .eq("id", workspaceId)
-    .maybeSingle();
-  if (!data) return false;
-
-  return entitlementFor(
-    {
-      plan: data.plan as never,
-      trialEndsAt: data.trial_ends_at,
-      subscriptionStatus: (data.subscription_status ?? null) as never,
-      seats: data.seats ?? 1,
-    },
-    now,
-    // Read per call rather than once at import, so the switch takes effect on
-    // the next tick after the variable changes and a test can set it.
-    { enforceTrial: trialLimitEnforced(process.env.TRIAL_LIMIT_ENFORCED) },
-  ).canSend;
+  return Boolean((await workspaceEntitlement(db, workspaceId, now))?.canSend);
 }
 
 /**

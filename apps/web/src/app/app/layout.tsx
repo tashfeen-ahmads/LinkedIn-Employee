@@ -208,6 +208,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     seats: workspace?.seats ?? 1,
   }, new Date(), { enforceTrial: trialLimitEnforced(process.env.TRIAL_LIMIT_ENFORCED) });
   const billingMessage = entitlementMessage(entitlement);
+  // A trial says how long it has left on every page, quietly, so day fifteen
+  // is never a surprise.
+  const trialLeft = entitlement.reason === "trial_active" ? entitlement.trialDaysLeft : null;
 
   const { data: account } = await supabase
     .from("linkedin_accounts")
@@ -280,10 +283,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         />
 
         {/*
-          No trial countdown and no "Choose a plan" here: the product is free
-          for everyone for now, so there is no clock to show and no plan to
-          choose. A workspace that genuinely cannot send still gets the banner
-          above the page, which is the right shape for something broken.
+          The trial's countdown is a banner above the page rather than a line
+          in the rail: it is about the account, and on a phone the rail is a
+          row of chips with no room for it.
         */}
 
         <form action={signOut} className="app-signout stack-1">
@@ -364,12 +366,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </div>
         </header>
 
-        {billingMessage || (account && account.status !== "active") ? (
+        {billingMessage || trialLeft !== null || (account && account.status !== "active") ? (
           <div className="app-banners">
             {billingMessage ? (
               <div className={`notice ${entitlement.canSend ? "warning" : "danger"}`}>
                 <p>
-                  {billingMessage} <Link href="/app/billing">Details</Link>
+                  {billingMessage} <Link href="/app/profile#billing">Choose a plan</Link>
+                </p>
+              </div>
+            ) : trialLeft !== null ? (
+              <div className="notice">
+                <p>
+                  {trialLeft === 0 ? "Your free trial ends today." : `${trialLeft} day${trialLeft === 1 ? "" : "s"} left in your free trial of Nora Autopilot.`}{" "}
+                  <Link href="/app/profile#billing">Choose a plan</Link>
                 </p>
               </div>
             ) : null}

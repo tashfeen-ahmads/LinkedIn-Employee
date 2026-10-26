@@ -29,7 +29,7 @@ const FAQ: readonly Faq[] = [
   },
   {
     q: "How much does an AI SDR cost?",
-    a: "As of October 2026, from nothing to about $45,000 a year at entry pricing. LinkedIn sequence tools cost roughly $40 to $100 per account a month, Valley $149 to $199 a seat, self-serve AI SDR agents from Artisan and AiSDR start around $250 a month, and 11x’s Growth tier is $3,750 a month billed annually. Larger volumes are quoted. Nora is free while we grow, with no card.",
+    a: "As of October 2026, from about $40 a month to about $45,000 a year at entry pricing. LinkedIn sequence tools cost roughly $40 to $100 per account a month, Valley $149 to $199 a seat, self-serve AI SDR agents from Artisan and AiSDR start around $250 a month, and 11x’s Growth tier is $3,750 a month billed annually. Larger volumes are quoted. Nora starts with a 14-day free trial with no card, and its plans are on the pricing page.",
   },
 ];
 
@@ -66,7 +66,7 @@ const PRICES = [
     label: TOOL_PRICES[id].name,
     values: [TOOL_PRICES[id].model, TOOL_PRICES[id].price, TOOL_PRICES[id].billing],
   })),
-  { label: "Nora", values: ["No plans", "Free while we grow", "No contract, no card"] },
+  { label: "Nora", values: ["Two plans", "See the pricing page", "Monthly or yearly, after a 14-day free trial with no card"] },
 ];
 
 /*
@@ -315,7 +315,7 @@ export default function Page() {
       <p>
         Agents built around LinkedIn: they plan the audience, write per person, follow up and handle replies, with
         LinkedIn&rsquo;s limits as the central constraint. Valley publishes per-seat pricing and adds email on its higher tiers.
-        Nora is LinkedIn only, approval-first and free while we grow. Both
+        Nora is LinkedIn only, approval-first and free to try for 14 days. Both
         suit founders, consultants and small teams for whom LinkedIn is the channel that works.
       </p>
 
@@ -406,9 +406,9 @@ export default function Page() {
         You launch the campaign. It sends inside the caps above, spread across your working hours, and drafts each reply from the
         facts you gave it for you to approve; switch on autopilot and the clean ones go out on their own. It offers meeting times
         only from the free slots in its booking calendar.{" "}
-        <Link href="/how-it-works">How Nora works</Link> covers every step, and it is free while we grow, with no card:{" "}
-        <Link href="/free-linkedin-automation-tool">a free LinkedIn automation tool</Link> in the plainest sense, with details on
-        the <Link href="/pricing">pricing page</Link>.
+        <Link href="/how-it-works">How Nora works</Link> covers every step, and you can try it free for 14 days with no
+        card. The <Link href="/free-linkedin-automation-tool">free LinkedIn automation tool</Link> page says what the trial
+        includes, and the <Link href="/pricing">pricing page</Link> lists the plans after it.
       </p>
       <p>What it does not do, as of October 2026:</p>
       <ul>

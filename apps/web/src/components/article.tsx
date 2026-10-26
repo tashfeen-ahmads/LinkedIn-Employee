@@ -17,6 +17,7 @@ import {
   type ContentKind,
 } from "@/lib/seo-content";
 import { formatDate } from "@/lib/format";
+import { TRIAL_DAYS } from "@/lib/plans";
 import { BRAND, INVITE_NOTE_MAX_CHARS, LINKEDIN_LIMITS, SUSTAINED_INVITES_PER_DAY, WEEKS_TO_SUSTAINED } from "@le/shared";
 import { RampChart } from "./diagrams";
 
@@ -259,17 +260,17 @@ function ArticleCta({ compact = false }: { compact?: boolean }) {
     <div className={`article-cta${compact ? " is-compact" : ""}`}>
       <div>
         <p className="article-cta-title">
-          {compact ? "Nora is free while we grow" : "Let Nora run this for you"}
+          {compact ? `Try Nora free for ${TRIAL_DAYS} days` : "Let Nora run this for you"}
         </p>
         <p className="article-cta-text">
           {compact
             ? "No card. You approve who it reaches, what they read and the launch."
-            : "It finds the people, writes one note per person and paces the sending inside these limits. Free while we grow."}
+            : `It finds the people, writes one note per person and paces the sending inside these limits. ${TRIAL_DAYS}-day free trial, no card.`}
         </p>
       </div>
       <div className="article-cta-actions">
         <a className="btn" href={`${SITE.app}/signup`}>
-          Sign up free
+          Start a {TRIAL_DAYS}-day free trial
         </a>
         <Link className="btn secondary" href="/how-it-works">
           How it works

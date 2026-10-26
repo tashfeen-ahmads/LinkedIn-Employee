@@ -5,6 +5,7 @@ import { ArticleLayout, articleMeta, type Faq, type Source } from "@/components/
 import { AudMore, AudNote, AudStats, AudSteps } from "@/components/seo/aud-blocks";
 import { FIRST_MONTH_TOTAL, FIRST_MONTH_WEEKS, FOLLOW_UP_MINUTES } from "@/components/seo/aud-first-month";
 import { PUBLIC_LIMITS } from "@/lib/site";
+import { TRIAL_DAYS } from "@/lib/plans";
 
 const PATH = "/for/small-business";
 
@@ -21,7 +22,7 @@ const FAQ: readonly Faq[] = [
   },
   {
     q: "Is there an affordable AI SDR for a small business?",
-    a: `Nora is free while we grow, with no card. It finds prospects, writes one note per person, follows up, drafts replies for you to approve and books meetings, inside the same limits for everyone: ${PUBLIC_LIMITS.invitesPerDayStart} invitations a day at first, rising to ${PUBLIC_LIMITS.invitesPerDayMax}, and never more than ${PUBLIC_LIMITS.invitesPerWeek} a week.`,
+    a: `Nora starts with a ${TRIAL_DAYS}-day free trial, no card, and then a paid plan you can see on the pricing page. It finds prospects, writes one note per person, follows up, drafts replies for you to approve and books meetings, inside the same limits for everyone: ${PUBLIC_LIMITS.invitesPerDayStart} invitations a day at first, rising to ${PUBLIC_LIMITS.invitesPerDayMax}, and never more than ${PUBLIC_LIMITS.invitesPerWeek} a week.`,
   },
   {
     q: "Is Sales Navigator worth it for a small business?",
@@ -40,7 +41,7 @@ export default function Page() {
     <ArticleLayout
       path={PATH}
       h1="LinkedIn lead generation for small businesses without a sales team"
-      lede="LinkedIn lead generation for a small business means finding the few hundred people who could buy from you and writing to each one personally, which is exactly the work an owner never has time for. Nora does that work as a free AI SDR: it finds the buyers, writes each a note, follows up and drafts the replies, while you approve what goes out under your name."
+      lede="LinkedIn lead generation for a small business means finding the few hundred people who could buy from you and writing to each one personally, which is exactly the work an owner never has time for. Nora does that work as an AI SDR you can try free for 14 days: it finds the buyers, writes each a note, follows up and drafts the replies, while you approve what goes out under your name."
       faq={FAQ}
       sources={SOURCES}
     >
@@ -121,11 +122,12 @@ export default function Page() {
         shows when the seat is worth it.
       </p>
       <p>
-        Nora itself is free while we grow, with no card and no plans to choose between: every
-        workspace gets the whole product and the same limits. The{" "}
+        Nora itself starts with a {TRIAL_DAYS}-day free trial of the whole product, no card, and every
+        workspace gets the same limits. The{" "}
         <Link href="/free-linkedin-automation-tool">free LinkedIn automation tool</Link> page says
-        exactly what that covers, and <Link href="/how-it-works">how Nora works</Link> walks through
-        a campaign from strategy to booked call.
+        exactly what the trial covers, and the <Link href="/pricing">pricing page</Link> lists the plans
+        after it. <Link href="/how-it-works">How Nora works</Link> walks through a campaign from
+        strategy to booked call.
       </p>
       <AudMore current="/for/small-business" />
     </ArticleLayout>

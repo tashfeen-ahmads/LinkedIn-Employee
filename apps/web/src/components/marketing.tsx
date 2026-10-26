@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { SiteMenu, SiteNav } from "./site-nav";
 import { BRAND, FREE_NOTES_PER_MONTH, POWERED_BY, LINKEDIN_LIMITS, SUSTAINED_INVITES_PER_DAY, WEEKS_TO_SUSTAINED, alwaysHoldsSentence } from "@le/shared";
 import { SITE } from "@/lib/site";
+import { TRIAL_DAYS } from "@/lib/plans";
 import { Wordmark } from "./logo";
 
 /*
@@ -52,7 +53,7 @@ export function SiteHeader() {
             Sign in
           </Link>
           <Link href={`${SITE.app}/signup`} className="btn">
-            Sign up free
+            Start free trial
           </Link>
           {/* Below 900px the nav is hidden and below 480px so is Sign in; the
               menu carries both, so neither is ever out of reach. */}
@@ -141,13 +142,13 @@ export function Glance({
   );
 }
 
-/** Said once and reused, so the band and /pricing cannot drift apart. */
-export const FREE_LINE = "Free while we grow.";
+/** Said once and reused, so the band, the sign-up page and the auth panel cannot drift apart. */
+export const TRIAL_LINE = `${TRIAL_DAYS}-day free trial, no card.`;
 
 export const FAQ_ITEMS = [
   {
     q: "What does it cost?",
-    a: "Nothing. Nora is free while we grow: sign up and start right away, with no plan to choose and no card to enter. If that changes, you will hear it from us well before it does.",
+    a: `Every new workspace starts with a ${TRIAL_DAYS}-day free trial of Nora Autopilot, the whole product, and you do not need a card to start it. After the trial you choose Nora Pro or Nora Autopilot, and the pricing page lists what each one costs. Workspaces that signed up before we introduced pricing stay free for good.`,
   },
   {
     q: "Is this safe for my LinkedIn account?",
@@ -216,10 +217,10 @@ export function ClosingCta() {
         <div className="mk-cta-band">
           <div className="mk-cta-copy">
             <h2 id="mk-cta-title">Your first meetings, at a careful pace.</h2>
-            <p>{FREE_LINE} No card.</p>
+            <p>{TRIAL_LINE}</p>
           </div>
           <Link href={`${SITE.app}/signup`} className="btn large mk-btn-invert">
-            Sign up free
+            Start a {TRIAL_DAYS}-day free trial
           </Link>
         </div>
       </div>

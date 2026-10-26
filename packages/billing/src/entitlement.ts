@@ -1,4 +1,32 @@
-export type Plan = "trial" | "solo" | "pro" | "teams" | "canceled";
+/**
+ * `free` is every workspace that signed up while the product was free: it
+ * keeps everything, for good, and is never asked to choose a plan. `trial` is
+ * fourteen days of Autopilot with no card. `pro` and `autopilot` are paid.
+ * `solo` and `teams` are older names nothing writes any more, read as Pro.
+ */
+export type Plan = "free" | "trial" | "pro" | "autopilot" | "solo" | "teams" | "canceled";
+
+/** What separates the paid plans: how much Nora does on its own, never how much it sends. */
+export type Tier = "pro" | "autopilot";
+
+export interface Features {
+  /** Replies sent without a person approving each one. */
+  autopilotReplies: boolean;
+  /** A meeting booked as soon as somebody accepts a time, without a person confirming it. */
+  autoBooking: boolean;
+  /** Pricing questions answered from the business's own facts rather than held. */
+  pricingAnswers: boolean;
+  /** Contacts and meetings written to the customer's CRM. */
+  crmSync: boolean;
+}
+
+export const TIER_FEATURES: Record<Tier, Features> = {
+  pro: { autopilotReplies: false, autoBooking: false, pricingAnswers: false, crmSync: false },
+  autopilot: { autopilotReplies: true, autoBooking: true, pricingAnswers: true, crmSync: true },
+};
+
+/** The trial is fourteen days of the top plan, with no card. */
+export const TRIAL_DAYS = 14;
 
 export interface WorkspaceBilling {
   plan: Plan;
@@ -10,6 +38,8 @@ export interface WorkspaceBilling {
 }
 
 export type EntitlementReason =
+  /** Signed up while the product was free, and keeps it. */
+  | "free_plan"
   | "active_subscription"
   | "trial_active"
   /** A trial workspace while the trial's end date is not being enforced. */
@@ -28,6 +58,9 @@ export interface Entitlement {
   reason: EntitlementReason;
   /** Whole days left in the trial, floored. Null outside a trial. */
   trialDaysLeft: number | null;
+  /** Which plan's features apply. A trial is Autopilot; a lapsed account is Pro. */
+  tier: Tier;
+  features: Features;
 }
 
 /**
@@ -48,55 +81,57 @@ export function entitlementFor(
   // No countdown anywhere while there is nothing to count down to: a sidebar
   // reading "2 days left" over an account that will keep sending on day three
   // is a screen that lies in the direction that makes people panic.
-  const trialDaysLeft = enforceTrial ? daysLeft(billing.trialEndsAt, now) : null;
+  const trialDaysLeft = enforceTrial && billing.plan === "trial" ? daysLeft(billing.trialEndsAt, now) : null;
+  const paidTier: Tier = billing.plan === "autopilot" ? "autopilot" : "pro";
+  const result = (canSend: boolean, reason: EntitlementReason, tier: Tier): Entitlement => ({
+    canSend,
+    canRead: true,
+    reason,
+    trialDaysLeft,
+    tier,
+    features: TIER_FEATURES[tier],
+  });
+
+  // Everybody who joined while the product was free keeps it, with every
+  // feature, and no screen ever asks them to choose a plan.
+  if (billing.plan === "free") return result(true, "free_plan", "autopilot");
 
   if (billing.subscriptionStatus === "active" || billing.subscriptionStatus === "trialing") {
-    return { canSend: true, canRead: true, reason: "active_subscription", trialDaysLeft };
+    return result(true, "active_subscription", paidTier);
   }
 
   // Past due keeps sending for now: Stripe retries a failed payment for days,
   // and cutting a paying customer off over a card that expired on Tuesday
   // loses the campaign, not just the invoice.
-  if (billing.subscriptionStatus === "past_due") {
-    return { canSend: true, canRead: true, reason: "payment_failed", trialDaysLeft };
-  }
+  if (billing.subscriptionStatus === "past_due") return result(true, "payment_failed", paidTier);
 
   if (billing.subscriptionStatus === "canceled" || billing.subscriptionStatus === "unpaid") {
-    return { canSend: false, canRead: true, reason: "subscription_canceled", trialDaysLeft };
+    return result(false, "subscription_canceled", "pro");
   }
 
   if (billing.plan === "trial") {
-    if (!enforceTrial) {
-      return { canSend: true, canRead: true, reason: "trial_unlimited", trialDaysLeft: null };
-    }
+    if (!enforceTrial) return result(true, "trial_unlimited", "autopilot");
     // Compare the instant, not the floored day count: trialDaysLeft is 0 for
     // the whole of the final day, and reading it as expiry would end a
-    // seven-day trial after six.
+    // fourteen-day trial after thirteen.
     const endsAt = billing.trialEndsAt ? Date.parse(billing.trialEndsAt) : NaN;
-    if (Number.isFinite(endsAt) && endsAt > now.getTime()) {
-      return { canSend: true, canRead: true, reason: "trial_active", trialDaysLeft };
-    }
-    return { canSend: false, canRead: true, reason: "trial_expired", trialDaysLeft: 0 };
+    if (Number.isFinite(endsAt) && endsAt > now.getTime()) return result(true, "trial_active", "autopilot");
+    return { ...result(false, "trial_expired", "pro"), trialDaysLeft: 0 };
   }
 
-  if (billing.plan === "canceled") {
-    return { canSend: false, canRead: true, reason: "subscription_canceled", trialDaysLeft };
-  }
+  if (billing.plan === "canceled") return result(false, "subscription_canceled", "pro");
 
   // A paid plan name with no subscription record means the two sides have
   // drifted. Fail closed on sending rather than give away the product.
-  return { canSend: false, canRead: true, reason: "no_plan", trialDaysLeft };
+  return result(false, "no_plan", "pro");
 }
 
 /**
- * Whether a trial's end date stops anything. Off unless explicitly turned on.
+ * Whether a trial's end date stops anything. On unless explicitly turned off.
  *
- * Pricing and the trial are not decided yet, and until they are nobody should
- * find their campaigns paused by a date we picked as a placeholder. So the
- * limit is off by default for every workspace, existing and new, and switching
- * it back on is one environment variable on both the web app and the worker —
- * `TRIAL_LIMIT_ENFORCED=true` — with no code change. Everything the limit did
- * is still here and still tested with it on; it is suspended, not deleted.
+ * `TRIAL_LIMIT_ENFORCED=false` on both the web app and the worker suspends it
+ * with no code change, for an emergency. Everything the limit does is tested
+ * with it on.
  *
  * Only the trial is suspended. A cancelled or unpaid subscription still stops
  * sending, because that is somebody's decision, not a placeholder.
@@ -106,7 +141,10 @@ export function entitlementFor(
  * the loop keeps sending is the drift this exists to prevent.
  */
 export function trialLimitEnforced(value: string | undefined): boolean {
-  return value?.trim().toLowerCase() === "true";
+  // On unless explicitly turned off, now that pricing is decided. Every
+  // workspace from before it is on the `free` plan, which the trial never
+  // touches, so this only ever reaches somebody who signed up into a trial.
+  return value?.trim().toLowerCase() !== "false";
 }
 
 /** Whole days remaining, floored at zero. Null when there is no trial. */
@@ -117,10 +155,13 @@ export function daysLeft(trialEndsAt: string | null, now: Date = new Date()): nu
   return Math.max(0, Math.floor((end - now.getTime()) / 86_400_000));
 }
 
+/** Seats are not what the plans price, so no paid plan limits them. */
 export const PLAN_SEATS: Record<Plan, number> = {
-  trial: 1,
-  solo: 1,
-  pro: 5,
+  free: 100,
+  trial: 100,
+  pro: 100,
+  autopilot: 100,
+  solo: 100,
   teams: 100,
   canceled: 0,
 };
@@ -133,7 +174,7 @@ export function withinSeatLimit(billing: WorkspaceBilling, memberCount: number):
 export function entitlementMessage(entitlement: Entitlement): string | null {
   switch (entitlement.reason) {
     case "trial_expired":
-      return "Your trial has ended. Campaigns are paused until you choose a plan; nothing has been deleted.";
+      return "Your free trial has ended. Campaigns are paused until you choose a plan. Nothing has been deleted.";
     case "subscription_canceled":
       return "Your subscription has ended. Campaigns are paused, and your conversations remain readable.";
     case "payment_failed":

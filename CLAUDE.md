@@ -1305,8 +1305,9 @@ tests that were verified by deliberately breaking the code.
     unsubscribe URL, and a deployment that cannot sign one (no
     `INTERNAL_API_SECRET`) sends no marketing email at all. Announcements carry
     a second guard: `send_requested_at` is claimed in one statement, so a
-    second press sends nothing. Copy is free-product copy — no prices, no
-    trials, no vendor names (rule 54).
+    second press sends nothing. Copy names no vendor (rule 54); prices come
+    from `lib/plans.ts` (rule 67). The trial reminder is transactional, so a
+    marketing opt-out does not hide the day sending stops.
 
 56. **Replies arrive by two doors, and every fault has a row in Issues.** The
     webhook is the fast path and it is configured on somebody else's dashboard,
@@ -1759,6 +1760,28 @@ tests that were verified by deliberately breaking the code.
     details, the note they accepted and the angle. It never names the product
     or the company, carries no link and is voice-checked; anything it cannot
     write cleanly is left null and step 1 goes as the campaign wrote it.
+
+67. **Two plans separated by what Nora does on its own, never by what it
+    sends.** Nora Pro ($99 a month, $990 a year) and Nora Autopilot ($179, $1,790)
+    are said once, in `apps/web/src/lib/plans.ts`; the pricing page and the
+    plan cards read it, and `team.test.ts` refuses a dollar figure typed
+    anywhere public. Both plans get the same caps (rule 4). Pro holds every
+    reply for a person, holds pricing questions, confirms each booking by hand
+    and syncs no CRM (`TIER_FEATURES`, `rulesForPlan` in
+    `apps/worker/src/billing.ts`, narrowing only and before `applyRules`, which
+    stays pure, rule 5).
+
+    Every workspace from before pricing is on the `free` plan (migration 0052)
+    and keeps every feature for good: no clock, no plan screen, no email. A new
+    workspace gets fourteen days of Autopilot with no card; a reminder goes on
+    day twelve through `sendOnce`, and on day fifteen sending waits until a
+    plan is chosen. The plan is read on the send path as well as in the pacing
+    loop (rule 1), and an unreadable plan waits rather than sends. Choosing a
+    plan during the trial keeps the trial: Stripe's first charge is its end.
+
+    Stripe events are applied newest-wins (`last_billing_event_at`), and a price
+    whose lookup key is not one of `PRICE_KEYS` leaves the plan alone rather
+    than reading as a trial, which would stop a paying workspace.
 
 ## Conventions
 

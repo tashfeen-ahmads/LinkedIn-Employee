@@ -32,7 +32,7 @@ const FAQ: readonly Faq[] = [
   },
   {
     q: "Is there a cheaper alternative to Artisan?",
-    a: "Yes. As of October 2026 LinkedIn sequencers often cost under $100 per sender a month. Nora is free while we grow, with no card and no contract. The trade-off is scope: Nora works on LinkedIn only and sends at a careful pace, while Artisan runs email at volume with its own contact database. If email is your channel, a cheaper email-first agent is the closer swap.",
+    a: "Yes. As of October 2026 LinkedIn sequencers often cost under $100 per sender a month. Nora starts with a 14-day free trial with no card, and its plans are on the pricing page. The trade-off is scope: Nora works on LinkedIn only and sends at a careful pace, while Artisan runs email at volume with its own contact database. If email is your channel, a cheaper email-first agent is the closer swap.",
   },
   {
     q: "How much does 11x cost?",
@@ -81,7 +81,7 @@ export default function Page() {
       <h2 id="short-answer">Nora or Artisan: the short answer</h2>
       <Verdict
         rival="Artisan"
-        nora={["Your buyers answer on LinkedIn more readily than by email.", "You want to read every note and approve the launch before anything is sent.", "You want to start free, with no card and no contract."]}
+        nora={["Your buyers answer on LinkedIn more readily than by email.", "You want to read every note and approve the launch before anything is sent.", "You want to start with a 14-day free trial, with no card."]}
         them={["Your buyers reply to email, and you need volume in the thousands a month.", "You want contact data, sequencing and deliverability tools from one vendor.", "You are comfortable with an agent that runs largely on its own once configured."]}
       />
 

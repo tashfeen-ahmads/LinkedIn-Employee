@@ -106,11 +106,26 @@ export default async function AdminWorkspacePage({
       />
       <PageNotice error={notice.error} notice={notice.notice} />
 
-      {/* NORA is free for everyone for now, so there is no plan, seat count or
-          trial clock to show — only when the workspace began. */}
+      {/* The plan as the send path reads it (rule 67): free for good, a
+          trial with its end, or a paid plan with its Stripe status. */}
       <Section title="Workspace">
         <div className="kpi-row">
           <Kpi label="Signed up" value={when(workspace.created_at)} />
+          <Kpi
+            label="Plan"
+            value={planLabel(workspace.plan)}
+            note={
+              workspace.plan === "trial"
+                ? workspace.trial_ends_at
+                  ? `trial ends ${when(workspace.trial_ends_at)}`
+                  : "trial with no end date"
+                : workspace.subscription_status
+                  ? `${workspace.subscription_status}${workspace.current_period_end ? `, renews ${when(workspace.current_period_end)}` : ""}`
+                  : workspace.plan === "free"
+                    ? "joined before pricing, keeps everything"
+                    : "no subscription on record"
+            }
+          />
           <Kpi label="Open support tickets" value={String(openTickets ?? 0)} />
         </div>
         {openTickets ? (
@@ -280,3 +295,19 @@ export default async function AdminWorkspacePage({
     </>
   );
 }
+
+function planLabel(plan: string): string {
+  switch (plan) {
+    case "free":
+      return "Free";
+    case "trial":
+      return "Trial";
+    case "autopilot":
+      return "Autopilot";
+    case "canceled":
+      return "Cancelled";
+    default:
+      return "Pro";
+  }
+}
+

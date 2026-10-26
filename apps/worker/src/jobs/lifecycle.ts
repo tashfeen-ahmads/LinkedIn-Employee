@@ -500,7 +500,8 @@ export async function runLifecycleEmails(ctx: WorkerContext, now: Date = new Dat
 
 /* ------------------------------------------------------ trial warnings */
 
-const TRIAL_WARNING_DAYS = [3, 1];
+/** Day twelve of a fourteen-day trial: time to choose before anything stops. */
+const TRIAL_WARNING_DAYS = [2];
 
 type WorkspaceRow = {
   id: string;
@@ -532,20 +533,14 @@ async function runTrialWarnings(ctx: WorkerContext, now: Date): Promise<number> 
 }
 
 async function maybeTrialWarning(ctx: WorkerContext, workspace: WorkspaceRow, now: Date): Promise<number> {
-  if (workspace.subscription_status === "active" || !workspace.trial_ends_at) return 0;
+  // Only a trial: a workspace on the free plan never has one, and a paid one
+  // has chosen already.
+  if (workspace.plan !== "trial" || workspace.subscription_status || !workspace.trial_ends_at) return 0;
 
   const daysLeft = Math.ceil((Date.parse(workspace.trial_ends_at) - now.getTime()) / 86_400_000);
   if (!TRIAL_WARNING_DAYS.includes(daysLeft)) return 0;
 
   const eventName = `trial.warned.${daysLeft}`;
-  const { data: already } = await ctx.db
-    .from("events")
-    .select("id")
-    .eq("workspace_id", workspace.id)
-    .eq("name", eventName)
-    .limit(1)
-    .maybeSingle();
-  if (already) return 0;
 
   // Two queries rather than an embedded `profiles(...)` join: the same shape
   // digest.ts uses, and the only one the fake database can answer honestly.
@@ -570,9 +565,14 @@ async function maybeTrialWarning(ctx: WorkerContext, workspace: WorkspaceRow, no
     .eq("workspace_id", workspace.id);
   const counts = countFunnel(rows ?? []);
 
-  const ok = await trySend(
-    ctx.email,
-    trialEndingEmail({
+  // Claimed before it is sent, so it is sent once whatever happens next
+  // (rule 55). Transactional: it is about the account, not a promotion, so an
+  // opt-out from marketing does not hide the day the trial ends.
+  const outcome = await sendOnce(ctx.db, ctx.email, {
+    userId: owner.user_id,
+    step: `${eventName}:${workspace.id}`,
+    kind: "transactional",
+    message: trialEndingEmail({
       to: profile.email,
       repName: profile.full_name,
       appUrl: ctx.env.APP_URL,
@@ -581,8 +581,8 @@ async function maybeTrialWarning(ctx: WorkerContext, workspace: WorkspaceRow, no
       accepted: counts.accepted,
       meetings: counts.meetings,
     }),
-  );
-  if (!ok) return 0;
+  });
+  if (outcome !== "sent") return 0;
 
   await recordEvent(ctx.db, { workspaceId: workspace.id, name: eventName, subjectType: "workspace", subjectId: workspace.id });
   return 1;

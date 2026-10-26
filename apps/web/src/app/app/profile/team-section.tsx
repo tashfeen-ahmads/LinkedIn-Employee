@@ -83,7 +83,7 @@ async function inviteMember(formData: FormData) {
     redirect(
       teamQuery(
         errorQuery,
-        "This workspace has reached its member limit for now. Ask us from Support and we will raise it. There is nothing to pay.",
+        "This workspace has reached its member limit for now. Ask us from Support and we will raise it.",
       ),
     );
   }

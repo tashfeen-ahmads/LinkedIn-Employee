@@ -114,7 +114,7 @@ function harness(overrides: { prospect?: Record<string, unknown>; cp?: Record<st
       ...overrides.cp,
     },
   ]);
-  db.seed("workspaces", [{ id: WORKSPACE, trial_ends_at: new Date(NOW.getTime() + 30 * 86_400_000).toISOString() }]);
+  db.seed("workspaces", [{ id: WORKSPACE, plan: "trial", trial_ends_at: new Date(NOW.getTime() + 30 * 86_400_000).toISOString() }]);
   db.seed("events", []);
   db.seed("exclusions", []);
 

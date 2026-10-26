@@ -155,7 +155,7 @@ export const CONTENT: readonly ContentPage[] = [
     path: "/guides/ai-sdr-pricing",
     kind: "guide",
     title: "AI SDR pricing in 2026 vs the cost of hiring an SDR",
-    description: "What AI SDRs cost in 2026 with dated sources, what a human or outsourced SDR really costs, the hidden costs both carry, and a free option.",
+    description: "What AI SDRs cost in 2026 with dated sources, what a human or outsourced SDR really costs, the hidden costs both carry, and where to start free.",
     query: "ai sdr pricing",
     published: D,
     updated: D,
@@ -308,8 +308,8 @@ export const CONTENT: readonly ContentPage[] = [
   {
     path: "/alternatives/artisan",
     kind: "alternative",
-    title: "Artisan AI alternatives: a free AI SDR for LinkedIn",
-    description: "Artisan and 11x are email-first AI SDRs on contracts. If your buyers answer on LinkedIn, here is a free, human-approved alternative and how it compares.",
+    title: "Artisan AI alternatives: an AI SDR built for LinkedIn",
+    description: "Artisan and 11x are email-first AI SDRs on contracts. If your buyers answer on LinkedIn, here is a human-approved alternative you can try free for 14 days.",
     query: "artisan ai alternatives",
     published: D,
     updated: D,
@@ -341,8 +341,8 @@ export const CONTENT: readonly ContentPage[] = [
   {
     path: "/alternatives/waalaxy",
     kind: "alternative",
-    title: "Waalaxy alternatives: free, with a note for every person",
-    description: "Nora vs Waalaxy: free use, a note written for each person instead of a template, reply handling and meeting booking, and how each tool paces sending.",
+    title: "Waalaxy alternatives: a note for every person, free to try",
+    description: "Nora vs Waalaxy: a 14-day free trial, a note written for each person instead of a template, reply handling, meeting booking and how each tool paces.",
     query: "waalaxy alternatives",
     published: D,
     updated: D,
@@ -397,7 +397,7 @@ export const CONTENT: readonly ContentPage[] = [
     path: "/for/small-business",
     kind: "audience",
     title: "LinkedIn lead generation for small business, no sales team",
-    description: "LinkedIn lead generation with no sales team: find buyers, send each a personal note and book calls with a free AI SDR that stays inside safe limits.",
+    description: "LinkedIn lead generation with no sales team: find buyers, send each a personal note and book calls with an AI SDR, free for 14 days, inside safe limits.",
     query: "linkedin lead generation for small business",
     published: D,
     updated: D,
@@ -451,8 +451,8 @@ export const CONTENT: readonly ContentPage[] = [
   {
     path: "/free-linkedin-automation-tool",
     kind: "landing",
-    title: "Free LinkedIn automation tool: an AI SDR, free while we grow",
-    description: "Nora is free while we grow: it finds buyers, writes each a personal note, follows up and books meetings on LinkedIn inside safe limits. No card needed.",
+    title: "Free LinkedIn automation tool: try a full AI SDR for 14 days",
+    description: "Try Nora free for 14 days with no card. It finds buyers, writes each a personal note, follows up and books meetings on LinkedIn inside safe limits.",
     query: "free linkedin automation tool",
     published: D,
     updated: D,
@@ -486,7 +486,7 @@ export function linkCard(path: string): { path: string; title: string; descripti
   const core: Record<string, { title: string; description: string }> = {
     "/how-it-works": { title: "How an AI SDR for LinkedIn works", description: "Three decisions are yours. The rest runs on its own, inside your limits." },
     "/linkedin-automation-limits": { title: "LinkedIn connection request limits in 2026", description: "Daily and weekly limits, acceptance rate, and the signs before a restriction." },
-    "/pricing": { title: "Pricing", description: "Free for everyone while we grow. No card." },
+    "/pricing": { title: "Pricing", description: "A 14-day free trial with no card, then Nora Pro or Nora Autopilot." },
     "/security": { title: "Security and data", description: "Where your data sits and who can reach it." },
   };
   return core[path] ? { path, ...core[path] } : null;

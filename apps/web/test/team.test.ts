@@ -106,13 +106,15 @@ describe("teamStatus", () => {
 });
 
 /*
- * Free for everyone, for now — so no price, plan or trial clock may survive on
- * a page anybody outside the product reads.
+ * Nora's prices are said in one place (`lib/plans.ts`) and read everywhere
+ * else, and the free-product promise is gone from every page.
  *
- * A grep, because the price was never in one function: it was in a component,
- * the structured data, the page metadata, a FAQ answer and the sign-up panel,
- * and a check of any one of them would have passed with the other four still
- * quoting $149.
+ * A grep, because the price was never in one function when it was last
+ * removed: it was in a component, the structured data, the page metadata, a
+ * FAQ answer and the sign-up panel, and a check of any one of them would have
+ * passed with the other four still quoting the old figure. So no public file
+ * may type a dollar figure at all: the pricing page renders `PLANS`, and a
+ * price typed anywhere else is a second copy waiting to disagree.
  */
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -124,7 +126,7 @@ function tsx(dir: string): string[] {
   });
 }
 
-describe("nothing public quotes a price", () => {
+describe("nothing public types a price or promises it is free", () => {
   const PUBLIC = [
     ...tsx(join(here, "../src/app/(marketing)")),
     ...["marketing", "schema", "auth-aside", "gate-simulator", "agent-timeline"].map(
@@ -134,23 +136,23 @@ describe("nothing public quotes a price", () => {
     join(here, "../src/app/login/page.tsx"),
     join(here, "../src/app/app/profile/billing-section.tsx"),
     join(here, "../src/app/app/layout.tsx"),
+    join(here, "../src/lib/site.ts"),
   ];
 
   it("finds the pages", () => {
     expect(PUBLIC.length).toBeGreaterThan(10);
   });
 
-  it("has no dollar price, per-seat rate, plan name or trial offer", () => {
+  it("types no dollar figure, per-seat rate or free-product promise", () => {
     const BANNED = [
       /\$\d/,
       /\/\s*seat\s*\/\s*mo/i,
       /per seat,? per month/i,
-      /free trial/i,
       /7-day/i,
       /seven days free/i,
-      /choose a plan/i,
-      /"(Solo|Pro|Teams)"/,
-      /on every plan/i,
+      /free while we grow/i,
+      /free for everyone/i,
+      /"(Solo|Teams)"/,
     ];
     const offenders: string[] = [];
     for (const file of PUBLIC) {
@@ -208,3 +210,15 @@ function rendered(file: string): string {
     .replace(/\/\*[\s\S]*?\*\//g, "")
     .replace(/^\s*\/\/.*$/gm, "");
 }
+
+describe("the plans", () => {
+  it("are priced in one place, and the pricing page and the app read it", () => {
+    const plans = readFileSync(join(here, "../src/lib/plans.ts"), "utf8");
+    expect(plans).toMatch(/monthly: 99,\s*yearly: 990/);
+    expect(plans).toMatch(/monthly: 179,\s*yearly: 1790/);
+    for (const reader of ["../src/app/(marketing)/pricing/page.tsx", "../src/app/app/profile/billing-section.tsx"]) {
+      expect(readFileSync(join(here, reader), "utf8"), reader).toContain('from "@/lib/plans"');
+    }
+  });
+});
+

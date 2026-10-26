@@ -1,6 +1,6 @@
 import { createHmac } from "node:crypto";
 import { describe, expect, it } from "vitest";
-import { normalizeSubscriptionStatus, planFromPriceLookupKey, verifyStripeWebhook } from "../src/stripe.js";
+import { intervalFromPriceLookupKey, normalizeSubscriptionStatus, planFromPriceLookupKey, verifyStripeWebhook } from "../src/stripe.js";
 
 const SECRET = "whsec_test";
 const NOW = new Date("2026-09-08T12:00:00Z");
@@ -53,11 +53,16 @@ describe("verifyStripeWebhook", () => {
 });
 
 describe("planFromPriceLookupKey", () => {
-  it("maps known keys and falls back to trial", () => {
-    expect(planFromPriceLookupKey("pro")).toBe("pro");
-    expect(planFromPriceLookupKey("TEAMS")).toBe("teams");
-    expect(planFromPriceLookupKey("mystery")).toBe("trial");
-    expect(planFromPriceLookupKey(null)).toBe("trial");
+  it("maps the four prices to their plans, and anything else to nothing", () => {
+    expect(planFromPriceLookupKey("pro_monthly")).toBe("pro");
+    expect(planFromPriceLookupKey("PRO_YEARLY")).toBe("pro");
+    expect(planFromPriceLookupKey("autopilot_monthly")).toBe("autopilot");
+    expect(planFromPriceLookupKey("autopilot_yearly")).toBe("autopilot");
+    // Never "trial": a paying workspace read as a lapsed trial is stopped.
+    expect(planFromPriceLookupKey("mystery")).toBeNull();
+    expect(planFromPriceLookupKey(null)).toBeNull();
+    expect(intervalFromPriceLookupKey("pro_yearly")).toBe("year");
+    expect(intervalFromPriceLookupKey("autopilot_monthly")).toBe("month");
   });
 });
 

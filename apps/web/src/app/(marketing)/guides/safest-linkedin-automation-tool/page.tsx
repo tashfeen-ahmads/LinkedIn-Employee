@@ -436,7 +436,7 @@ export default function Page() {
         covers what to ask beyond safety. More reading is in the{" "}
         <Link href="/guides">LinkedIn outreach guides</Link>. And run the 8 checks on Nora too: connect
         an account and you can see its first day&rsquo;s allowance before anything is sent. More on{" "}
-        <Link href="/free-linkedin-automation-tool">Nora as a free LinkedIn automation tool</Link>.
+        <Link href="/free-linkedin-automation-tool">Nora&rsquo;s free trial</Link>.
       </p>
     </ArticleLayout>
   );

@@ -51,6 +51,10 @@ export class StripeClient {
     priceId: string;
     quantity: number;
     customerEmail?: string;
+    /** An existing Stripe customer, so a returning workspace keeps its history. */
+    customerId?: string;
+    /** The app trial's end, when it is still running: no charge until then. */
+    trialEndsAt?: string | null;
     successUrl: string;
     cancelUrl: string;
   }): Promise<{ id: string; url: string }> {
@@ -65,7 +69,14 @@ export class StripeClient {
       client_reference_id: input.workspaceId,
       "metadata[workspace_id]": input.workspaceId,
       "subscription_data[metadata][workspace_id]": input.workspaceId,
-      ...(input.customerEmail ? { customer_email: input.customerEmail } : {}),
+      ...(input.customerId
+        ? { customer: input.customerId }
+        : input.customerEmail
+          ? { customer_email: input.customerEmail }
+          : {}),
+      // Somebody whose trial has a week to run should not lose it by paying
+      // early: the first charge waits until it ends.
+      ...(input.trialEndsAt ? { "subscription_data[trial_end]": String(Math.floor(Date.parse(input.trialEndsAt) / 1000)) } : {}),
     });
   }
 
@@ -123,18 +134,31 @@ export function verifyStripeWebhook(input: {
   return JSON.parse(input.body) as StripeEvent;
 }
 
-/** Maps a Stripe price nickname or lookup key onto our plan names. */
-export function planFromPriceLookupKey(lookupKey: string | null | undefined): Plan {
-  switch ((lookupKey ?? "").toLowerCase()) {
-    case "solo":
-      return "solo";
-    case "pro":
-      return "pro";
-    case "teams":
-      return "teams";
-    default:
-      return "trial";
-  }
+/** The four prices, by the lookup key each carries in Stripe. */
+export const PRICE_KEYS = ["pro_monthly", "pro_yearly", "autopilot_monthly", "autopilot_yearly"] as const;
+export type PriceKey = (typeof PRICE_KEYS)[number];
+
+/**
+ * Maps a Stripe price's lookup key onto our plan, or null when it is not one
+ * of ours.
+ *
+ * An unknown key used to read as "trial", so a paying workspace whose price
+ * had been renamed in Stripe would have been treated as a lapsed trial and
+ * stopped. Null means the caller leaves the plan as it is.
+ */
+export function planFromPriceLookupKey(lookupKey: string | null | undefined): "pro" | "autopilot" | null {
+  const key = (lookupKey ?? "").toLowerCase();
+  if (key === "pro" || key.startsWith("pro_")) return "pro";
+  if (key === "autopilot" || key.startsWith("autopilot_")) return "autopilot";
+  return null;
+}
+
+/** Monthly or yearly, from the price's own lookup key. */
+export function intervalFromPriceLookupKey(lookupKey: string | null | undefined): "month" | "year" | null {
+  const key = (lookupKey ?? "").toLowerCase();
+  if (key.endsWith("_yearly") || key.endsWith("_annual")) return "year";
+  if (key.endsWith("_monthly")) return "month";
+  return null;
 }
 
 /** The subscription statuses we store, normalised from Stripe's larger set. */

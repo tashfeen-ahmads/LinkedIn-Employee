@@ -216,8 +216,9 @@ export interface WelcomeInput {
  *
  * It introduces the team and asks for exactly one thing — the business —
  * because that is the one input every other step waits on. It makes no promise
- * about money or a trial: the product is free while it is being built, and an
- * email that mentions a price is the one people forward with a question mark.
+ * about money or a trial: the trial has its own reminder (`trialEndingEmail`),
+ * and a welcome that mentions a price is the one people forward with a
+ * question mark.
  */
 export function welcomeEmail(input: WelcomeInput): EmailMessage {
   const first = firstName(input.repName);
@@ -329,8 +330,8 @@ export interface TrialEndingInput {
  * feature list. If those numbers are thin it says so — a trial email that
  * claims success against three invitations insults the reader.
  *
- * Only ever sent while `TRIAL_LIMIT_ENFORCED` is on, which it is not while the
- * product is free; `lifecycle.ts` checks before it gets here.
+ * Only ever sent while `TRIAL_LIMIT_ENFORCED` is on, and never to a workspace
+ * that signed up before pricing; `lifecycle.ts` checks before it gets here.
  */
 export function trialEndingEmail(input: TrialEndingInput): EmailMessage {
   const first = firstName(input.repName);
@@ -341,10 +342,12 @@ export function trialEndingEmail(input: TrialEndingInput): EmailMessage {
     : `Your numbers so far: ${input.invited} invitations out, ${input.accepted} accepted, ${input.meetings} ${input.meetings === 1 ? "meeting" : "meetings"} booked.`;
 
   const lines = [
-    `${first ? `${first}, y` : "Y"}our trial ends in ${input.daysLeft === 1 ? "a day" : `${input.daysLeft} days`}.`,
+    `${first ? `${first}, y` : "Y"}our free trial of Nora Autopilot ends in ${input.daysLeft === 1 ? "a day" : `${input.daysLeft} days`}.`,
     summary,
-    "When it ends, sending stops and everything else stays exactly where it is — your prospects, your conversations and any booked meetings are still there whenever you come back.",
+    "Keep Autopilot and Nora goes on answering and booking on its own, or choose Pro and approve every message yourself. Paying yearly gives you two months free.",
+    "If you do not choose, sending pauses when the trial ends. Your prospects, conversations and booked meetings stay where they are.",
   ];
+  const billing = `${input.appUrl}/app/profile#billing`;
 
   return {
     to: input.to,
@@ -353,10 +356,10 @@ export function trialEndingEmail(input: TrialEndingInput): EmailMessage {
       title: "Your trial is nearly up",
       appUrl: input.appUrl,
       body: lines.map(paragraph).join(""),
-      cta: { label: "Choose a plan", url: `${input.appUrl}/app/billing` },
+      cta: { label: "Choose your plan", url: billing },
       after: note("Nothing is deleted if you do not. Sending simply pauses."),
     }),
-    text: [...lines, "", `${input.appUrl}/app/billing`].join("\n"),
+    text: [...lines, "", billing].join("\n"),
   };
 }
 

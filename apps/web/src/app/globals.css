@@ -3488,6 +3488,18 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
    than a phone's width in one row: it wraps rather than running off the edge. */
 .app .admin-top-inner { flex-wrap: wrap; row-gap: var(--space-2); }
 
+/* The two plans, side by side on the profile's billing section, stacked on a phone. */
+.app .plan-period { display: flex; flex-wrap: wrap; gap: var(--space-4); border: 0; padding: 0; margin: 0; align-items: center; }
+.app .plan-period legend { margin-bottom: var(--space-2); }
+.app .plan-period label { display: inline-flex; align-items: center; gap: var(--space-2); }
+.app .plan-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); gap: var(--space-4); }
+.app .plan-card { display: flex; flex-direction: column; gap: var(--space-2); }
+.app .plan-card.is-featured { border-color: var(--accent-border); box-shadow: 0 0 0 1px var(--accent-border); }
+.app .plan-card-name { font-weight: 650; }
+.app .plan-card-price { font-size: 1.75rem; font-weight: 700; letter-spacing: -0.01em; }
+.app .plan-card-list { margin: 0; padding-left: 1.1em; display: grid; gap: var(--space-1); flex: 1; }
+.app .plan-card-list .is-missing { color: var(--text-subtle); }
+
 /* A heartbeat's record on the console, one field to a line. */
 .app .beat-detail summary { cursor: pointer; color: var(--text-muted); }
 .app .beat-detail dl { display: grid; gap: var(--space-1); margin: var(--space-2) 0 0; }
@@ -5248,44 +5260,7 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
 
 /* Pricing: one plan card. The amount is the word "Free" in large type, never a
    dollar figure (no public page quotes a price). */
-.fx4-plan-section { padding-top: 0; }
-.fx4-plan {
-  display: grid;
-  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
-  background: var(--surface-raised);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm);
-  overflow: hidden;
-}
-.fx4-plan-price {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--space-3);
-  padding: clamp(1.5rem, 3vw, 2.5rem);
-  background: var(--accent-soft);
-  border-right: 1px solid var(--border);
-}
-.fx4-plan-name { font-size: 0.9375rem; font-weight: 600; color: var(--accent); }
-.fx4-plan-amount {
-  font-size: clamp(3.5rem, 2.5rem + 3vw, 5rem);
-  font-weight: 600;
-  line-height: 1;
-  letter-spacing: -0.04em;
-  color: var(--text);
-}
-.fx4-plan-sub { font-size: 1.0625rem; color: var(--text-muted); }
-.fx4-plan-cta { margin-top: var(--space-3); }
-.fx4-plan-note { font-size: 0.875rem; line-height: 1.55; color: var(--text-muted); }
-.fx4-plan-note a,
 .fx4-sec-intro a { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
-.fx4-plan-body { display: flex; flex-direction: column; gap: var(--space-5); padding: clamp(1.5rem, 3vw, 2.5rem); }
-.fx4-plan-title { font-size: 1.25rem; line-height: 1.3; letter-spacing: -0.015em; }
-.fx4-included { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-4); }
-.fx4-included li { display: grid; grid-template-columns: 1.25rem minmax(0, 1fr); gap: var(--space-3); align-items: start; }
-.fx4-included strong { font-weight: 600; }
-.fx4-included p { margin-top: 0.15rem; font-size: 0.9375rem; line-height: 1.55; color: var(--text-muted); }
 .fx4-check {
   width: 1.25rem;
   height: 1.25rem;
@@ -5296,9 +5271,95 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
   stroke-linecap: round;
   stroke-linejoin: round;
 }
+/* Pricing: two plans, a monthly/yearly switch that needs no script, the
+   comparison and the trial by day. */
+.pr-section { padding-top: 0; }
+.pr { display: flex; flex-direction: column; gap: var(--space-5); }
+.pr-period {
+  display: inline-flex;
+  align-self: center;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-raised);
+}
+.pr-period input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.pr-period label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 2.75rem;
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-pill);
+  font-weight: 550;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.pr-period input:checked + label { background: var(--accent-soft); color: var(--text); }
+.pr-period input:focus-visible + label { outline: 2px solid var(--accent); outline-offset: 2px; }
+.pr-badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--radius-pill);
+  background: var(--positive-soft, var(--accent-soft));
+  color: var(--positive, var(--accent));
+}
+.pr-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-5); }
+.pr-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: clamp(1.5rem, 3vw, 2.25rem);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+.pr-card.is-featured { border-color: var(--accent-border); box-shadow: 0 0 0 1px var(--accent-border), var(--shadow-sm); }
+.pr-card-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: var(--space-2); }
+.pr-card-name { font-size: 1.375rem; letter-spacing: -0.015em; }
+.pr-card-flag { font-size: 0.8125rem; font-weight: 600; color: var(--accent); }
+.pr-card-for { color: var(--text-muted); }
+.pr-amount {
+  font-size: clamp(2.75rem, 2rem + 2.5vw, 3.75rem);
+  font-weight: 650;
+  line-height: 1;
+  letter-spacing: -0.035em;
+  font-variant-numeric: tabular-nums;
+}
+.pr-unit { margin-left: var(--space-2); font-size: 1rem; font-weight: 500; letter-spacing: 0; color: var(--text-muted); }
+.pr-note { margin-top: var(--space-2); font-size: 0.9375rem; color: var(--text-muted); }
+.pr-price.is-year { display: none; }
+.pr:has(#period-year:checked) .pr-price.is-month { display: none; }
+.pr:has(#period-year:checked) .pr-price.is-year { display: block; }
+.pr-points { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-3); flex: 1; }
+.pr-points li { display: grid; grid-template-columns: 1.25rem minmax(0, 1fr); gap: var(--space-3); align-items: start; }
+.pr-points li.is-off { color: var(--text-subtle); }
+.pr-detail { display: block; font-size: 0.875rem; color: var(--text-muted); }
+.pr-none { display: inline-block; width: 1.25rem; text-align: center; color: var(--text-subtle); }
+.pr-cta { align-self: stretch; justify-content: center; }
+.pr-fineprint { text-align: center; font-size: 0.875rem; color: var(--text-muted); }
+.pr-table th[scope="row"] { font-weight: 500; text-align: left; }
+/* Three columns fit a phone, so the comparison never scrolls sideways; and a
+   cell is the containing block for its screen-reader text, which otherwise
+   escaped the scroller and widened the whole page. */
+.pr-table table { min-width: 0; }
+.pr-table td { text-align: center; position: relative; }
+.pr-table thead th:not(:first-child) { text-align: center; }
+@media (max-width: 640px) {
+  .pr-table th, .pr-table td { padding-inline: var(--space-2); font-size: 0.8125rem; }
+  .pr-table th[scope="row"] { width: 52%; }
+}
+.pr-trial { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-5); }
+.pr-trial li { display: flex; flex-direction: column; gap: var(--space-2); padding-top: var(--space-4); border-top: 2px solid var(--accent-border); }
+.pr-trial-day { font-size: 0.8125rem; font-weight: 650; text-transform: uppercase; letter-spacing: 0.06em; color: var(--accent); }
+.pr-trial-title { font-size: 1.125rem; }
+.pr-trial p:last-child { color: var(--text-muted); }
 @media (max-width: 860px) {
-  .fx4-plan { grid-template-columns: minmax(0, 1fr); }
-  .fx4-plan-price { border-right: 0; border-bottom: 1px solid var(--border); }
+  .pr-cards, .pr-trial { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* About: an essay column at body size, so the hero's lede sits above it. One

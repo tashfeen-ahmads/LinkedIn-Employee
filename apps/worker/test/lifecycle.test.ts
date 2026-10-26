@@ -535,16 +535,25 @@ describe("trial warnings", () => {
       else process.env.TRIAL_LIMIT_ENFORCED = was;
     });
 
-    it("warns three days before a trial ends", async () => {
-      const { ctx, email } = harness({ trialEndsInDays: 3, signedUpAgo: 30 * DAY });
+    it("warns on day twelve of the fourteen, once", async () => {
+      const { ctx, email } = harness({ trialEndsInDays: 2, signedUpAgo: 12 * DAY });
 
       await runLifecycleEmails(ctx, NOW);
-      const trial = email.sent.find((m) => m.subject.includes("trial"));
-      expect(trial?.subject).toBe("Your trial ends in 3 days");
+      await runLifecycleEmails(ctx, NOW);
+      const trial = email.sent.filter((m) => m.subject.includes("trial"));
+      expect(trial.map((m) => m.subject)).toEqual(["Your trial ends in 2 days"]);
+    });
+
+    it("never warns a workspace on the free plan", async () => {
+      const { db, ctx, email } = harness({ trialEndsInDays: 2, signedUpAgo: 12 * DAY });
+      db.find("workspaces", { id: WORKSPACE })!.plan = "free";
+
+      await runLifecycleEmails(ctx, NOW);
+      expect(email.sent.some((m) => m.subject.includes("trial"))).toBe(false);
     });
 
     it("does not warn a workspace that has already subscribed", async () => {
-      const { db, ctx, email } = harness({ trialEndsInDays: 3, signedUpAgo: 30 * DAY });
+      const { db, ctx, email } = harness({ trialEndsInDays: 2, signedUpAgo: 30 * DAY });
       db.find("workspaces", { id: WORKSPACE })!.subscription_status = "active";
 
       await runLifecycleEmails(ctx, NOW);
@@ -552,7 +561,7 @@ describe("trial warnings", () => {
     });
 
     it("says the numbers are early rather than claiming success on three invitations", async () => {
-      const { ctx, email } = harness({ trialEndsInDays: 1, signedUpAgo: 30 * DAY });
+      const { ctx, email } = harness({ trialEndsInDays: 2, signedUpAgo: 30 * DAY });
 
       await runLifecycleEmails(ctx, NOW);
       const trial = email.sent.find((m) => m.subject.includes("trial"));
@@ -565,13 +574,14 @@ describe("trial warnings", () => {
     // the product does not carry out, and the real one later reads as another
     // false alarm.
     const was = process.env.TRIAL_LIMIT_ENFORCED;
-    delete process.env.TRIAL_LIMIT_ENFORCED;
+    process.env.TRIAL_LIMIT_ENFORCED = "false";
     try {
       const { ctx, email } = harness({ trialEndsInDays: 3 });
       await runLifecycleEmails(ctx, NOW);
       expect(email.sent.some((m) => m.subject.toLowerCase().includes("trial"))).toBe(false);
     } finally {
       if (was !== undefined) process.env.TRIAL_LIMIT_ENFORCED = was;
+      else delete process.env.TRIAL_LIMIT_ENFORCED;
     }
   });
 

@@ -35,7 +35,7 @@ const FAQ: readonly Faq[] = [
   },
   {
     q: "Is there a free Dripify alternative?",
-    a: "Yes. As of October 2026 Nora is free while we grow, with no card, and the free version is the whole product: prospect search, a note written for each person, follow-ups, reply drafts and booking, under the same caps for everyone. Dripify itself offers a 7-day trial rather than a permanent free plan.",
+    a: "Not a permanent one for new accounts. As of October 2026 Nora offers a 14-day free trial with no card, and the trial is the whole product: prospect search, a note written for each person, follow-ups, reply drafts and booking, under the same caps for everyone. After the trial it is a paid plan. Dripify itself offers a 7-day trial rather than a permanent free plan.",
   },
   {
     q: "Is Dripify legit?",

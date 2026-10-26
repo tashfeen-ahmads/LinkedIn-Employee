@@ -5,6 +5,7 @@ import { ArticleLayout, Callout, CompareTable, articleMeta, type Faq, type Sourc
 import { SoftwareSchema } from "@/components/schema";
 import { AudStats, AudSteps } from "@/components/seo/aud-blocks";
 import { PUBLIC_LIMITS } from "@/lib/site";
+import { TRIAL_DAYS } from "@/lib/plans";
 
 const PATH = "/free-linkedin-automation-tool";
 
@@ -22,7 +23,7 @@ const LI_PROHIBITED = "https://www.linkedin.com/help/linkedin/answer/a1341387";
 const FAQ: readonly Faq[] = [
   {
     q: "Is there a free LinkedIn automation tool?",
-    a: "Yes, but few run real campaigns for free. Most tools offer a trial of 7 to 14 days, or a free tier that lets you look around while sending is paid. As of October 2026 Nora is free while we grow, for every workspace, with no trial clock, no card and the whole product: prospect search, a note for each person, follow-ups, replies and booking.",
+    a: `Yes, but few run real campaigns for free. Most tools offer a trial of 7 to 14 days, or a free tier that lets you look around while sending is paid. As of October 2026 Nora offers a ${TRIAL_DAYS}-day free trial of the whole product with no card: prospect search, a note for each person, follow-ups, replies and booking. After the trial it is a paid plan.`,
   },
   {
     q: "Are free LinkedIn automation tools safe?",
@@ -34,11 +35,11 @@ const FAQ: readonly Faq[] = [
   },
   {
     q: "What is the cheapest safe LinkedIn automation?",
-    a: `The cheapest is free, and Nora is free while we grow. What makes it safe is not the price but the guardrails: every workspace gets the same caps, starting at ${PUBLIC_LIMITS.invitesPerDayStart} invitations a day from the first send, a weekly ceiling of ${PUBLIC_LIMITS.invitesPerWeek} across all campaigns, and approval before launch. A paid tool with a higher ceiling is not safer for costing more.`,
+    a: `The cheapest is a free plan, though few of those send at a useful pace. Nora is free for ${TRIAL_DAYS} days and then a paid plan, and the pricing page lists what each plan costs. What makes a tool safe is not the price but the guardrails: every workspace gets the same caps, starting at ${PUBLIC_LIMITS.invitesPerDayStart} invitations a day from the first send, a weekly ceiling of ${PUBLIC_LIMITS.invitesPerWeek} across all campaigns, and approval before launch. A paid tool with a higher ceiling is not safer for costing more.`,
   },
   {
     q: "Do I need a credit card?",
-    a: "No. You sign up, connect your LinkedIn account and start, with no card and no plan to choose. If Nora ever stops being free, you will hear it from us well before it does, and an owner or admin can export the whole workspace at any time.",
+    a: `Not for the trial. You sign up, connect your LinkedIn account and start a ${TRIAL_DAYS}-day free trial with no card. You add a card only when you choose a paid plan, and an owner or admin can export the whole workspace at any time.`,
   },
 ];
 
@@ -65,8 +66,8 @@ export default function Page() {
   return (
     <ArticleLayout
       path={PATH}
-      h1="A free LinkedIn automation tool that runs real campaigns"
-      lede={`Nora is a free LinkedIn automation tool that runs whole campaigns: it finds your buyers, writes each one a personal note, follows up, drafts your replies and books meetings, with no card and no trial clock. Free while we grow. The sending limits are set for your account's safety and are the same for every workspace, so free never means a smaller quota.`}
+      h1={`Free LinkedIn automation tool: ${TRIAL_DAYS} days of real campaigns`}
+      lede={`Nora is a LinkedIn automation tool you can try free for ${TRIAL_DAYS} days, with no card. It runs whole campaigns: it finds your buyers, writes each one a personal note, follows up, drafts your replies and books meetings. The trial is the whole product, not a cut-down tier. The sending limits are set for your account's safety and are the same on the trial and the paid plans, so a trial never means a smaller quota.`}
       faq={FAQ}
       sources={SOURCES}
     >
@@ -82,10 +83,10 @@ export default function Page() {
         ]}
       />
 
-      <h2 id="what-is-free">What you get for free</h2>
+      <h2 id="what-is-free">What the free trial includes</h2>
       <p>
-        All of it, for every workspace. There is no free tier with the useful parts held back,
-        because there is no paid tier to hold them for.
+        All of it. The trial is {TRIAL_DAYS} days of Nora Autopilot, the whole product, with nothing
+        held back. When it ends, you choose Nora Pro or Nora Autopilot to keep sending.
       </p>
       <ul className="free-grid">
         <li>
@@ -143,8 +144,13 @@ export default function Page() {
         slowest days, or tempted to skip the ramp to see results before the trial runs out. That
         second temptation is how accounts get restricted.
       </p>
+      <p>
+        Nora&rsquo;s trial is {TRIAL_DAYS} days too, and the ramp does not speed up for it. What you can
+        judge in that time is what decides results later. Do the strategies fit your buyers? Do the
+        notes read as written for one person? How many people accept?
+      </p>
 
-      <h2 id="same-caps">Free and safe: the same caps for everyone</h2>
+      <h2 id="same-caps">The same caps for everyone, trial or paid</h2>
       <p>
         Every workspace gets the same limits, and they are not for sale. They are enforced in code
         immediately before each send, and an owner can lower them for an account or a campaign but
@@ -186,7 +192,7 @@ export default function Page() {
         caption="Free plans and trials for LinkedIn automation tools, as of October 2026"
         columns={["What is free", "Can you send for free?"]}
         rows={[
-          { label: "Nora", values: ["The whole product, no trial clock, no card", "Yes, under the same caps as everyone"] },
+          { label: "Nora", values: [`${TRIAL_DAYS}-day free trial of the whole product, no card`, "During the trial, under the same caps as everyone"] },
           {
             label: "Waalaxy",
             values: [
@@ -258,8 +264,8 @@ export default function Page() {
         rotating through one campaign, or volumes above the caps on this page. See{" "}
         <Link href="/for/small-business">LinkedIn lead generation for small business</Link>, and the{" "}
         <Link href="/guides/best-ai-sdr-for-linkedin">guide to choosing an AI SDR for LinkedIn</Link>{" "}
-        for the questions to ask any vendor. <Link href="/pricing">The pricing page</Link> says what
-        happens if free ever ends.
+        for the questions to ask any vendor. <Link href="/pricing">The pricing page</Link> lists the
+        plans that follow the trial.
       </p>
     </ArticleLayout>
   );

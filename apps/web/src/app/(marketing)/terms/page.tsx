@@ -9,7 +9,7 @@ import { PUBLIC_LIMITS, pageMeta } from "@/lib/site";
 export const metadata: Metadata = pageMeta({
   title: "Terms of Service: Nora",
   description:
-    "The terms for using Nora: the free service, your responsibilities on LinkedIn, who owns your data, AI-written drafts and the limits of our liability.",
+    "The terms for using Nora: the free trial and paid plans, your duties on LinkedIn, who owns your data, AI-written drafts and the limits of our liability.",
   path: "/terms",
 });
 
@@ -53,9 +53,16 @@ const SECTIONS: ReadonlyArray<LegalSection> = [
           weekly sending limits.
         </p>
         <p>
-          Nora is free while we grow, and you do not need a card to use it. We may introduce paid plans
-          or change what is free. If we do, we will tell you before the change affects you, and we will
-          never charge you for anything you have not agreed to pay for.
+          Nora has paid plans, Nora Pro and Nora Autopilot, priced on our{" "}
+          <Link href="/pricing">pricing page</Link>. A new workspace starts with a 14-day free trial of Nora
+          Autopilot, and you do not need a card to start it. When the trial ends, you choose a paid plan
+          to keep sending. If you do not choose one, Nora stops sending new outreach, and you can still
+          sign in and read everything in your workspace.
+        </p>
+        <p>
+          Workspaces created before we introduced paid plans keep using Nora free, with everything
+          included, for good. If we change our prices, we will tell you before the change affects you,
+          and we will never charge you for anything you have not agreed to pay for.
         </p>
       </>
     ),
@@ -317,7 +324,7 @@ export default function TermsPage() {
           <Glance
             title="In short"
             items={[
-              { label: "Cost", value: "Free while we grow, no card" },
+              { label: "Cost", value: "14-day free trial, no card, then a paid plan" },
               { label: "Your content", value: "Stays yours" },
               { label: "What is sent", value: "You approve it by default" },
               { label: "Account restrictions", value: "Possible, and we say so" },

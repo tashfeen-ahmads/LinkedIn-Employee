@@ -40,7 +40,7 @@ const FAQ: readonly Faq[] = [
   },
   {
     q: "What is better than Waalaxy?",
-    a: "Better for what you need. For LinkedIn and email in branching sequences, Expandi or Dripify. For agencies with many senders, HeyReach. For a founder who wants the prospecting, the writing and the reply drafts done, with a person approving each stage and nothing to pay while we grow, Nora. Waalaxy remains a good first tool for someone learning automated outreach.",
+    a: "Better for what you need. For LinkedIn and email in branching sequences, Expandi or Dripify. For agencies with many senders, HeyReach. For a founder who wants the prospecting, the writing and the reply drafts done, with a person approving each stage and a 14-day free trial with no card, Nora. Waalaxy remains a good first tool for someone learning automated outreach.",
   },
 ];
 
@@ -73,15 +73,15 @@ export default function Page() {
   return (
     <ArticleLayout
       path={PATH}
-      h1="Waalaxy alternatives: free, with a note for every person"
-      lede="The best Waalaxy alternative depends on what you outgrew. If it was the price or the free plan, Nora is free while we grow and runs whole campaigns; if it was the template messages, Nora writes a connection note for each person and drafts the replies. If you need LinkedIn and email in one sequence, Waalaxy's top plan or another multichannel tool fits better, because Nora works on LinkedIn only."
+      h1="Waalaxy alternatives: a note for every person, free to try"
+      lede="The best Waalaxy alternative depends on what you outgrew. If it was the free plan, Nora's 14-day free trial runs whole campaigns with no card. If it was the template messages, Nora writes a connection note for each person and drafts the replies. If you need LinkedIn and email in one sequence, Waalaxy's top plan or another multichannel tool fits better, because Nora works on LinkedIn only."
       faq={FAQ}
       sources={SOURCES}
     >
       <h2 id="short-answer">Nora or Waalaxy: the short answer</h2>
       <Verdict
         rival="Waalaxy"
-        nora={["You want to run real campaigns free, with no card.", "You want a note written for each person instead of a template.", "You want replies drafted for you and meetings booked."]}
+        nora={["You want to run real campaigns on a 14-day free trial, with no card.", "You want a note written for each person instead of a template.", "You want replies drafted for you and meetings booked."]}
         them={["You want LinkedIn and email steps in one campaign, with an email finder built in.", "You like starting from a template library and editing it yourself.", "You already know exactly who to target and mostly need a sender."]}
       />
 
@@ -187,11 +187,11 @@ export default function Page() {
         shows what makes a note specific.
       </p>
       <p>
-        The other is what free buys. In Nora, free does not mean a smaller quota and paying would not
-        mean a bigger one: every account ramps from {PUBLIC_LIMITS.invitesPerDayStart} invitations a
+        The other is what the trial buys. In Nora, a trial does not mean a smaller quota and paying
+        would not mean a bigger one: every account ramps from {PUBLIC_LIMITS.invitesPerDayStart} invitations a
         day to {PUBLIC_LIMITS.invitesPerDayMax} over about {PUBLIC_LIMITS.warmupWeeks} weeks, under{" "}
         {PUBLIC_LIMITS.invitesPerWeek} a week and {PUBLIC_LIMITS.messagesPerDay} messages a day. See{" "}
-        <Link href="/free-linkedin-automation-tool">what the free LinkedIn automation tool includes</Link>.
+        <Link href="/free-linkedin-automation-tool">what Nora&rsquo;s free trial includes</Link>.
       </p>
 
       <h2 id="free-plan-2026">Waalaxy&rsquo;s free plan in 2026: what the sources say</h2>

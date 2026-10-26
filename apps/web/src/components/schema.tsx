@@ -1,5 +1,6 @@
 import { PUBLIC_LIMITS, SITE, canonical } from "@/lib/site";
 import { BRAND } from "@le/shared";
+import { TRIAL_DAYS } from "@/lib/plans";
 
 /**
  * Structured data.
@@ -58,11 +59,11 @@ export function OrganizationSchema() {
 /**
  * The product itself.
  *
- * One offer at zero, because that is what the page says: free for everyone,
- * for now. The three priced plans this used to carry were removed from every
- * visible page, and structured data that still advertised them would be the
- * mismatch Google treats as spam — a price in the markup that no reader can
- * find on the screen.
+ * One offer at zero, and it is the trial: fourteen days of Autopilot with no
+ * card, which is what every public page says. The paid plans are priced on
+ * /pricing alone, and structured data must never advertise a price or an
+ * offer no reader can find on the screen, which is the mismatch Google treats
+ * as spam.
  */
 export function SoftwareSchema() {
   return (
@@ -79,9 +80,11 @@ export function SoftwareSchema() {
         description: SITE.description,
         offers: {
           "@type": "Offer",
-          name: "Free for everyone, for now",
+          name: `${TRIAL_DAYS}-day free trial of Nora Autopilot`,
+          description: `No card needed. After the trial, choose Nora Pro or Nora Autopilot.`,
           price: "0",
           priceCurrency: "USD",
+          eligibleDuration: { "@type": "QuantitativeValue", value: TRIAL_DAYS, unitCode: "DAY" },
         },
         featureList: [
           "An AI assistant with four AI employees: a strategist, a prospector, a campaign writer and an outreach and booking specialist",

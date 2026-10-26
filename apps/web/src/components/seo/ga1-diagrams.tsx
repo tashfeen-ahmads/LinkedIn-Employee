@@ -134,14 +134,15 @@ export function PacingDayFigure() {
 
 export interface CostBar {
   label: string;
-  /** Dollars a year; null for a free row, which is said in words. */
+  /** Dollars a year; null for Nora's row, which points to /pricing rather than putting a price beside the name. */
   value: number | null;
   note: string;
 }
 
 /**
- * Annual cost, one shared scale, every value written beside its bar. A free
- * row draws no bar and says so, rather than a zero that reads as missing.
+ * Annual cost, one shared scale, every value written beside its bar. A row
+ * with no value (Nora's) draws no bar and links to the pricing page, rather
+ * than a zero that reads as missing or a price beside the product's name.
  */
 export function CostBars({ caption, bars }: { caption: string; bars: readonly CostBar[] }) {
   const top = Math.max(...bars.map((b) => b.value ?? 0), 1);
@@ -153,7 +154,7 @@ export function CostBars({ caption, bars }: { caption: string; bars: readonly Co
             <div className="ga1-bars-head">
               <span className="ga1-bars-label">{bar.label}</span>
               <span className="ga1-bars-value">
-                {bar.value === null ? "Free" : `$${bar.value.toLocaleString("en-US")} a year`}
+                {bar.value === null ? <a href="/pricing">See pricing</a> : `$${bar.value.toLocaleString("en-US")} a year`}
               </span>
             </div>
             <span className="ga1-bars-track" aria-hidden="true">

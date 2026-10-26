@@ -17,11 +17,11 @@ export function GET() {
     "/": "What Nora is: an AI SDR for LinkedIn that finds buyers, writes one note per person, answers replies and books meetings inside conservative limits.",
     "/how-it-works": "The three decisions a person makes (who to reach, what they read, launch) and what runs on its own.",
     "/linkedin-automation-limits": "LinkedIn connection request limits, the warm-up ramp and the signs before a restriction.",
-    "/pricing": "Pricing: free while we grow, no card.",
+    "/pricing": "Pricing: a 14-day free trial of Nora Autopilot with no card, then Nora Pro or Nora Autopilot. Workspaces that signed up before pricing stay free.",
     "/security": "Where data is stored, who can reach it, and how a prospect is erased.",
     "/about": "Why the product is built this way.",
     "/privacy": "Privacy policy: what is collected, the customer as controller of prospect data, retention, export and erasure.",
-    "/terms": "Terms of service: the free service, LinkedIn account risk, ownership of content and AI-written messages.",
+    "/terms": "Terms of service: the free trial and paid plans, LinkedIn account risk, ownership of content and AI-written messages.",
   };
   const lines = [
     `# ${SITE.name}`,

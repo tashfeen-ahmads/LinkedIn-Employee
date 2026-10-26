@@ -42,7 +42,7 @@ const FAQ: readonly Faq[] = [
   },
   {
     q: "What is the cheapest LinkedIn automation tool?",
-    a: "As of October 2026, Nora is free while we grow, with no card. Among paid tools in the table, the lowest listed entry prices are Waalaxy's, though sources disagree on its exact figures and on whether its free plan still runs campaigns. Per-seat tools such as Dripify, Expandi and HeyReach run from $59 to $99 a month per user or sender on monthly billing.",
+    a: "As of October 2026, Nora starts with a 14-day free trial with no card, and its plans are on the pricing page. Among the other tools in the table, the lowest listed entry prices are Waalaxy's, though sources disagree on its exact figures and on whether its free plan still runs campaigns. Per-seat tools such as Dripify, Expandi and HeyReach run from $59 to $99 a month per user or sender on monthly billing.",
   },
   {
     q: "Is LinkedIn automation legal?",
@@ -148,7 +148,9 @@ export default function Page() {
                     </span>,
                     `Automatic, about ${PUBLIC_LIMITS.warmupWeeks} weeks from the first send; spread across working hours`,
                     "Never invites anyone already contacted; exclusion list checked before every send",
-                    "Free while we grow, no card",
+                    <span key="nora-price">
+                      14-day free trial, no card. <Link href="/pricing">See pricing</Link>
+                    </span>,
                   ],
                 },
                 {
@@ -283,9 +285,9 @@ export default function Page() {
             Prices are monthly-billing list prices from the sources linked in the table, checked on{" "}
             {formatDate(CHECKED)}. Annual billing is cheaper with every paid vendor here. Three pricing
             models are in play: per user (Dripify, Waalaxy), per LinkedIn sender or account
-            (HeyReach, Expandi), and per plan with usage credits (PhantomBuster, Artisan). Nora is free
-            while we grow; <Link href="/pricing">the pricing page</Link> says what happens if that
-            changes.
+            (HeyReach, Expandi), and per plan with usage credits (PhantomBuster, Artisan). Nora starts
+            with a 14-day free trial with no card, and <Link href="/pricing">the pricing page</Link>{" "}
+            lists its plans.
           </p>
 
           <h2 id="who-each-suits">Who each LinkedIn automation tool suits</h2>

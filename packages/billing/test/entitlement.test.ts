@@ -3,6 +3,7 @@ import {
   daysLeft,
   entitlementFor as entitlementForAnyMode,
   entitlementMessage,
+  TIER_FEATURES,
   trialLimitEnforced,
   withinSeatLimit,
   type WorkspaceBilling,
@@ -99,15 +100,16 @@ describe("daysLeft", () => {
 
 describe("withinSeatLimit", () => {
   it("allows a team up to its plan's seats", () => {
+    // Seats are not what the plans price; only a cancelled workspace has none.
     expect(withinSeatLimit(billing({ plan: "pro", seats: 5 }), 5)).toBe(true);
-    expect(withinSeatLimit(billing({ plan: "solo", seats: 1 }), 2)).toBe(false);
+    expect(withinSeatLimit(billing({ plan: "canceled", seats: 0 }), 1)).toBe(false);
   });
 });
 
 describe("entitlementMessage", () => {
   it("explains a block without blaming the customer", () => {
     const expired = entitlementMessage(entitlementFor(billing({ trialEndsAt: inDays(-1) }), NOW));
-    expect(expired).toContain("nothing has been deleted");
+    expect(expired).toContain("Nothing has been deleted");
   });
 
   it("says nothing when sending is fine", () => {
@@ -168,14 +170,40 @@ describe("with the trial limit off (the default)", () => {
     expect(result.canSend).toBe(false);
   });
 
-  it("is off unless the variable says exactly true", () => {
-    // Off by default means unset, empty and anything ambiguous all read as
-    // off — the safe direction while there is no price to charge.
-    expect(trialLimitEnforced(undefined)).toBe(false);
-    expect(trialLimitEnforced("")).toBe(false);
-    expect(trialLimitEnforced("false")).toBe(false);
-    expect(trialLimitEnforced("1")).toBe(false);
+  it("is on unless the variable says exactly false", () => {
+    // Pricing is decided, and every workspace from before it is on the free
+    // plan the trial never touches, so on is the default and off is the
+    // deliberate act.
+    expect(trialLimitEnforced(undefined)).toBe(true);
+    expect(trialLimitEnforced("")).toBe(true);
     expect(trialLimitEnforced("true")).toBe(true);
-    expect(trialLimitEnforced(" TRUE ")).toBe(true);
+    expect(trialLimitEnforced("false")).toBe(false);
+    expect(trialLimitEnforced(" FALSE ")).toBe(false);
+  });
+});
+
+describe("plans", () => {
+  it("keeps everybody who joined while it was free on everything, for good", () => {
+    const result = entitlementFor(billing({ plan: "free", trialEndsAt: inDays(-90) }), NOW);
+    expect(result).toMatchObject({ canSend: true, reason: "free_plan", tier: "autopilot", trialDaysLeft: null });
+    expect(result.features.autopilotReplies).toBe(true);
+  });
+
+  it("gives a trial every Autopilot feature", () => {
+    const result = entitlementFor(billing({ trialEndsAt: inDays(5) }), NOW);
+    expect(result.tier).toBe("autopilot");
+    expect(result.features).toEqual(TIER_FEATURES.autopilot);
+  });
+
+  it("separates the paid plans by what Nora does on its own, never by what it sends", () => {
+    const pro = entitlementFor(billing({ plan: "pro", subscriptionStatus: "active" }), NOW);
+    const autopilot = entitlementFor(billing({ plan: "autopilot", subscriptionStatus: "active" }), NOW);
+    expect(pro.canSend && autopilot.canSend).toBe(true);
+    expect(pro.features).toEqual({ autopilotReplies: false, autoBooking: false, pricingAnswers: false, crmSync: false });
+    expect(autopilot.features).toEqual({ autopilotReplies: true, autoBooking: true, pricingAnswers: true, crmSync: true });
+  });
+
+  it("reads the old plan names as Pro", () => {
+    expect(entitlementFor(billing({ plan: "solo", subscriptionStatus: "active" }), NOW).tier).toBe("pro");
   });
 });

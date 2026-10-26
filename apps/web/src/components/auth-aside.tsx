@@ -1,7 +1,7 @@
 import { PUBLIC_LIMITS } from "@/lib/site";
 import { BRAND, LINKEDIN_LIMITS } from "@le/shared";
 import { dailyInviteCap } from "@le/linkedin";
-import { FREE_LINE } from "./marketing";
+import { TRIAL_LINE } from "./marketing";
 
 /**
  * What the form is for, beside the form.
@@ -41,7 +41,7 @@ export function AuthAside({ variant = "signin" }: { variant?: "signin" | "signup
     <aside className="auth-aside" aria-label={`What ${BRAND.name} does`}>
       {variant === "signup" ? (
         <p className="auth-badge">
-          {FREE_LINE} No card.
+          {TRIAL_LINE}
         </p>
       ) : null}
 

@@ -31,6 +31,7 @@ import { offerSlots, resolveCalendar, type CalendarBinding } from "../calendar.j
 import { syncConversationToCrm, syncMeetingToCrm } from "../crm.js";
 import { bookAcceptedSlot } from "./booking.js";
 import { readCampaignCta } from "../cta.js";
+import { rulesForPlan, workspaceFeatures } from "../billing.js";
 
 /**
  * Agent 3 end to end: a prospect replies, we classify it, decide whether a
@@ -176,10 +177,16 @@ export async function handleInboundMessage(
         .single()
     : { data: null };
 
-  const rules = RulesOfEngagementSchema.parse({
-    ...(campaign?.rules && typeof campaign.rules === "object" ? campaign.rules : {}),
-    ...(campaign?.reply_mode ? { mode: campaign.reply_mode } : {}),
-  });
+  // What the plan includes decides how far the agent may go on its own: on
+  // Pro every reply waits for a person and nobody is booked without one.
+  const features = await workspaceFeatures(db, job.workspaceId);
+  const rules = rulesForPlan(
+    RulesOfEngagementSchema.parse({
+      ...(campaign?.rules && typeof campaign.rules === "object" ? campaign.rules : {}),
+      ...(campaign?.reply_mode ? { mode: campaign.reply_mode } : {}),
+    }),
+    features,
+  );
 
   const history = await loadHistory(ctx, conversation.id, inbound.id as string);
   // The agent this conversation belongs to, resolved before anything reads it.
@@ -309,6 +316,8 @@ export async function handleInboundMessage(
       binding: calendar,
       durationMinutes,
       workingHours,
+      // Pro confirms a booking by hand; Autopilot books it.
+      confirmFirst: !features.autoBooking,
     });
     if (outcome.status === "booked") {
       bookedMeeting = true;

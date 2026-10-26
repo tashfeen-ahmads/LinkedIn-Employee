@@ -4,7 +4,9 @@ import { z } from "zod";
 import { exchangeGoogleCode, exchangeMicrosoftCode, googleConsentUrl, microsoftConsentUrl } from "@le/calendar";
 import { exchangeHubSpotCode, exchangeSalesforceCode, hubspotConsentUrl, salesforceConsentUrl } from "@le/crm";
 import {
+  PRICE_KEYS,
   StripeClient,
+  intervalFromPriceLookupKey,
   normalizeSubscriptionStatus,
   planFromPriceLookupKey,
   verifyStripeWebhook,
@@ -249,8 +251,7 @@ const ExportRequest = LinkRequest;
 const ImportRequest = LinkRequest.extend({ file: z.unknown() });
 
 const CheckoutRequest = LinkRequest.extend({
-  plan: z.enum(["solo", "pro", "teams"]),
-  seats: z.number().int().min(1).max(100).default(1),
+  price: z.enum(PRICE_KEYS),
   email: z.string().email().optional(),
 });
 
@@ -275,6 +276,17 @@ async function assertMembership(
     .eq("user_id", userId)
     .maybeSingle();
   return Boolean(data);
+}
+
+/** An owner or admin of the workspace: the roles that decide what it is charged. */
+async function isWorkspaceAdmin(db: WorkerContext["db"], workspaceId: string, userId: string): Promise<boolean> {
+  const { data } = await db
+    .from("memberships")
+    .select("role")
+    .eq("workspace_id", workspaceId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  return data?.role === "owner" || data?.role === "admin";
 }
 
 /**
@@ -1587,32 +1599,92 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
     }
 
     const priceId = {
-      solo: ctx.env.STRIPE_PRICE_SOLO,
-      pro: ctx.env.STRIPE_PRICE_PRO,
-      teams: ctx.env.STRIPE_PRICE_TEAMS,
-    }[parsed.data.plan];
+      pro_monthly: ctx.env.STRIPE_PRICE_PRO_MONTHLY,
+      pro_yearly: ctx.env.STRIPE_PRICE_PRO_YEARLY,
+      autopilot_monthly: ctx.env.STRIPE_PRICE_AUTOPILOT_MONTHLY,
+      autopilot_yearly: ctx.env.STRIPE_PRICE_AUTOPILOT_YEARLY,
+    }[parsed.data.price];
     if (!ctx.env.STRIPE_SECRET_KEY || !ctx.env.STRIPE_WEBHOOK_SECRET || !priceId) {
       return c.json({ error: "billing is not configured" }, 501);
+    }
+    // Only an owner or admin decides what the workspace is charged.
+    if (!(await isWorkspaceAdmin(ctx.db, parsed.data.workspaceId, parsed.data.userId))) {
+      return c.json({ error: "only an owner or admin can choose a plan" }, 403);
     }
 
     const stripe = new StripeClient({
       secretKey: ctx.env.STRIPE_SECRET_KEY,
       webhookSecret: ctx.env.STRIPE_WEBHOOK_SECRET,
     });
+    const { data: workspace } = await ctx.db
+      .from("workspaces")
+      .select("stripe_customer_id, plan, trial_ends_at")
+      .eq("id", parsed.data.workspaceId)
+      .maybeSingle();
+    // Stripe refuses a trial that ends within two days, so a trial that close
+    // to its end simply starts the paid period now.
+    const trialLeftMs = workspace?.plan === "trial" && workspace.trial_ends_at ? Date.parse(workspace.trial_ends_at) - Date.now() : 0;
+    const keepTrialUntil = trialLeftMs > 49 * 60 * 60_000 ? workspace!.trial_ends_at : null;
 
     try {
       const session = await stripe.createCheckoutSession({
+        trialEndsAt: keepTrialUntil,
         workspaceId: parsed.data.workspaceId,
         priceId,
-        quantity: parsed.data.seats,
-        customerEmail: parsed.data.email,
-        successUrl: `${ctx.env.APP_URL}/app/billing?checkout=success`,
-        cancelUrl: `${ctx.env.APP_URL}/app/billing?checkout=cancelled`,
+        quantity: 1,
+        // A returning customer keeps one Stripe customer, so the portal shows
+        // every invoice they have ever had.
+        ...(workspace?.stripe_customer_id
+          ? { customerId: workspace.stripe_customer_id }
+          : { customerEmail: parsed.data.email }),
+        successUrl: `${ctx.env.APP_URL}/app/profile?checkout=success#billing`,
+        cancelUrl: `${ctx.env.APP_URL}/app/profile?checkout=cancelled#billing`,
       });
       return c.json({ url: session.url });
     } catch (error) {
       console.error("checkout failed", error);
       return c.json({ error: "could not start checkout" }, 502);
+    }
+  });
+
+  /**
+   * Stripe's own page for changing plan, card or interval, and cancelling.
+   *
+   * Switching between the four prices is set up in Stripe's portal settings,
+   * so a plan change made there arrives here as a subscription update like any
+   * other and nothing in this product has to model it.
+   */
+  app.post("/jobs/portal", async (c) => {
+    const parsed = LinkRequest.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "invalid request" }, 400);
+    if (!(await assertMembership(ctx.db, parsed.data.workspaceId, parsed.data.userId))) {
+      return c.json({ error: "not a member of that workspace" }, 403);
+    }
+    if (!(await isWorkspaceAdmin(ctx.db, parsed.data.workspaceId, parsed.data.userId))) {
+      return c.json({ error: "only an owner or admin can manage billing" }, 403);
+    }
+    if (!ctx.env.STRIPE_SECRET_KEY || !ctx.env.STRIPE_WEBHOOK_SECRET) {
+      return c.json({ error: "billing is not configured" }, 501);
+    }
+    const { data: workspace } = await ctx.db
+      .from("workspaces")
+      .select("stripe_customer_id")
+      .eq("id", parsed.data.workspaceId)
+      .maybeSingle();
+    if (!workspace?.stripe_customer_id) return c.json({ error: "no billing account yet" }, 404);
+    const stripe = new StripeClient({
+      secretKey: ctx.env.STRIPE_SECRET_KEY,
+      webhookSecret: ctx.env.STRIPE_WEBHOOK_SECRET,
+    });
+    try {
+      const session = await stripe.createPortalSession({
+        customerId: workspace.stripe_customer_id,
+        returnUrl: `${ctx.env.APP_URL}/app/profile#billing`,
+      });
+      return c.json({ url: session.url });
+    } catch (error) {
+      console.error("portal failed", error);
+      return c.json({ error: "could not open billing" }, 502);
     }
   });
 
@@ -1657,14 +1729,21 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
   return app;
 }
 
-/** Applies a verified Stripe event to the workspace it names. */
-async function applyBillingEvent(
-  ctx: WorkerContext,
-  event: { type: string; data: { object: Record<string, unknown> } },
+/**
+ * Applies a verified Stripe event to the workspace it names.
+ *
+ * Stripe does not promise order, so an event older than the last one applied
+ * is recorded and not applied: a `subscription.updated` from before a
+ * cancellation arriving after it would otherwise switch sending back on.
+ */
+export async function applyBillingEvent(
+  ctx: Pick<WorkerContext, "db">,
+  event: { type: string; created?: number; data: { object: Record<string, unknown> } },
 ): Promise<void> {
   const object = event.data.object;
   const workspaceId = workspaceIdFrom(object);
   if (!workspaceId) return;
+  const createdAt = typeof event.created === "number" ? new Date(event.created * 1000).toISOString() : null;
 
   if (event.type === "checkout.session.completed") {
     await ctx.db
@@ -1677,29 +1756,55 @@ async function applyBillingEvent(
     return;
   }
 
-  if (event.type.startsWith("customer.subscription.")) {
-    const status = normalizeSubscriptionStatus(asString(object.status));
-    const items = object.items as { data?: Array<{ price?: { lookup_key?: string }; quantity?: number }> } | undefined;
-    const first = items?.data?.[0];
-    const periodEnd = typeof object.current_period_end === "number"
-      ? new Date(object.current_period_end * 1000).toISOString()
-      : null;
+  if (!event.type.startsWith("customer.subscription.")) return;
 
-    await ctx.db
-      .from("workspaces")
-      .update({
-        subscription_status: status,
-        // A deleted subscription keeps its plan name so the UI can say what
-        // they had, while the status is what actually gates sending.
-        ...(event.type === "customer.subscription.deleted"
-          ? {}
-          : { plan: planFromPriceLookupKey(first?.price?.lookup_key) }),
-        seats: first?.quantity ?? 1,
-        current_period_end: periodEnd,
-        stripe_subscription_id: asString(object.id),
-      })
-      .eq("id", workspaceId);
+  const { data: current } = await ctx.db
+    .from("workspaces")
+    .select("last_billing_event_at")
+    .eq("id", workspaceId)
+    .maybeSingle();
+  if (createdAt && current?.last_billing_event_at && Date.parse(current.last_billing_event_at) > Date.parse(createdAt)) {
+    return;
   }
+
+  const status = normalizeSubscriptionStatus(asString(object.status));
+  const items = object.items as
+    | {
+        data?: Array<{
+          price?: { lookup_key?: string; recurring?: { interval?: string } };
+          quantity?: number;
+          current_period_end?: number;
+        }>;
+      }
+    | undefined;
+  const first = items?.data?.[0];
+  // Newer API versions moved the period end onto the item.
+  const periodEndSeconds =
+    typeof object.current_period_end === "number" ? object.current_period_end : first?.current_period_end;
+  const periodEnd = typeof periodEndSeconds === "number" ? new Date(periodEndSeconds * 1000).toISOString() : null;
+  const plan = planFromPriceLookupKey(first?.price?.lookup_key);
+  const recurring = first?.price?.recurring?.interval;
+  const interval =
+    recurring === "month" || recurring === "year" ? recurring : intervalFromPriceLookupKey(first?.price?.lookup_key);
+
+  await ctx.db
+    .from("workspaces")
+    .update({
+      subscription_status: status,
+      // A deleted subscription keeps its plan name so the screens can say what
+      // they had, while the status is what actually gates sending. A price we
+      // do not recognise leaves the plan alone rather than calling a paying
+      // workspace a trial.
+      ...(event.type === "customer.subscription.deleted" || !plan ? {} : { plan }),
+      ...(interval ? { billing_interval: interval } : {}),
+      cancel_at_period_end: object.cancel_at_period_end === true,
+      seats: first?.quantity ?? 1,
+      current_period_end: periodEnd,
+      stripe_subscription_id: asString(object.id),
+      ...(asString(object.customer) ? { stripe_customer_id: asString(object.customer) } : {}),
+      ...(createdAt ? { last_billing_event_at: createdAt } : {}),
+    })
+    .eq("id", workspaceId);
 }
 
 function workspaceIdFrom(object: Record<string, unknown>): string | null {

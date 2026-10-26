@@ -65,7 +65,8 @@ function harness() {
   const linkedin = new MockLinkedInProvider();
   const log: Array<{ queue: string; id: string; data: unknown }> = [];
 
-  db.seed("workspaces", [{ id: WORKSPACE, name: "Acme", plan: "trial", seats: 1 }]);
+  // Joined while the product was free, so every Autopilot feature applies.
+  db.seed("workspaces", [{ id: WORKSPACE, name: "Acme", plan: "free", seats: 1 }]);
   db.seed("profiles", [{ id: USER, email: "rep@acme.test", full_name: "Rep Person", timezone: "UTC", bio: null }]);
   db.seed("memberships", [{ workspace_id: WORKSPACE, user_id: USER, role: "owner" }]);
   db.seed("linkedin_accounts", [

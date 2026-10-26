@@ -57,11 +57,11 @@ const FAQ: readonly Faq[] = [
   },
   {
     q: "Are there AI SDRs with no annual contract?",
-    a: `Yes. As of October 2026, Artisan's self-serve plan and Reply.io's Jason AI SDR start monthly, while 11x bills annually, Amplemarket's Startup plan is an annual term and AiSDR bills quarterly or annually. Most LinkedIn sequencers bill monthly per sender. Nora has no contract at all: it is free while we grow, with no card and no plan to choose.`,
+    a: `Yes. As of October 2026, Artisan's self-serve plan and Reply.io's Jason AI SDR start monthly, while 11x bills annually, Amplemarket's Startup plan is an annual term and AiSDR bills quarterly or annually. Most LinkedIn sequencers bill monthly per sender. Nora starts with a 14-day free trial with no card, then bills monthly or yearly, as you choose. The pricing page lists both plans.`,
   },
   {
     q: "Is there a free AI SDR?",
-    a: "Nora is free while we grow, for everyone, with no card. It is LinkedIn only: it drafts customer profiles from your website, finds people, writes one note per person, follows up, drafts replies from your documents for you to approve and books meetings, with you approving the strategy, the copy and the launch. Several other tools offer time-limited trials or a free plan with a small quota.",
+    a: "Nora offers a 14-day free trial of the whole product, with no card, and then a paid plan. It is LinkedIn only: it drafts customer profiles from your website, finds people, writes one note per person, follows up, drafts replies from your documents for you to approve and books meetings, with you approving the strategy, the copy and the launch. Several other tools offer time-limited trials or a free plan with a small quota.",
   },
 ];
 
@@ -117,7 +117,7 @@ export default function Page() {
           { label: "Outsourced SDR or agency", values: [`Roughly ${usd(OUTSOURCED.lowMonthly)} to ${usd(OUTSOURCED.highMonthly)} a month, or per meeting`, "Often 3 to 6 month minimums plus setup"] },
           { label: "AI SDR agent", values: ["About $250 to $3,750 a month at entry, more for volume", "Monthly to annual, depending on the vendor"] },
           { label: "LinkedIn sequencer", values: ["Often under $100 per sender a month", "Usually monthly"] },
-          { label: "Nora", values: ["Free while we grow", "None: no card, no plan"] },
+          { label: "Nora", values: ["See the pricing page", "14-day free trial, no card, then monthly or yearly"] },
         ]}
       />
       <p>
@@ -141,7 +141,7 @@ export default function Page() {
             label: TOOL_PRICES[id].name,
             values: [<Priced key="p" id={id} />, TOOL_PRICES[id].billing, TOOL_PRICES[id].channel],
           })),
-          { label: "Nora", values: ["Free while we grow", "No contract, no card", "LinkedIn"] },
+          { label: "Nora", values: ["See the pricing page", "Monthly or yearly, after a 14-day free trial with no card", "LinkedIn"] },
         ]}
       />
 
@@ -267,7 +267,7 @@ export default function Page() {
           { label: "11x Growth tier", value: AGENT_TOP * 12, note: "Billed annually" },
           { label: "AiSDR Explore", value: AGENT_ENTRY * 12, note: "Quarterly, or less billed annually" },
           { label: "HeyReach, one sender, with Sales Navigator", value: SEQUENCER_MONTHLY * 12, note: "You write the copy and answer the replies" },
-          { label: "Nora", value: null, note: "Free while we grow, no card" },
+          { label: "Nora", value: null, note: "14-day free trial, no card" },
         ]}
       />
 
@@ -296,15 +296,16 @@ export default function Page() {
 
       <h2 id="free-ai-sdr">Is a free AI SDR worth it?</h2>
       <p>
-        It depends on what &ldquo;free&rdquo; leaves out. Nora is free while we grow for every workspace, with no card and
-        the same limits for everyone, because the caps that protect a LinkedIn account are product rules rather than
+        It depends on what &ldquo;free&rdquo; leaves out. Most free plans hold back the sending. Nora has no free plan for new
+        workspaces, but its 14-day free trial is the whole product, with no card and the same limits for everyone,
+        because the caps that protect a LinkedIn account are product rules rather than
         something a higher tier unlocks. It does the whole job on LinkedIn: drafts customer profiles from your website,
         finds real people, writes each a note from their own profile, follows up, drafts replies from the documents you
         give it for you to approve, and books meetings. You approve the strategy, the copy and the launch. The{" "}
-        <Link href="/pricing">pricing page</Link> says what happens if that ever changes: you hear first, and your data
-        is yours to export.
+        <Link href="/pricing">pricing page</Link> lists the plans that follow the trial, and your data is always yours to
+        export.
       </p>
-      <p>What it will not do, so you can judge whether free is enough:</p>
+      <p>What it will not do, so you can judge it before the trial ends:</p>
       <ul>
         <li>It is LinkedIn only. If your buyers answer email, an email-first agent fits better.</li>
         <li>

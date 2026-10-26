@@ -9,8 +9,8 @@
  * and every one names where it came from, because a competitor's price is a
  * fact about one month.
  *
- * Only priced competitors live here. Nothing in this file prices Nora: Nora is
- * free while we grow, and the pages say so in words.
+ * Only priced competitors live here. Nothing in this file prices Nora: Nora's
+ * prices live on /pricing alone, and these pages point there in words.
  */
 
 export const PRICES_CHECKED = "October 2026";

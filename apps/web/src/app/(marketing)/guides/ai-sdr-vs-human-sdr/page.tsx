@@ -176,7 +176,7 @@ export default function Page() {
           { label: "Agency, bottom of the published range", value: OUTSOURCED.lowMonthly * 12, note: "Before setup fees and minimum terms" },
           { label: "AI SDR, 11x Growth tier", value: AGENT_TOP_YEARLY, note: "The highest published entry price; billed annually" },
           { label: "AI SDR, AiSDR Explore plan", value: AGENT_ENTRY_YEARLY, note: "Billed quarterly, or less billed annually" },
-          { label: "Nora", value: null, note: "Free while we grow, no card" },
+          { label: "Nora", value: null, note: "14-day free trial, no card" },
         ]}
       />
 

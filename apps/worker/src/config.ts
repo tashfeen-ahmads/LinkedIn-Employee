@@ -123,9 +123,11 @@ const EnvSchema = z.object({
   SALESFORCE_LOGIN_URL: z.string().optional(),
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
-  STRIPE_PRICE_SOLO: z.string().optional(),
-  STRIPE_PRICE_PRO: z.string().optional(),
-  STRIPE_PRICE_TEAMS: z.string().optional(),
+  /** The four prices' ids (price_…), one per plan and interval. */
+  STRIPE_PRICE_PRO_MONTHLY: z.string().optional(),
+  STRIPE_PRICE_PRO_YEARLY: z.string().optional(),
+  STRIPE_PRICE_AUTOPILOT_MONTHLY: z.string().optional(),
+  STRIPE_PRICE_AUTOPILOT_YEARLY: z.string().optional(),
   EMAIL_PROVIDER: z.enum(["resend", "mock", "off"]).default("off"),
   RESEND_API_KEY: z.string().optional(),
   /** e.g. "Nora <hello@norasdr.com>" */

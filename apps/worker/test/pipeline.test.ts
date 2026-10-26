@@ -1324,11 +1324,11 @@ describe("campaign pipeline", () => {
   });
 
   it("keeps outreach running for an expired trial while the limit is off", async () => {
-    // The default. Nobody's campaign pauses on a placeholder date — asserted
-    // through the real loop, not only on `entitlementFor`, because the gate is
-    // the call site and a call site is where a switch gets lost.
+    // The emergency switch. Asserted through the real loop, not only on
+    // `entitlementFor`, because the gate is the call site and a call site is
+    // where a switch gets lost.
     const was = process.env.TRIAL_LIMIT_ENFORCED;
-    delete process.env.TRIAL_LIMIT_ENFORCED;
+    process.env.TRIAL_LIMIT_ENFORCED = "false";
     try {
       const { db, queues, enqueued } = harness({
         trialEndsAt: new Date(NOW.getTime() - 30 * 86_400_000).toISOString(),
@@ -1339,6 +1339,7 @@ describe("campaign pipeline", () => {
       expect(enqueued.length).toBeGreaterThan(0);
     } finally {
       if (was !== undefined) process.env.TRIAL_LIMIT_ENFORCED = was;
+      else delete process.env.TRIAL_LIMIT_ENFORCED;
     }
   });
 

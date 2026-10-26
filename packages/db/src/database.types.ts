@@ -76,6 +76,11 @@ export type WorkspaceRow = {
   subscription_status: SubscriptionStatus | null;
   seats: number;
   current_period_end: string | null;
+  /** Monthly or yearly, once a plan is paid for (migration 0052). */
+  billing_interval: "month" | "year" | null;
+  cancel_at_period_end: boolean;
+  /** When the newest Stripe event applied here was created, so a late older one never wins. */
+  last_billing_event_at: string | null;
   data_retention_days: number;
   created_at: string;
 };

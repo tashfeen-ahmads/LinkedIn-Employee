@@ -21,7 +21,7 @@ export const NORA = {
   replies: "Drafted from your documents for you to approve; with autopilot on, clean replies go out on their own",
   booking: "Times from the availability you set, or your own scheduling link",
   email: "No, LinkedIn only",
-  price: "Free while we grow, no card",
+  price: "14-day free trial, no card, then see pricing",
 } as const;
 
 /** What a competitor cell says when its documentation is silent. */
@@ -82,8 +82,8 @@ const ROWS: Record<GlanceTool, GlanceRow> = {
   nora: {
     name: "Nora",
     bestFor: "Founders and small teams selling from their own profiles",
-    price: "Free while we grow",
-    free: "Free, no card",
+    price: "See the pricing page",
+    free: "14-day free trial, no card",
     caps: `${PUBLIC_LIMITS.invitesPerDayStart} rising to ${PUBLIC_LIMITS.invitesPerDayMax} a day, ${PUBLIC_LIMITS.invitesPerWeek} a week, enforced`,
     sources: [],
   },

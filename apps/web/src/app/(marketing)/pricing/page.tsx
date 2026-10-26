@@ -4,70 +4,65 @@ import { SalesNavigator } from "@/components/home";
 import { Faq, PageHero } from "@/components/marketing";
 import { BreadcrumbSchema, SoftwareSchema } from "@/components/schema";
 import { PUBLIC_LIMITS, SITE, pageMeta } from "@/lib/site";
+import { PLANS, PLAN_FEATURES, TRIAL_DAYS, yearlyPerMonth, yearlySaving } from "@/lib/plans";
 import { BRAND, FREE_NOTES_PER_MONTH } from "@le/shared";
 
 /*
- * The route stays, because every link, bookmark and search result that ever
- * pointed at /pricing should land on the answer rather than a 404 or a hop to
- * a page that does not mention it. The answer is short, so the page is.
+ * Two plans, monthly or yearly, and a trial of the top one.
  *
- * A crossed-out price reads as a sale, and a sale is a promise about a later
- * price nobody has decided, so there is one plan card here and nothing greyed
- * out beside it. The card says "Free" in large type rather than a dollar
- * figure: no public page quotes a price (test/team.test.ts).
+ * Every number on this page is read from `lib/plans.ts`, never typed here, so
+ * the pricing page and the plan cards inside the app cannot quote two
+ * different prices. The monthly and yearly figures are both in the markup and
+ * a radio switch shows one set (CSS only, no script), so the page is complete
+ * before anything loads and a crawler reads both.
+ *
+ * What separates the plans is how much Nora does on its own, never how much it
+ * sends: the caps are product rules (rule 4) and are the same on both.
  */
 export const metadata: Metadata = pageMeta({
-  title: "Free AI SDR for LinkedIn: Nora pricing, no card needed",
+  title: "Nora pricing: Pro and Autopilot, 14-day free trial",
   description:
-    "A free AI SDR for LinkedIn. Free while we grow: no card, no plan to choose, and the same safety limits for every workspace.",
+    "Two plans for an AI SDR on LinkedIn. Approve every message on Pro, or let Autopilot book meetings for you. 14-day free trial, no card.",
   path: "/pricing",
 });
 
+const [PRO, AUTOPILOT] = PLANS as [(typeof PLANS)[number], (typeof PLANS)[number]];
+
 const QA = [
   {
-    q: "Is there a catch?",
-    a: "No plan to choose and no card. Every workspace gets the whole product and the same limits. The caps that keep a LinkedIn account safe are product rules, not something a higher tier unlocks.",
+    q: "Do I need a card for the trial?",
+    a: `No. Every new workspace gets ${TRIAL_DAYS} days of ${AUTOPILOT.name}, the whole product, with no card. We email you two days before it ends. If you do not choose a plan, sending pauses and nothing is deleted.`,
+  },
+  {
+    q: "What is the difference between the plans?",
+    a: `How much ${BRAND.name} does on its own. On ${PRO.name} you approve every reply and confirm every booking. On ${AUTOPILOT.name} clean replies are sent for you, pricing questions are answered from your own facts, meetings go straight into your calendar and contacts sync to your CRM. Both send the same amount, on the same limits.`,
+  },
+  {
+    q: "Why do both plans have the same sending limits?",
+    a: `Because the limits are what keep your LinkedIn account safe, and a plan that sent more would be a plan that restricted more accounts. Every account starts at ${PUBLIC_LIMITS.invitesPerDayStart} invitations a day, grows to ${PUBLIC_LIMITS.invitesPerDayMax} over ${PUBLIC_LIMITS.warmupWeeks} weeks and never sends more than ${PUBLIC_LIMITS.invitesPerWeek} a week.`,
+  },
+  {
+    q: "Can I switch plans or pay yearly later?",
+    a: "Yes. Change plan, switch between monthly and yearly, update your card or cancel from your billing settings at any time. Paying yearly gives you two months free.",
   },
   {
     q: "Do I need to pay LinkedIn for anything?",
-    a: `No. It works with any LinkedIn account. A free account can add a note to only ${FREE_NOTES_PER_MONTH} invitations a month, LinkedIn's own limit; after that ${BRAND.name} sends invitations without one. Premium lifts that limit, and Sales Navigator also makes the search more precise. Without it, the campaign tells you which filters could not be applied before you launch.`,
-  },
-  {
-    q: "Can I bring my team?",
-    a: "Yes. Invite teammates to your workspace and each one connects their own LinkedIn account. Every account keeps its own daily and weekly limits, and nobody on your list is contacted twice, whichever teammate found them.",
+    a: `No. It works with any LinkedIn account. A free account can add a note to only ${FREE_NOTES_PER_MONTH} invitations a month, LinkedIn's own limit; after that ${BRAND.name} sends invitations without one. Premium lifts that limit, and Sales Navigator also makes the search more precise.`,
   },
   {
     q: "Does anything go out before I say so?",
-    a: "No. A strategy runs only after you approve it, and a campaign sends nothing until you have read its notes and pressed Launch. Replies are drafted for you to approve unless you switch on autopilot.",
-  },
-  {
-    q: "What happens if it stops being free?",
-    a: "You will hear it from us well before it does. Your prospects, conversations and booked meetings stay yours either way, and an owner or admin can download a full export of the workspace at any time.",
+    a: "No. A strategy runs only after you approve it, and a campaign sends nothing until you have read its notes and pressed Launch.",
   },
 ];
 
-/** What every workspace gets, said as facts the product enforces. */
-const INCLUDED = [
+/** The trial, day by day. A real sequence, so it is numbered by day. */
+const TRIAL_STEPS = [
+  { day: "Day 1", title: `${AUTOPILOT.name}, free`, body: "Sign up with no card. Every feature is on, so you see what hands-off looks like." },
+  { day: `Day ${TRIAL_DAYS - 2}`, title: "A reminder", body: "We email you two days before the trial ends, with what it has done so far." },
   {
-    label: "The whole product",
-    value:
-      "Strategy, prospect search, a personalized note for every invitation LinkedIn allows one on, follow-ups and meeting booking.",
-  },
-  {
-    label: "The same safety limits",
-    value: `${PUBLIC_LIMITS.invitesPerDayStart} to ${PUBLIC_LIMITS.invitesPerDayMax} invitations a day and ${PUBLIC_LIMITS.invitesPerWeek} a week, spread across your working hours.`,
-  },
-  {
-    label: "Sales Navigator, if you have it",
-    value: `Tick one box and ${BRAND.name} searches with Sales Navigator, filtering by seniority and company size too. A regular LinkedIn account works as well.`,
-  },
-  {
-    label: "Replies you approve",
-    value: `${BRAND.name} drafts each reply from your documents and you approve it, or switch on autopilot so clean replies go out on their own.`,
-  },
-  {
-    label: "Your data, yours",
-    value: "An owner or admin can download a full export of the workspace at any time.",
+    day: `Day ${TRIAL_DAYS + 1}`,
+    title: "You choose",
+    body: `Keep ${AUTOPILOT.name}, or move to ${PRO.name} and approve every message yourself. If you choose neither, sending pauses and nothing is deleted.`,
   },
 ];
 
@@ -79,7 +74,30 @@ function Check() {
   );
 }
 
+function Cell({ value }: { value: string | boolean }) {
+  if (value === true) {
+    return (
+      <>
+        <Check />
+        <span className="sr-only">Included</span>
+      </>
+    );
+  }
+  if (value === false) {
+    return (
+      <>
+        <span aria-hidden="true" className="pr-none">
+          ×
+        </span>
+        <span className="sr-only">Not included</span>
+      </>
+    );
+  }
+  return <span>{value}</span>;
+}
+
 export default function PricingPage() {
+  const signup = `${SITE.app}/signup`;
   return (
     <>
       <SoftwareSchema />
@@ -94,44 +112,134 @@ export default function PricingPage() {
         crumb="Pricing"
         lede={
           <p>
-            One plan for every workspace, with the whole of {BRAND.name} and the same safety limits
-            for everyone.
+            Two plans with the same safe sending limits. What changes is how much {BRAND.name} does on its own.
+            Everyone starts with {TRIAL_DAYS} days of {AUTOPILOT.name}, free, with no card.
           </p>
         }
       >
-        <h1>A free AI SDR for LinkedIn, for everyone while we grow</h1>
+        <h1>Pricing</h1>
       </PageHero>
 
-      <section className="mk-section fx4-plan-section">
-        <div className="container">
-          <div className="fx4-plan">
-            <div className="fx4-plan-price">
-              <p className="fx4-plan-name">One plan</p>
-              <p className="fx4-plan-amount">Free</p>
-              <p className="fx4-plan-sub">Free while we grow. No card.</p>
-              <Link href={`${SITE.app}/signup`} className="btn large fx4-plan-cta">
-                Sign up free
-              </Link>
-              <p className="fx4-plan-note">
-                Still deciding? <Link href="/how-it-works">See how it works</Link> or{" "}
-                <Link href="/linkedin-automation-limits">read the limits</Link>.
-              </p>
-            </div>
-            <div className="fx4-plan-body">
-              <h2 className="fx4-plan-title">What every workspace gets</h2>
-              <ul className="fx4-included">
-                {INCLUDED.map((item) => (
-                  <li key={item.label}>
-                    <Check />
-                    <div>
-                      <strong>{item.label}</strong>
-                      <p>{item.value}</p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
+      <section className="mk-section pr-section" aria-label="Plans">
+        <div className="container pr">
+          <fieldset className="pr-period">
+            <legend className="sr-only">Billing period</legend>
+            <input type="radio" name="period" id="period-month" defaultChecked />
+            <label htmlFor="period-month">Monthly</label>
+            <input type="radio" name="period" id="period-year" />
+            <label htmlFor="period-year">
+              Yearly <span className="pr-badge">2 months free</span>
+            </label>
+          </fieldset>
+
+          <div className="pr-cards">
+            {PLANS.map((plan) => (
+              <article key={plan.key} className={`pr-card${plan.key === "autopilot" ? " is-featured" : ""}`}>
+                <header className="pr-card-head">
+                  <h2 className="pr-card-name">{plan.name}</h2>
+                  {plan.key === "autopilot" ? <p className="pr-card-flag">What your trial is</p> : null}
+                </header>
+                <p className="pr-card-for">{plan.bestFor}.</p>
+                <div className="pr-price is-month">
+                  <p className="pr-amount">
+                    ${plan.monthly}
+                    <span className="pr-unit">a month</span>
+                  </p>
+                  <p className="pr-note">Billed monthly. Cancel any time.</p>
+                </div>
+                <div className="pr-price is-year">
+                  <p className="pr-amount">
+                    ${yearlyPerMonth(plan)}
+                    <span className="pr-unit">a month</span>
+                  </p>
+                  <p className="pr-note">
+                    ${plan.yearly.toLocaleString("en-US")} billed yearly. Two months free, ${yearlySaving(plan)} saved.
+                  </p>
+                </div>
+                <ul className="pr-points">
+                  {PLAN_FEATURES.filter((f) => f.pro !== f.autopilot).map((feature) => {
+                    const value = feature[plan.key];
+                    return (
+                      <li key={feature.label} className={value === false ? "is-off" : undefined}>
+                        {value === false ? (
+                          <span aria-hidden="true" className="pr-none">
+                            ×
+                          </span>
+                        ) : (
+                          <Check />
+                        )}
+                        <span>
+                          {feature.label}
+                          {typeof value === "string" ? <span className="pr-detail">{value}</span> : null}
+                          {value === false ? <span className="sr-only"> (not included)</span> : null}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+                <Link href={signup} className={`btn large${plan.key === "autopilot" ? "" : " secondary"} pr-cta`}>
+                  Start your {TRIAL_DAYS}-day free trial
+                </Link>
+              </article>
+            ))}
           </div>
+          <p className="pr-fineprint">
+            Prices in US dollars. No card for the trial. Workspaces that joined while {BRAND.name} was free keep
+            everything, free, for good.
+          </p>
+        </div>
+      </section>
+
+      <section className="mk-section" aria-labelledby="compare">
+        <div className="container mk-stack">
+          <h2 id="compare" className="mk-h2">
+            Everything on each plan
+          </h2>
+          <div className="table-scroll pr-table">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">
+                    <span className="sr-only">Feature</span>
+                  </th>
+                  {/* The short names: the cards above carry the full ones, and
+                      "Nora Autopilot" clipped the column on a phone. */}
+                  <th scope="col">Pro</th>
+                  <th scope="col">Autopilot</th>
+                </tr>
+              </thead>
+              <tbody>
+                {PLAN_FEATURES.map((feature) => (
+                  <tr key={feature.label}>
+                    <th scope="row">{feature.label}</th>
+                    <td>
+                      <Cell value={feature.pro} />
+                    </td>
+                    <td>
+                      <Cell value={feature.autopilot} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section className="mk-section" aria-labelledby="trial">
+        <div className="container mk-stack">
+          <h2 id="trial" className="mk-h2">
+            How the trial works
+          </h2>
+          <ol className="pr-trial">
+            {TRIAL_STEPS.map((step) => (
+              <li key={step.day}>
+                <p className="pr-trial-day">{step.day}</p>
+                <h3 className="pr-trial-title">{step.title}</h3>
+                <p>{step.body}</p>
+              </li>
+            ))}
+          </ol>
         </div>
       </section>
 

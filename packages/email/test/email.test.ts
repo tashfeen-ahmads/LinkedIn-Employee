@@ -196,7 +196,11 @@ describe("trialEndingEmail", () => {
     const message = trialEndingEmail({ ...base, daysLeft: 1 });
 
     expect(message.subject).toBe("Your trial ends tomorrow");
-    expect(message.text).toContain("sending stops and everything else stays exactly where it is");
+    expect(message.text).toContain("sending pauses when the trial ends");
+    expect(message.text).toContain("stay where they are");
+    // The choice is between two plans, and both are named.
+    expect(message.text).toContain("Autopilot");
+    expect(message.text).toContain("Pro");
   });
 });
 

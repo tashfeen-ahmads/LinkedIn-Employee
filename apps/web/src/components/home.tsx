@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { BRAND, DEFAULT_WORKING_HOURS, FREE_NOTES_PER_MONTH, INVITE_NOTE_MAX_CHARS, LINKEDIN_LIMITS, SUSTAINED_INVITES_PER_DAY, WEEKS_TO_SUSTAINED } from "@le/shared";
 import { SITE } from "@/lib/site";
+import { TRIAL_DAYS } from "@/lib/plans";
 import {
   BOOKED_DAY_NAME,
   BOOKED_SLOT,
@@ -54,7 +55,7 @@ export function Hero() {
         <div className="mk-hero-copy">
           <p className="mk-hero-badge">
             <span className="mk-hero-badge-dot" aria-hidden="true" />
-            Free while we grow. No card.
+            {TRIAL_DAYS}-day free trial. No card.
           </p>
           <h1 className="mk-display">
             <span className="mk-line">The AI SDR for LinkedIn</span>{" "}
@@ -75,7 +76,7 @@ export function Hero() {
           </p>
           <div className="mk-hero-actions">
             <Link href={SIGNUP} className="btn large">
-              Sign up free
+              Start a {TRIAL_DAYS}-day free trial
             </Link>
             <Link href="/how-it-works" className="btn large secondary mk-hero-second">
               See how it works <span aria-hidden="true">→</span>

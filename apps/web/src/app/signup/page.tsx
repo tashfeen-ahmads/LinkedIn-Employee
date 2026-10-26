@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase-server";
 import { isAppConfigured } from "@/lib/config";
-import { AuthFooter, AuthHeader, FREE_LINE } from "@/components/marketing";
+import { AuthFooter, AuthHeader, TRIAL_LINE } from "@/components/marketing";
 import { AuthAside } from "@/components/auth-aside";
 import { PasswordField } from "@/components/password-field";
 import { SubmitButton } from "@/components/submit-button";
@@ -249,7 +249,7 @@ export default async function SignupPage({
       <main className="auth-page" id="main" tabIndex={-1}>
         <header>
           <h1>Create your account</h1>
-          <p className="auth-free">{FREE_LINE} No card.</p>
+          <p className="auth-free">{TRIAL_LINE}</p>
           <p className="muted">
             Two things: who the messages come from, and how you sign back in. Everything about your
             business is asked once, on the next screen.

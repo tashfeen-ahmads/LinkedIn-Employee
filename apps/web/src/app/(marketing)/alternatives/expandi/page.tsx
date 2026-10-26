@@ -49,7 +49,7 @@ const FAQ: readonly Faq[] = [
   },
   {
     q: "What is cheaper than Expandi?",
-    a: "As of October 2026, Nora is free while we grow, with no card. Among paid tools, Dripify starts at $59 a user and Waalaxy's listed prices start lower still, though sources disagree on Waalaxy's figures. Several reviews also note that Expandi's personalized image and video features rely on partner tools billed separately, which raises the real cost per seat.",
+    a: "As of October 2026, Nora starts with a 14-day free trial with no card, and its plans are on the pricing page. Among other tools, Dripify starts at $59 a user and Waalaxy's listed prices start lower still, though sources disagree on Waalaxy's figures. Several reviews also note that Expandi's personalized image and video features rely on partner tools billed separately, which raises the real cost per seat.",
   },
   {
     q: "Does Expandi have a free trial?",
