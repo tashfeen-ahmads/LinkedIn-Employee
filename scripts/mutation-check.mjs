@@ -5531,6 +5531,14 @@ const MUTATIONS = [
     pkg: "@le/worker",
   },
   {
+    id: "setup/new-workspace-clears-finished-cookie",
+    rule: "Rule 65: a new workspace goes through its own setup, whatever a previous workspace finished",
+    file: "apps/web/src/app/onboarding/submit/route.ts",
+    from: "  response.headers.append(\"Set-Cookie\", `${SETUP_DONE_COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax`);\n",
+    to: "",
+    pkg: "@le/web",
+  },
+  {
     id: "billing/send-path-checks-the-plan",
     rule: "Rule 67: an invitation queued during a trial does not go out after it ends",
     file: "apps/worker/src/jobs/linkedin-action.ts",

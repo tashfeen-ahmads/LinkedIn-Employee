@@ -19,8 +19,15 @@
  * Set once a person's workspace is seen to have launched, holding their user
  * id, so the middleware stops asking. It only ever skips the setup redirect,
  * which is the person's own convenience: nothing is authorised by it.
+ *
+ * It names the person, not the workspace, so it outlived the workspace it was
+ * about: an owner whose workspace was deleted to start again kept a year-old
+ * "finished" cookie, and the new workspace's setup was skipped straight to the
+ * dashboard the moment LinkedIn connected. Creating a workspace clears it now
+ * (`/onboarding/submit`), and the name carries a version so every cookie set
+ * before that is ignored.
  */
-export const SETUP_DONE_COOKIE = "le_setup_done";
+export const SETUP_DONE_COOKIE = "le_setup_done_2";
 
 export type WizardStepKey =
   | "business"

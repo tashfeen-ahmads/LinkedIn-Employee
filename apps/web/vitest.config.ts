@@ -9,6 +9,8 @@ export default defineConfig({
       // worth keeping in the build, so it is stubbed here rather than removed
       // from the modules it protects.
       "server-only": new URL("./test/stubs/server-only.ts", import.meta.url).pathname,
+      // The app's own `@/` imports, so a route handler can be run as written.
+      "@/": new URL("./src/", import.meta.url).pathname,
     },
   },
 });

@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
 import { createWorkspace } from "@/lib/create-workspace";
 import { seeOther } from "@/lib/see-other";
+import { SETUP_DONE_COOKIE } from "@/lib/wizard";
 
 /*
  * The onboarding form posts here as a plain HTML form, not a server action.
@@ -13,5 +14,9 @@ import { seeOther } from "@/lib/see-other";
  */
 export async function POST(request: NextRequest) {
   const to = await createWorkspace(await request.formData());
-  return seeOther(to);
+  const response = seeOther(to);
+  // A new workspace has a setup of its own to finish. A "finished" cookie from
+  // a workspace this person had before would skip it (see SETUP_DONE_COOKIE).
+  response.headers.append("Set-Cookie", `${SETUP_DONE_COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax`);
+  return response;
 }
