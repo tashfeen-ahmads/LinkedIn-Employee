@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { NavIcon } from "@/components/icons";
-import { BOOT_BEAT, PACING_LOOP, PACING_STALE_MS } from "@le/shared";
+import { BOOT_BEAT, PACING_LOOP, PACING_STALE_MS, isIdleReleased } from "@le/shared";
 import { createClient } from "@/lib/supabase-server";
 import { requirePlatformAdmin, ago } from "@/lib/admin";
 import { formatSpend } from "@/lib/spend-display";
@@ -56,7 +56,7 @@ export default async function AdminOverviewPage({ searchParams }: { searchParams
     supabase.rpc("platform_users"),
     supabase
       .from("linkedin_accounts")
-      .select("id, user_id, status, invites_today, messages_today, counters_reset_on, invites_paused_until"),
+      .select("id, user_id, status, status_detail, provider_account_id, invites_today, messages_today, counters_reset_on, invites_paused_until"),
     supabase.from("campaigns").select("id, status"),
     supabase.from("support_tickets").select("id, status, answered_by, drafted_at, created_at"),
     supabase.from("platform_settings").select("outreach_paused_at, outreach_paused_reason, support_autopilot").maybeSingle(),
@@ -85,7 +85,15 @@ export default async function AdminOverviewPage({ searchParams }: { searchParams
   const heldForYou = open.filter((t) => t.drafted_at).length;
   const assistantWeek = (tickets ?? []).filter((t) => t.answered_by === "agent" && t.created_at >= weekAgo).length;
 
-  const notSending = (accounts ?? []).filter((a) => a.status !== "active").length;
+  // Only an account that was working and broke needs an operator. A sign-in
+  // somebody started and never finished is the customer's step, not a fault
+  // (rule 56), and an account released for being idle is waiting for its
+  // owner to come back (rule 63). Counted as "not active", four customers who
+  // had not finished connecting read as four broken accounts.
+  const unfinished = (accounts ?? []).filter((a) => a.status === "connecting" && !a.provider_account_id).length;
+  const notSending = (accounts ?? []).filter(
+    (a) => a.status !== "active" && !(a.status === "connecting" && !a.provider_account_id) && !isIdleReleased(a),
+  ).length;
   const held = (accounts ?? []).filter(
     (a) => a.invites_paused_until && Date.parse(a.invites_paused_until) > Date.now(),
   ).length;
@@ -134,7 +142,7 @@ export default async function AdminOverviewPage({ searchParams }: { searchParams
     waiting.push({ tone: "warning", text: `${heldForYou} support ticket${heldForYou === 1 ? "" : "s"} drafted and waiting for you.`, href: "/admin/support" });
   }
   if (notSending) {
-    waiting.push({ tone: "warning", text: `${notSending} LinkedIn account${notSending === 1 ? " is" : "s are"} not active.`, href: "/admin/accounts" });
+    waiting.push({ tone: "warning", text: `${notSending} LinkedIn account${notSending === 1 ? " has" : "s have"} stopped working.`, href: "/admin/accounts" });
   }
   if (warnings) waiting.push({ tone: "warning", text: `${warnings} warning${warnings === 1 ? "" : "s"} on the Issues list.`, href: "/admin/issues" });
 
@@ -202,7 +210,7 @@ export default async function AdminOverviewPage({ searchParams }: { searchParams
             <Stat
               label="LinkedIn accounts"
               value={accounts?.length ?? 0}
-              note={`${notSending} not active · ${held} held by LinkedIn`}
+              note={`${notSending} need attention · ${held} held by LinkedIn${unfinished ? ` · ${unfinished} never finished connecting` : ""}`}
               tone={notSending ? "warning" : undefined}
             />
             <Stat
