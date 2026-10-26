@@ -98,6 +98,8 @@ function navGroups(waiting: number, marks: NavMarks): NavGroup[] {
         // publishes that nobody is waiting for, and a post that waits a day
         // has lost nothing — which is the whole argument for its approval gate.
         { href: "/app/posts", label: "Profile posts", icon: "posts" },
+        // What Nora liked and commented on in the rep's name, and its switch.
+        { href: "/app/engagement", label: "Likes and comments", icon: "inbox" },
         { href: "/app/tutorial", label: "How it works", icon: "tutorial" },
         { href: "/app/system", label: "System check", icon: "system" },
       ],

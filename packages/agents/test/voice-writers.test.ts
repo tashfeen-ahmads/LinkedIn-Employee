@@ -3,6 +3,7 @@ import { draftReply } from "../src/reply.js";
 import { buildCampaign, personalizeInvites } from "../src/targeting.js";
 import { reviseForVoice } from "../src/revise.js";
 import { writeFirstMessage } from "../src/first-message.js";
+import { writeComment } from "../src/comment.js";
 import type { AgentContext } from "../src/client.js";
 import type {
   BusinessProfile,
@@ -296,5 +297,39 @@ describe("writeFirstMessage", () => {
     const { ctx, users } = scriptedCtx([pitch, pitch]);
     expect(await writeFirstMessage(ctx, input)).toBeNull();
     expect(users[1]).toMatch(/names the company/);
+  });
+});
+
+describe("writeComment", () => {
+  const POST =
+    "We moved our dispatch team to a four-day week last spring and missed calls dropped by a third. Still working out how to cover Friday afternoons without burning anyone out.";
+  const input = {
+    postText: POST,
+    authorFirstName: "Jane",
+    repName: "Sam",
+    repContext: "An answering service for home service companies.",
+    companyName: "Acme",
+  };
+  const out = (comment: string, grounding: string, skip = false) => ({ comment, grounding, skip });
+
+  it("keeps a comment that responds to a phrase in the post", async () => {
+    const { ctx, users } = scriptedCtx([out("Fridays were our gap too. We ended up rotating one person on a half day.", "cover Friday afternoons")]);
+    expect(await writeComment(ctx, input)).toEqual({
+      comment: "Fridays were our gap too. We ended up rotating one person on a half day.",
+      grounding: "cover Friday afternoons",
+    });
+    expect(users).toHaveLength(1);
+  });
+
+  it("sends back generic praise once, and gives up rather than post it", async () => {
+    const praise = out("Great post, thanks for sharing.", "four-day week");
+    const { ctx, users } = scriptedCtx([praise, praise]);
+    expect(await writeComment(ctx, input)).toBeNull();
+    expect(users[1]).toMatch(/great post/);
+  });
+
+  it("writes nothing when the model says there is nothing honest to say", async () => {
+    const { ctx } = scriptedCtx([out("", "", true)]);
+    expect(await writeComment(ctx, input)).toBeNull();
   });
 });

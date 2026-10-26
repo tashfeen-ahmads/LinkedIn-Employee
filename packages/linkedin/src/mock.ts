@@ -12,6 +12,8 @@ import type {
   ProviderRelation,
   SearchQuery,
   SearchTier,
+  PostReaction,
+  ProviderPost,
 } from "./provider.js";
 
 /**
@@ -215,6 +217,29 @@ export class MockLinkedInProvider implements LinkedInProvider {
   async publishPost(input: { accountId: string; text: string }): Promise<ActionResult> {
     this.publishedPosts.push(input);
     return { ok: true, providerId: `post_${this.publishedPosts.length}` };
+  }
+
+  /** Each person's posts, by provider id, for a test to set. */
+  posts: Record<string, ProviderPost[]> = {};
+  reactions: Array<{ accountId: string; postId: string; reaction: PostReaction }> = [];
+  comments: Array<{ accountId: string; postId: string; text: string }> = [];
+  /** Set to make the next reaction or comment fail with this provider sentence. */
+  engageError: string | null = null;
+
+  async listPosts(input: { accountId: string; userId: string; limit?: number }): Promise<ProviderPost[]> {
+    return (this.posts[input.userId] ?? []).slice(0, input.limit ?? 5);
+  }
+
+  async reactToPost(input: { accountId: string; postId: string; reaction: PostReaction }): Promise<ActionResult> {
+    if (this.engageError) return { ok: false, error: this.engageError };
+    this.reactions.push(input);
+    return { ok: true };
+  }
+
+  async commentOnPost(input: { accountId: string; postId: string; text: string }): Promise<ActionResult> {
+    if (this.engageError) return { ok: false, error: this.engageError };
+    this.comments.push(input);
+    return { ok: true };
   }
 
   async listNewMessages(): Promise<InboundMessage[]> {

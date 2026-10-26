@@ -24,6 +24,9 @@ export interface AccountRecord {
   messages_today: number;
   /** Profile views spent today, reset with the other daily counters. */
   profile_views_today?: number | null;
+  /** Likes and comments on posts today, reset with the other daily counters. */
+  reactions_today?: number | null;
+  comments_today?: number | null;
   counters_reset_on: string | null;
   last_action_at: string | null;
   working_hours: unknown;
@@ -59,7 +62,7 @@ export interface AccountRecord {
  * function that needs it rather than being retyped at each call site.
  */
 export const ACCOUNT_USAGE_COLUMNS =
-  "id, workspace_id, user_id, provider_account_id, status, connected_at, first_action_at, invites_today, invites_this_week, messages_today, counters_reset_on, last_action_at, working_hours, profile_views_today, invites_paused_until, invites_paused_reason, invite_throttle_streak, invites_by_day, has_sales_navigator, has_premium, notes_exhausted_month";
+  "id, workspace_id, user_id, provider_account_id, status, connected_at, first_action_at, invites_today, invites_this_week, messages_today, counters_reset_on, last_action_at, working_hours, profile_views_today, reactions_today, comments_today, invites_paused_until, invites_paused_reason, invite_throttle_streak, invites_by_day, has_sales_navigator, has_premium, notes_exhausted_month";
 
 export function parseWorkingHours(value: unknown): WorkingHours {
   if (value && typeof value === "object") {
@@ -84,6 +87,8 @@ export function toUsage(account: AccountRecord, timezone: string): AccountUsage 
     // would stop every warm-up; reading it as zero is the truth — nobody had
     // spent a view before there was a counter for it.
     profileViewsToday: account.profile_views_today ?? 0,
+    reactionsToday: account.reactions_today ?? 0,
+    commentsToday: account.comments_today ?? 0,
     lastActionAt: account.last_action_at ? new Date(account.last_action_at) : null,
     workingHours: parseWorkingHours(account.working_hours),
     timezone,
@@ -181,6 +186,8 @@ export function rollCounters<T extends AccountRecord>(account: T, today: string)
     // Reset with the rest of them. Left out, the warm-up allowance is spent
     // once and never refilled.
     profile_views_today: 0,
+    reactions_today: 0,
+    comments_today: 0,
     counters_reset_on: today,
     invites_this_week: invitesInLastWeek(account, today),
   };

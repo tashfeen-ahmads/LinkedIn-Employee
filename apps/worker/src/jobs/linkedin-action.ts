@@ -18,6 +18,7 @@ import {
   warmStillCounts,
   workingMsLeftToday,
   workingMsAhead,
+  type PostReaction,
 } from "@le/linkedin";
 import {
   canTransition,
@@ -78,6 +79,7 @@ export function alreadyContactedReason(lastContactedAt: string): string {
 
 export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJob): Promise<void> {
   if (job.kind === "reply") return sendApprovedReply(ctx, job);
+  if (job.kind === "engage") return sendEngagement(ctx, job);
 
   const { db } = ctx;
   const { data: cp } = await db
@@ -1503,6 +1505,121 @@ export function addDays(date: Date, days: number): Date {
 export const RECIPIENT_REFUSALS_BEFORE_CLOSING = 2;
 
 /** Thrown when the limiter denies an action that was already scheduled. */
+/**
+ * A like or a comment on a prospect's post (rule 68), sent here for the same
+ * reasons every other action is: the limiter, the pause, the plan, the
+ * exclusion list and do-not-contact are all read immediately before the call.
+ *
+ * Skipped, never retried into a burst, when the day's allowance is spent: a
+ * like that waits until tomorrow is a like on an older post, and an old post
+ * is the one that reads as a bot. Never sent while LinkedIn is throttling the
+ * account's invitations, because adding activity to an account the platform
+ * has started to doubt is the opposite of what this is for.
+ */
+async function sendEngagement(
+  ctx: WorkerContext,
+  job: Extract<LinkedInActionJob, { kind: "engage" }>,
+): Promise<void> {
+  const { db } = ctx;
+  const { data: row } = await db
+    .from("engagement_actions")
+    .select("id, workspace_id, linkedin_account_id, prospect_id, post_id, kind, reaction_type, body, status")
+    .eq("id", job.engagementId)
+    .eq("workspace_id", job.workspaceId)
+    .maybeSingle();
+  if (!row || row.status !== "queued") return;
+
+  const skip = async (reason: string) => {
+    await db.from("engagement_actions").update({ status: "skipped", reason }).eq("id", row.id).eq("status", "queued");
+  };
+
+  const { data: workspace } = await db.from("workspaces").select("engage_posts").eq("id", row.workspace_id).maybeSingle();
+  if (!workspace?.engage_posts) return skip("liking and commenting is turned off for this workspace");
+
+  if (row.prospect_id) {
+    const { data: prospect } = await db
+      .from("prospects")
+      .select("id, company, linkedin_url, do_not_contact")
+      .eq("id", row.prospect_id)
+      .eq("workspace_id", row.workspace_id)
+      .maybeSingle();
+    if (!prospect) return skip("that prospect no longer exists");
+    if (prospect.do_not_contact) return skip("prospect marked do not contact");
+    const excluded = matchExclusion(await loadExclusions(db, row.workspace_id), {
+      company: prospect.company,
+      linkedinUrl: prospect.linkedin_url,
+    });
+    if (excluded) return skip(exclusionReason(excluded));
+    // Somebody who asked to be left alone, or whose conversation is over, is
+    // not engaged with on any campaign.
+    const { data: ended } = await db
+      .from("campaign_prospects")
+      .select("id")
+      .eq("workspace_id", row.workspace_id)
+      .eq("prospect_id", prospect.id)
+      .in("status", ["opted_out", "negative", "closed", "failed"])
+      .limit(1);
+    if (ended?.length) return skip("their conversation is over or they asked to stop");
+  }
+
+  const paused = await outreachPause(db);
+  if (paused) {
+    throw new RescheduleError(`outreach_paused: ${paused}`, jitteredRetryMs(OUTREACH_PAUSE_RETRY_MS, "outreach_paused"));
+  }
+  const entitled = await workspaceEntitlement(db, row.workspace_id);
+  if (!entitled?.canSend) return skip("the workspace has no plan that sends");
+
+  const { data: accountRow } = await db
+    .from("linkedin_accounts")
+    .select(ACCOUNT_USAGE_COLUMNS)
+    .eq("id", row.linkedin_account_id)
+    .single();
+  if (!accountRow || accountRow.status !== "active" || !accountRow.provider_account_id) {
+    return skip("the LinkedIn account is not active");
+  }
+  if (accountRow.invites_paused_until && Date.parse(accountRow.invites_paused_until) > Date.now()) {
+    return skip("LinkedIn is holding this account's invitations, so it stays quiet");
+  }
+
+  const { data: owner } = await db.from("profiles").select("timezone").eq("id", accountRow.user_id).single();
+  const timezone = owner?.timezone ?? "UTC";
+  const account = await resetCountersIfNeeded(db, accountRow as AccountRecord, localDate(new Date(), timezone));
+  const kind = row.kind === "comment" ? "post_comment" : "post_reaction";
+  const decision = checkAction(kind, toUsage(account, timezone));
+  if (!decision.allowed) {
+    if (decision.reason === "daily_reaction_cap" || decision.reason === "daily_comment_cap") {
+      return skip("today's allowance for this is spent");
+    }
+    throw new RescheduleError(decision.reason, jitteredRetryMs(decision.retryAfterMs, decision.reason));
+  }
+
+  const result =
+    row.kind === "comment"
+      ? row.body?.trim()
+        ? await ctx.linkedin.commentOnPost({ accountId: accountRow.provider_account_id, postId: row.post_id, text: row.body.trim() })
+        : { ok: false, error: "no comment was written" }
+      : await ctx.linkedin.reactToPost({
+          accountId: accountRow.provider_account_id,
+          postId: row.post_id,
+          reaction: (row.reaction_type as PostReaction | null) ?? "like",
+        });
+  if (!result.ok) {
+    await db
+      .from("engagement_actions")
+      .update({ status: "failed", reason: (result.error ?? "refused").slice(0, 300) })
+      .eq("id", row.id);
+    return;
+  }
+
+  // Counted in the same statement as every other action (rule 2).
+  await recordAction(db, accountRow.id, kind);
+  const now = new Date().toISOString();
+  await db.from("engagement_actions").update({ status: "sent", sent_at: now, reason: null }).eq("id", row.id);
+  if (row.prospect_id) {
+    await db.from("prospects").update({ last_engaged_at: now }).eq("id", row.prospect_id).eq("workspace_id", row.workspace_id);
+  }
+}
+
 export class RescheduleError extends Error {
   constructor(
     readonly reason: string,

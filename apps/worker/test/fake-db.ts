@@ -88,6 +88,10 @@ export class FakeDb {
     const invite = args.p_kind === "invite" ? 1 : 0;
     const message = args.p_kind === "message" ? 1 : 0;
     const view = args.p_kind === "profile_view" ? 1 : 0;
+    const reaction = args.p_kind === "post_reaction" ? 1 : 0;
+    const comment = args.p_kind === "post_comment" ? 1 : 0;
+    account.reactions_today = ((account.reactions_today as number) ?? 0) + reaction;
+    account.comments_today = ((account.comments_today as number) ?? 0) + comment;
     account.invites_today = (account.invites_today as number) + invite;
     account.invites_this_week = (account.invites_this_week as number) + invite;
     // The rolling week's per-day record, on the rep's date the row is stamped
@@ -109,7 +113,11 @@ export class FakeDb {
     // is day zero for *sending*. Modelled here because a test that asserted
     // the difference against a fake that ignored it would be asserting nothing.
     account.last_action_at = new Date().toISOString();
-    if (!view) account.first_action_at = (account.first_action_at as string | null) ?? new Date().toISOString();
+    // Engaging with a post is not a send either: like a view, it never starts
+    // the invitation ramp.
+    if (!view && !reaction && !comment) {
+      account.first_action_at = (account.first_action_at as string | null) ?? new Date().toISOString();
+    }
 
     return {
       data: [

@@ -25,7 +25,7 @@ import { extractLinks } from "./links.js";
  * edits that cannot change meaning. Nothing is ever truncated.
  */
 
-export type MessageKind = "invite_note" | "first_message" | "follow_up" | "reply";
+export type MessageKind = "invite_note" | "first_message" | "follow_up" | "reply" | "comment";
 
 /** The most a message of each kind may run, in characters, links excluded. */
 export const MESSAGE_MAX_CHARS: Record<MessageKind, number> = {
@@ -35,6 +35,8 @@ export const MESSAGE_MAX_CHARS: Record<MessageKind, number> = {
   follow_up: 280,
   // Inside LinkedIn's under-400 band with room for a link on top.
   reply: 320,
+  // A comment under somebody's post: a sentence or two, never a paragraph.
+  comment: 220,
 };
 
 /** The rules every writer is given, word for word. */

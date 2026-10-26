@@ -1783,6 +1783,35 @@ tests that were verified by deliberately breaking the code.
     whose lookup key is not one of `PRICE_KEYS` leaves the plan alone rather
     than reading as a trial, which would stop a paying workspace.
 
+68. **Nora likes and comments on prospects' posts, and every one is earned.**
+    `planEngagement` (`apps/worker/src/jobs/engagement.ts`, hourly) picks, for
+    each working account inside its owner's hours, people in its running
+    campaigns who are still in a live conversation, none engaged with in the
+    last week, and one recent post of their own each (`choosePost`: no
+    reposts, nothing older than three weeks, nothing about grief, illness, a
+    lost job or politics). A like, and a comment when the post says enough to
+    respond to. Each is an `engagement_actions` row (migration 0053; the unique
+    index means one like and one comment per post, ever) and a job on the one
+    send path (rule 1), which re-checks do-not-contact, the exclusion list, an
+    ended conversation, the pause, the plan and the limiter at the moment of
+    sending.
+
+    Likes and comments have their own allowances (25 and 5 a day, 2 a day in an
+    account's first fortnight), counted in the same statement as every other
+    action (rule 2), and neither starts the invitation ramp (rule 3). A day's
+    allowance spent means skipped, never carried into tomorrow onto an older
+    post. Nothing is planned while LinkedIn is holding the account's
+    invitations.
+
+    LinkedIn's 2026 policy targets automated comments, so a comment is the
+    action held tightest: written at planning time, never on the send path, it
+    must name a phrase the post really contains (`grounding`), pass the voice
+    checks, praise nothing in general, carry no link or bare domain, never name
+    the company and never ask for a call (`commentProblems`). One rewrite; a
+    comment that still fails is not written and the post is only liked. Every
+    like and comment, with the words of the post and of the comment, is listed
+    on `/app/engagement`, where an owner or admin can turn it off.
+
 ## Conventions
 
 - Agent output is validated against a zod schema before it touches the

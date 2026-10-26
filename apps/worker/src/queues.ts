@@ -111,7 +111,12 @@ export type LinkedInActionJob =
   | { kind: "warm_up"; workspaceId: string; campaignProspectId: string }
   | { kind: "invite"; workspaceId: string; campaignProspectId: string }
   | { kind: "follow_up"; workspaceId: string; campaignProspectId: string; stepNumber: number }
-  | { kind: "reply"; workspaceId: string; conversationId: string; draftId: string };
+  | { kind: "reply"; workspaceId: string; conversationId: string; draftId: string }
+  /**
+   * A like or a comment on a prospect's post, planned by `planEngagement` and
+   * sent here like everything else that touches the account (rule 68).
+   */
+  | { kind: "engage"; workspaceId: string; engagementId: string };
 
 /**
  * The email queue's payload. Its scheduled jobs (digest, weekly report, the

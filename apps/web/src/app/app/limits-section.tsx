@@ -7,6 +7,7 @@ import {
 } from "@le/shared";
 import {
   ACCOUNT_USAGE_COLUMNS,
+  dailyCommentCap,
   dailyInviteCap,
   toUsage,
   type AccountRecord,
@@ -120,6 +121,16 @@ export async function LimitsSection() {
             used={usage.profileViewsToday}
             cap={LINKEDIN_LIMITS.profileViewsPerDay}
             note="Warm-ups have their own allowance and never cost an invitation."
+          />
+          <AllowanceMeter
+            label="Likes today"
+            used={usage.reactionsToday}
+            cap={LINKEDIN_LIMITS.reactionsPerDay}
+          />
+          <AllowanceMeter
+            label="Comments today"
+            used={usage.commentsToday}
+            cap={dailyCommentCap(usage.firstActionAt, now)}
           />
           <AllowanceMeter
             label="Invitations, last 7 days"

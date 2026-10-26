@@ -33,13 +33,16 @@ export interface AccountUsage {
    * to write to them.
    */
   profileViewsToday: number;
+  /** Likes on posts today, and comments: each its own allowance (migration 0053). */
+  reactionsToday: number;
+  commentsToday: number;
   lastActionAt: Date | null;
   workingHours: WorkingHours;
   /** IANA zone used to evaluate workingHours. */
   timezone: string;
 }
 
-export type ActionKind = "invite" | "message" | "profile_view";
+export type ActionKind = "invite" | "message" | "profile_view" | "post_reaction" | "post_comment";
 
 export type Decision =
   | { allowed: true }
@@ -50,6 +53,8 @@ export type DenyReason =
   | "weekly_invite_cap"
   | "daily_message_cap"
   | "daily_profile_view_cap"
+  | "daily_reaction_cap"
+  | "daily_comment_cap"
   | "outside_working_hours"
   | "too_soon";
 
@@ -466,10 +471,36 @@ export function checkAction(kind: ActionKind, usage: AccountUsage, now: Date = n
     return { allowed: true };
   }
 
+  if (kind === "post_reaction") {
+    if (usage.reactionsToday >= LINKEDIN_LIMITS.reactionsPerDay) {
+      return { allowed: false, reason: "daily_reaction_cap", retryAfterMs: untilTomorrow };
+    }
+    return { allowed: true };
+  }
+
+  if (kind === "post_comment") {
+    if (usage.commentsToday >= dailyCommentCap(usage.firstActionAt, now)) {
+      return { allowed: false, reason: "daily_comment_cap", retryAfterMs: untilTomorrow };
+    }
+    return { allowed: true };
+  }
+
   if (usage.messagesToday >= LINKEDIN_LIMITS.messagesPerDay) {
     return { allowed: false, reason: "daily_message_cap", retryAfterMs: untilTomorrow };
   }
   return { allowed: true };
+}
+
+/**
+ * Comments allowed today: the lower number for an account's first fortnight
+ * of sending, measured from its first action like the invitation ramp (rule
+ * 3), and the same for an account that has sent nothing yet.
+ */
+export function dailyCommentCap(firstActionAt: Date | null, now: Date = new Date()): number {
+  const { commentsPerDay, commentsPerDayNew, commentsRampDays } = LINKEDIN_LIMITS;
+  if (!firstActionAt) return commentsPerDayNew;
+  const days = (now.getTime() - firstActionAt.getTime()) / 86_400_000;
+  return days >= commentsRampDays ? commentsPerDay : commentsPerDayNew;
 }
 
 

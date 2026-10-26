@@ -14,6 +14,8 @@ import type {
   ProviderRelation,
   SearchQuery,
   PendingInvitation,
+  PostReaction,
+  ProviderPost,
 } from "./provider.js";
 import type { ClassicPosition } from "./cursor.js";
 import { decodeClassicCursor, encodeClassicCursor, isClassicCursor } from "./cursor.js";
@@ -39,6 +41,9 @@ const ROUTES = {
   withdrawInvite: (id: string) => `/api/v1/users/invite/${id}`,
   chats: "/api/v1/chats",
   posts: "/api/v1/posts",
+  userPosts: (id: string) => `/api/v1/users/${encodeURIComponent(id)}/posts`,
+  postReaction: "/api/v1/posts/reaction",
+  postComments: (id: string) => `/api/v1/posts/${encodeURIComponent(id)}/comments`,
   chatMessages: (id: string) => `/api/v1/chats/${id}/messages`,
   messages: "/api/v1/messages",
   relations: "/api/v1/users/relations",
@@ -84,6 +89,15 @@ export class UnipileError extends Error {
     super(message);
     this.name = "UnipileError";
   }
+}
+
+interface RawUnipilePost {
+  social_id?: string;
+  share_url?: string;
+  text?: string;
+  parsed_datetime?: string;
+  is_repost?: boolean;
+  permissions?: { can_react?: boolean; can_post_comments?: boolean };
 }
 
 interface UnipileRawProfile {
@@ -695,6 +709,50 @@ export class UnipileProvider implements LinkedInProvider {
         body: JSON.stringify({ account_id: input.accountId, text: input.text }),
       });
       return { ok: true, providerId: res.post_id ?? res.id };
+    } catch (err) {
+      return toActionError(err);
+    }
+  }
+
+  async listPosts(input: { accountId: string; userId: string; limit?: number }): Promise<ProviderPost[]> {
+    const params = new URLSearchParams({ account_id: input.accountId, limit: String(input.limit ?? 5) });
+    const res = await this.request<{ items?: RawUnipilePost[] }>(`${ROUTES.userPosts(input.userId)}?${params.toString()}`);
+    return (res.items ?? [])
+      .filter((post) => typeof post.social_id === "string" && post.social_id)
+      .map((post) => ({
+        socialId: post.social_id as string,
+        url: post.share_url ?? null,
+        text: post.text ?? "",
+        postedAt: post.parsed_datetime ?? null,
+        isRepost: Boolean(post.is_repost),
+        canReact: post.permissions?.can_react !== false,
+        canComment: post.permissions?.can_post_comments !== false,
+      }));
+  }
+
+  /**
+   * React to a post by its social id. The id in a post's URL can fail here,
+   * which is why `listPosts` carries the social id and nothing else.
+   */
+  async reactToPost(input: { accountId: string; postId: string; reaction: PostReaction }): Promise<ActionResult> {
+    try {
+      await this.request(ROUTES.postReaction, {
+        method: "POST",
+        body: JSON.stringify({ account_id: input.accountId, post_id: input.postId, reaction_type: input.reaction }),
+      });
+      return { ok: true };
+    } catch (err) {
+      return toActionError(err);
+    }
+  }
+
+  async commentOnPost(input: { accountId: string; postId: string; text: string }): Promise<ActionResult> {
+    try {
+      await this.request(ROUTES.postComments(input.postId), {
+        method: "POST",
+        body: JSON.stringify({ account_id: input.accountId, text: input.text }),
+      });
+      return { ok: true };
     } catch (err) {
       return toActionError(err);
     }

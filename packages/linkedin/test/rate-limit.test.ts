@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { LINKEDIN_LIMITS } from "@le/shared";
 import {
   checkAction,
+  dailyCommentCap,
   dailyInviteCap,
   isWithinWorkingHours,
   nextGapMs,
@@ -169,5 +170,35 @@ describe("msUntilNextLocalMidnight", () => {
     for (const zone of ["UTC", "Asia/Kolkata", "America/Los_Angeles", "Pacific/Chatham"]) {
       expect(msUntilNextLocalMidnight(MIDWEEK_AFTERNOON, zone), zone).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("likes and comments", () => {
+  const base = {
+    invitesToday: 0,
+    invitesThisWeek: 0,
+    messagesToday: 0,
+    profileViewsToday: 0,
+    reactionsToday: 0,
+    commentsToday: 0,
+    firstActionAt: new Date("2026-08-01T09:00:00Z"),
+    lastActionAt: null,
+    workingHours: { start: 8, end: 18, days: [1, 2, 3, 4, 5] },
+    timezone: "UTC",
+  };
+  const NOON = new Date("2026-09-09T12:00:00Z");
+
+  it("have their own daily allowances, which invitations never spend", () => {
+    expect(checkAction("post_reaction", { ...base, invitesToday: 35 }, NOON).allowed).toBe(true);
+    expect(checkAction("post_reaction", { ...base, reactionsToday: 25 }, NOON)).toMatchObject({ allowed: false, reason: "daily_reaction_cap" });
+    expect(checkAction("post_comment", { ...base, commentsToday: 5 }, NOON)).toMatchObject({ allowed: false, reason: "daily_comment_cap" });
+  });
+
+  it("allows fewer comments in an account's first fortnight of sending", () => {
+    const fresh = { ...base, firstActionAt: new Date("2026-09-05T09:00:00Z") };
+    expect(dailyCommentCap(fresh.firstActionAt, NOON)).toBe(2);
+    expect(checkAction("post_comment", { ...fresh, commentsToday: 2 }, NOON).allowed).toBe(false);
+    expect(dailyCommentCap(null, NOON)).toBe(2);
+    expect(dailyCommentCap(base.firstActionAt, NOON)).toBe(5);
   });
 });

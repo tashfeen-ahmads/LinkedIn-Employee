@@ -79,9 +79,33 @@ export type WorkspaceRow = {
   /** Monthly or yearly, once a plan is paid for (migration 0052). */
   billing_interval: "month" | "year" | null;
   cancel_at_period_end: boolean;
+  /** Like and comment on prospects' posts (migration 0053). */
+  engage_posts: boolean;
   /** When the newest Stripe event applied here was created, so a late older one never wins. */
   last_billing_event_at: string | null;
   data_retention_days: number;
+  created_at: string;
+};
+
+export type EngagementActionRow = {
+  id: string;
+  workspace_id: string;
+  linkedin_account_id: string;
+  prospect_id: string | null;
+  campaign_id: string | null;
+  post_id: string;
+  post_url: string | null;
+  post_excerpt: string | null;
+  post_at: string | null;
+  kind: "reaction" | "comment";
+  reaction_type: string | null;
+  body: string | null;
+  grounding: string | null;
+  prompt_version: string | null;
+  status: "queued" | "sent" | "skipped" | "failed";
+  reason: string | null;
+  scheduled_for: string | null;
+  sent_at: string | null;
   created_at: string;
 };
 
@@ -197,6 +221,8 @@ export type LinkedinAccountRow = {
    */
   /** Profile views spent today; its own allowance, reset with the daily ones. */
   profile_views_today: number;
+  reactions_today: number;
+  comments_today: number;
   invites_paused_until: string | null;
   invites_paused_reason: string | null;
   /**
@@ -315,6 +341,8 @@ export type ProspectRow = {
   signals: Json;
   owner_user_id: string | null;
   last_contacted_at: string | null;
+  /** When this workspace last liked or commented on their posts (migration 0053). */
+  last_engaged_at: string | null;
   do_not_contact: boolean;
   do_not_contact_reason: string | null;
   crm_contact_id: string | null;
@@ -930,6 +958,7 @@ export type Database = {
       hooks: Table<HookRow>;
       agents: Table<AgentRow>;
       linkedin_posts: Table<LinkedInPostRow>;
+      engagement_actions: Table<EngagementActionRow>;
       agent_test_runs: Table<AgentTestRunRow>;
       support_tickets: Table<SupportTicketRow>;
       support_ticket_drafts: Table<SupportTicketDraftRow>;
@@ -945,7 +974,7 @@ export type Database = {
     Views: { [_ in never]: never };
     Functions: {
       record_linkedin_action: {
-        Args: { p_account_id: string; p_kind: "invite" | "message" | "profile_view" };
+        Args: { p_account_id: string; p_kind: "invite" | "message" | "profile_view" | "post_reaction" | "post_comment" };
         Returns: { invites_today: number; invites_this_week: number; messages_today: number }[];
       };
       /**

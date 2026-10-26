@@ -106,6 +106,22 @@ export const SEARCH_FILTERS = [
   { label: "Leave out job titles", classic: false, dropped: "excluded titles" },
 ] as const;
 
+/** One of a person's recent posts, as much as the engagement path needs. */
+export interface ProviderPost {
+  /** The id a reaction or comment is addressed to (LinkedIn's social id, never the URL's). */
+  socialId: string;
+  url: string | null;
+  text: string;
+  /** When it was posted, ISO, or null when the provider did not say. */
+  postedAt: string | null;
+  /** A repost carries somebody else's words; it is not theirs to be engaged with. */
+  isRepost: boolean;
+  canReact: boolean;
+  canComment: boolean;
+}
+
+export type PostReaction = "like" | "celebrate" | "support" | "love" | "insightful" | "funny";
+
 /** One connection the account has, as the provider reports it. */
 export interface ProviderRelation {
   providerId: string;
@@ -282,6 +298,12 @@ export interface LinkedInProvider {
    * behind it — see mayPublish in @le/shared.
    */
   publishPost(input: { accountId: string; text: string }): Promise<ActionResult>;
+  /** A person's most recent posts, newest first. Every call is a read off the rep's seat. */
+  listPosts(input: { accountId: string; userId: string; limit?: number }): Promise<ProviderPost[]>;
+  /** React to a post. Only ever called from the send path (rule 1). */
+  reactToPost(input: { accountId: string; postId: string; reaction: PostReaction }): Promise<ActionResult>;
+  /** Comment on a post. Only ever called from the send path (rule 1). */
+  commentOnPost(input: { accountId: string; postId: string; text: string }): Promise<ActionResult>;
   listNewMessages(input: { accountId: string; since: string }): Promise<InboundMessage[]>;
   /**
    * The account's connections, newest first. This is how an accepted

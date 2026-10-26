@@ -36,6 +36,28 @@ export const LINKEDIN_LIMITS = {
    * ability to write to them.
    */
   profileViewsPerDay: 40,
+  /**
+   * Likes on prospects' posts per day (docs/06-research.md section 2).
+   *
+   * A fraction of the vendor floor on purpose. A like is cheap to send and the
+   * easiest action to do too much of, and the account this protects is the one
+   * every campaign sends from.
+   */
+  reactionsPerDay: 25,
+  /**
+   * Comments per day, and the lower number for an account's first fortnight
+   * of sending. LinkedIn's 2026 policy singles out automated comments, so this
+   * is the action held tightest: five a day is a person who comments on a few
+   * posts, never a feed being worked.
+   */
+  commentsPerDay: 5,
+  commentsPerDayNew: 2,
+  /** Days from an account's first send during which the lower comment cap applies. */
+  commentsRampDays: 14,
+  /** The least time between two engagements with one person's posts. */
+  engageSamePersonEveryDays: 7,
+  /** A post older than this is not liked: a like on a month-old post reads as a bot. */
+  engagePostMaxAgeDays: 21,
   /** Minimum gap between two actions on one account, milliseconds. */
   minGapMs: 2 * 60_000,
   /** Maximum gap added as random jitter, milliseconds. */

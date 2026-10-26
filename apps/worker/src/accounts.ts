@@ -64,7 +64,7 @@ export async function recordObservedAccounts(
 export async function recordAction(
   db: Db,
   accountId: string,
-  kind: "invite" | "message" | "profile_view",
+  kind: "invite" | "message" | "profile_view" | "post_reaction" | "post_comment",
 ): Promise<void> {
   const { error } = await db.rpc("record_linkedin_action", { p_account_id: accountId, p_kind: kind });
   // Loudly: an uncounted action is an account creeping past its daily cap, and
@@ -483,6 +483,8 @@ export async function resetCountersIfNeeded(db: Db, account: AccountRecord, toda
     invites_today: rolled.invites_today,
     messages_today: rolled.messages_today,
     profile_views_today: rolled.profile_views_today ?? 0,
+    reactions_today: rolled.reactions_today ?? 0,
+    comments_today: rolled.comments_today ?? 0,
     counters_reset_on: today,
     invites_this_week: rolled.invites_this_week,
   };
