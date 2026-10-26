@@ -13,7 +13,12 @@ import {
   normalizeLinkedInUrl,
   parseHeadline,
 } from "@le/shared";
-import { describeRefusal, isAccountGone } from "@le/linkedin";
+import {
+  SALES_NAVIGATOR_PARTIAL_NOTE,
+  SALES_NAVIGATOR_REFUSED_NOTE,
+  describeRefusal,
+  isAccountGone,
+} from "@le/linkedin";
 import { markAccountGone } from "../accounts.js";
 import { agentForCampaign, modelFor, openersFor, voiceOf } from "../agent.js";
 import { brandOf, withBrand } from "../brand.js";
@@ -270,6 +275,16 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
   // "Find more" would go permanently dead at the first repeat page.
   if (continuing) await rememberPosition(ctx, job, continuing.id, page.cursor);
   else await rememberStrategyPosition(ctx, job, profileRow.id, searchKey, page.cursor);
+
+  // The seat refused the full search and the list came from a narrower one.
+  // Which field it refused is answered only by asking each alone, so that is
+  // done once a week per workspace and kept where whoever fixes it will look.
+  if (
+    searchTier === "sales_navigator" &&
+    (page.filterNotes ?? []).some((n) => n === SALES_NAVIGATOR_REFUSED_NOTE || n === SALES_NAVIGATOR_PARTIAL_NOTE)
+  ) {
+    await probeSalesNavigatorOnce(ctx, job.workspaceId, profileRow.id, account.provider_account_id);
+  }
 
   // Anyone this workspace already knows about is excluded, whichever rep owns
   // them. This is the cross-rep duplicate prevention promised in the spec.
@@ -1421,14 +1436,18 @@ async function rememberStrategyPosition(
 async function probeProvider(
   ctx: WorkerContext,
   accountId: string,
+  options: { salesNavigator?: boolean } = {},
 ): Promise<Record<string, string> | undefined> {
   const provider = ctx.linkedin as {
-    probeSearch?: (id: string) => Promise<Array<{ label: string; count: number | null; error?: string }>>;
+    probeSearch?: (
+      id: string,
+      options?: { salesNavigator?: boolean },
+    ) => Promise<Array<{ label: string; count: number | null; error?: string }>>;
   };
   if (typeof provider.probeSearch !== "function") return undefined;
 
   try {
-    const rows = await provider.probeSearch(accountId);
+    const rows = await provider.probeSearch(accountId, options);
     return Object.fromEntries(
       rows.map((r) => [r.label, r.error ? `refused: ${r.error}` : `${r.count}`]),
     );
@@ -1512,4 +1531,33 @@ async function verifyProfiles(
  */
 function stepDelay(stepNumber: number, written: number): number {
   return stepNumber === 1 ? FIRST_STEP_DELAY_DAYS : written;
+}
+
+const SALES_NAVIGATOR_PROBE_EVENT = "targeting.sales_navigator_probe";
+
+async function probeSalesNavigatorOnce(
+  ctx: WorkerContext,
+  workspaceId: string,
+  profileId: string,
+  accountId: string,
+): Promise<void> {
+  const since = new Date(Date.now() - 7 * 86_400_000).toISOString();
+  const { data: recent, error } = await ctx.db
+    .from("events")
+    .select("id")
+    .eq("workspace_id", workspaceId)
+    .eq("name", SALES_NAVIGATOR_PROBE_EVENT)
+    .gte("created_at", since)
+    .limit(1);
+  // A read that failed is not "never probed": every request comes off a seat.
+  if (error || recent?.length) return;
+  const rows = await probeProvider(ctx, accountId, { salesNavigator: true });
+  if (!rows) return;
+  await recordEvent(ctx.db, {
+    workspaceId,
+    name: SALES_NAVIGATOR_PROBE_EVENT,
+    subjectType: "customer_profile",
+    subjectId: profileId,
+    payload: rows,
+  }).catch(() => undefined);
 }

@@ -237,15 +237,44 @@ export class UnipileProvider implements LinkedInProvider {
       // A classic position describes six searches and means nothing here. An
       // account that gained a seat since the last run carries one.
       if (input.cursor && !isClassicCursor(input.cursor)) params.set("cursor", input.cursor);
-      const res = await this.request<{ items?: UnipileRawProfile[]; cursor?: string | null }>(
-        `${ROUTES.search}?${params.toString()}`,
-        { method: "POST", body: JSON.stringify(body) },
-      );
+
+      // The first Sales Navigator account this product ever searched with was
+      // refused six times in a row with "Invalid parameters", and the customer
+      // sat on "building your campaign" with no list and no way forward. A
+      // field the provider will not take is not a reason to find nobody: the
+      // whole profile is asked first, then the part every search accepts, and
+      // only then regular search, each step named on the campaign.
+      const attempts = [
+        { body, droppedFilters, note: null as string | null },
+        ...salesNavigatorFallbacks(input.query, resolved),
+      ];
+      for (const attempt of attempts) {
+        try {
+          const res = await this.request<{ items?: UnipileRawProfile[]; cursor?: string | null }>(
+            `${ROUTES.search}?${params.toString()}`,
+            { method: "POST", body: JSON.stringify(attempt.body) },
+          );
+          return {
+            items: (res.items ?? []).map(toProspectCandidate),
+            cursor: res.cursor ?? null,
+            droppedFilters: attempt.droppedFilters,
+            filterNotes: attempt.note ? [...notes, attempt.note] : notes,
+          };
+        } catch (err) {
+          if (!isRefusedSearch(err)) throw err;
+        }
+      }
+
+      // Regular search runs on any account, a seat included. Its position
+      // carries over only when the last run already fell back here.
+      const classic = await this.searchProspects({
+        ...input,
+        tier: "classic",
+        cursor: input.cursor && isClassicCursor(input.cursor) ? input.cursor : undefined,
+      });
       return {
-        items: (res.items ?? []).map(toProspectCandidate),
-        cursor: res.cursor ?? null,
-        droppedFilters,
-        filterNotes: notes,
+        ...classic,
+        filterNotes: [SALES_NAVIGATOR_REFUSED_NOTE, ...(classic.filterNotes ?? [])],
       };
     }
 
@@ -805,8 +834,12 @@ export class UnipileProvider implements LinkedInProvider {
    * replaces six deployments. Each probe requests a single result: this is a
    * diagnostic, and it runs against a seat somebody is paying for.
    */
-  async probeSearch(accountId: string): Promise<Array<{ label: string; count: number | null; error?: string }>> {
+  async probeSearch(
+    accountId: string,
+    options: { salesNavigator?: boolean } = {},
+  ): Promise<Array<{ label: string; count: number | null; error?: string }>> {
     const usId = (await this.lookupParameter(accountId, "LOCATION", "United States")).found?.id;
+    const sn = (extra: Record<string, unknown>) => ({ api: "sales_navigator", category: "people", keywords: "Founder", ...extra });
 
     const candidates: Array<{ label: string; body: Record<string, unknown> }> = [
       { label: "keywords only", body: { api: "classic", category: "people", keywords: "Founder" } },
@@ -830,6 +863,21 @@ export class UnipileProvider implements LinkedInProvider {
         label: "no filters at all",
         body: { api: "classic", category: "people" },
       },
+      // Sales Navigator, one field at a time, in each shape it might take. The
+      // first live seat had every search refused as "Invalid parameters", and
+      // the refusal names the field only here, where it is asked alone.
+      ...(options.salesNavigator
+        ? [
+            { label: "SN keywords only", body: sn({}) },
+            { label: "SN location", body: sn(usId ? { location: { include: [usId] } } : {}) },
+            { label: "SN seniority as a level", body: sn({ seniority: { include: ["owner"] } }) },
+            { label: "SN seniority as an id", body: sn({ seniority: { include: ["10"] } }) },
+            { label: "SN headcount as a range", body: sn({ company_headcount: [{ min: 11, max: 50 }] }) },
+            { label: "SN headcount as text", body: sn({ company_headcount: ["11-50"] }) },
+            { label: "SN title", body: sn({ title: { include: ["Founder"] } }) },
+            { label: "SN role", body: sn({ role: { include: ["Founder"] } }) },
+          ]
+        : []),
     ];
 
     const params = new URLSearchParams({ account_id: accountId, limit: "1" });
@@ -1088,24 +1136,100 @@ function anyOf(terms: Array<string | undefined>): string | undefined {
   return quoted.length === 1 ? quoted[0] : quoted.join(" OR ");
 }
 
+export const SALES_NAVIGATOR_REFUSED_NOTE =
+  "Sales Navigator would not run this search, so regular LinkedIn search was used instead. Seniority, company size and excluded titles were not applied, so read the names carefully.";
+
+export const SALES_NAVIGATOR_PARTIAL_NOTE =
+  "Sales Navigator would not take the full set of filters, so it was searched by title and location only. Seniority, company size and excluded titles were not applied.";
+
+const SALES_NAVIGATOR_SENIORITY: Array<[RegExp, string]> = [
+  [/\b(owner|founder|co-?founder|proprietor)\b/i, "owner"],
+  [/\bpartner\b/i, "partner"],
+  [/\b(cxo|c-?level|c-?suite|chief|ceo|cfo|coo|cto|cmo|cro|president)\b/i, "cxo"],
+  [/\b(vp|vice president)\b/i, "vp"],
+  [/\b(director|head)\b/i, "director"],
+  [/\b(senior manager|experienced manager|manager)\b/i, "experienced_manager"],
+  [/\bentry manager\b/i, "entry_manager"],
+  [/\bstrategic\b/i, "strategic"],
+  [/\bsenior\b/i, "senior"],
+  [/\b(entry|junior|associate)\b/i, "entry_level"],
+  [/\b(training|intern|trainee)\b/i, "in_training"],
+];
+
+/** Seniority words as Sales Navigator's own levels; an unknown word is left out. */
+export function salesNavigatorSeniorities(words: string[] | undefined): string[] {
+  const out = new Set<string>();
+  for (const word of words ?? []) {
+    const hit = SALES_NAVIGATOR_SENIORITY.find(([re]) => re.test(word));
+    if (hit) out.add(hit[1]);
+  }
+  return [...out];
+}
+
+/** "11-50", "1,001-5,000", "10,000+" as ranges; anything else is left out. */
+export function salesNavigatorHeadcounts(sizes: string[] | undefined): Array<{ min: number; max?: number }> {
+  const out: Array<{ min: number; max?: number }> = [];
+  for (const size of sizes ?? []) {
+    const digits = size.replace(/,/g, "");
+    const range = /^\s*(\d+)\s*(?:-|–|to)\s*(\d+)\s*$/i.exec(digits);
+    const open = /^\s*(\d+)\s*\+\s*$/.exec(digits);
+    if (range) out.push({ min: Number(range[1]), max: Number(range[2]) });
+    else if (open) out.push({ min: Number(open[1]) });
+  }
+  return out;
+}
+
+/** What to ask Sales Navigator when the whole profile is refused: the part any search takes. */
+function salesNavigatorFallbacks(
+  query: SearchQuery,
+  resolved: ResolvedFilters,
+): Array<{ body: Record<string, unknown>; droppedFilters: string[]; note: string }> {
+  const keywords = anyOf(query.titles?.length ? query.titles : (query.keywords ?? []));
+  return [
+    {
+      body: {
+        api: "sales_navigator",
+        category: "people",
+        ...(keywords ? { keywords } : {}),
+        ...(resolved.locations.length ? { location: { include: resolved.locations } } : {}),
+      },
+      droppedFilters: ["seniority", "company size", "excluded titles"],
+      note: SALES_NAVIGATOR_PARTIAL_NOTE,
+    },
+  ];
+}
+
+/** The provider rejected the request itself, as opposed to failing to answer it. */
+function isRefusedSearch(err: unknown): boolean {
+  return err instanceof UnipileError && (err.status === 400 || err.status === 422);
+}
+
 function toUnipileSearchBody(
   query: SearchQuery,
   tier: SearchTier,
   resolved: ResolvedFilters,
 ): { body: Record<string, unknown>; droppedFilters: string[] } {
   if (tier === "sales_navigator") {
+    // The Strategy Agent writes seniority and company size the way a person
+    // would ("Founder", "11-50"). Sales Navigator takes neither as words, and
+    // sending them is what had every search refused.
+    const seniority = salesNavigatorSeniorities(query.seniorities);
+    const headcount = salesNavigatorHeadcounts(query.companyHeadcount);
+    const droppedFilters: string[] = [];
+    if (query.seniorities?.length && !seniority.length) droppedFilters.push("seniority");
+    if (query.companyHeadcount?.length && !headcount.length) droppedFilters.push("company size");
     return {
       body: {
         api: "sales_navigator",
         category: "people",
         keywords: anyOf(query.keywords ?? []),
         title: query.titles?.length ? { include: query.titles, exclude: query.excludeTitles ?? [] } : undefined,
-        seniority: query.seniorities?.length ? { include: query.seniorities } : undefined,
+        seniority: seniority.length ? { include: seniority } : undefined,
         industry: resolved.industries.length ? { include: resolved.industries } : undefined,
-        company_headcount: query.companyHeadcount?.length ? query.companyHeadcount : undefined,
+        company_headcount: headcount.length ? headcount : undefined,
         location: resolved.locations.length ? { include: resolved.locations } : undefined,
       },
-      droppedFilters: [],
+      droppedFilters,
     };
   }
 

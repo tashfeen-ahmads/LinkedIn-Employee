@@ -5378,6 +5378,22 @@ const MUTATIONS = [
     to: "    if (!owner) continue;",
     pkg: "@le/worker",
   },
+  {
+    id: "search/sales-navigator-fallback",
+    rule: "Rule 12: a refused Sales Navigator search still builds a list",
+    file: "packages/linkedin/src/unipile.ts",
+    from: "  return err instanceof UnipileError && (err.status === 400 || err.status === 422);",
+    to: "  return false;",
+    pkg: "@le/linkedin",
+  },
+  {
+    id: "search/sales-navigator-levels",
+    rule: "Rule 12: Sales Navigator is sent its own seniority levels, never the words",
+    file: "packages/linkedin/src/unipile.ts",
+    from: "        seniority: seniority.length ? { include: seniority } : undefined,",
+    to: "        seniority: query.seniorities?.length ? { include: query.seniorities } : undefined,",
+    pkg: "@le/linkedin",
+  },
 ];
 
 /**

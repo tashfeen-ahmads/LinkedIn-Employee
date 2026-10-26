@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { CLASSIC_TITLES_OR_KEYWORDS_NOTE, UnipileProvider } from "../src/unipile.js";
+import {
+  CLASSIC_TITLES_OR_KEYWORDS_NOTE,
+  SALES_NAVIGATOR_PARTIAL_NOTE,
+  SALES_NAVIGATOR_REFUSED_NOTE,
+  UnipileProvider,
+  salesNavigatorHeadcounts,
+  salesNavigatorSeniorities,
+} from "../src/unipile.js";
 import { SEARCH_FILTERS, type SearchQuery } from "../src/provider.js";
 import { isPublicProfileUrl } from "@le/shared";
 
@@ -84,9 +91,90 @@ describe("searchProspects tier", () => {
     });
 
     expect(bodies[0]?.api).toBe("sales_navigator");
-    expect(bodies[0]?.seniority).toEqual({ include: ["Director"] });
-    expect(bodies[0]?.company_headcount).toEqual(["51-200"]);
+    // Sales Navigator's own levels and ranges, never the words the Strategy
+    // Agent wrote: those had every search on the first live seat refused.
+    expect(bodies[0]?.seniority).toEqual({ include: ["director"] });
+    expect(bodies[0]?.company_headcount).toEqual([{ min: 51, max: 200 }]);
     expect(page.droppedFilters).toEqual([]);
+  });
+
+  it("maps seniority words and company sizes to what Sales Navigator takes", () => {
+    expect(salesNavigatorSeniorities(["Owner", "Founder", "Partner", "CXO", "VP", "Director", "Mystery"])).toEqual([
+      "owner",
+      "partner",
+      "cxo",
+      "vp",
+      "director",
+    ]);
+    expect(salesNavigatorHeadcounts(["1-10", "1,001-5,000", "10,000+", "small"])).toEqual([
+      { min: 1, max: 10 },
+      { min: 1001, max: 5000 },
+      { min: 10000 },
+    ]);
+  });
+
+  it("names seniority and size as dropped when none of the words can be sent", async () => {
+    const { provider, bodies } = providerWithCapturedBody();
+    const page = await provider.searchProspects({
+      accountId: "a1",
+      query: { ...QUERY, seniorities: ["Mystery"], companyHeadcount: ["small"] },
+      tier: "sales_navigator",
+    });
+    expect(bodies[0]?.seniority).toBeUndefined();
+    expect(bodies[0]?.company_headcount).toBeUndefined();
+    expect(page.droppedFilters).toEqual(["seniority", "company size"]);
+  });
+
+  it("falls back to a narrower Sales Navigator search, then to regular search, when refused", async () => {
+    const bodies: Record<string, unknown>[] = [];
+    let refuse = 2;
+    const fetchImpl = (async (url: string | URL | Request, init?: RequestInit) => {
+      if (String(url).includes("/search/parameters")) return json({ items: [] });
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      bodies.push(body);
+      if (body.api === "sales_navigator" && refuse-- > 0) {
+        return new Response(JSON.stringify({ title: "Invalid parameters" }), { status: 400 });
+      }
+      return json({ items: [{ provider_id: "p1", public_identifier: "jane" }], cursor: null });
+    }) as typeof fetch;
+    const provider = new UnipileProvider({ dsn: "https://api.test", accessToken: "t", fetchImpl });
+
+    const page = await provider.searchProspects({ accountId: "a1", query: QUERY, tier: "sales_navigator" });
+
+    // Full profile, then title and location only, then regular search.
+    expect(bodies.map((b) => b.api)).toEqual(["sales_navigator", "sales_navigator", "classic", "classic"]);
+    expect(bodies[1]?.seniority).toBeUndefined();
+    expect(page.items).toHaveLength(1);
+    expect(page.filterNotes?.[0]).toBe(SALES_NAVIGATOR_REFUSED_NOTE);
+    expect(page.droppedFilters).toEqual(["seniority", "company size", "excluded titles"]);
+  });
+
+  it("keeps the narrower Sales Navigator list when only the full search is refused", async () => {
+    let refuse = 1;
+    const fetchImpl = (async (url: string | URL | Request, init?: RequestInit) => {
+      if (String(url).includes("/search/parameters")) return json({ items: [] });
+      void init;
+      if (refuse-- > 0) return new Response(JSON.stringify({ title: "Invalid parameters" }), { status: 400 });
+      return json({ items: [{ provider_id: "p1", public_identifier: "jane" }], cursor: "sn-next" });
+    }) as typeof fetch;
+    const provider = new UnipileProvider({ dsn: "https://api.test", accessToken: "t", fetchImpl });
+
+    const page = await provider.searchProspects({ accountId: "a1", query: QUERY, tier: "sales_navigator" });
+
+    expect(page.cursor).toBe("sn-next");
+    expect(page.filterNotes).toContain(SALES_NAVIGATOR_PARTIAL_NOTE);
+    expect(page.droppedFilters).toEqual(["seniority", "company size", "excluded titles"]);
+  });
+
+  it("does not paper over a provider that failed to answer", async () => {
+    const fetchImpl = (async (url: string | URL | Request) => {
+      if (String(url).includes("/search/parameters")) return json({ items: [] });
+      return new Response(JSON.stringify({ title: "Service unavailable" }), { status: 503 });
+    }) as typeof fetch;
+    const provider = new UnipileProvider({ dsn: "https://api.test", accessToken: "t", fetchImpl });
+    await expect(
+      provider.searchProspects({ accountId: "a1", query: QUERY, tier: "sales_navigator" }),
+    ).rejects.toThrow(/503/);
   });
 
   it("defaults to classic, because a seat nobody bought is the costlier assumption", async () => {
