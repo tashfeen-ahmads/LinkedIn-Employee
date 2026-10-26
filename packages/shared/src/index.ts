@@ -35,3 +35,5 @@ export * from "./idle-release.js";
 export * from "./voice.js";
 export * from "./reply-playbook.js";
 export * from "./admin-roles.js";
+export * from "./invite-room.js";
+export * from "./linkedin-connect.js";

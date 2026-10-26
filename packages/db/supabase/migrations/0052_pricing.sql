@@ -20,9 +20,12 @@ begin
   end if;
 end $$;
 
+-- Bounded by date so a re-run of this file (schema-install re-emits every
+-- migration) can never turn a trial that started after pricing into free.
 update workspaces
 set plan = 'free', trial_ends_at = null
-where plan = 'trial' and stripe_subscription_id is null;
+where plan = 'trial' and stripe_subscription_id is null
+  and created_at < '2026-10-26T18:00:00Z';
 
 create or replace function create_workspace(
   p_name text,

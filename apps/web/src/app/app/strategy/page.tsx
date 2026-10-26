@@ -12,6 +12,7 @@ import { Empty, PageHeader, Section } from "@/components/page";
 import { requireSession } from "@/lib/workspace";
 import { HOW_MANY, queueSearch } from "@/lib/search";
 import { approveStrategy } from "@/lib/approve";
+import { chosenCtaColumns, ensureCta } from "@/lib/cta-library";
 import { createClient } from "@/lib/supabase-server";
 import {
   ALREADY_RUNNING,
@@ -77,9 +78,24 @@ async function approveProfile(formData: FormData) {
   const session = await requireSession();
   const supabase = await createClient();
 
+  /*
+   * The call to action chosen in setup, onto a strategy that points at none
+   * (rule 65), exactly as onboarding's own approval step applies it. A
+   * strategy with a `cta_id` already says what it asks for: chosen on this
+   * page or in setup, and never overwritten. `approveStrategy` writes it only
+   * while the strategy has no campaign, whose copy was written to the old ask.
+   */
+  const { data: current } = await supabase
+    .from("customer_profiles")
+    .select("cta_id")
+    .eq("id", id)
+    .eq("workspace_id", session.workspaceId)
+    .maybeSingle();
+  const extra = current && !current.cta_id ? await chosenCtaColumns(supabase, session.workspaceId, session.userId) : {};
+
   // Checked, because approving is the one decision this screen exists for
   // (rule 9). The shared definition checks the rows it changed.
-  const approved = await approveStrategy(supabase, session.workspaceId, id);
+  const approved = await approveStrategy(supabase, session.workspaceId, id, extra);
   if (!approved.ok) {
     redirect(errorQuery("/app/strategy", "That strategy could not be approved, so nothing was searched for. Reload the page and try again."));
   }
@@ -176,6 +192,17 @@ async function saveProfile(formData: FormData) {
     ctaUrl = checked.url;
   }
 
+  // The library entry for what was just typed, so the strategy's pointer
+  // names the same ask as its columns. Left pointing at an older entry, the
+  // campaign this strategy builds would send that entry's destination while
+  // its copy argued for this one (rule 36) — and an approval would not know
+  // the strategy already has an ask of its own.
+  const ctaId = await ensureCta(supabase, session.workspaceId, session.userId, {
+    kind,
+    label: ctaLabel,
+    url: ctaUrl,
+  });
+
   const { error: saveError } = await supabase
     .from("customer_profiles")
     .update({
@@ -186,6 +213,7 @@ async function saveProfile(formData: FormData) {
       // Cleared when the goal is no longer a link, or the database constraint
       // and the screen would disagree about what this strategy is doing.
       cta_url: ctaUrl,
+      cta_id: ctaId,
     })
     .eq("id", id)
     .eq("workspace_id", session.workspaceId);
@@ -697,6 +725,12 @@ export default async function StrategyPage({
                         Find {HOW_MANY} prospects
                       </SubmitButton>
                     </form>
+                  ) : !row.name?.trim() ? (
+                    // Written from nothing: there is no segment to approve.
+                    <p className="small muted">
+                      Sage wrote this one with no name, so there is nothing to approve. Set it aside and ask Sage
+                      for more.
+                    </p>
                   ) : (
                     <form action={approveProfile}>
                       <input type="hidden" name="profileId" value={row.id} />

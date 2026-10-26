@@ -106,8 +106,11 @@ export const ONBOARDING_SEQUENCE: readonly SequenceStep[] = [
     key: "approve_strategies",
     atMs: 2 * DAY,
     untilMs: 5 * DAY,
-    // Only once Sage has written something to approve.
-    due: (p) => p.isOwner && p.strategies > 0 && p.approvedStrategies === 0,
+    // Only once Sage has written something to approve, and only once there is
+    // an account to search with: setup asks for LinkedIn before the approval
+    // step (rule 65), so asking for an approval first is asking for something
+    // they cannot do yet. `connect_linkedin` is the email for that moment.
+    due: (p) => p.isOwner && p.linkedInConnected && p.strategies > 0 && p.approvedStrategies === 0,
   },
   {
     key: "launch_campaign",

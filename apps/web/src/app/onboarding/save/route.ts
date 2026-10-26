@@ -1,5 +1,6 @@
 import type { NextRequest } from "next/server";
 import { checkCtaUrl, isValidTimezone } from "@le/shared";
+import { isUuid, meetingBookingUrl, stepPath, withScheme } from "@/lib/wizard-launch";
 import { createClient } from "@/lib/supabase-server";
 import { seeOther } from "@/lib/see-other";
 import { callWorker } from "@/lib/worker";
@@ -63,16 +64,20 @@ export async function POST(request: NextRequest) {
   } = await supabase.auth.getUser();
   if (!user) return seeOther("/login");
 
+  // The campaign the launch step was launching, carried back on every refusal
+  // so the page reloads onto the same one (stepPath keeps only a uuid).
+  const campaignId = action === "launch" ? String(form.get("campaignId") ?? "") : null;
+  const again = (code: string) => seeOther(stepPath(step, { error: code, campaign: campaignId }));
+
   const wizard = await readWizard(supabase, user.id);
   const workspaceId = wizard.workspaceId;
   if (!workspaceId) return seeOther("/onboarding");
   // Nothing is decided from facts that could not be read.
-  if (wizard.unreadable) return seeOther(`/onboarding?step=${step}&error=unreadable`);
+  if (wizard.unreadable) return again("unreadable");
   const current = currentStep(wizard.facts);
   if (!current) return seeOther("/app");
   if (stepIndex(step) > stepIndex(current)) return seeOther("/onboarding");
 
-  const again = (code: string) => seeOther(`/onboarding?step=${step}&error=${code}`);
   // The roles the database lets write the workspace row (`is_workspace_admin`).
   const isAdmin = (AUTONOMY_ROLES as readonly string[]).includes(wizard.role ?? "");
 
@@ -226,12 +231,13 @@ export async function POST(request: NextRequest) {
       }
       if (kind === "meeting") {
         // The rep's own scheduling link is optional (rule 31): without one,
-        // the agent offers times from this product's own booking page.
-        const raw = String(form.get("bookingUrl") ?? "").trim();
-        if (raw) {
-          const checked = checkCtaUrl(withScheme(raw));
-          if (!checked.ok) return again("booking-url");
-          await supabase.from("profiles").update({ booking_url: checked.url }).eq("id", user.id);
+        // the agent offers times from this product's own booking page. Typed
+        // into the general link box instead, it is still theirs, and dropping
+        // it offered our page in place of the one they use.
+        const booking = meetingBookingUrl(String(form.get("bookingUrl") ?? ""), String(form.get("ctaUrl") ?? ""));
+        if (!booking.ok) return again("booking-url");
+        if (booking.url) {
+          await supabase.from("profiles").update({ booking_url: booking.url }).eq("id", user.id);
         }
       }
 
@@ -326,7 +332,7 @@ export async function POST(request: NextRequest) {
     }
 
     case "launch": {
-      const campaignId = String(form.get("campaignId") ?? "");
+      if (!isUuid(campaignId)) return again("launch-missing");
       // Only a draft of this workspace: the first launch, never a paused or
       // archived campaign named in a hand-made form.
       const { data: draft } = await supabase
@@ -419,11 +425,4 @@ async function defer(): Promise<Response> {
     .eq("id", user.id)
     .select("id");
   return seeOther(saved?.length ? "/app" : `/onboarding?step=${current}&error=save-failed`);
-}
-
-/** "cal.com/sam" as most people type it, with the scheme the check requires. */
-function withScheme(raw: string): string {
-  const trimmed = raw.trim();
-  if (!trimmed || /^[a-z][a-z0-9+.-]*:/i.test(trimmed)) return trimmed;
-  return `https://${trimmed}`;
 }

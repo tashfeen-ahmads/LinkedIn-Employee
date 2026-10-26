@@ -234,6 +234,9 @@ async function closeExhaustedSequences(ctx: WorkerContext, now: Date): Promise<v
     const next = (row.last_step_sent ?? 0) + 1;
     if (own.some((step) => step.step_number === next)) continue;
 
+    // This exact reason is what lets a reply to the last message reopen the
+    // row (`SEQUENCE_COMPLETED` in inbound.ts): the sequence ran out, nobody
+    // said no, so an answer is still this campaign's reply to count.
     await ctx.db
       .from("campaign_prospects")
       .update({ status: "closed", status_reason: "sequence completed", closed_at: now.toISOString() })

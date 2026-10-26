@@ -632,3 +632,150 @@ describe("runStrategyJob stores what it says it stored", () => {
     expect(db.rows("customer_profiles")).toHaveLength(1);
   });
 });
+
+/*
+ * A run given nothing it could read came back with every field "" and was
+ * stored: a business profile with no name and a strategy with no name that a
+ * person could approve. Live, on a workspace that gave only a LinkedIn page.
+ */
+describe("runStrategyJob refuses to store a blank answer", () => {
+  const BLANK_BUSINESS = {
+    companyName: "",
+    oneLiner: "",
+    offering: "",
+    pricingModel: "unknown",
+    proofPoints: [],
+    toneOfVoice: "",
+    competitors: [],
+    commonObjections: [],
+    differentiators: [],
+  };
+
+  it("fails a first run whose business has no name, and stores nothing", async () => {
+    const { db, ctx } = harness();
+    const { runStrategyJob, STRATEGY_NOTHING_TO_READ } = await import("../src/jobs/strategy.js");
+    strategyMock.mockResolvedValue({ businessProfile: BLANK_BUSINESS, customerProfiles: [profile("", 1)] });
+
+    await expect(
+      runStrategyJob(ctx, { workspaceId: WORKSPACE, userId: USER, websiteUrl: "https://acme.test" }),
+    ).rejects.toThrow(STRATEGY_NOTHING_TO_READ);
+
+    expect(db.rows("business_profiles")).toHaveLength(0);
+    expect(db.rows("customer_profiles")).toHaveLength(0);
+    // Nothing seeded from a company with no name.
+    expect(db.rows("agents")).toHaveLength(0);
+    // The failure says in words what is needed, for the screen that shows it.
+    const failed = db.rows("events").find((e) => e.name === "strategy.failed");
+    expect((failed?.payload as { reason: string }).reason).toMatch(/website, or a few sentences/);
+  });
+
+  it("fails a first run whose business has a name and no offering", async () => {
+    const { db, ctx } = harness();
+    const { runStrategyJob } = await import("../src/jobs/strategy.js");
+    strategyMock.mockResolvedValue({ ...OUTPUT, businessProfile: { ...OUTPUT.businessProfile, offering: "  " } });
+
+    await expect(
+      runStrategyJob(ctx, { workspaceId: WORKSPACE, userId: USER, websiteUrl: "https://acme.test" }),
+    ).rejects.toThrow();
+    expect(db.rows("business_profiles")).toHaveLength(0);
+  });
+
+  it("fails a run in which any strategy has no name, rather than storing the rest", async () => {
+    const { db, ctx } = harness();
+    const { runStrategyJob } = await import("../src/jobs/strategy.js");
+    strategyMock.mockResolvedValue({ ...OUTPUT, customerProfiles: [profile("Ops leaders", 1), profile("  ", 2)] });
+
+    await expect(
+      runStrategyJob(ctx, { workspaceId: WORKSPACE, userId: USER, websiteUrl: "https://acme.test" }),
+    ).rejects.toThrow();
+    expect(db.rows("customer_profiles")).toHaveLength(0);
+  });
+
+  it("repairs a business profile an earlier run stored blank, once a run can describe it", async () => {
+    const { db, ctx } = harness();
+    const { runStrategyJob } = await import("../src/jobs/strategy.js");
+    db.seed("business_profiles", [{ id: "bp-blank", workspace_id: WORKSPACE, spec: BLANK_BUSINESS }]);
+    db.seed("customer_profiles", [
+      { id: "cp-blank", workspace_id: WORKSPACE, business_profile_id: "bp-blank", name: "", priority: 1 },
+    ]);
+    strategyMock.mockResolvedValue({ ...OUTPUT, customerProfiles: [profile("HVAC owners in Texas", 1)] });
+
+    await runStrategyJob(ctx, {
+      workspaceId: WORKSPACE,
+      userId: USER,
+      expand: true,
+      guidance: "HVAC owners in Texas",
+    });
+
+    expect((db.find("business_profiles", { id: "bp-blank" })?.spec as { companyName: string }).companyName).toBe("Acme");
+    expect(db.rows("customer_profiles").find((r) => r.name === "HVAC owners in Texas")).toBeTruthy();
+    // The nameless one was a rejected suggestion and is set aside.
+    expect(db.find("customer_profiles", { id: "cp-blank" })?.do_not_pursue).toBe(true);
+  });
+
+  it("seeds no agent from a blank business, even on a run that adds strategies", async () => {
+    const { db, ctx } = harness();
+    const { runStrategyJob } = await import("../src/jobs/strategy.js");
+    db.seed("business_profiles", [{ id: "bp-blank", workspace_id: WORKSPACE, spec: BLANK_BUSINESS }]);
+    strategyMock.mockResolvedValue({ businessProfile: BLANK_BUSINESS, customerProfiles: [profile("Clinic owners", 1)] });
+
+    await runStrategyJob(ctx, { workspaceId: WORKSPACE, userId: USER, expand: true });
+
+    expect(db.rows("customer_profiles").some((r) => r.name === "Clinic owners")).toBe(true);
+    // An offer and an opener about a company with no name are copy about nobody.
+    expect(db.rows("agents")).toHaveLength(0);
+  });
+
+  it("never rewrites a business profile that has something in it", async () => {
+    const { db, ctx } = harness();
+    const { runStrategyJob } = await import("../src/jobs/strategy.js");
+    await runStrategyJob(ctx, { workspaceId: WORKSPACE, userId: USER, websiteUrl: "https://acme.test" });
+    strategyMock.mockResolvedValue({
+      businessProfile: { ...OUTPUT.businessProfile, companyName: "Somebody else" },
+      customerProfiles: [profile("New angle", 1)],
+    });
+
+    await runStrategyJob(ctx, { workspaceId: WORKSPACE, userId: USER, expand: true });
+    expect((db.rows("business_profiles")[0]?.spec as { companyName: string }).companyName).toBe("Acme");
+  });
+});
+
+describe("blankStrategyOutput and pagesToRead", () => {
+  it("treats an empty name as no name, never as a duplicate of another", async () => {
+    const { blankStrategyOutput } = await import("../src/jobs/strategy.js");
+    expect(blankStrategyOutput(OUTPUT, { expanding: false })).toBeNull();
+    expect(blankStrategyOutput({ ...OUTPUT, customerProfiles: [{ name: "" }] }, { expanding: true })).toBeTruthy();
+    // An expanding run that found nothing new is an answer, not a failure.
+    expect(blankStrategyOutput({ ...OUTPUT, customerProfiles: [] }, { expanding: true })).toBeNull();
+  });
+
+  it("reads the exact page the customer gave first, then the origin's pages", async () => {
+    const { pagesToRead } = await import("../src/jobs/strategy.js");
+    const pages = pagesToRead("http://host.test/our-clinic?ref=x#top");
+    expect(pages[0]).toBe("https://host.test/our-clinic?ref=x");
+    expect(pages).toContain("https://host.test/");
+    expect(pages).toContain("https://host.test/about");
+    // The root given as the site is read once, not twice.
+    expect(pagesToRead("acme.test").filter((u) => u === "https://acme.test/")).toHaveLength(1);
+    expect(pagesToRead("ftp://acme.test")).toEqual([]);
+  });
+
+  it("fetches the page with the path, through the vetted fetch", async () => {
+    const { ctx } = harness();
+    const { runStrategyJob } = await import("../src/jobs/strategy.js");
+
+    await runStrategyJob(ctx, { workspaceId: WORKSPACE, userId: USER, websiteUrl: "https://host.test/our-clinic" });
+
+    const urls = ((globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls ?? []).map((c) => String(c[0]));
+    expect(urls[0]).toBe("https://host.test/our-clinic");
+    // Still refused inside this network when the path is the only difference.
+    lookupMock.mockImplementation(async () => [{ address: "10.0.0.7", family: 4 }]);
+    try {
+      vi.stubGlobal("fetch", vi.fn(async () => new Response("x", { status: 200 })));
+      await runStrategyJob(ctx, { workspaceId: WORKSPACE, userId: USER, websiteUrl: "https://intranet.test/a/b" });
+      expect((globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(0);
+    } finally {
+      lookupMock.mockImplementation(async () => [{ address: "93.184.216.34", family: 4 }]);
+    }
+  });
+});

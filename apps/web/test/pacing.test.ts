@@ -382,3 +382,55 @@ describe("describePacing and the week", () => {
     expect(state?.body).toMatch(/rolling seven days/);
   });
 });
+
+describe("describePacing and what is already queued", () => {
+  /*
+   * Two ways the page promised invitations the loop would not send: "up to 6
+   * more today" with ten minutes of the day left, and "up to 10 more today" on
+   * an account whose day another campaign had already queued. The loop leaves
+   * both for tomorrow (rule 61) and nets the queue off the allowance
+   * (`inviteRoom`); the screen now reads the same arithmetic.
+   */
+  const morning = new Date("2026-09-17T10:00:00Z"); // A Thursday morning.
+  const ready = {
+    status: "running",
+    queued: 20,
+    timezone: "UTC",
+    lastBeatAt: "2026-09-17T09:58:00Z",
+    dailyCap: 10,
+    sentToday: 0,
+    now: morning,
+  };
+
+  it("says the rest go tomorrow when less than one gap is left today", () => {
+    const late = new Date("2026-09-17T17:55:00Z"); // five minutes before close
+    const state = describePacing({ ...ready, account: account(), lastBeatAt: "2026-09-17T17:53:00Z", now: late });
+    expect(state?.body).not.toMatch(/more today/);
+    expect(state?.body).toMatch(/from 8 AM tomorrow/);
+    expect(state?.title).toContain("from 8 AM tomorrow");
+  });
+
+  it("names the next sending day, not tomorrow, on a Friday evening", () => {
+    const friday = new Date("2026-09-18T17:55:00Z");
+    const state = describePacing({ ...ready, account: account({ counters_reset_on: "2026-09-18" }), lastBeatAt: "2026-09-18T17:53:00Z", now: friday });
+    expect(state?.body).toMatch(/from 8 AM on Monday/);
+  });
+
+  it("nets invitations other campaigns already queued off the account's day", () => {
+    // A new account: ten a day. Another campaign on it has all ten queued.
+    const state = describePacing({ ...ready, account: account(), queuedOnAccount: 10, queuedOnCampaign: 0 });
+    expect(state?.body).not.toMatch(/up to \d+ more today/);
+    expect(state?.body).toMatch(/already queued \(10 from other campaigns on it\)/);
+  });
+
+  it("counts this campaign's own queued invitations as going today", () => {
+    const state = describePacing({ ...ready, account: account(), queuedOnAccount: 6, queuedOnCampaign: 2 });
+    // 10 a day, 4 queued by others: 6 left, of which 2 are this campaign's own.
+    expect(state?.body).toContain("up to 6 more today");
+  });
+
+  it("says what it said before when the loop reported nothing queued", () => {
+    const state = describePacing({ ...ready, account: account() });
+    expect(state?.body).toContain("up to 10 more today");
+  });
+});

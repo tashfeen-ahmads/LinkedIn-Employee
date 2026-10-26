@@ -1,4 +1,4 @@
-import { isWithinWorkingHours, type WorkingHours } from "@le/shared";
+import { isValidTimezone, isWithinWorkingHours, type WorkingHours } from "@le/shared";
 import type { BusyInterval } from "./provider.js";
 
 export type { WorkingHours };
@@ -49,6 +49,17 @@ export function offerableStarts(options: SlotOptions): string[] {
     minNoticeHours = 12,
     bufferMinutes = 15,
   } = options;
+
+  /*
+   * A zone this runtime cannot read offers nothing, rather than throwing or
+   * guessing. Stored zones have included free text ("Eastern"), and every
+   * `Intl` call given one throws — the reply job failed outright. Read as UTC
+   * instead, "9 to 5" would offer a prospect a call at four in the morning
+   * under a real rep's name. No times is the failure that costs an offer; the
+   * wrong times cost the meeting (rule 19's direction). Callers resolve the
+   * zone first (`usableTimezone`) and say which one they used.
+   */
+  if (!isValidTimezone(timezone)) return [];
 
   const durationMs = durationMinutes * 60_000;
   const bufferMs = bufferMinutes * 60_000;
@@ -135,8 +146,9 @@ function dayKeyFor(date: Date, timezone: string): string {
 
 /** Human-readable rendering of a slot, in the prospect's own words. */
 export function formatSlot(iso: string, timezone: string): string {
+  // Labelled with the zone it is written in, so a fallback is never silent.
   return new Intl.DateTimeFormat("en-US", {
-    timeZone: timezone,
+    timeZone: isValidTimezone(timezone) ? timezone : "UTC",
     weekday: "long",
     month: "long",
     day: "numeric",

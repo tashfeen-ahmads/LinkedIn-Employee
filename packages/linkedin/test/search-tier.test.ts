@@ -33,7 +33,7 @@ import { isPublicProfileUrl } from "@le/shared";
 const QUERY: SearchQuery = {
   titles: ["Head of Operations"],
   seniorities: ["Director"],
-  industries: ["Software"],
+  industries: ["Computer Software"],
   companyHeadcount: ["51-200"],
   geographies: ["United Kingdom"],
   keywords: ["revops"],
@@ -51,7 +51,7 @@ const QUERY: SearchQuery = {
  */
 function providerWithCapturedBody(parameters: Record<string, { id: string; title: string }> = {
   "united kingdom": { id: "101165590", title: "United Kingdom" },
-  software: { id: "4", title: "Software Development" },
+  "software development": { id: "4", title: "Software Development" },
 }) {
   const bodies: Record<string, unknown>[] = [];
   const lookups: string[] = [];
@@ -191,7 +191,7 @@ describe("searchProspects tier", () => {
     const fetchImpl = (async (url: string | URL | Request, init?: RequestInit) => {
       if (String(url).includes("/search/parameters")) {
         const asked = new URL(String(url)).searchParams.get("keywords") ?? "";
-        return json({ items: asked === "United Kingdom" ? [{ id: "101165590", title: "United Kingdom" }] : asked === "Software" ? [{ id: "4", title: "Software" }] : [] });
+        return json({ items: asked === "United Kingdom" ? [{ id: "101165590", title: "United Kingdom" }] : asked === "Software Development" ? [{ id: "4", title: "Software Development" }] : [] });
       }
       bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
       if (refuse-- > 0) return new Response(JSON.stringify({ title: "Invalid parameters" }), { status: 400 });
@@ -381,7 +381,7 @@ describe("searchProspects tier", () => {
 
     await provider.searchProspects({ accountId: "a1", query: QUERY, tier: "classic" });
 
-    expect(lookups).toEqual(["United Kingdom", "Software"]);
+    expect(lookups).toEqual(["United Kingdom", "Software Development"]);
     // The whole bug, in two lines. Sending the words returns nobody.
     expect(bodies[0]?.location).toEqual(["101165590"]);
     expect(bodies[0]?.industry).toEqual(["4"]);
@@ -401,10 +401,10 @@ describe("searchProspects tier", () => {
 
     const page = await provider.searchProspects({ accountId: "a1", query: QUERY, tier: "classic" });
 
-    // "Software" is a real thing to ask for and is not what LinkedIn calls it.
-    // The narrower list is fine; the reviewer not knowing it narrowed is not.
+    // "Computer Software" is LinkedIn's pre-2022 name, and is not what it
+    // calls it now. The rename is deliberate; the reviewer still hears of it.
     expect(page.filterNotes).toContain(
-      'The industry "Software" was searched as LinkedIn\'s "Software Development".',
+      'The industry "Computer Software" was searched as LinkedIn\'s "Software Development".',
     );
   });
 
@@ -467,7 +467,7 @@ describe("searchProspects tier", () => {
     await provider.searchProspects({ accountId: "a1", query: QUERY, tier: "classic" });
     await provider.searchProspects({ accountId: "a1", query: QUERY, tier: "classic" });
 
-    expect(lookups).toEqual(["United Kingdom", "Software"]);
+    expect(lookups).toEqual(["United Kingdom", "Software Development"]);
   });
 
   it("keeps the filters classic search does have", async () => {

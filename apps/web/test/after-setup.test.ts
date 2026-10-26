@@ -25,7 +25,8 @@ describe("screens after onboarding read what onboarding wrote", () => {
   it("availability falls back to the timezone given at onboarding, not UTC", () => {
     const availability = read("app", "app", "meetings", "availability.tsx");
     expect(availability).toMatch(/timezone: ownTimezone \?\? DEFAULTS\.timezone, \.\.\.\(row \?\? \{\}\)/);
-    expect(availability).toMatch(/row\?\.timezone \|\| \(await profileTimezone\(supabase, session\.userId\)\)/);
+    // The row's zone when it is one the calendar can read, the profile's otherwise.
+    expect(availability).toMatch(/usableTimezone\(row\?\.timezone, await profileTimezone\(supabase, session\.userId\)\)/);
   });
 
   it("does not ask the Sales Navigator question again on the overview", () => {

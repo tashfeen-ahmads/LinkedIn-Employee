@@ -1,4 +1,4 @@
-import { LINKEDIN_LIMITS, PACING_STALE_MS } from "@le/shared";
+import { LINKEDIN_LIMITS, PACING_STALE_MS, inviteRoom, zonedParts } from "@le/shared";
 import {
   checkAction,
   dailyInviteCap,
@@ -61,6 +61,16 @@ export function describePacing(input: {
    * the screen has to as well or it quotes a faster pace than the loop keeps.
    */
   sentToday?: number;
+  /**
+   * Invitations already queued and not yet sent, as the pacing loop's last run
+   * recorded them (`queuedFromLoop`): on the whole account, every campaign on
+   * it, and this campaign's own. The loop nets them off today's allowance
+   * before it places anything (`inviteRoom`), so the screen has to as well — a
+   * second campaign on an account whose day the first had already queued was
+   * promised "up to 10 more today" and sent none.
+   */
+  queuedOnAccount?: number;
+  queuedOnCampaign?: number;
   /**
    * The operator's kill switch, as the pacing loop's own stamp reports it
    * (`detail.paused`). While it holds, the loop keeps beating and enqueues
@@ -181,16 +191,38 @@ export function describePacing(input: {
   // campaign on it, and this one may not take all of it.
   // And the week's ceiling, which the loop's budget includes (`paceMs` below
   // honours it too): 97 of 100 this week is three more today, whatever the
-  // day's ramp says.
-  const left = Math.max(
-    0,
-    Math.min(
-      dailyInviteCap(usage.firstActionAt, now) - usage.invitesToday,
-      LINKEDIN_LIMITS.invitesPerWeek - usage.invitesThisWeek,
-      input.dailyCap === undefined ? Number.POSITIVE_INFINITY : input.dailyCap - (input.sentToday ?? 0),
-    ),
-  );
+  // day's ramp says. And net of what is already queued, by this campaign and
+  // by every other one on the account, through the loop's own arithmetic.
+  const room = roomToday(input, usage, now);
+  const left = room.moreToday;
   const pace = paceMs(input, usage, now);
+  const opening = `${hour(usage.workingHours.start)} ${nextSendingDay(now, usage.workingHours.days, usage.timezone)}`;
+
+  /*
+   * Nothing more today, said as such. The loop leaves for tomorrow whatever
+   * does not fit before close (rule 61), so "up to 6 more today" at twenty to
+   * six, or on an account whose day another campaign has already queued, is a
+   * promise the loop will not keep, and the one somebody believes.
+   */
+  if (left === 0) {
+    const others = Math.max(0, (input.queuedOnAccount ?? 0) - (input.queuedOnCampaign ?? 0));
+    return {
+      tone: "muted",
+      title: `${input.queued} ${input.queued === 1 ? "person" : "people"} still to invite, from ${opening}.`,
+      body:
+        others > 0 && room.accountCap <= 0
+          ? `Today's invitations on this account are already queued (${others} from other campaigns on it), so this campaign's next ones go out from ${opening}, spread across the day. One account shares one daily allowance however many campaigns send from it.`
+          : `Today's allowance for this campaign is spoken for, so the next invitations go out from ${opening}, spread across the day.`,
+    };
+  }
+  const windowLeft = workingMsLeftToday(now, usage.workingHours, usage.timezone);
+  if (windowLeft < (pace ?? LINKEDIN_LIMITS.minGapMs)) {
+    return {
+      tone: "muted",
+      title: `${input.queued} ${input.queued === 1 ? "person" : "people"} still to invite, from ${opening}.`,
+      body: `Less than one invitation's gap is left in today's sending hours, so the rest go out from ${opening} (${usage.timezone}), spread across the day rather than squeezed into the last minutes of this one.`,
+    };
+  }
   return {
     tone: "accent",
     title: `Sending. ${input.queued} ${input.queued === 1 ? "person" : "people"} still to invite.`,
@@ -279,15 +311,13 @@ function notSending(
  * two ways, which is the drift `invitePaceMs` exists to prevent.
  */
 function paceMs(
-  input: { dailyCap?: number; sentToday?: number },
+  input: PaceInput,
   usage: ReturnType<typeof toUsage>,
   now: Date,
 ): number | null {
-  const remaining = Math.min(
-    Math.max(0, dailyInviteCap(usage.firstActionAt, now) - usage.invitesToday),
-    Math.max(0, LINKEDIN_LIMITS.invitesPerWeek - usage.invitesThisWeek),
-    input.dailyCap === undefined ? Number.POSITIVE_INFINITY : Math.max(0, input.dailyCap - (input.sentToday ?? 0)),
-  );
+  // What the loop divides the day among: its budget, net of what is queued.
+  const room = roomToday(input, usage, now);
+  const remaining = room.budget > 0 ? room.budget : room.moreToday;
   if (remaining <= 0) return null;
   return invitePaceMs({
     remaining,
@@ -295,6 +325,43 @@ function paceMs(
     dayMs: workingDayMs(usage.workingHours),
     dayAllowance: dailyInviteCap(usage.firstActionAt, now),
   });
+}
+
+type PaceInput = { dailyCap?: number; sentToday?: number; queuedOnAccount?: number; queuedOnCampaign?: number };
+
+/** Today's room, through the same arithmetic the pacing loop budgets by. */
+function roomToday(input: PaceInput, usage: ReturnType<typeof toUsage>, now: Date) {
+  const queuedOnAccount = Math.max(0, input.queuedOnAccount ?? 0);
+  return inviteRoom({
+    dayAllowance: dailyInviteCap(usage.firstActionAt, now),
+    accountSentToday: usage.invitesToday,
+    accountInFlightToday: queuedOnAccount,
+    weekCeiling: LINKEDIN_LIMITS.invitesPerWeek,
+    accountSentThisWeek: usage.invitesThisWeek,
+    accountInFlight: queuedOnAccount,
+    campaignCap: input.dailyCap === undefined ? Number.POSITIVE_INFINITY : input.dailyCap,
+    campaignSentToday: input.sentToday ?? 0,
+    campaignInFlightToday: Math.min(queuedOnAccount, Math.max(0, input.queuedOnCampaign ?? 0)),
+  });
+}
+
+/**
+ * "tomorrow", or the weekday name, of the next day the account sends on.
+ * Read in the rep's zone; a zone this runtime cannot read says "next".
+ */
+function nextSendingDay(now: Date, days: number[], timezone: string): string {
+  let weekday: number;
+  try {
+    weekday = zonedParts(now, timezone).weekday;
+  } catch {
+    return "on the next sending day";
+  }
+  const names = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  for (let ahead = 1; ahead <= 7; ahead++) {
+    const day = (weekday + ahead) % 7;
+    if (days.includes(day)) return ahead === 1 ? "tomorrow" : `on ${names[day]}`;
+  }
+  return "on the next sending day";
 }
 
 function minutesAgo(ms: number): string {

@@ -160,6 +160,7 @@ describe("the onboarding sequence, keyed to progress", () => {
 
   it("moves on past a step it has already sent", async () => {
     const { db, ctx, email } = harness({ signedUpAgo: 2.5 * DAY });
+    db.seed("linkedin_accounts", [{ workspace_id: WORKSPACE, user_id: USER, status: "active" }]);
     db.seed("customer_profiles", [{ workspace_id: WORKSPACE, name: "Agencies", approved_at: null }]);
     db.seed("email_sends", [
       {
@@ -174,6 +175,22 @@ describe("the onboarding sequence, keyed to progress", () => {
 
     await runOnboardingSequence(ctx, NOW);
     expect(email.sent.map((m) => m.subject)).toEqual(["Your strategy is ready to review"]);
+  });
+
+  it("does not ask for an approval before LinkedIn is connected, because setup cannot reach it", () => {
+    // Setup asks for LinkedIn before the approval step (rule 65), so this
+    // email would point at a screen the person cannot open yet.
+    const ask = (linkedInConnected: boolean) =>
+      nextSequenceStep({
+        ageMs: 2.5 * DAY,
+        progress: progress({ strategies: 2, linkedInConnected }),
+        alreadySent: new Set(["onboarding.connect_linkedin"]),
+        lastLifecycleSentAt: null,
+        now: NOW.getTime(),
+        localHour: 10,
+      });
+    expect(ask(false)).toBeNull();
+    expect(ask(true)?.key).toBe("approve_strategies");
   });
 
   it("leaves a stale step alone rather than sending it late", async () => {

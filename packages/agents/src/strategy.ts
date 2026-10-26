@@ -26,14 +26,21 @@ export async function runStrategyAgent(ctx: AgentContext, input: StrategyInput):
   // the strategies already written, which is more material than a first run
   // ever has. Requiring the website again would make "write me four more" fail
   // for every workspace that onboarded with a description.
+  //
+  // A LinkedIn company page is not material on its own: nothing fetches it
+  // (LinkedIn serves nothing readable to a stranger's request), so a run
+  // given only that address is a run given only a URL, and the model fills a
+  // business profile and a strategy with empty strings that a person can then
+  // approve. It still travels as a hint beside a website or a description.
   const hasMaterial =
     input.websiteUrl ||
-    input.linkedinCompanyUrl ||
-    input.description ||
+    input.description?.trim() ||
     input.websiteText ||
     input.existingProfiles?.length;
   if (!hasMaterial) {
-    throw new Error("Strategy Agent needs at least a website, a LinkedIn page, or a description");
+    throw new Error(
+      "Sage needs your website or a few sentences about what you sell. A LinkedIn page alone cannot be read.",
+    );
   }
 
   return callStructured(ctx, {

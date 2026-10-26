@@ -10,7 +10,7 @@ import { recordBeat } from "./heartbeat.js";
 import { BOOT_BEAT } from "@le/shared";
 import { billingConfigured, trialEnforced } from "@le/billing";
 import type { CampaignTickJob, DigestJob, InboundMessageJob, LinkedInActionJob, StrategyJob, TargetingJob } from "./queues.js";
-import { runCampaignTick } from "./jobs/campaign-tick.js";
+import { rescheduleJob, runCampaignTick } from "./jobs/campaign-tick.js";
 import { runLinkedInAction, RescheduleError } from "./jobs/linkedin-action.js";
 import { handleInboundMessage } from "./jobs/inbound.js";
 import { runStrategyJob } from "./jobs/strategy.js";
@@ -241,7 +241,10 @@ const workers = [
         await runLinkedInAction(ctx, job.data);
       } catch (err) {
         if (err instanceof RescheduleError) {
-          await job.moveToDelayed(Date.now() + err.retryAfterMs, job.token);
+          // Through `rescheduleJob`, which writes the new due time into the
+          // job's data: BullMQ keeps the original `timestamp` and makes `delay`
+          // relative to now, so the pacing loop read their sum as due early.
+          await rescheduleJob(job, err.retryAfterMs);
           // BullMQ requires this throw: without it the worker tries to complete
           // a job it has just moved to the delayed set, and the reschedule
           // fails instead of happening.

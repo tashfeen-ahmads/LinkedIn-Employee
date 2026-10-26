@@ -1,6 +1,6 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { HOOK_MAX_CHARS, PITCH_MAX_CHARS } from "@le/shared";
+import { HOOK_MAX_CHARS, PITCH_MAX_CHARS, usesPitch } from "@le/shared";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { callWorker, errorQuery, noticeQuery } from "@/lib/worker";
@@ -420,7 +420,7 @@ export default async function PitchPage({ searchParams }: { searchParams: Promis
   const session = await requireSession();
   const supabase = await createClient();
 
-  const [{ data: pitchRows }, { data: hookRows }, { data: variants }] = await Promise.all([
+  const [{ data: pitchRows }, { data: hookRows }, { data: variants }, { data: liveCampaigns }] = await Promise.all([
     supabase
       .from("pitches")
       .select("id, name, body, angle, written_by, facts_used, approved_at, is_default, agent_id")
@@ -439,7 +439,27 @@ export default async function PitchPage({ searchParams }: { searchParams: Promis
       .from("campaign_variants")
       .select("name, pitch_id, hook_id")
       .eq("workspace_id", session.workspaceId),
+    // Campaigns that can still send a follow-up, for whether any of their
+    // steps is built from `{{pitch}}` at all.
+    supabase
+      .from("campaigns")
+      .select("id")
+      .eq("workspace_id", session.workspaceId)
+      .in("status", ["draft", "running", "paused"])
+      .limit(500),
   ]);
+  const liveIds = (liveCampaigns ?? []).map((c) => c.id);
+  const { data: liveSteps } = liveIds.length
+    ? await supabase.from("campaign_steps").select("message").in("campaign_id", liveIds).limit(2000)
+    : { data: [] as Array<{ message: string }> };
+  /*
+   * Only a step built from `{{pitch}}` is ever held for want of one (rule 40).
+   * The warning said every workspace without a default would have its
+   * follow-ups held, including the ones whose steps never mention the pitch,
+   * which is most of them: replies are drafted without one, and a follow-up
+   * written in full sends as written.
+   */
+  const pitchInUse = (liveSteps ?? []).some((step) => usesPitch(step.message ?? ""));
 
   const pitches = pitchRows ?? [];
   const hooks = hookRows ?? [];
@@ -471,13 +491,15 @@ export default async function PitchPage({ searchParams }: { searchParams: Promis
 
       <PageNotice error={params.error} notice={params.notice} />
 
-      {noDefault(hooks) || noDefault(pitches) ? (
+      {noDefault(hooks) || (noDefault(pitches) && pitchInUse) ? (
         <div className="notice warning">
           {noDefault(hooks) ? "No approved opener is set as the default. " : ""}
-          {noDefault(pitches)
-            ? "No approved pitch is set as the default, so anybody in a campaign with no angle has their follow-up held instead of sent. "
+          {noDefault(pitches) && pitchInUse
+            ? "No approved pitch is set as the default, and a campaign step is built from {{pitch}}, so anybody in a campaign with no angle has that follow-up held instead of sent. "
             : ""}
-          Approve one of each and mark it default.
+          {noDefault(hooks) && noDefault(pitches) && pitchInUse
+            ? "Approve one of each and mark it default."
+            : "Approve one and mark it default."}
         </div>
       ) : null}
 

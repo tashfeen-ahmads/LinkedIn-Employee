@@ -589,3 +589,32 @@ describe("the two audiences for a system check", () => {
     }
   });
 });
+
+describe("whether the provider holds this rep's account", () => {
+  /*
+   * The provider's own list carries no reference, so matching on it alone
+   * reported "no LinkedIn account is connected for you" to every rep whose row
+   * was not active, including one whose own signed sign-in had just returned a
+   * live account id the Team page was about to claim.
+   */
+  it("finds the account the rep's own sign-in returned", async () => {
+    const { ctx, linkedin } = harness({
+      account: { status: "connecting", provider_account_id: null, pending_provider_account_id: "acct_new" },
+    });
+    (linkedin as unknown as { listAccounts: () => Promise<unknown> }).listAccounts = async () => [
+      { providerAccountId: "acct_new", reference: "", status: "active" },
+    ];
+    const row = check(await run(ctx), "account-replacement");
+    expect(row.detail).not.toContain("No LinkedIn account is connected");
+  });
+
+  it("never counts somebody else's account as the rep's", async () => {
+    const { ctx, linkedin } = harness({
+      account: { status: "connecting", provider_account_id: null, pending_provider_account_id: null },
+    });
+    (linkedin as unknown as { listAccounts: () => Promise<unknown> }).listAccounts = async () => [
+      { providerAccountId: "acct_other", reference: "", status: "active" },
+    ];
+    expect(check(await run(ctx), "account-replacement").state).toBe("blocked");
+  });
+});

@@ -195,10 +195,30 @@ async function tick(db: Db, queues: Queues, now: Date, linkedin?: unknown): Prom
     }
   }
 
+  // Invitations due before each account's local midnight, by campaign: the
+  // number the campaign page nets off today's room (`queuedFromLoop`). Written
+  // as a count rather than left for the screen to read out of `decisions`,
+  // which are sentences and capped at twenty (rule 21: one reading).
+  const inFlightToday: Record<string, { account: number; campaigns: Record<string, number> }> = {};
+  if (inFlight.known) {
+    for (const [accountId, loaded] of accounts) {
+      if (!loaded) continue;
+      const dayEnd = localDayStart(now, loaded.timezone).getTime() + 86_400_000;
+      const entry = { account: 0, campaigns: {} as Record<string, number> };
+      for (const e of inFlight.entries.values()) {
+        if (e.accountId !== accountId || e.at >= dayEnd) continue;
+        entry.account += 1;
+        entry.campaigns[e.campaignId] = (entry.campaigns[e.campaignId] ?? 0) + 1;
+      }
+      inFlightToday[accountId] = entry;
+    }
+  }
+
   await beat(db, now, {
     campaigns: campaigns.length,
     enqueued,
     decisions,
+    inFlight: inFlightToday,
     // What is actually sitting in the queue. A job already holding the id this
     // loop would use is accepted silently by BullMQ and never added, so a
     // single stuck or failed invitation can stop a campaign for ever with the
@@ -283,10 +303,14 @@ async function sampleInviteCapacity(
   if (typeof provider.listPendingInvitations !== "function") return;
   if (!account.provider_account_id) return;
 
+  // One stamp per account. A single shared row meant the first account
+  // sampled each hour reset the clock for every other, so on a deployment
+  // with several accounts only ever one of them was asked.
+  const beatName = inviteCapacityBeat(account.id);
   const { data: last } = await ctx.db
     .from("worker_heartbeats")
     .select("beat_at")
-    .eq("name", INVITE_CAPACITY_BEAT)
+    .eq("name", beatName)
     .maybeSingle();
   const since = last?.beat_at ? now.getTime() - Date.parse(last.beat_at) : Number.POSITIVE_INFINITY;
   if (Number.isFinite(since) && since < INVITE_CAPACITY_EVERY_MS) return;
@@ -317,7 +341,7 @@ async function sampleInviteCapacity(
       .filter((ms) => Number.isFinite(ms));
     await recordBeat(
       ctx.db,
-      INVITE_CAPACITY_BEAT,
+      beatName,
       {
         account: account.id,
         pending: invitations.length,
@@ -334,11 +358,16 @@ async function sampleInviteCapacity(
   } catch (err) {
     await recordBeat(
       ctx.db,
-      INVITE_CAPACITY_BEAT,
+      beatName,
       { account: account.id, pending: null, failed: (err as { message?: string })?.message ?? "unknown" },
       now,
     );
   }
+}
+
+/** The heartbeat row holding one account's pending-invitation sample. */
+export function inviteCapacityBeat(accountId: string): string {
+  return `${INVITE_CAPACITY_BEAT}:${accountId}`;
 }
 
 /** How long to wait for the provider before giving up and carrying on. */
@@ -811,7 +840,7 @@ async function enqueueInvites(
       reason: stale
         ? `${stale} warmed too long ago to still count — re-warming before inviting`
         : waiting?.length
-          ? `${waiting.length} waiting on a per-person hold from LinkedIn`
+          ? whyNobodyIsReady(waiting, inFlight, now)
           : campaign.warm_up
             ? "nobody warmed and waiting yet"
             : "nobody left to invite",
@@ -983,7 +1012,9 @@ async function enqueueInvites(
     const outcome = await enqueueOnce(
       queues.linkedinAction,
       "invite",
-      { kind: "invite", workspaceId: campaign.workspace_id, campaignProspectId: row.id },
+      // The intended time travels with the job, because BullMQ's own fields
+      // stop describing it the first time it is rescheduled (`jobDueAt`).
+      { kind: "invite", workspaceId: campaign.workspace_id, campaignProspectId: row.id, dueAt: now.getTime() + at },
       { delay: at, jobId: jobId("invite", row.id) },
     );
     if (outcome === "added") added++;
@@ -1125,13 +1156,115 @@ async function warmedWaiting(
   return found;
 }
 
+/**
+ * Why everybody queued on a campaign is being held back, in its separate
+ * parts.
+ *
+ * A person viewed a few minutes ago carries `next_action_at` too: the wait
+ * drawn after the view, which is the warm-up working as designed. Reported as
+ * "waiting on a per-person hold from LinkedIn", every warm-up campaign between
+ * a view and its invitation read as LinkedIn refusing somebody, and sent
+ * whoever read it to look for a refusal that never happened. A wait is ours
+ * when the person has a view that still counts and the wait ends inside that
+ * view's window; anything else holding them back is LinkedIn's.
+ */
+export function whyNobodyIsReady(
+  rows: Array<{ id: string; next_action_at: string | null; warmed_at: string | null }>,
+  inFlight: { entries: Map<string, unknown> },
+  now: Date,
+): string {
+  let queued = 0;
+  let warming = 0;
+  let held = 0;
+  let nextWarm = Number.POSITIVE_INFINITY;
+  for (const row of rows) {
+    if (inFlight.entries.has(row.id)) {
+      queued++;
+      continue;
+    }
+    const due = row.next_action_at ? Date.parse(row.next_action_at) : Number.NaN;
+    const viewed = row.warmed_at ? Date.parse(row.warmed_at) : Number.NaN;
+    const ownWait =
+      Number.isFinite(due) &&
+      Number.isFinite(viewed) &&
+      warmStillCounts(row.warmed_at, now) &&
+      due <= viewed + LINKEDIN_LIMITS.warmUpToInviteMaxMs;
+    if (ownWait) {
+      warming++;
+      nextWarm = Math.min(nextWarm, due);
+    } else {
+      held++;
+    }
+  }
+  const parts: string[] = [];
+  if (warming) {
+    const minutes = Math.max(1, Math.ceil((nextWarm - now.getTime()) / 60_000));
+    parts.push(`${warming} viewed and waiting the usual pause before their invitation (next ready in ${minutes} min)`);
+  }
+  if (held) parts.push(`${held} waiting on a per-person hold from LinkedIn`);
+  if (queued) parts.push(`${queued} already queued`);
+  return parts.join(", ") || "nobody ready to invite";
+}
+
 const PENDING_STATES = ["active", "waiting", "delayed", "prioritized", "paused"] as const;
+
+/** The parts of a BullMQ job that say when it runs. */
+export interface QueuedJobTiming {
+  data?: { dueAt?: unknown } | null;
+  timestamp?: number;
+  delay?: number;
+}
+
+/**
+ * When a queued job will actually run, in epoch ms.
+ *
+ * `timestamp + delay` is right only until the job is first rescheduled.
+ * BullMQ 5's `moveToDelayed` (what the send path's RescheduleError and every
+ * retry backoff use) rewrites `delay` relative to the moment of the
+ * reschedule and leaves `timestamp` at the original add. So a job placed
+ * yesterday and moved this morning to tomorrow read as due yesterday, was
+ * charged to today's allowance, and today sent less than it was allowed.
+ *
+ * The time we meant is written into the job's data when it is placed and
+ * again when it is rescheduled (`rescheduleJob`), and read first. A job from
+ * before that field existed falls back to BullMQ's fields. Both readings can
+ * only be early, never late (a retry backoff moves a job without touching
+ * its data), so the later of the two is the closer, and an early reading errs
+ * towards charging today and sending less.
+ */
+export function jobDueAt(job: QueuedJobTiming, now: Date): number {
+  const readings = [Number(job.data?.dueAt), Number(job.timestamp ?? Number.NaN) + Number(job.delay ?? 0)].filter(
+    (ms) => Number.isFinite(ms),
+  );
+  return readings.length ? Math.max(...readings) : now.getTime();
+}
+
+/**
+ * Moves a running job back to the delayed set for `retryAfterMs`, writing the
+ * new due time into its data first so `jobDueAt` reads it (see there).
+ */
+export async function rescheduleJob<D extends object>(
+  job: {
+    data: D;
+    token?: string;
+    updateData: (data: D) => Promise<void>;
+    moveToDelayed: (timestamp: number, token?: string) => Promise<void>;
+  },
+  retryAfterMs: number,
+  nowMs: number = Date.now(),
+): Promise<void> {
+  const dueAt = nowMs + retryAfterMs;
+  // A failed data write must not stop the reschedule: the job still has to
+  // wait, and the reading falls back to BullMQ's own fields.
+  await job.updateData({ ...job.data, dueAt }).catch((err) => console.error("could not stamp a job's due time", err));
+  await job.moveToDelayed(dueAt, job.token);
+}
 
 async function invitesInFlight(db: Db, queues: Queues, campaigns: CampaignRow[], now: Date): Promise<InFlight> {
   const state: InFlight = { known: true, entries: new Map(), warms: new Map() };
   const queue = queues.linkedinAction as unknown as {
     getJobs?: (types: readonly string[]) => Promise<
-      Array<{ name?: string; data?: { kind?: string; campaignProspectId?: string }; timestamp?: number; delay?: number } | null | undefined>
+      Array<(QueuedJobTiming & { name?: string; data?: { kind?: string; campaignProspectId?: string; dueAt?: number } }) | null | undefined>
     >;
   };
   if (typeof queue.getJobs !== "function") return state;
@@ -1152,8 +1285,7 @@ async function invitesInFlight(db: Db, queues: Queues, campaigns: CampaignRow[],
       continue;
     }
     if (job.data.kind !== "invite") continue;
-    const at = Number(job.timestamp ?? now.getTime()) + Number(job.delay ?? 0);
-    dueAt.set(job.data.campaignProspectId, Number.isFinite(at) ? at : now.getTime());
+    dueAt.set(job.data.campaignProspectId, jobDueAt(job, now));
   }
   if (!dueAt.size && !views.size) return state;
 

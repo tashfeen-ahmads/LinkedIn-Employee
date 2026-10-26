@@ -27,10 +27,10 @@ export async function createWorkspace(formData: FormData): Promise<string> {
   const description = String(formData.get("description") ?? "").trim();
   const fullName = String(formData.get("fullName") ?? "").trim();
 
-  if (!companyName) return "/onboarding?error=Company+name+is+required";
-  if (!websiteUrl && !linkedinCompanyUrl && !description) {
-    return "/onboarding?error=Give+us+a+website%2C+a+LinkedIn+page%2C+or+a+description+to+work+from";
-  }
+  if (!companyName) return "/onboarding?error=company-name";
+  // A LinkedIn page alone is not enough: nothing reads it, and a run given only
+  // that came back blank. It still travels beside a website or a description.
+  if (!websiteUrl && !description) return "/onboarding?error=source-missing";
 
   const slug = `${slugify(companyName)}-${Math.random().toString(36).slice(2, 7)}`;
 

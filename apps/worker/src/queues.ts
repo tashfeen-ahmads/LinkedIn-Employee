@@ -109,7 +109,19 @@ export type LinkedInActionJob =
    * when a campaign otherwise has nothing to do.
    */
   | { kind: "warm_up"; workspaceId: string; campaignProspectId: string }
-  | { kind: "invite"; workspaceId: string; campaignProspectId: string }
+  | {
+      kind: "invite";
+      workspaceId: string;
+      campaignProspectId: string;
+      /**
+       * When this invitation is meant to run, in epoch ms, written when it is
+       * placed and again whenever it is rescheduled. BullMQ's own `timestamp`
+       * is the original add and its `delay` is relative to the latest
+       * reschedule, so their sum reads a rescheduled job as due early
+       * (`jobDueAt`).
+       */
+      dueAt?: number;
+    }
   | { kind: "follow_up"; workspaceId: string; campaignProspectId: string; stepNumber: number }
   | { kind: "reply"; workspaceId: string; conversationId: string; draftId: string }
   /**

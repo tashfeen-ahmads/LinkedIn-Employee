@@ -58,6 +58,14 @@ describe("the onboarding stash", () => {
     expect(hasStrategySource({})).toBe(false);
   });
 
+  it("does not count a LinkedIn page alone as something Sage can read", () => {
+    // Nothing fetches it: a run given only that address stored a business and a
+    // strategy with every field blank, and the strategy could be approved.
+    expect(hasStrategySource({ linkedinCompanyUrl: "https://linkedin.com/company/acme" })).toBe(false);
+    expect(chooseStrategySource({ linkedinCompanyUrl: "https://linkedin.com/company/acme" }, {})).toBeNull();
+    expect(hasStrategySource({ linkedinCompanyUrl: "x", description: "We fit heat pumps." })).toBe(true);
+  });
+
   it("reads the three fields from a form", () => {
     const form = new FormData();
     form.set("websiteUrl", "  ");

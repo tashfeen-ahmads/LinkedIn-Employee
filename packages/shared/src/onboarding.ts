@@ -146,6 +146,20 @@ export function nextStep(state: OnboardingState): OnboardingStep | null {
   return outstanding.find((step) => step.required) ?? outstanding[0] ?? null;
 }
 
+/**
+ * The next step that stops anything being sent, or null once every one is
+ * done.
+ *
+ * `nextStep` falls through to the optional steps, which is right for the nav's
+ * one mark and wrong for the overview's setup block: the knowledge base is
+ * optional by definition, so a workspace that never fills it in was shown the
+ * whole setup block, checklist and all, every morning for ever. The block is
+ * for setup; an optional step is a small prompt of its own.
+ */
+export function nextRequiredStep(state: OnboardingState): OnboardingStep | null {
+  return remainingSteps(state).find((step) => step.required) ?? null;
+}
+
 /** Whether this workspace can actually send. Everything required is done. */
 export function isReadyToSend(state: OnboardingState): boolean {
   return ONBOARDING_STEPS.filter((step) => step.required).every((step) => state[step.key]);

@@ -131,3 +131,19 @@ describe("formatSlot", () => {
     expect(text).toContain("September 8");
   });
 });
+
+describe("a zone the runtime cannot read", () => {
+  /*
+   * A live availability row held "Eastern", and every Intl call given it
+   * throws. Offering nothing is the failure that costs an offer; reading it as
+   * UTC would offer a prospect four in the morning under a real rep's name.
+   */
+  it("offers no times rather than throwing or guessing", () => {
+    expect(() => findFreeSlots(options({ timezone: "Eastern" }))).not.toThrow();
+    expect(findFreeSlots(options({ timezone: "Eastern" }))).toEqual([]);
+  });
+
+  it("still renders a slot, labelled in the zone it is written in", () => {
+    expect(formatSlot("2026-09-08T14:00:00Z", "Eastern")).toMatch(/UTC/);
+  });
+});

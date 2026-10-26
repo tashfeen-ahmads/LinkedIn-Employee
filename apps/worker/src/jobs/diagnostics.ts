@@ -213,7 +213,7 @@ export async function runDiagnostics(
   // ---- The LinkedIn account, asked of the provider ----------------------
   const { data: account } = await db
     .from("linkedin_accounts")
-    .select("id, provider_account_id, status, status_detail, has_sales_navigator")
+    .select("id, provider_account_id, pending_provider_account_id, status, status_detail, has_sales_navigator")
     .eq("workspace_id", input.workspaceId)
     .eq("user_id", input.userId)
     .maybeSingle();
@@ -241,7 +241,7 @@ export async function runDiagnostics(
   // shows "reauth required". Two screens contradicting each other and no way
   // to tell which is right is the worst report this product can give.
   if (providerCheck.state === "blocked" || (account && account.status !== "active")) {
-    add({ ...(await probeReplacement(ctx, input.userId, account?.provider_account_id ?? null)), stage: STAGES.account, key: "account-replacement" });
+    add({ ...(await probeReplacement(ctx, input.userId, account?.provider_account_id ?? null, account?.pending_provider_account_id ?? null)), stage: STAGES.account, key: "account-replacement" });
   }
 
   // ---- Can we actually search? -----------------------------------------
@@ -815,11 +815,16 @@ async function probeReplacement(
   ctx: WorkerContext,
   userId: string,
   held: string | null,
+  pending: string | null = null,
 ): Promise<Omit<Check, "key" | "stage">> {
   let mine: Array<{ providerAccountId: string }>;
   try {
     const accounts = await ctx.linkedin.listAccounts();
-    mine = accounts.filter((a) => a.reference === userId);
+    // The provider's list carries no reference on the pull path, so a rep's
+    // account is one labelled with them or the one their own signed sign-in
+    // returned (`pending_provider_account_id`). Read-only: claiming it is the
+    // Team page's job, never the system check's.
+    mine = accounts.filter((a) => a.reference === userId || (pending !== null && a.providerAccountId === pending));
   } catch (err) {
     return {
       label: "The provider and this app agree about your account",
@@ -842,7 +847,7 @@ async function probeReplacement(
       fix: "Connect LinkedIn again from the Team page.",
       href: "/app/team",
       operator:
-        "The provider holds no account whose reference is this user id. If its own dashboard shows one connected, the account is not labelled with this user — check what `name` the hosted auth link was given.",
+        "The provider lists no account labelled with this user id and none matching the id their last signed sign-in returned. If its own dashboard shows one connected, the return never reached /auth/linkedin/done with an account id.",
     };
   }
 

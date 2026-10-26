@@ -1,4 +1,4 @@
-import { isWithinWorkingHours, type WorkingHours } from "@le/shared";
+import { isValidTimezone, isWithinWorkingHours, type WorkingHours } from "@le/shared";
 import type { BusyInterval } from "./provider.js";
 import { mergeIntervals, offerableStarts } from "./slots.js";
 
@@ -87,6 +87,11 @@ export function planDays(options: PlanOptions): DayPlan[] {
     bufferMinutes,
     maxPerDay,
   } = options;
+
+  // Nothing is drawn in a zone the runtime cannot read, for the reason
+  // `offerableStarts` offers nothing in one; the screen resolves its zone
+  // first and says which it used.
+  if (!isValidTimezone(timezone)) return [];
 
   const durationMs = durationMinutes * 60_000;
   // One midnight per local calendar date, never `start + n × 24h`: on the

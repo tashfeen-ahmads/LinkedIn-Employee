@@ -87,8 +87,8 @@ export function BusinessForm() {
         <span>Anything else worth knowing</span>
         <textarea name="description" rows={4} placeholder="Who you sell to, what you charge, what makes you different." />
         <span className="hint">
-          A website, a LinkedIn page or a description: one of them is required. Sage will not invent a business
-          from nothing.
+          Your website or a description is required. A LinkedIn page helps beside them but cannot be read on its
+          own, and Sage will not invent a business from nothing.
         </span>
       </label>
       <PostButton className="btn block" pendingLabel="Starting Sage…">
@@ -439,7 +439,7 @@ export function StrategyCards({ cards }: { cards: StrategyCard[] }) {
       {cards.map((card) => (
         <article key={card.id} className="card wz-strategy">
           <header className="between">
-            <h3>{card.name}</h3>
+            <h3>{card.name.trim() || "Unnamed strategy"}</h3>
             {card.approved ? <span className="pill positive">Approved</span> : null}
           </header>
           <p className="small">{card.summary}</p>
@@ -462,7 +462,14 @@ export function StrategyCards({ cards }: { cards: StrategyCard[] }) {
               </>
             ) : null}
           </dl>
-          {card.approved ? null : (
+          {card.approved ? null : !card.name.trim() ? (
+            // Written from nothing: there is no segment to approve, and the
+            // way forward is "None of these fit?" below.
+            <p className="small muted">
+              Sage wrote this one with no name, so it cannot be approved. Tell Sage who you sell to below and it will
+              write new ones.
+            </p>
+          ) : (
             <form action="/onboarding/save" method="post">
               <input type="hidden" name="action" value="approve" />
               <input type="hidden" name="profileId" value={card.id} />
@@ -529,7 +536,12 @@ export interface LaunchReview {
   dailyCap: number;
   asks: string;
   samples: Array<{ who: string; note: string | null }>;
+  /** The sequence of the angle most of the list holds (rule 28). */
   steps: Array<{ n: number; delayDays: number; message: string }>;
+  /** That angle, how many queued people hold it, and how many angles the list has; null when nobody holds one. */
+  angle: { name: string | null; holders: number; angles: number } | null;
+  /** A free account's invitation notes left this month (rule 62); null on a paid plan or when unknown. */
+  notesLeft: number | null;
   blockers: string[];
   /** The agent's opener and offer, unapproved; launching approves these exact words. */
   lines: Array<{ table: "hooks" | "pitches"; id: string; body: string; title: string }>;
@@ -568,9 +580,43 @@ export function LaunchPanel({
         </div>
       </dl>
 
+      {review.lines.length ? (
+        <section className="stack-2" aria-labelledby="wz-lines">
+          <h3 id="wz-lines">In your words</h3>
+          <ul className="wz-notes">
+            {review.lines.map((line) => (
+              <li key={line.id}>
+                <p className="tiny subtle">{line.title}</p>
+                <p className="small">{line.body}</p>
+                {line.table === "hooks" ? (
+                  // Notes are written when a list is built, so an opener
+                  // approved now cannot have shaped this list's (rule 40).
+                  <p className="tiny subtle">
+                    This shapes the notes written for people {NORA} finds from now on. This list&rsquo;s notes
+                    were written when it was built, and are shown below exactly as they will go.
+                  </p>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+          <p className="tiny subtle">
+            Launching approves these exact words for {NORA} to use. Change them any time on Agents.
+          </p>
+        </section>
+      ) : null}
+
       {review.samples.length ? (
         <section className="stack-2" aria-labelledby="wz-samples">
           <h3 id="wz-samples">A few of the connection notes</h3>
+          {review.notesLeft !== null ? (
+            <p className="small" role="note">
+              {review.notesLeft > 0
+                ? `${review.notesLeft} of ${FREE_NOTES_PER_MONTH} notes left this month. `
+                : `0 of ${FREE_NOTES_PER_MONTH} notes left this month, so invitations go without a note until the month turns, these included. `}
+              A free LinkedIn account can add a note to only {FREE_NOTES_PER_MONTH} invitations a month; after
+              that invitations are still sent, without one.
+            </p>
+          ) : null}
           <ul className="wz-notes">
             {review.samples.map((sample, i) => (
               <li key={i}>
@@ -585,33 +631,34 @@ export function LaunchPanel({
       {review.steps.length ? (
         <section className="stack-2" aria-labelledby="wz-steps">
           <h3 id="wz-steps">After they accept</h3>
+          {review.angle ? (
+            <p className="small">
+              Most people on this list get this angle
+              {review.angle.name ? <> (&ldquo;{review.angle.name}&rdquo;)</> : null}: {review.angle.holders} of{" "}
+              {review.people}.{" "}
+              {review.angle.angles > 1
+                ? `${review.angle.angles} angles in total, each with its own messages; every one is on the campaign page.`
+                : "It is the only angle on this list."}
+            </p>
+          ) : null}
           <ol className="wz-sequence">
             {review.steps.map((step) => (
               <li key={step.n}>
                 <p className="tiny subtle">
-                  {step.n === 1 ? "Soon after they accept" : `${step.delayDays} day${step.delayDays === 1 ? "" : "s"} later, if no reply`}
+                  {step.n === 1
+                    ? "Soon after they accept · written for each person"
+                    : `${step.delayDays} day${step.delayDays === 1 ? "" : "s"} later, if no reply`}
                 </p>
+                {step.n === 1 ? (
+                  <p className="tiny subtle">
+                    The first message after somebody accepts is written for that person, from their own profile
+                    and the note they accepted. This is what goes if one cannot be written.
+                  </p>
+                ) : null}
                 <p className="small">{step.message}</p>
               </li>
             ))}
           </ol>
-        </section>
-      ) : null}
-
-      {review.lines.length ? (
-        <section className="stack-2" aria-labelledby="wz-lines">
-          <h3 id="wz-lines">In your words</h3>
-          <ul className="wz-notes">
-            {review.lines.map((line) => (
-              <li key={line.id}>
-                <p className="tiny subtle">{line.title}</p>
-                <p className="small">{line.body}</p>
-              </li>
-            ))}
-          </ul>
-          <p className="tiny subtle">
-            Launching approves these exact words for {NORA} to use. Change them any time on Agents.
-          </p>
         </section>
       ) : null}
 

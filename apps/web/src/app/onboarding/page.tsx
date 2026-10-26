@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import {
   BRAND,
   BusinessProfileSchema,
+  LINKEDIN_CONNECT_ERRORS,
   CTA_DEFINITIONS,
   competitorTargeting,
   describeCompetitorTargeting,
@@ -20,6 +21,8 @@ import { hasStrategySource } from "@/lib/onboarding-stash";
 import { STALLED_MS, describeLastSearch } from "@/lib/last-search";
 import { launchBlockers } from "@/lib/campaign";
 import { launchState } from "@/lib/launch";
+import { notesLeftThisMonth } from "@/lib/invite-notes";
+import { angleSequence, mostHeldAngle } from "@/lib/wizard-launch";
 import { readWizard, type WizardRead } from "@/lib/wizard-state";
 import { AUTONOMY_ROLES } from "@/lib/autonomy";
 import { parseWorkingHours } from "@le/linkedin";
@@ -56,10 +59,18 @@ import {
  * `?error=` carries a code, never a sentence: whatever is in the address bar
  * is shown to the person, and a code can only ever map to words written here.
  */
+const SOURCE_MISSING =
+  "Give us your website, or a few sentences on what you sell and who buys it. A LinkedIn page alone cannot be read, and Sage will not invent a business from nothing.";
 const ERRORS: Record<string, string> = {
+  // The sign-in codes the worker sends back, in the one definition the
+  // profile page reads too.
+  ...LINKEDIN_CONNECT_ERRORS,
+  "company-name": "Enter your company name.",
+  "source-missing": SOURCE_MISSING,
+  // The two sentences the business step used to put in the address bar, for a
+  // link somebody still has open.
   "Company name is required": "Enter your company name.",
-  "Give us a website, a LinkedIn page, or a description to work from":
-    "Give us a website, a LinkedIn page or a description to work from. Sage will not invent a business from nothing.",
+  "Give us a website, a LinkedIn page, or a description to work from": SOURCE_MISSING,
   "plan-missing": "Choose the LinkedIn plan this account has.",
   "linkedin-link": "LinkedIn did not give us a sign-in link just now. Try again in a minute.",
   timezone: "Choose your timezone.",
@@ -85,7 +96,8 @@ const ERRORS: Record<string, string> = {
   unreadable: "Your setup could not be loaded just now, so nothing was saved. Try again in a minute.",
   "sage-not-started": "Sage could not be started just now. Try again in a minute.",
   "sage-admin-only": "Only an owner or admin can change what Sage reads. Press Try again to run it on what you gave at the start.",
-  "sage-needs-source": "Tell Sage what you sell first: a website, a LinkedIn page or a sentence or two.",
+  "sage-needs-source":
+    "Tell Sage what you sell first: your website, or a few sentences on what you sell and who buys it. A LinkedIn page alone cannot be read.",
 };
 const UNKNOWN_ERROR = "Something did not go through just now. Try again in a minute.";
 const LINKEDIN_SIGN_IN_FAILED = "The LinkedIn sign-in did not go through, so nothing was connected. Press Connect LinkedIn to try again.";
@@ -146,12 +158,17 @@ export default async function OnboardingPage({
 
   if (!wizard.workspaceId) {
     // Someone with a pending invitation is joining a team, not starting one.
+    // Only one that can still be accepted: the invite page refuses an expired
+    // one, and sending somebody there from here made a loop with no way out of
+    // it except an invitation nobody was going to resend.
     const { data: pendingInvite } = await supabase
       .from("invitations")
       .select("token")
       .eq("email", user.email ?? "")
       .is("accepted_at", null)
       .is("revoked_at", null)
+      .gt("expires_at", new Date().toISOString())
+      .order("expires_at", { ascending: false })
       .limit(1)
       .maybeSingle();
     if (pendingInvite) redirect(`/invite/${pendingInvite.token}`);
@@ -702,7 +719,7 @@ async function launchReview(workspaceId: string, preferredId: string | null = nu
   const supabase = await createClient();
   const { data: drafts } = await supabase
     .from("campaigns")
-    .select("id, name, daily_invite_cap, cta_kind")
+    .select("id, name, daily_invite_cap, cta_kind, linkedin_account_id, owner_user_id")
     .eq("workspace_id", workspaceId)
     .eq("status", "draft")
     .is("launched_at", null)
@@ -729,7 +746,7 @@ async function launchReview(workspaceId: string, preferredId: string | null = nu
     null;
   if (!campaign) return null;
 
-  const [state, { data: queued }, { data: steps }] = await Promise.all([
+  const [state, { data: queued }, { data: steps }, { data: held }, { data: variants }, { data: account }, { data: owner }] = await Promise.all([
     launchState(campaign.id, workspaceId),
     supabase
       .from("campaign_prospects")
@@ -743,6 +760,22 @@ async function launchReview(workspaceId: string, preferredId: string | null = nu
       .select("step_number, delay_days, message, variant_id")
       .eq("campaign_id", campaign.id)
       .order("step_number"),
+    // Which angle each queued person holds, so the sequence shown is the one
+    // most of them receive (rule 28).
+    supabase
+      .from("campaign_prospects")
+      .select("variant_id")
+      .eq("campaign_id", campaign.id)
+      .eq("status", "queued")
+      .order("created_at")
+      .limit(5000),
+    supabase.from("campaign_variants").select("id, name").eq("campaign_id", campaign.id),
+    supabase
+      .from("linkedin_accounts")
+      .select("id, has_premium, has_sales_navigator, notes_exhausted_month")
+      .eq("id", campaign.linkedin_account_id)
+      .maybeSingle(),
+    supabase.from("profiles").select("timezone").eq("id", campaign.owner_user_id).maybeSingle(),
   ]);
   const ids = (queued ?? []).map((row) => row.prospect_id);
   const { data: people } = ids.length
@@ -750,12 +783,15 @@ async function launchReview(workspaceId: string, preferredId: string | null = nu
     : { data: [] };
   const byId = new Map((people ?? []).map((p) => [p.id, p]));
 
-  // The campaign-wide sequence, or the first angle's when every step belongs
-  // to an angle (rule 28): one sequence to read, not all of them.
-  const all = steps ?? [];
-  const firstVariant = all.find((s) => s.variant_id)?.variant_id ?? null;
-  const shared = all.filter((s) => !s.variant_id);
-  const sequence = (shared.length ? shared : all.filter((s) => s.variant_id === firstVariant)).slice(0, 3);
+  // The sequence of the angle most of the list holds, by the send path's own
+  // rule. The campaign-wide steps used to be shown, and with every prospect on
+  // an angle that owns its sequence (rule 28) they reach nobody.
+  const angle = mostHeldAngle((held ?? []).map((row) => row.variant_id));
+  const sequence = angleSequence(steps ?? [], angle.variantId).slice(0, 3);
+  const angleName = angle.variantId ? ((variants ?? []).find((v) => v.id === angle.variantId)?.name ?? null) : null;
+  // The same count the campaign page shows and the send path decides from
+  // (rule 62). Null on a paid plan.
+  const notesLeft = account ? await notesLeftThisMonth(supabase, account, owner?.timezone ?? "UTC") : null;
 
   const kind = (campaign.cta_kind ?? "meeting") as keyof typeof CTA_DEFINITIONS;
   return {
@@ -772,6 +808,8 @@ async function launchReview(workspaceId: string, preferredId: string | null = nu
       return { who: role ? `${name} · ${role}` : name, note: row.invite_note?.trim() || null };
     }),
     steps: sequence.map((s) => ({ n: s.step_number, delayDays: s.delay_days, message: s.message })),
+    angle: angle.variantId ? { name: angleName, holders: angle.holders, angles: angle.angles } : null,
+    notesLeft,
     blockers: state ? launchBlockers(state) : ["That campaign could not be read."],
   };
 }

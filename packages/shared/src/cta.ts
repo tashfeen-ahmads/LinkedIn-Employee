@@ -189,6 +189,23 @@ export interface EffectiveCta {
   fromLibrary: boolean;
 }
 
+/**
+ * Whether `{{cta_link}}` in this campaign's copy has nothing to become.
+ *
+ * A meeting campaign always has a destination, whether or not it carries a
+ * URL of its own: the send path fills the placeholder with the sending rep's
+ * own scheduling link, or else this prospect's own link to the booking page
+ * this product owns (rule 18). Reading `!url` alone told every meeting
+ * campaign on the overview it was "asking people to click a link that is not
+ * set" while each of its follow-ups went out with a working booking link. Only
+ * a goal with no booking fallback can be missing one. One reading, shared by
+ * the overview's list and the campaign page, so the two cannot disagree.
+ */
+export function ctaLinkMissing(cta: Pick<EffectiveCta, "kind" | "url">): boolean {
+  if (cta.url?.trim()) return false;
+  return cta.kind !== "meeting";
+}
+
 export function effectiveCta(
   linked: CtaSource | null | undefined,
   own: CtaSource | null | undefined,

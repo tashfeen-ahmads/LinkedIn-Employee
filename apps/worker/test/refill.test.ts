@@ -145,4 +145,66 @@ describe("refillCampaigns", () => {
     expect(await paused.run()).toBe(0);
     expect([...unapproved.added, ...setAside.added, ...lapsed.added, ...paused.added]).toHaveLength(0);
   });
+  describe("an account several campaigns share", () => {
+    const campaign = (id: string, extra: Record<string, unknown> = {}) => ({
+      id,
+      workspace_id: WS,
+      owner_user_id: USER,
+      customer_profile_id: "cp1",
+      linkedin_account_id: "acct",
+      daily_invite_cap: 10,
+      status: "running",
+      search_exhausted: false,
+      ...extra,
+    });
+    const queuedOn = (campaignId: string, n: number) =>
+      Array.from({ length: n }, (_, i) => ({ id: `${campaignId}-q${i}`, workspace_id: WS, campaign_id: campaignId, status: "queued" }));
+
+    it("is not refilled while the account already has more than two days queued across its campaigns", async () => {
+      /*
+       * Live: one free account, five campaigns, 116 people queued between
+       * them (about eleven days at its allowance), and the campaign with the
+       * fewest queued was still refilled because it looked short on its own.
+       */
+      const { added, run } = harness(0, (db) => {
+        db.seed("campaigns", ["c2", "c3", "c4", "c5"].map((id) => campaign(id)));
+        for (const id of ["c2", "c3", "c4", "c5"]) db.seed("campaign_prospects", queuedOn(id, 29));
+      });
+      expect(await run()).toBe(0);
+      expect(added).toHaveLength(0);
+    });
+
+    it("counts the queue of a campaign that cannot itself be refilled", async () => {
+      // c2's search is exhausted, but its 40 queued people still go out from
+      // the same account's allowance.
+      const { added, run } = harness(0, (db) => {
+        db.seed("campaigns", [campaign("c2", { search_exhausted: true })]);
+        db.seed("campaign_prospects", queuedOn("c2", 40));
+      });
+      expect(await run()).toBe(0);
+      expect(added).toHaveLength(0);
+    });
+
+    it("refills one campaign per account per run, the shortest first", async () => {
+      const { added, run } = harness(4, (db) => {
+        db.seed("campaigns", [campaign("c2")]);
+        db.seed("campaign_prospects", queuedOn("c2", 1));
+      });
+      expect(await run()).toBe(1);
+      expect(added.map((a) => a.data.campaignId)).toEqual(["c2"]);
+    });
+  });
+
+  it("leaves a campaign launched in the last day alone", async () => {
+    const { added, run } = harness(0, (db) => {
+      db.find("campaigns", { id: "c1" })!.launched_at = new Date(NOW.getTime() - 2 * 3_600_000).toISOString();
+    });
+    expect(await run()).toBe(0);
+    expect(added).toHaveLength(0);
+
+    const older = harness(0, (db) => {
+      db.find("campaigns", { id: "c1" })!.launched_at = new Date(NOW.getTime() - 30 * 3_600_000).toISOString();
+    });
+    expect(await older.run()).toBe(1);
+  });
 });

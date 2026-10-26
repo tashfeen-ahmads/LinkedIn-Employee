@@ -1120,3 +1120,122 @@ describe("who a reply is from", () => {
     expect(db.rows("events").filter((e) => e.name === "inbound.unmatched")).toHaveLength(1);
   });
 });
+
+describe("a reply to the last message of a sequence", () => {
+  /*
+   * Maintenance closes a row once its last step has gone out. The reply that
+   * last step was written to get then found no open row, was answered under
+   * no campaign (the schema's approval mode and meeting goal, no agent, no
+   * brand) and never reached the funnel.
+   */
+  function completed(db: FakeDb, overrides: Record<string, unknown> = {}) {
+    Object.assign(db.find("campaign_prospects", { id: CP })!, {
+      status: "closed",
+      status_reason: "sequence completed",
+      closed_at: "2026-09-08T03:00:00.000Z",
+      last_step_sent: 1,
+      ...overrides,
+    });
+    db.seed("conversations", [
+      { id: "conv-1", workspace_id: WORKSPACE, prospect_id: PROSPECT, linkedin_account_id: ACCOUNT, campaign_id: CAMPAIGN, provider_chat_id: "chat_1" },
+    ]);
+  }
+
+  it("is answered under its campaign and moves the row on", async () => {
+    const { db, ctx, queues, log } = harness();
+    completed(db);
+
+    await handleInboundMessage(ctx, queues, inboundJob("Sounds interesting"));
+
+    // The campaign's own autopilot, not the schema's approval default.
+    expect(db.rows("reply_drafts")[0]?.status).toBe("approved");
+    expect(replyJobs(log)).toHaveLength(1);
+    const row = db.find("campaign_prospects", { id: CP })!;
+    expect(row.status).toBe("positive");
+    expect(row.replied_at).toBeTruthy();
+    expect(row.closed_at).toBeNull();
+  });
+
+  it("never reopens a row closed for any other reason", async () => {
+    for (const reason of ["already contacted on another campaign", "excluded: Northwind", "invitation expired"]) {
+      const { db, ctx, queues } = harness();
+      completed(db, { status_reason: reason });
+
+      await handleInboundMessage(ctx, queues, inboundJob("Sounds interesting"));
+
+      expect(db.find("campaign_prospects", { id: CP })!.status).toBe("closed");
+      expect(db.find("campaign_prospects", { id: CP })!.status_reason).toBe(reason);
+    }
+  });
+
+  it("never reopens anything for somebody on the do-not-contact list", async () => {
+    const { db, ctx, queues } = harness();
+    completed(db);
+    db.find("prospects", { id: PROSPECT })!.do_not_contact = true;
+
+    await handleInboundMessage(ctx, queues, inboundJob("Sounds interesting"));
+
+    expect(db.find("campaign_prospects", { id: CP })!.status).toBe("closed");
+  });
+
+  it("never reopens an opted-out row", async () => {
+    const { db, ctx, queues } = harness();
+    completed(db, { status: "opted_out", status_reason: "opt-out phrase detected" });
+
+    await handleInboundMessage(ctx, queues, inboundJob("Sounds interesting"));
+
+    expect(db.find("campaign_prospects", { id: CP })!.status).toBe("opted_out");
+  });
+});
+
+describe("a rep with their own scheduling link", () => {
+  /*
+   * The calendar this product owns cannot see a diary kept on Calendly
+   * (rule 18). Handed both, the agent offered our times beside the rep's
+   * link, and an acceptance was booked on a calendar blind to the meeting
+   * already sitting at that hour.
+   */
+  const SLOT = "2026-09-10T10:00:00.000Z";
+
+  it("offers no built-in times", async () => {
+    const { db, ctx, queues } = harness();
+    db.find("profiles", { id: USER })!.booking_url = "https://cal.test/rep";
+    db.find("campaigns", { id: CAMPAIGN })!.reply_mode = "approval";
+
+    await handleInboundMessage(ctx, queues, inboundJob("Sounds interesting, when are you free?"));
+
+    const input = draftMock.mock.calls[0]![1] as { availableSlots: string[] };
+    expect(input.availableSlots).toEqual([]);
+  });
+
+  it("books nothing on our calendar when they accept a time", async () => {
+    const { db, ctx, queues } = harness();
+    (ctx.env as Record<string, unknown>).CALENDAR_PROVIDER = "own";
+    db.find("profiles", { id: USER })!.booking_url = "https://cal.test/rep";
+    db.seed("conversations", [
+      { id: "conv-1", workspace_id: WORKSPACE, prospect_id: PROSPECT, linkedin_account_id: ACCOUNT, campaign_id: CAMPAIGN, needs_human: false, provider_chat_id: "chat_1" },
+    ]);
+    db.seed("reply_drafts", [
+      { workspace_id: WORKSPACE, conversation_id: "conv-1", proposes_meeting: true, proposed_slots: [SLOT], status: "sent", body: "Would Thursday at 10 work?", created_at: "2026-09-08T10:00:00.000Z" },
+    ]);
+
+    await handleInboundMessage(ctx, queues, inboundJob("Thursday at 10 works"));
+
+    expect(db.rows("meetings")).toHaveLength(0);
+  });
+
+  it("still books on our calendar for a rep without one", async () => {
+    const { db, ctx, queues } = harness();
+    (ctx.env as Record<string, unknown>).CALENDAR_PROVIDER = "own";
+    db.seed("conversations", [
+      { id: "conv-1", workspace_id: WORKSPACE, prospect_id: PROSPECT, linkedin_account_id: ACCOUNT, campaign_id: CAMPAIGN, needs_human: false, provider_chat_id: "chat_1" },
+    ]);
+    db.seed("reply_drafts", [
+      { workspace_id: WORKSPACE, conversation_id: "conv-1", proposes_meeting: true, proposed_slots: [SLOT], status: "sent", body: "Would Thursday at 10 work?", created_at: "2026-09-08T10:00:00.000Z" },
+    ]);
+
+    await handleInboundMessage(ctx, queues, inboundJob("Thursday at 10 works"));
+
+    expect(db.rows("meetings")).toHaveLength(1);
+  });
+});

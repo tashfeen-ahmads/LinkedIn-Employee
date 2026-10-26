@@ -50,6 +50,26 @@ async function acceptInvite(formData: FormData) {
   redirect("/app");
 }
 
+/**
+ * The way out of a refused invitation.
+ *
+ * Setup sends somebody with an invitation here instead of letting them start a
+ * workspace, and this page refused an expired one with nothing to press — so
+ * the person waited on an admin who might never resend it, or left. Setup now
+ * only sends an invitation that can still be accepted; this is for everybody
+ * who arrives here anyway, from an old email.
+ */
+function StartOwnWorkspace() {
+  return (
+    <div className="stack small">
+      <p className="muted">Not waiting on a new link? You can set up your own workspace instead.</p>
+      <a className="btn secondary" href="/onboarding">
+        Start your own workspace
+      </a>
+    </div>
+  );
+}
+
 interface InvitePreview {
   found: boolean;
   workspaceName: string | null;
@@ -98,6 +118,7 @@ export default async function InvitePage({
               <p className="muted">
                 This link is not valid. Ask whoever invited you to send a new one.
               </p>
+              {user ? <StartOwnWorkspace /> : null}
             </>
           ) : !user ? (
             <>
@@ -113,6 +134,7 @@ export default async function InvitePage({
             <>
               <h1>This invitation cannot be used</h1>
               <p className="muted">{inviteRejectionMessage(verdict.reason)}</p>
+              <StartOwnWorkspace />
             </>
           ) : (
             <>

@@ -10,7 +10,13 @@ describe("campaign page", () => {
     // printed under every campaign, including the ones whose workspace had
     // chosen to let the agent answer exactly those.
     expect(page).toMatch(/const autonomous = \(campaign\.rules as \{ autonomy\?: string \} \| null\)\?\.autonomy === "autonomous"/);
-    expect(page).toMatch(/\{autonomous\s*\?/);
+    expect(page).toMatch(/:\s*autonomous\s*\?/);
+  });
+
+  it("says every reply waits when the campaign is set to hold them", () => {
+    // "Hold for my approval" holds everything whatever the rules say, so the
+    // autonomous sentence under it described replies that would never be sent.
+    expect(page).toMatch(/campaign\.reply_mode === "approval"\s*\?\s*"Every reply waits for you/);
   });
 
   it("keeps the space in an angle's range", () => {

@@ -42,7 +42,7 @@ describe("autonomy is stored in one place", () => {
     // step's choice goes through setReplyHandling, which is setAutonomy plus
     // the campaign being launched.
     expect(readFileSync(join(here, "../src/app/onboarding/save/route.ts"), "utf8")).toMatch(/await setReplyHandling\(/);
-    expect(autonomy).toMatch(/export async function setReplyHandling[\s\S]*?await setAutonomy\(supabase, workspaceId, autonomy\)/);
+    expect(autonomy).toMatch(/export async function setReplyHandling[\s\S]*?await setAutonomy\(supabase, workspaceId, autonomy, replyMode\)/);
   });
 
   it("merges rather than replaces, or the sending window and the search tier are lost", () => {
@@ -56,7 +56,7 @@ describe("autonomy is stored in one place", () => {
     // The reply gate holds every message on an approval-mode campaign whatever
     // its autonomy says, and campaigns are created in approval mode. Six live
     // drafts said "autonomous" and would have held every reply.
-    expect(autonomy).toMatch(/update\(\{ rules: \{ \.\.\.rules, autonomy \} as never, \.\.\.replyModeFor\(autonomy\) \}\)/);
+    expect(autonomy).toMatch(/update\(\{ rules: \{ \.\.\.rules, autonomy \} as never, \.\.\.replyModeFor\(autonomy, replyMode\) \}\)/);
     expect(autonomy).toMatch(/autonomy === "autonomous" \? \{ reply_mode: "autopilot" \} : \{\}/);
     expect(targeting).toMatch(/reply_mode: onboardingAutonomy === "autonomous" \? "autopilot" : "approval"/);
   });

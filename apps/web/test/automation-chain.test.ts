@@ -32,7 +32,9 @@ describe("approving a strategy starts the search", () => {
     const action = end === -1 ? body : body.slice(0, end);
 
     // The approval itself is the shared definition both approval screens use.
-    expect(action).toMatch(/await approveStrategy\(supabase, session\.workspaceId, id\)/);
+    // With the call to action chosen in setup, for a strategy that has none (rule 65).
+    expect(action).toMatch(/await approveStrategy\(supabase, session\.workspaceId, id, extra\)/);
+    expect(action).toMatch(/!current\.cta_id \? await chosenCtaColumns\(/);
     expect(read("../src/lib/approve.ts")).toContain("approved_at");
     expect(action).toMatch(/await queueSearch\(/);
   });

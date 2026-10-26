@@ -82,10 +82,29 @@ async function strategy(ctx: WorkerContext, job: StrategyJob): Promise<string> {
     guidance: job.guidance,
   });
 
+  // A run that came back empty is a failed run, not a business. Given nothing
+  // it could read, the model answers with every field "" — and stored, that is
+  // a business profile somebody's whole setup hangs off and a strategy with no
+  // name that a person can approve. Thrown here, before anything is written,
+  // so the screen shows the failure and the form asking for what is needed.
+  const blank = blankStrategyOutput(output, { expanding: Boolean(existing) });
+  if (blank) throw new Error(blank);
+
   let businessProfileId: string;
 
   if (existing) {
     businessProfileId = existing.id;
+    // A business profile stored blank by an earlier run (before the check
+    // above existed) is replaced by the first run that could describe the
+    // company. Never a profile with anything in it: that is somebody's
+    // reviewed description, and an expanding run is not asked to rewrite it.
+    if (isBlankBusiness(existing.spec) && !isBlankBusiness(output.businessProfile)) {
+      await ctx.db
+        .from("business_profiles")
+        .update({ spec: output.businessProfile as never })
+        .eq("id", existing.id)
+        .eq("workspace_id", job.workspaceId);
+    }
   } else {
     const { data: created, error } = await ctx.db
       .from("business_profiles")
@@ -194,12 +213,15 @@ async function strategy(ctx: WorkerContext, job: StrategyJob): Promise<string> {
   // The bio as well as the name, off the same row. Onboarding collects it and
   // promises it is the voice invitations are written in; selecting only the
   // name is how that promise was kept for replies and broken for invitations.
-  const { data: owner } = await ctx.db
-    .from("profiles")
-    .select("full_name, bio")
-    .eq("id", job.userId)
-    .maybeSingle();
-  await seedWorkspaceAgent(ctx.db, {
+  //
+  // Never from a blank business: an agent, offer and opener written about a
+  // company with no name or offering are copy about nobody, and seeded once
+  // they are what the launch step asks somebody to approve.
+  const seedFrom = isBlankBusiness(output.businessProfile) ? null : output.businessProfile;
+  const { data: owner } = seedFrom
+    ? await ctx.db.from("profiles").select("full_name, bio").eq("id", job.userId).maybeSingle()
+    : { data: null };
+  if (seedFrom) await seedWorkspaceAgent(ctx.db, {
     workspaceId: job.workspaceId,
     userId: job.userId,
     business: output.businessProfile,
@@ -288,6 +310,43 @@ async function readExistingStrategies(
   };
 }
 
+/** What the screen says when Sage had nothing it could write from. */
+export const STRATEGY_NOTHING_TO_READ =
+  "Sage could not find enough about your business to write from. Add your website, or a few sentences on what you sell and who buys it, then run Sage again. A LinkedIn page alone cannot be read.";
+
+function blankText(value: unknown): boolean {
+  return typeof value !== "string" || value.trim() === "";
+}
+
+/** A business profile with no name or no offering describes nobody. */
+export function isBlankBusiness(spec: unknown): boolean {
+  if (!spec || typeof spec !== "object") return true;
+  const business = spec as { companyName?: unknown; offering?: unknown };
+  return blankText(business.companyName) || blankText(business.offering);
+}
+
+/**
+ * Why a Strategy Agent answer cannot be stored, or null when it can.
+ *
+ * A first run must describe the business, because everything else hangs off
+ * that row. An expanding run already has one, so only its strategies are
+ * checked — and any one without a name fails the run rather than being
+ * quietly dropped, because a model that wrote a nameless strategy wrote it
+ * from nothing.
+ */
+export function blankStrategyOutput(
+  output: { businessProfile: unknown; customerProfiles: Array<{ name?: unknown }> },
+  options: { expanding: boolean },
+): string | null {
+  if (!options.expanding && isBlankBusiness(output.businessProfile)) return STRATEGY_NOTHING_TO_READ;
+  // A first run with nothing under its business is a profile with no way
+  // forward. An expanding run that found nothing new is an answer, and the
+  // strategies already here stay as they were.
+  if (!options.expanding && !output.customerProfiles.length) return STRATEGY_NOTHING_TO_READ;
+  if (output.customerProfiles.some((p) => blankText(p.name))) return STRATEGY_NOTHING_TO_READ;
+  return null;
+}
+
 /**
  * True the first time a name is seen, and false for every repeat of it.
  *
@@ -295,7 +354,11 @@ async function readExistingStrategies(
  * "chamber leaders " are one segment written twice.
  */
 function claimName(taken: Set<string>, name: string): boolean {
-  const key = name.trim().toLowerCase();
+  const key = (name ?? "").trim().toLowerCase();
+  // A strategy with no name is not a duplicate of another nameless one, it is
+  // not a strategy: nothing on any screen can say what it is, and a person
+  // could approve it. Never stored.
+  if (!key) return false;
   if (taken.has(key)) return false;
   taken.add(key);
   return true;
@@ -314,19 +377,21 @@ function claimName(taken: Set<string>, name: string): boolean {
  * feeds use: https only, DNS resolved and vetted, every redirect re-checked.
  */
 async function fetchSite(baseUrl: string): Promise<string | undefined> {
-  const origin = normalizeOrigin(baseUrl);
-  if (!origin) return undefined;
+  const urls = pagesToRead(baseUrl);
+  if (!urls.length) return undefined;
 
   const pages = await Promise.all(
-    PAGES_TO_READ.map(async (path) => {
+    urls.map(async (url, i) => {
       try {
-        const fetched = await fetchVetted(`${origin}${path}`, {
+        const fetched = await fetchVetted(url, {
           timeoutMs: 10_000,
           headers: { "user-agent": "LinkedInEmployee/1.0 (+strategy-agent)" },
         });
         if (!fetched.ok || !fetched.response.ok) return "";
         const html = await fetched.response.text();
-        return `\n\n--- ${path || "/"} ---\n${cleanWebsiteText(html, 6_000)}`;
+        // The page the customer named gets the larger share: it is the one
+        // they chose to describe themselves with.
+        return `\n\n--- ${new URL(url).pathname} ---\n${cleanWebsiteText(html, i === 0 ? 10_000 : 6_000)}`;
       } catch {
         return "";
       }
@@ -338,20 +403,39 @@ async function fetchSite(baseUrl: string): Promise<string | undefined> {
 }
 
 /**
- * The site's origin, always as https.
+ * Every address to read, the one the customer typed first.
  *
- * A plain `http://` address is upgraded rather than refused: nearly every
- * company site answers on https, and the vetted fetch will not travel in the
- * clear. Whatever the scheme, the host is checked by `fetchVetted` before
- * anything is requested.
+ * Only the origin used to be kept, so `example.com/our-clinic` was read as
+ * `example.com` — a different business whenever the path was the business: a
+ * page on a shared host, a brand under a group's domain, a product's own
+ * landing page. The exact page comes first, then the origin's usual pages for
+ * whatever it does not say. Each one still goes through `fetchVetted`.
+ *
+ * Always https: a plain `http://` address is upgraded rather than refused,
+ * because nearly every company site answers on https and the vetted fetch will
+ * not travel in the clear. The fragment is dropped, since it never reaches a
+ * server.
  */
-function normalizeOrigin(input: string): string | null {
+export function pagesToRead(input: string): string[] {
+  let url: URL;
   try {
     const trimmed = input.trim();
-    const url = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`);
-    if (url.protocol !== "https:" && url.protocol !== "http:") return null;
-    return `https://${url.host}`;
+    url = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`);
   } catch {
-    return null;
+    return [];
   }
+  if (url.protocol !== "https:" && url.protocol !== "http:") return [];
+  const origin = `https://${url.host}`;
+  const exact = `${origin}${url.pathname}${url.search}`;
+
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const candidate of [exact, ...PAGES_TO_READ.map((path) => `${origin}${path || "/"}`)]) {
+    // `/about` and `/about/` are one page.
+    const key = candidate.replace(/\/+$/, "").toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(candidate);
+  }
+  return out;
 }

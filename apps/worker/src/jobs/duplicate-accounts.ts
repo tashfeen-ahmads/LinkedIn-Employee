@@ -51,6 +51,15 @@ export async function releaseDuplicateAccounts(ctx: WorkerContext): Promise<{ re
   if (waitingError) return { released: 0, failed: 0 };
   const connecting = new Set((waiting ?? []).map((r) => r.user_id as string));
 
+  // An account a rep's own sign-in returned, remembered until the provider
+  // lists it (migration 0055), is that rep's, not a spare.
+  const { data: remembered, error: rememberedError } = await db
+    .from("linkedin_accounts")
+    .select("pending_provider_account_id")
+    .not("pending_provider_account_id", "is", null);
+  if (rememberedError) return { released: 0, failed: 0 };
+  const pending = new Set((remembered ?? []).map((r) => r.pending_provider_account_id as string));
+
   const label = (a: ConnectedAccount) => (a.displayName || a.reference || "").trim().toLowerCase();
   const healthyHeld = accounts.filter((a) => heldBy.has(a.providerAccountId) && a.status === "ok");
 
@@ -58,7 +67,7 @@ export async function releaseDuplicateAccounts(ctx: WorkerContext): Promise<{ re
   let failed = 0;
   const done: Array<{ released: string; kept: string }> = [];
   for (const spare of accounts) {
-    if (heldBy.has(spare.providerAccountId)) continue;
+    if (heldBy.has(spare.providerAccountId) || pending.has(spare.providerAccountId)) continue;
     const name = label(spare);
     const twin = healthyHeld.find((held) => {
       const owner = heldBy.get(held.providerAccountId);

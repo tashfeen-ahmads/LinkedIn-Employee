@@ -1,4 +1,5 @@
 import "server-only";
+import { isValidTimezone } from "@le/shared";
 import type { createClient } from "@/lib/supabase-server";
 
 /**
@@ -40,6 +41,12 @@ export const AVAILABILITY_DEFAULTS = {
 /** Why these values cannot be saved, in words for the screen, or null. */
 export function availabilityProblem(input: AvailabilityInput): string | null {
   const { start, end, days, meetingMinutes, minNoticeHours, bufferMinutes, maxPerDay } = input;
+  // Every offered time is computed in this zone, and one the runtime cannot
+  // read ("Eastern", "EST+1") makes the slot finder throw: no times offered,
+  // and the Meetings page itself down. Refused at the door, in words.
+  if (!isValidTimezone(input.timezone)) {
+    return "Pick your timezone from the list. That one is not a zone the calendar can read.";
+  }
   if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end > 24 || end <= start) {
     return "Meeting hours need a start before an end, between 0 and 24.";
   }
@@ -58,6 +65,10 @@ export async function saveAvailability(
   userId: string,
   input: AvailabilityInput,
 ): Promise<boolean> {
+  // Checked here as well, because this is the write every caller shares: a
+  // caller that skipped `availabilityProblem` must not store a zone that
+  // takes the slot finder down.
+  if (!isValidTimezone(input.timezone)) return false;
   const { data, error } = await supabase
     .from("availability")
     .upsert(
@@ -78,4 +89,28 @@ export async function saveAvailability(
     .select("id");
   if (error) console.error(`[availability] save: ${error.message}`);
   return Boolean(data?.length);
+}
+
+/**
+ * A new profile timezone, carried onto this person's meeting hours.
+ *
+ * Availability falls back to the profile's zone until it is saved (rule 65),
+ * and once saved it kept its own for ever: a rep who corrected their zone on
+ * Profile kept being offered to prospects at the old one. One zone per
+ * person, so the profile's change moves the meeting row too. A row that does
+ * not exist yet needs nothing, since it already reads the profile's.
+ */
+export async function carryTimezoneToAvailability(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  workspaceId: string,
+  userId: string,
+  timezone: string,
+): Promise<void> {
+  if (!isValidTimezone(timezone)) return;
+  const { error } = await supabase
+    .from("availability")
+    .update({ timezone: timezone.trim(), updated_at: new Date().toISOString() })
+    .eq("workspace_id", workspaceId)
+    .eq("user_id", userId);
+  if (error) console.error(`[availability] carry timezone: ${error.message}`);
 }

@@ -13,6 +13,7 @@ import {
   draftLinkCheck,
   extractLinks,
   effectiveIntent,
+  hasOwnBookingLink,
   replyMove,
   type CampaignProspectStatus,
   type ReplyClassification,
@@ -143,9 +144,23 @@ export async function handleInboundMessage(
     occurredAt: job.receivedAt,
   });
 
-  const campaignProspect = await stopSequence(ctx, prospect.id);
-  const campaignId = campaignProspect?.campaign_id ?? null;
-  await linkConversationToCampaign(ctx, conversation.id, prospect.id, campaignId);
+  const campaignProspect = await stopSequence(ctx, prospect.id, { doNotContact: prospect.do_not_contact });
+  /*
+   * The campaign this reply is answered under, even when no row is open.
+   *
+   * A reply to the last message of a sequence arrives after maintenance has
+   * closed the row (`sequence completed`). `stopSequence` reopens that one,
+   * but when it cannot (a do-not-contact prospect, a row closed for any other
+   * reason) the conversation still belongs to a campaign, and answering it as
+   * nobody's fell back to the schema's defaults: approval mode, a meeting
+   * goal, no agent and no brand, whatever the campaign had been set to.
+   */
+  const campaignId = await linkConversationToCampaign(
+    ctx,
+    conversation.id,
+    prospect.id,
+    campaignProspect?.campaign_id ?? (await conversationCampaign(ctx, conversation.id)),
+  );
 
   /*
    * "Remove me" is recorded before anybody asks a model what it means.
@@ -192,9 +207,7 @@ export async function handleInboundMessage(
   // The agent this conversation belongs to, resolved before anything reads it.
   // A conversation with no campaign, or on a campaign built before agents,
   // resolves to null and behaves exactly as it always did.
-  const agent = campaignProspect?.campaign_id
-    ? await agentForCampaign(ctx.db, campaignProspect.campaign_id)
-    : null;
+  const agent = campaignId ? await agentForCampaign(ctx.db, campaignId) : null;
   const [knowledge, pitch] = await Promise.all([
     // This brand's documents and the shared ones, never another agent's.
     loadKnowledge(ctx, job.workspaceId, agent?.id ?? null),
@@ -250,7 +263,9 @@ export async function handleInboundMessage(
           closed_at: new Date().toISOString(),
           next_action_at: null,
         })
-        .eq("id", campaignProspect.id);
+        .eq("id", campaignProspect.id)
+        // An outcome already recorded is never overwritten (rules 7 and 24).
+        .not("status", "in", "(closed,opted_out,failed)");
     }
     await recordEvent(db, {
       workspaceId: job.workspaceId,
@@ -285,6 +300,18 @@ export async function handleInboundMessage(
     .eq("id", account.user_id)
     .single();
 
+  /*
+   * A rep with their own scheduling link books on it, never on ours.
+   *
+   * The calendar this product owns knows only what we put in it (rule 18),
+   * and a rep who gave us their Calendly keeps their real diary there
+   * (rule 31). Handed both, the agent offered our times beside their link, and
+   * an acceptance was booked into a calendar that cannot see the meeting they
+   * already have at that hour. So with their own link there are no offered
+   * times and nothing is booked here: the link is the way to a meeting.
+   */
+  const ownBookingLink = hasOwnBookingLink(rep?.booking_url);
+
   const timezone = rep?.timezone ?? "UTC";
   const calendar = await resolveCalendar(db, ctx.env, {
     workspaceId: job.workspaceId,
@@ -304,7 +331,7 @@ export async function handleInboundMessage(
   const durationMinutes = calendar?.repSettings
     ? calendar.rules.meetingMinutes
     : ctx.env.MEETING_DURATION_MINUTES;
-  if (calendar) {
+  if (calendar && !ownBookingLink) {
     const offered = await lastOfferedSlots(ctx, conversation.id);
     const outcome = await bookAcceptedSlot(ctx, {
       workspaceId: job.workspaceId,
@@ -331,7 +358,7 @@ export async function handleInboundMessage(
     }
   }
 
-  const slots = calendar && !bookedMeeting
+  const slots = calendar && !bookedMeeting && !ownBookingLink
     ? await offerSlots(calendar, { workingHours, durationMinutes })
     : { iso: [], readable: [] };
 
@@ -428,6 +455,10 @@ export async function handleInboundMessage(
       // A campaign not asking for a meeting offers none at all: proposing
       // times to somebody who was asked to look at a page is the agent
       // pursuing a goal nobody set.
+      //
+      // A rep with their own scheduling link has none here either: `slots`
+      // is empty for them (`ownBookingLink`, above), so the link is offered
+      // and never our times beside it.
       availableSlots: goal === "meeting" && move.slots ? slots.readable : [],
       bookedMeeting,
       move,
@@ -875,14 +906,14 @@ async function recordOptOut(
  * campaign and kept none for ever, so every count read by campaign (the
  * digest, the campaign's own page) left out exactly the replies a campaign
  * exists to produce. Only ever fills a gap: a conversation already tied to a
- * campaign keeps it.
+ * campaign keeps it. Returns the campaign the reply is answered under.
  */
 async function linkConversationToCampaign(
   ctx: WorkerContext,
   conversationId: string,
   prospectId: string,
   campaignId: string | null,
-): Promise<void> {
+): Promise<string | null> {
   let id = campaignId;
   if (!id) {
     // Stopped, opted out or closed rows still say which campaign found them.
@@ -895,14 +926,36 @@ async function linkConversationToCampaign(
       .maybeSingle();
     id = (latest?.campaign_id as string | undefined) ?? null;
   }
-  if (!id) return;
+  if (!id) return null;
   await ctx.db.from("conversations").update({ campaign_id: id }).eq("id", conversationId).is("campaign_id", null);
+  return id;
 }
 
-/** A reply ends the automated sequence; the conversation takes over. */
+/** The reason maintenance closes a row whose sequence has run out. */
+export const SEQUENCE_COMPLETED = "sequence completed";
+
+/** The campaign a conversation is already tied to, if any. */
+async function conversationCampaign(ctx: WorkerContext, conversationId: string): Promise<string | null> {
+  const { data } = await ctx.db.from("conversations").select("campaign_id").eq("id", conversationId).maybeSingle();
+  return (data?.campaign_id as string | null | undefined) ?? null;
+}
+
+/**
+ * A reply ends the automated sequence; the conversation takes over.
+ *
+ * The open row first. Failing that, the row maintenance closed because its
+ * last step had gone out (`closeExhaustedSequences`): somebody answering the
+ * final follow-up is the reply the sequence was written to get, and with that
+ * row skipped the reply was answered under no campaign and never counted in
+ * its funnel. That row, and only that one, moves to `replied`. A row closed
+ * for anything else (an opt-out, do-not-contact, the exclusion list, the
+ * never-twice rule, an expired invitation) stays closed, and so does every
+ * row of a person on the do-not-contact list (rules 7, 14 and 24).
+ */
 async function stopSequence(
   ctx: WorkerContext,
   prospectId: string,
+  options: { doNotContact?: boolean } = {},
 ): Promise<{ id: string; campaign_id: string; variant_id: string | null } | null> {
   const { data: cp } = await ctx.db
     .from("campaign_prospects")
@@ -915,7 +968,7 @@ async function stopSequence(
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  if (!cp) return null;
+  if (!cp) return options.doNotContact ? null : reopenCompletedSequence(ctx, prospectId);
 
   if (canTransition(cp.status as CampaignProspectStatus, "replied")) {
     await ctx.db
@@ -926,6 +979,41 @@ async function stopSequence(
     await ctx.db.from("campaign_prospects").update({ next_action_at: null }).eq("id", cp.id);
   }
   return { id: cp.id, campaign_id: cp.campaign_id, variant_id: cp.variant_id ?? null };
+}
+
+/** The latest row closed only because its sequence ran out, moved to `replied`. */
+async function reopenCompletedSequence(
+  ctx: WorkerContext,
+  prospectId: string,
+): Promise<{ id: string; campaign_id: string; variant_id: string | null } | null> {
+  const { data: done } = await ctx.db
+    .from("campaign_prospects")
+    .select("id, campaign_id, variant_id, status_reason")
+    .eq("prospect_id", prospectId)
+    .eq("status", "closed")
+    .eq("status_reason", SEQUENCE_COMPLETED)
+    .order("closed_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (!done) return null;
+  const { data: moved } = await ctx.db
+    .from("campaign_prospects")
+    .update({
+      status: "replied",
+      status_reason: null,
+      replied_at: new Date().toISOString(),
+      closed_at: null,
+      next_action_at: null,
+    })
+    .eq("id", done.id)
+    // Only while it is still exactly as read: closed, for that reason.
+    .eq("status", "closed")
+    .eq("status_reason", done.status_reason ?? SEQUENCE_COMPLETED)
+    .select("id");
+  // Moved or not, this is the campaign the conversation belongs to. Unmoved,
+  // it is context only: nothing below may write to a row it did not reopen.
+  if (!moved?.length) return null;
+  return { id: done.id, campaign_id: done.campaign_id, variant_id: done.variant_id ?? null };
 }
 
 async function loadHistory(

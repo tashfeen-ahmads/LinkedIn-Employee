@@ -39,6 +39,7 @@ import {
   missingFields,
   type MergeValues,
 } from "@le/shared";
+import { CAMPAIGN_PROMPT_VERSION, FIRST_MESSAGE_PROMPT_VERSION } from "@le/agents";
 import { readCampaignCta } from "../cta.js";
 import type { WorkerContext } from "../context.js";
 import { recordEvent } from "../context.js";
@@ -87,7 +88,7 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
   const { data: cp } = await db
     .from("campaign_prospects")
     .select(
-      "id, workspace_id, campaign_id, prospect_id, status, last_step_sent, invitation_id, invite_note, variant_id, warmed_at, next_action_at, invite_refusals, first_message",
+      "id, workspace_id, campaign_id, prospect_id, status, last_step_sent, invitation_id, invite_note, variant_id, warmed_at, next_action_at, invite_refusals, first_message, first_message_prompt_version",
     )
     .eq("id", job.campaignProspectId)
     .single();
@@ -660,6 +661,18 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
   // the campaign's own copy.
   const personal = job.stepNumber === 1 ? (cp as { first_message?: string | null }).first_message?.trim() : null;
   const step = personal ? { ...stepRow, message: personal } : stepRow;
+  /*
+   * Which prompt wrote the words that go out, so a regression traces back to
+   * the change that caused it (Conventions). Every sent message stored null
+   * here, so nothing could say which writer a bad follow-up came from.
+   *
+   * The personal first message carries the version it was written with. A
+   * campaign step stores none of its own, so it is the campaign writer's,
+   * the one prompt that writes steps.
+   */
+  const promptVersion = personal
+    ? ((cp as { first_message_prompt_version?: string | null }).first_message_prompt_version ?? FIRST_MESSAGE_PROMPT_VERSION)
+    : CAMPAIGN_PROMPT_VERSION;
 
   // The destination goes in here rather than being written into the copy, so
   // changing where a campaign points does not mean rewriting three messages and
@@ -909,6 +922,7 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
     source: "agent",
     body,
     provider_message_id: result.providerId ?? null,
+    prompt_version: promptVersion,
     sent_at: new Date().toISOString(),
   });
   // The follow-up this conversation was held for has gone, so its copy hold
@@ -1335,9 +1349,9 @@ async function claimsOverCap(
  * not a defence when the design produces that. So the spellings people
  * actually use are accepted — braces or brackets, one word or two, any case.
  *
- * `there` remains the fallback when the provider gave us no first name.
- * "Thanks for connecting, there" reads slightly oddly and reads as written by
- * a person; the alternative is a name-shaped hole.
+ * With no first name from the provider, a greeting reads "Hi there," and
+ * anywhere else the name is left out with its comma ("Thanks for
+ * connecting."), never "there" standing where the name was (`renderMerge`).
  */
 const NAME_PLACEHOLDER = /(\{\{|\{|\[)\s*(?:first[\s_-]*name|name|fname)\s*(\}\}|\}|\])/gi;
 
@@ -1492,8 +1506,8 @@ export function inviteNote(
    * conditional block, which is why `DEFAULT_OPENER_TEMPLATE` carries one.
    *
    * `first_name` is the exception, and it is the same exception `renderMerge`
-   * already makes: it resolves to "there", which is what a person writes when
-   * they cannot see a name. Counting it as a hole would send no note at all to
+   * already makes: it resolves to "there" after a greeting and to nothing
+   * elsewhere, which is what a person writes when they cannot see a name. Counting it as a hole would send no note at all to
    * every prospect whose first name LinkedIn did not give us — a real cost, to
    * avoid a greeting that reads perfectly ordinary.
    */

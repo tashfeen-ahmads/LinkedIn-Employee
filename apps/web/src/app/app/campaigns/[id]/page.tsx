@@ -10,7 +10,10 @@ import {
   BOOT_BEAT,
   CLICKS_ARE_INVISIBLE,
   CTA_DEFINITIONS,
+  CTA_PLACEHOLDER,
+  ctaLinkMissing,
   effectiveCta,
+  type CtaKind,
   FIRST_STEP_TIMING_LABEL,
   LINKEDIN_LIMITS,
   PACING_LOOP,
@@ -29,8 +32,9 @@ import { callWorker, errorQuery, noticeQuery, startedNotice } from "@/lib/worker
 import { SubmitButton } from "@/components/submit-button";
 import { describeSearch } from "./search-state";
 import { describePacing } from "@/lib/pacing";
+import { campaignCtas } from "@/lib/campaign-cta";
 import { campaignBookingUrl } from "@/lib/booking-link";
-import { EXTERNAL_BOOKINGS_UNCOUNTED, FREE_NOTES_PER_MONTH, IDLE_RELEASE_TAGLINE, isIdleReleased, INVITE_NOTE_MAX_CHARS, MIN_SENDS_TO_COMPARE, alwaysHoldsSentence, comparisonReady, standings, profileHref } from "@le/shared";
+import { queuedFromLoop, EXTERNAL_BOOKINGS_UNCOUNTED, FREE_NOTES_PER_MONTH, IDLE_RELEASE_TAGLINE, isIdleReleased, INVITE_NOTE_MAX_CHARS, MIN_SENDS_TO_COMPARE, alwaysHoldsSentence, comparisonReady, standings, profileHref } from "@le/shared";
 import { PageNotice, type NoticeParams } from "@/components/page-notice";
 import { ConfirmButton } from "@/components/confirm-button";
 import { formatDate, isoAttr } from "@/lib/format";
@@ -263,11 +267,38 @@ async function setCampaignCta(formData: FormData) {
   const session = await requireSession();
   const supabase = await createClient();
 
-  // Empty means "use this campaign's own destination", which is what a
-  // campaign built before the library has. Never a lookup for "".
+  /*
+   * The picked entry's goal is written onto the campaign's own columns as
+   * well as the pointer. Writing only `cta_id` left `cta_kind` saying
+   * "meeting" on a campaign whose every message now sent a link, and every
+   * screen that read the column (the funnel's goal, the results label, the
+   * inbox's meeting tab, the meeting-hours row) described a campaign that no
+   * longer existed. Readers resolve through the pointer anyway
+   * (`campaignCtas`); the columns are kept in step so they are never the odd
+   * one out, and so "this campaign's own destination" is the last one picked.
+   *
+   * Empty means "use this campaign's own destination", which is what a
+   * campaign built before the library has. Never a lookup for "".
+   */
+  let patch: { cta_id: string | null; cta_kind?: CtaKind; cta_label?: string | null; cta_url?: string | null } = {
+    cta_id: null,
+  };
+  if (ctaId) {
+    const { data: picked } = await supabase
+      .from("ctas")
+      .select("id, kind, label, url")
+      .eq("id", ctaId)
+      .eq("workspace_id", session.workspaceId)
+      .is("archived_at", null)
+      .maybeSingle();
+    if (!picked) {
+      redirect(errorQuery(`/app/campaigns/${campaignId}`, "That call to action is not available any more. Nothing changed."));
+    }
+    patch = { cta_id: picked.id, cta_kind: picked.kind, cta_label: picked.label, cta_url: picked.url };
+  }
   const { error } = await supabase
     .from("campaigns")
-    .update({ cta_id: ctaId || null })
+    .update(patch)
     .eq("id", campaignId)
     .eq("workspace_id", session.workspaceId);
 
@@ -864,19 +895,22 @@ export default async function CampaignPage({
   // The library, and what this campaign is actually sending. One resolver, the
   // same one the worker uses at send time — a screen that read the columns
   // directly would show a destination the send path does not use.
-  const { data: ctaLibrary } = await supabase
-    .from("ctas")
-    .select("id, name, kind, label, url")
-    .eq("workspace_id", session.workspaceId)
-    .is("archived_at", null)
-    .order("name", { ascending: true });
-
-  const linked = (ctaLibrary ?? []).find((c) => c.id === campaign.cta_id) ?? null;
-  const cta = effectiveCta(linked, {
-    kind: campaign.cta_kind,
-    label: campaign.cta_label,
-    url: campaign.cta_url,
-  });
+  const [{ data: ctaLibrary }, resolved] = await Promise.all([
+    supabase
+      .from("ctas")
+      .select("id, name, kind, label, url")
+      .eq("workspace_id", session.workspaceId)
+      .is("archived_at", null)
+      .order("name", { ascending: true }),
+    // Resolved like the send path, archived entries included: the list above
+    // is what may be picked, not what this campaign points at.
+    campaignCtas(supabase, session.workspaceId, [campaign]),
+  ]);
+  const cta = resolved.get(campaign.id) ?? effectiveCta(null, { kind: campaign.cta_kind, label: campaign.cta_label, url: campaign.cta_url });
+  // `{{cta_link}}` in the copy with nothing to fill it: the same reading as
+  // the overview's "link that is not set" row.
+  const ctaMissing =
+    ctaLinkMissing(cta) && (steps ?? []).some((step) => (step.message ?? "").includes(CTA_PLACEHOLDER));
   // Rule 31: a meeting campaign whose replies offer the rep's own scheduling
   // link books some meetings where this page cannot see them.
   const bookingUrl = cta.kind === "meeting" ? await campaignBookingUrl(supabase, session.workspaceId, campaign) : null;
@@ -908,10 +942,20 @@ export default async function CampaignPage({
   // pace on screen is the one the loop keeps once part of today's cap is spent.
   const dayStart = localDayStart(new Date(), owner?.timezone ?? "UTC").getTime();
   const sentToday = rows.filter((r) => r.invited_at && Date.parse(r.invited_at) >= dayStart).length;
+  // What the loop's last run says is already queued on this account, so "more
+  // today" is net of it exactly as the loop's own budget is (`inviteRoom`).
+  const queuedNow = queuedFromLoop(
+    heartbeat?.detail ?? null,
+    campaign.id,
+    campaign.linkedin_account_id,
+    (siblings ?? []).map((c) => c.id),
+  );
   const pacing = describePacing({
     status: campaign.status,
     queued: actionable,
     sentToday,
+    queuedOnAccount: queuedNow?.account,
+    queuedOnCampaign: queuedNow?.campaign,
     account: account ?? null,
     timezone: owner?.timezone ?? "UTC",
     lastBeatAt: heartbeat?.beat_at ?? null,
@@ -1289,6 +1333,12 @@ export default async function CampaignPage({
               "Sends each person their own link to your Nora booking page. Add your own scheduling link on your profile to send that instead."
             )}
           </p>
+        ) : ctaMissing ? (
+          <p className="tiny subtle">
+            The copy carries {CTA_PLACEHOLDER} and this campaign has no destination to put there, so
+            those messages are held until it has one. Pick a saved call to action below, or{" "}
+            <Link href="/app/cta">save one</Link>.
+          </p>
         ) : null}
 
         {/* The picker. Without it the library was a page that did nothing:
@@ -1411,9 +1461,11 @@ export default async function CampaignPage({
             </SubmitButton>
           </div>
           <p className="small muted">
-            {autonomous
-              ? "Your rules let the agent answer pricing, legal and negative replies itself."
-              : "Pricing, legal and anything negative always wait for a person, on either setting."}{" "}
+            {campaign.reply_mode === "approval"
+              ? "Every reply waits for you before it is sent."
+              : autonomous
+                ? "Your rules let the agent answer pricing, legal and negative replies itself."
+                : "Pricing, legal and anything negative always wait for a person."}{" "}
             {alwaysHoldsSentence()}{" "}
             The ceiling of {LINKEDIN_LIMITS.invitesPerDayMax} a day is a safety limit, not a preference.
             {running ? "" : " Launch campaign saves anything changed here first."}

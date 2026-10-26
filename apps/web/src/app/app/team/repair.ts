@@ -7,6 +7,12 @@ export interface RefreshResult {
   changed?: boolean;
   lost?: boolean;
   unlabelled?: boolean;
+  /**
+   * LinkedIn's sign-in sent this rep back with an account, and the provider
+   * has not listed it yet. The worker remembers it and claims it on the next
+   * check (migration 0055), so nothing needs signing in again.
+   */
+  pending?: boolean;
   referenceShape?: string[];
   /** The shape this rep's own id has, so "found" can be compared to "wanted". */
   expected?: string;
@@ -63,16 +69,22 @@ export function describeRepair(result: WorkerResult<RefreshResult>): RepairNotic
   // existed, lives here permanently and legitimately.
   if (data?.unlabelled) return null;
 
+  if (data?.pending) return PENDING_NOTICE;
+
   const found = data?.found ?? 0;
   if (found > 0 && (data?.mine ?? 0) === 0) {
     // Said in words the rep can act on. How many accounts we hold and how
     // they are labelled is ours to know (rule 54): it read to a customer as
     // "the product is broken", and the fix is the same either way.
+    //
+    // Never "wait and it will appear": a sign-in that finished comes back
+    // with its account and is remembered (the `pending` case above), so
+    // reaching here means none came back, and waiting changes nothing.
     return {
       tone: "danger",
-      title: "We couldn't find your LinkedIn sign-in yet.",
-      body: "If you signed in a moment ago it can take a minute to show up here.",
-      fix: "Press Connect LinkedIn below and finish signing in on LinkedIn's page.",
+      title: "We haven't received a finished LinkedIn sign-in from you.",
+      body: "Nothing came back from LinkedIn's sign-in page for your account, so there is nothing to attach yet.",
+      fix: FINISH_SIGN_IN,
     };
   }
   if (data?.lost || found === 0) {
@@ -116,8 +128,20 @@ export function cannotSend(status: string | null | undefined): boolean {
  * just finished a moment, or sign in again.
  */
 export function describeRefreshRefusal(data: RefreshResult | null | undefined): string {
+  if (data?.pending) return `${PENDING_NOTICE.title} ${PENDING_NOTICE.body}`;
   if ((data?.found ?? 0) === 0) {
-    return "Your LinkedIn account isn't connected yet. If you just finished signing in, give it a few seconds and press Check again — otherwise press Connect LinkedIn.";
+    return `Your LinkedIn account isn't connected yet. ${FINISH_SIGN_IN}`;
   }
-  return "We couldn't find your LinkedIn sign-in yet. If you signed in a moment ago it can take a minute to show up — otherwise press Connect LinkedIn and finish signing in on LinkedIn's page.";
+  return `We haven't received a finished LinkedIn sign-in from you. ${FINISH_SIGN_IN}`;
 }
+
+/** What to do when no finished sign-in has come back. */
+const FINISH_SIGN_IN =
+  "Press Connect LinkedIn and finish every step on LinkedIn's page, including any verification code. You'll be brought back here when it's done.";
+
+/** A sign-in came back and the account is not listed yet. Nothing for the rep to do but wait a little. */
+const PENDING_NOTICE: RepairNotice = {
+  tone: "accent",
+  title: "LinkedIn signed you in, and we're waiting for it to confirm the account.",
+  body: "We check again every time this page opens and again overnight, so you don't need to sign in again. If it still says this tomorrow, tell us from the Support page.",
+};

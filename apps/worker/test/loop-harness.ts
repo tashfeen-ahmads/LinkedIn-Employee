@@ -1,6 +1,7 @@
 import { MockLinkedInProvider } from "@le/linkedin";
 import { FakeDb } from "./fake-db.js";
 import { RescheduleError, runLinkedInAction } from "../src/jobs/linkedin-action.js";
+import { jobDueAt } from "../src/jobs/campaign-tick.js";
 import type { WorkerContext } from "../src/context.js";
 import type { LinkedInActionJob, Queues } from "../src/queues.js";
 
@@ -57,14 +58,16 @@ export async function drain(
 ) {
   for (const job of jobs.values()) {
     if (job.state !== "delayed" || (kind && job.data.kind !== kind)) continue;
-    if (until !== undefined && job.timestamp + job.delay > until) continue;
+    if (until !== undefined && jobDueAt(job, new Date()) > until) continue;
     try {
       await runLinkedInAction(ctx, job.data);
       job.state = "completed";
     } catch (err) {
       if (!(err instanceof RescheduleError)) throw err;
-      // As the worker does: moveToDelayed(now + retryAfter)
-      job.timestamp = Date.now();
+      // As the worker does (`rescheduleJob`): the due time into the data, then
+      // moveToDelayed(now + retryAfter) — which in BullMQ 5 leaves
+      // `timestamp` at the original add and makes `delay` relative to now.
+      job.data = { ...job.data, dueAt: Date.now() + err.retryAfterMs } as LinkedInActionJob;
       job.delay = err.retryAfterMs;
     }
   }

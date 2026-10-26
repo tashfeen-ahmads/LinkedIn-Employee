@@ -176,10 +176,17 @@ export interface NeedsYouFacts {
   /** Campaigns with a reviewed list that were never launched. */
   campaignsUnlaunched: number;
   /**
-   * Campaigns whose notes fell back to the template, or whose notes cite
-   * nothing about the person (rules 16 and 27).
+   * Campaigns whose queued notes fell back to the template (no personal note
+   * at all), or whose notes cite nothing about the person (rules 16 and 27).
+   * Accounts whose free notes are spent this month are left out: their
+   * invitations go without any note, so the note is not what anybody reads.
    */
   campaignsWithThinNotes: number;
+  /**
+   * How many of those have not launched yet. A draft is not sending anything,
+   * so the row must not say it is. Optional so older callers read as none.
+   */
+  campaignsWithThinNotesDraft?: number;
   /** Campaigns whose copy carries {{cta_link}} with no destination (rule 29). */
   campaignsMissingCta: number;
   /** Nothing in the workspace has launched yet (rule 65). */
@@ -316,7 +323,7 @@ export function needsYou(facts: NeedsYouFacts): NeedsYouItem[] {
     items.push({
       kind: "pitch_unapproved",
       title: `${plural(facts.pitchesUnapproved, "offer")} ${isare(facts.pitchesUnapproved)} written and waiting for you.`,
-      why: "An agent wrote them and cannot approve them. Nothing is sent from an unapproved line, so the first prospect who asks what this is gets no answer.",
+      why: "An agent wrote them and cannot approve them. Until one is approved, replies to anybody who asks what this is are written from your business profile in the agent's own words, not from an offer you have read.",
       href: "/app/agents",
       action: "Review the offers",
       tone: "warning",
@@ -344,10 +351,20 @@ export function needsYou(facts: NeedsYouFacts): NeedsYouItem[] {
    * launched at all.
    */
   if (facts.campaignsWithThinNotes > 0) {
+    // A draft sends nothing, so it is never "sending" (only a launched one is).
+    const total = facts.campaignsWithThinNotes;
+    const drafts = Math.max(0, Math.min(facts.campaignsWithThinNotesDraft ?? 0, total));
+    const sending = total - drafts;
+    const have = total === 1 ? "has" : "have";
     items.push({
       kind: "thin_notes",
-      title: `${plural(facts.campaignsWithThinNotes, "campaign")} ${isare(facts.campaignsWithThinNotes)} sending notes that are not personalised.`,
-      why: "The writer fell back to the template, so those notes read as generic on arrival. The agent can rewrite them before anybody is invited.",
+      title:
+        sending === total
+          ? `${plural(total, "campaign")} ${isare(total)} sending notes that are not personalised.`
+          : sending === 0
+            ? `${plural(total, "campaign")} ${have} notes ready that are not personalised.`
+            : `${plural(total, "campaign")} ${have} notes that are not personalised, ${sending} of them already sending.`,
+      why: "Those people get the campaign's generic line, or a note that says nothing about them, so it reads as a template on arrival. The agent can rewrite them before anybody is invited.",
       href: "/app/campaigns",
       action: "Review the notes",
       tone: "warning",

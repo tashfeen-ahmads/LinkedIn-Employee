@@ -8,8 +8,16 @@ import { readWorkspaceEntitlement, replyPlanNote } from "@/lib/entitlement";
 import { carryVoiceToAgent } from "@/lib/agent-voice";
 import { createClient } from "@/lib/supabase-server";
 import { callWorker, errorQuery, noticeQuery, startedNotice } from "@/lib/worker";
-import { alwaysHoldsSentence, checkCtaUrl, FREE_NOTES_PER_MONTH, LINKEDIN_LIMITS, describeWorkingHours } from "@le/shared";
+import {
+  alwaysHoldsSentence,
+  checkCtaUrl,
+  FREE_NOTES_PER_MONTH,
+  LINKEDIN_LIMITS,
+  describeWorkingHours,
+  linkedInConnectError,
+} from "@le/shared";
 import { TimezoneSelect } from "@/components/timezone-select";
+import { carryTimezoneToAvailability } from "@/lib/availability";
 import {
   cannotSend,
   describeRefreshRefusal,
@@ -261,8 +269,8 @@ async function saveProfile(formData: FormData) {
     bookingUrl = checked.url;
   }
 
-  const { data: before } = await supabase.from("profiles").select("full_name, bio").eq("id", session.userId).maybeSingle();
-  await supabase
+  const { data: before } = await supabase.from("profiles").select("full_name, bio, timezone").eq("id", session.userId).maybeSingle();
+  const { error: profileError } = await supabase
     .from("profiles")
     .update({
       ...(fullName ? { full_name: fullName.slice(0, 120) } : {}),
@@ -272,6 +280,12 @@ async function saveProfile(formData: FormData) {
       ...(isKnownTimezone(timezone) ? { timezone } : {}),
     })
     .eq("id", session.userId);
+  // Meeting hours are read in a zone too, and Availability falls back to this
+  // one (rule 65). A move to a new zone that left the meeting row behind
+  // offered prospects times in the old one, so it is carried across.
+  if (!profileError && isKnownTimezone(timezone) && timezone !== before?.timezone) {
+    await carryTimezoneToAvailability(supabase, session.workspaceId, session.userId, timezone);
+  }
   // The agent writes every message, so a corrected name or description has to
   // reach it too, as it does from onboarding.
   await carryVoiceToAgent(
@@ -393,7 +407,7 @@ async function rebuildBusiness() {
     redirect(
       errorQuery(
         "/app/profile?edit=1",
-        "Add a website, a LinkedIn page or a description first. Sage will not invent a business from nothing.",
+        "Add your website or a few sentences on what you sell first. A LinkedIn page alone cannot be read, and Sage will not invent a business from nothing.",
       ),
     );
   }
@@ -603,7 +617,9 @@ export default async function ProfilePage({
         }
       />
 
-      <PageNotice error={params.error} notice={params.notice} />
+      {/* A LinkedIn sign-in comes back with a code, never a sentence; its words
+          are the same ones the onboarding LinkedIn step shows. */}
+      <PageNotice error={linkedInConnectError(params.error) ?? params.error} notice={params.notice} />
       {repair ? (
         <div className={`notice ${repair.tone}`} role="status">
           <p>

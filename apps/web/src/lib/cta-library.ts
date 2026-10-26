@@ -1,7 +1,7 @@
 import "server-only";
 import { CTA_DEFINITIONS } from "@le/shared";
 import type { createClient } from "@/lib/supabase-server";
-import type { StashedCta } from "@/lib/onboarding-stash";
+import { readConfirmations, readOnboardingStash, type StashedCta } from "@/lib/onboarding-stash";
 
 /**
  * The library entry for the call to action chosen on onboarding's CTA step,
@@ -45,4 +45,44 @@ export async function ensureCta(
     .select("id")
     .single();
   return created?.id ?? null;
+}
+
+/**
+ * The strategy columns for a call to action: the goal on the strategy's own
+ * columns, and the library entry it points at. Written together, because the
+ * Targeting Agent writes the copy toward `cta_kind` and the campaign it builds
+ * sends through `cta_id` (rule 36); the two must name the same ask.
+ */
+export function ctaStrategyColumns(
+  cta: StashedCta,
+  ctaId: string | null,
+): { cta_kind: StashedCta["kind"]; cta_label: string | null; cta_url: string | null; cta_id?: string } {
+  return { cta_kind: cta.kind, cta_label: cta.label, cta_url: cta.url, ...(ctaId ? { cta_id: ctaId } : {}) };
+}
+
+/**
+ * The call to action this person chose during setup, as the columns an
+ * approval writes onto a strategy that has none of its own (rule 65).
+ *
+ * The same choice onboarding's approval step applies: this person's own
+ * confirmed choice first, since the workspace's copy is only written by its
+ * admins, then the workspace's. `/app/strategy` approved without it, so a
+ * strategy Sage wrote after the CTA step and approved there built a campaign
+ * asking for whatever the agent had defaulted to. Empty when nothing was
+ * chosen, so an approval with no setup behind it writes nothing extra.
+ */
+export async function chosenCtaColumns(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  workspaceId: string,
+  userId: string,
+): Promise<Record<string, unknown>> {
+  const [{ data: me }, { data: workspace }] = await Promise.all([
+    supabase.from("profiles").select("setup_confirmed").eq("id", userId).maybeSingle(),
+    supabase.from("workspaces").select("onboarding").eq("id", workspaceId).maybeSingle(),
+  ]);
+  const cta =
+    readConfirmations(me?.setup_confirmed, workspaceId).ctaChoice ?? readOnboardingStash(workspace?.onboarding).cta;
+  if (!cta) return {};
+  const ctaId = await ensureCta(supabase, workspaceId, userId, cta);
+  return ctaStrategyColumns(cta, ctaId);
 }

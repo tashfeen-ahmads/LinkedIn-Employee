@@ -7,6 +7,7 @@ import { answerSupportTicket, sweepSupportTickets } from "./support.js";
 import { startPendingSearches } from "./pending-searches.js";
 import { unstickProspects } from "./unstick.js";
 import { sendRecovery } from "./account-recovery.js";
+import { jobDueAt } from "./campaign-tick.js";
 
 /**
  * What an operator can do from the console without opening a SQL editor.
@@ -315,7 +316,7 @@ export async function queueStats(queues: Queues): Promise<QueueStats | null> {
 async function wakeParkedInvite(db: WorkerContext["db"], queues: Queues, accountId: string): Promise<boolean> {
   const queue = queues.linkedinAction as unknown as {
     getJobs?: (types: readonly string[]) => Promise<
-      Array<{ data?: { kind?: string; campaignProspectId?: string }; timestamp?: number; delay?: number; promote?: () => Promise<void> } | null>
+      Array<{ data?: { kind?: string; campaignProspectId?: string; dueAt?: number }; timestamp?: number; delay?: number; promote?: () => Promise<void> } | null>
     >;
   };
   if (typeof queue.getJobs !== "function") return false;
@@ -331,7 +332,10 @@ async function wakeParkedInvite(db: WorkerContext["db"], queues: Queues, account
     .select("id, campaign_id")
     .in("id", parked.map((job) => job.data!.campaignProspectId!));
   const onAccount = new Set((rows ?? []).filter((r) => ours.has(r.campaign_id)).map((r) => r.id));
-  const due = (job: (typeof parked)[number]) => Number(job.timestamp ?? 0) + Number(job.delay ?? 0);
+  // When each is really due, not `timestamp + delay`: a parked invitation has
+  // been rescheduled, which is exactly when that sum reads early.
+  const now = new Date();
+  const due = (job: (typeof parked)[number]) => jobDueAt(job, now);
   const first = parked.filter((job) => onAccount.has(job.data!.campaignProspectId!)).sort((a, b) => due(a) - due(b))[0];
   if (!first || typeof first.promote !== "function") return false;
   await first.promote();

@@ -114,9 +114,14 @@ function compact(source: StrategySource): StrategySource {
  * Whether there is anything to read. The agent refuses to invent a business
  * from nothing, so an empty source is not a run worth queueing — it is a form
  * somebody has to fill in.
+ *
+ * A LinkedIn company page alone is not something to read: nothing fetches it,
+ * and a run given only that address came back with a blank business and a
+ * blank strategy somebody could approve. It goes along as a hint beside a
+ * website or a description, never instead of them.
  */
 export function hasStrategySource(source: StrategySource): boolean {
-  return Boolean(source.websiteUrl || source.linkedinCompanyUrl || source.description);
+  return Boolean(source.websiteUrl || source.description);
 }
 
 /** The three fields as a form posted them, trimmed; absent ones left out. */

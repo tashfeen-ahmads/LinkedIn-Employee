@@ -63,7 +63,7 @@ export async function retryStrategy(form: FormData): Promise<string> {
   if (!source) {
     return `${errorQuery(
       STRATEGY_DETAILS,
-      "Tell Sage what you sell first — a website, a LinkedIn page or a sentence or two. It will not invent a business from nothing.",
+      "Tell Sage what you sell first: your website, or a few sentences on what you sell. A LinkedIn page alone cannot be read.",
     )}#details`;
   }
 

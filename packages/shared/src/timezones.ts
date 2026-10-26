@@ -60,6 +60,22 @@ export function isValidTimezone(zone: string | null | undefined): boolean {
 }
 
 /**
+ * The first of these zones this runtime can evaluate, or null when none can.
+ *
+ * Stored zones are not all valid: the Meetings page took free text, and a
+ * live row holds "Eastern", which makes every `Intl` call given it throw. The
+ * caller passes its candidates in order of authority (the row, then the
+ * profile, then whatever it treats as the last resort) and is told which one
+ * it got, so a screen can say it is not using the zone that was saved.
+ */
+export function usableTimezone(...zones: Array<string | null | undefined>): string | null {
+  for (const zone of zones) {
+    if (isValidTimezone(zone)) return zone!.trim();
+  }
+  return null;
+}
+
+/**
  * What a saved window actually means, in words.
  *
  * `8` and `18` on a screen are not a claim anybody can check. "08:00–18:00,

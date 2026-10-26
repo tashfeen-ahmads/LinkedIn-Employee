@@ -12,6 +12,11 @@ export const REFILL_DAYS_OF_ALLOWANCE = 2;
 export const REFILL_EVERY_MS = 24 * 60 * 60_000;
 /** One search page, the same as Find more. */
 export const REFILL_SIZE = 50;
+/**
+ * A campaign launched this recently is left alone: its first list has only
+ * just been queued, and the pacing loop has not yet placed a day of it.
+ */
+export const REFILL_LAUNCH_GRACE_MS = 24 * 60 * 60_000;
 
 export const REFILL_EVENT = "campaign.refill_queued";
 
@@ -27,8 +32,11 @@ export const REFILL_EVENT = "campaign.refill_queued";
  * It is the same search Find more runs, under the same job id, so a press and
  * a refill can never queue two: the stored position is continued (rule 20),
  * everybody already known is excluded, and the copy a human approved is kept.
- * It only asks once a campaign is down to two days of allowance, at most once
- * a day per campaign, and never after LinkedIn has said there is nobody left.
+ * It only asks once the account is down to two days of its allowance across
+ * every running campaign on it (and the campaign to two days of its own cap),
+ * at most once a day per campaign and once per run per account, never in a
+ * campaign's first day, and never after LinkedIn has said there is nobody
+ * left.
  *
  * Nothing is searched for outreach that cannot happen: not while the operator
  * pause is on, not for a workspace whose plan does not send, and not for a
@@ -44,16 +52,41 @@ export async function refillCampaigns(
   const { db } = ctx;
   // Unreadable counts as paused (rule 59): a hiccup is not permission.
   if (await outreachPause(db)) return 0;
-  const { data: campaigns, error } = await db
+  /*
+   * Every running campaign, not only the ones that could be refilled.
+   *
+   * The allowance belongs to the account (rules 3 and 4), and every running
+   * campaign on it draws on the same one. Compared campaign by campaign, a
+   * free account running five campaigns with 116 people queued between them,
+   * eleven days of its allowance, still had each campaign refilled because
+   * each one alone looked short. So the queue is counted per account, across
+   * every running campaign on it, including the ones that cannot be refilled
+   * themselves (search exhausted, no strategy): their people still go out
+   * from the same allowance.
+   */
+  const { data: running, error } = await db
     .from("campaigns")
-    .select("id, workspace_id, owner_user_id, customer_profile_id, linkedin_account_id, daily_invite_cap")
-    .eq("status", "running")
-    .eq("search_exhausted", false)
-    .not("customer_profile_id", "is", null);
-  if (error || !campaigns?.length) return 0;
+    .select(
+      "id, workspace_id, owner_user_id, customer_profile_id, linkedin_account_id, daily_invite_cap, search_exhausted, launched_at",
+    )
+    .eq("status", "running");
+  if (error || !running?.length) return 0;
+  const launchedBefore = now.getTime() - REFILL_LAUNCH_GRACE_MS;
+  const campaigns = running.filter(
+    (c) =>
+      c.search_exhausted !== true &&
+      c.customer_profile_id &&
+      // Launched in the last day: its list was built for this launch and has
+      // not been given a day to drain yet.
+      !(c.launched_at && Date.parse(c.launched_at) > launchedBefore),
+  );
+  if (!campaigns.length) return 0;
 
   const ids = campaigns.map((c) => c.id);
   const accountIds = [...new Set(campaigns.map((c) => c.linkedin_account_id).filter(Boolean))] as string[];
+  // Every running campaign on those accounts, whose queues the accounts share.
+  const sharing = running.filter((c) => c.linkedin_account_id && accountIds.includes(c.linkedin_account_id));
+  const accountOf = new Map(sharing.map((c) => [c.id, c.linkedin_account_id as string]));
   const profileIds = [...new Set(campaigns.map((c) => c.customer_profile_id).filter(Boolean))] as string[];
   const since = new Date(now.getTime() - REFILL_EVERY_MS).toISOString();
   // Every queued row, page by page: PostgREST answers at most a thousand, and a
@@ -64,7 +97,7 @@ export async function refillCampaigns(
       db
         .from("campaign_prospects")
         .select("id, campaign_id")
-        .in("campaign_id", ids)
+        .in("campaign_id", sharing.map((c) => c.id))
         .eq("status", "queued")
         .order("id")
         .range(from, to),
@@ -88,7 +121,17 @@ export async function refillCampaigns(
   if (queued.error || profiles.error || accounts.error || recent.error) return 0;
 
   const waiting = new Map<string, number>();
-  for (const row of queued.data ?? []) waiting.set(row.campaign_id, (waiting.get(row.campaign_id) ?? 0) + 1);
+  const waitingOnAccount = new Map<string, number>();
+  for (const row of queued.data ?? []) {
+    waiting.set(row.campaign_id, (waiting.get(row.campaign_id) ?? 0) + 1);
+    const accountId = accountOf.get(row.campaign_id);
+    if (accountId) waitingOnAccount.set(accountId, (waitingOnAccount.get(accountId) ?? 0) + 1);
+  }
+  // At most one refill per account per run, the shortest campaign first. Each
+  // search adds up to a page, and two found short in the same hour would both
+  // be filled before either had been counted.
+  const refilledAccounts = new Set<string>();
+  campaigns.sort((a, b) => (waiting.get(a.id) ?? 0) - (waiting.get(b.id) ?? 0));
   const accountById = new Map((accounts.data ?? []).map((a) => [a.id, a]));
   const refilledToday = new Set((recent.data ?? []).map((e) => e.subject_id));
   // Targeting refuses a strategy nobody approved (rule 9); asking anyway would
@@ -109,8 +152,14 @@ export async function refillCampaigns(
     const account = campaign.linkedin_account_id ? accountById.get(campaign.linkedin_account_id) : undefined;
     if (!account || account.status !== "active" || !account.provider_account_id) continue;
 
+    if (refilledAccounts.has(account.id)) continue;
+
     const firstAction = account.first_action_at ? new Date(account.first_action_at) : null;
-    const allowance = Math.min(campaign.daily_invite_cap ?? Infinity, dailyInviteCap(firstAction, now));
+    const accountAllowance = dailyInviteCap(firstAction, now);
+    const allowance = Math.min(campaign.daily_invite_cap ?? Infinity, accountAllowance);
+    // The account first: two days of what it may send, across every campaign
+    // on it. Then the campaign, which can be capped below the account.
+    if ((waitingOnAccount.get(account.id) ?? 0) >= REFILL_DAYS_OF_ALLOWANCE * accountAllowance) continue;
     if ((waiting.get(campaign.id) ?? 0) >= REFILL_DAYS_OF_ALLOWANCE * allowance) continue;
 
     const data = {
@@ -124,6 +173,9 @@ export async function refillCampaigns(
     const outcome = await enqueueOnce(queues.targeting, "targeting", data, {
       jobId: jobId("targeting", data.customerProfileId, campaign.id),
     });
+    // A search already running for this account's campaign is this hour's
+    // refill for the account either way.
+    refilledAccounts.add(account.id);
     if (outcome === "already_pending") continue;
     await Promise.all([
       recordEvent(db, {
@@ -131,7 +183,12 @@ export async function refillCampaigns(
         name: REFILL_EVENT,
         subjectType: "campaign",
         subjectId: campaign.id,
-        payload: { queued: waiting.get(campaign.id) ?? 0, allowance },
+        payload: {
+          queued: waiting.get(campaign.id) ?? 0,
+          queuedOnAccount: waitingOnAccount.get(account.id) ?? 0,
+          allowance,
+          accountAllowance,
+        },
       }),
       recordEvent(db, {
         workspaceId: campaign.workspace_id,

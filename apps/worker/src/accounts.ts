@@ -208,7 +208,7 @@ export async function reconcileAccount(
 ): Promise<{ changed?: boolean; lost?: boolean; unlabelled?: boolean }> {
   const { data: row } = await db
     .from("linkedin_accounts")
-    .select("id, provider_account_id, status")
+    .select("id, provider_account_id, status, pending_provider_account_id")
     .eq("workspace_id", workspaceId)
     .eq("user_id", userId)
     .maybeSingle();
@@ -277,9 +277,83 @@ export async function reconcileAccount(
       // fresh allowance — but a connection date that moves every time someone
       // presses a button is a lie on the screen either way.
       ...(changed ? { connected_at: new Date().toISOString(), paused_at: null } : {}),
+      // The id this rep's own sign-in returned has now been claimed.
+      ...(row.pending_provider_account_id === account.providerAccountId ? { pending_provider_account_id: null } : {}),
     })
     .eq("id", row.id);
   return { changed };
+}
+
+/**
+ * The accounts that are this rep's, out of a list the worker fetched itself.
+ *
+ * Two kinds of evidence, and nothing else. An account labelled with the rep's
+ * own user id — which the provider's list never carries on its own, only a
+ * delivery does. And the account id that came back on this rep's own signed
+ * return from LinkedIn's sign-in but could not be claimed at the time
+ * (`pending_provider_account_id`): usually the provider's list had not caught
+ * up yet, and without remembering it the id was logged and lost while the row
+ * sat `connecting` for ever. A display name is never evidence (rule 8).
+ *
+ * The remembered id is used only once the provider lists it, never while
+ * another row holds it, and never to re-point an account that is working: a
+ * second sign-in beside a healthy account is a spare, and is let go.
+ *
+ * `waiting` is true while an id is remembered and the provider does not list
+ * it yet, so the screen can say that instead of "sign in again".
+ */
+export async function accountsForRep(
+  db: Db,
+  row: {
+    id: string;
+    user_id: string;
+    status: string;
+    provider_account_id: string | null;
+    pending_provider_account_id?: string | null;
+  },
+  accounts: ConnectedAccount[],
+): Promise<{ mine: ConnectedAccount[]; waiting: boolean }> {
+  const labelled = accounts.filter((a) => a.reference === row.user_id);
+  const pending = row.pending_provider_account_id;
+  if (!pending) return { mine: labelled, waiting: false };
+
+  const clear = () =>
+    db
+      .from("linkedin_accounts")
+      .update({ pending_provider_account_id: null })
+      .eq("id", row.id)
+      .eq("pending_provider_account_id", pending);
+
+  // Already held by this row: nothing left to claim.
+  if (row.provider_account_id === pending) {
+    await clear();
+    return { mine: labelled, waiting: false };
+  }
+
+  const listed = accounts.find((a) => a.providerAccountId === pending);
+  if (!listed) return { mine: labelled, waiting: true };
+  if (labelled.some((a) => a.providerAccountId === pending)) return { mine: labelled, waiting: false };
+
+  // Somebody else's now, or a read that could not say: never taken on doubt.
+  const { data: holders, error } = await db
+    .from("linkedin_accounts")
+    .select("id")
+    .eq("provider_account_id", pending)
+    .neq("id", row.id)
+    .limit(1);
+  if (error) return { mine: labelled, waiting: false };
+  if (holders?.length) {
+    await clear();
+    return { mine: labelled, waiting: false };
+  }
+
+  const mine = [...labelled, listed];
+  if (row.status === "active" && !canRepointWorkingAccount(row, mine, accounts)) {
+    // The account this row holds is still there: the new sign-in is a spare.
+    await clear();
+    return { mine: labelled, waiting: false };
+  }
+  return { mine, waiting: false };
 }
 
 /**
@@ -366,7 +440,7 @@ export async function recoverAccounts(
 ): Promise<RecoveryRun> {
   const { data: rows } = await db
     .from("linkedin_accounts")
-    .select("id, workspace_id, user_id, status, provider_account_id")
+    .select("id, workspace_id, user_id, status, provider_account_id, pending_provider_account_id")
     .in("status", ["active", "connecting", "reauth_required", "restricted", "warning", "disconnected"]);
 
   if (!rows?.length) return { checked: 0, repaired: 0, unreachable: null };
@@ -397,7 +471,9 @@ export async function recoverAccounts(
 
   let repaired = 0;
   for (const row of rows) {
-    const mine = accounts.filter((a) => a.reference === row.user_id);
+    // Labelled with this rep, or the id this rep's own sign-in returned and
+    // could not claim at the time — the one tie the provider's list allows.
+    const { mine } = await accountsForRep(db, row, accounts);
     // Nothing for this rep: leave the row exactly as it is. The reason it is
     // already unhealthy is the reason it should stay that way, and overwriting
     // a specific status_detail with a generic one loses the only explanation

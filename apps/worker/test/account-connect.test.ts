@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { MockLinkedInProvider, UnipileError } from "@le/linkedin";
+import { LINKEDIN_CONNECT_ERRORS, linkedInConnectError } from "@le/shared";
 import { FakeDb } from "./fake-db.js";
 import { encryptJson } from "../src/crypto.js";
 import { createServer } from "../src/server.js";
@@ -938,7 +939,8 @@ describe("the connect return trip", () => {
     expect(res.status).toBe(302);
     // A sentence the person can act on, never the machine code the banner
     // used to print verbatim.
-    expect(decodeURIComponent(res.headers.get("location") ?? "")).toMatch(/didn't complete.*Connect LinkedIn/);
+    expect(new URL(res.headers.get("location") ?? "").searchParams.get("error")).toBe("connect-incomplete");
+    expect(LINKEDIN_CONNECT_ERRORS["connect-incomplete"]).toMatch(/didn't complete.*Connect LinkedIn/);
     expect(db.find("linkedin_accounts", { id: ACCOUNT })!.provider_account_id).toBeNull();
   });
 
@@ -952,7 +954,8 @@ describe("the connect return trip", () => {
 
     // A sentence the person can act on, never the machine code the banner
     // used to print verbatim.
-    expect(decodeURIComponent(res.headers.get("location") ?? "")).toMatch(/didn't complete.*Connect LinkedIn/);
+    expect(new URL(res.headers.get("location") ?? "").searchParams.get("error")).toBe("connect-incomplete");
+    expect(LINKEDIN_CONNECT_ERRORS["connect-incomplete"]).toMatch(/didn't complete.*Connect LinkedIn/);
     expect(db.find("linkedin_accounts", { id: ACCOUNT })!.provider_account_id).toBeNull();
   });
 
@@ -963,7 +966,8 @@ describe("the connect return trip", () => {
 
     const res = await done(app, `claim=${encodeURIComponent(old)}&account_id=acct_new`);
 
-    expect(decodeURIComponent(res.headers.get("location") ?? "")).toMatch(/expired.*Connect LinkedIn/);
+    expect(new URL(res.headers.get("location") ?? "").searchParams.get("error")).toBe("connect-expired");
+    expect(LINKEDIN_CONNECT_ERRORS["connect-expired"]).toMatch(/expired.*Connect LinkedIn/);
     expect(db.find("linkedin_accounts", { id: ACCOUNT })!.provider_account_id).toBeNull();
   });
 
@@ -1333,10 +1337,15 @@ describe("a LinkedIn sign-in that did not work", () => {
 
     expect(where).toContain("/app/profile");
     expect(where).not.toContain("connection_failed");
+    // A code, never a sentence: onboarding renders only words written on its
+    // own page, so a sentence in the address bar reached nobody in setup.
+    const code = new URL(res.headers.get("location") ?? "").searchParams.get("error");
+    expect(code).toBe("signin-failed");
     // The cause nobody guesses: a Google- or Apple-created LinkedIn account has
     // no password to type on the sign-in page.
-    expect(where).toMatch(/Google or Apple/);
-    expect(where).toMatch(/Connect LinkedIn/);
+    expect(linkedInConnectError(code)).toMatch(/Google or Apple/);
+    expect(linkedInConnectError(code)).toMatch(/Connect LinkedIn/);
+    expect(linkedInConnectError(code)).not.toMatch(/unipile/i);
   });
 
   it("records nothing for a token it did not mint, and says the same thing", async () => {
@@ -1388,5 +1397,187 @@ describe("a LinkedIn sign-in that did not work", () => {
     await failed(app, `claim=${encodeURIComponent(stale)}`);
 
     expect(db.rows("events").some((e) => e.name === "linkedin.connect.failed")).toBe(false);
+  });
+});
+
+/*
+ * The pull path could never match anybody. The provider's account list
+ * carries no reference to who started the sign-in, and its `name` is the
+ * LinkedIn display name, so `reference === userId` was false for every
+ * account and recovery repaired nothing. The one tie is the account id that
+ * comes back on the rep's own signed return; when it cannot be claimed there
+ * (the list has not caught up yet), it is remembered and claimed later.
+ */
+describe("a sign-in that came back before the provider listed it", () => {
+  const token = (workspaceId = WORKSPACE, userId = USER, issuedAt = Date.now()) =>
+    encryptJson({ workspaceId, userId, issuedAt }, CREDENTIALS_KEY);
+  const OTHER_USER = "99999999-9999-4999-8999-999999999999";
+  const OTHER_ROW = "44444444-4444-4444-8444-444444444444";
+
+  it("remembers the id from the rep's own return when the list does not have it yet", async () => {
+    const { db, app, linkedin } = harness({ provider_account_id: null, status: "connecting" });
+    linkedin.connectedAccounts = [];
+
+    const res = await app.request(`/auth/linkedin/done?claim=${encodeURIComponent(token())}&account_id=acct_late`);
+
+    expect(res.status).toBe(302);
+    const row = db.find("linkedin_accounts", { id: ACCOUNT })!;
+    expect(row.pending_provider_account_id).toBe("acct_late");
+    // Remembered, not bound: nothing attaches until the provider lists it.
+    expect(row.provider_account_id).toBeNull();
+    expect(row.status).toBe("connecting");
+  });
+
+  it("remembers nothing for a token it did not mint", async () => {
+    const { db, app, linkedin } = harness({ provider_account_id: null, status: "connecting" });
+    linkedin.connectedAccounts = [];
+    const forged = encryptJson({ workspaceId: WORKSPACE, userId: USER, issuedAt: Date.now() }, "b".repeat(64));
+
+    await app.request(`/auth/linkedin/done?claim=${encodeURIComponent(forged)}&account_id=acct_late`);
+
+    expect(db.find("linkedin_accounts", { id: ACCOUNT })!.pending_provider_account_id ?? null).toBeNull();
+  });
+
+  it("claims it on the next page load once the provider lists it, by id and never by name", async () => {
+    const { db, app, linkedin } = harness({
+      provider_account_id: null,
+      status: "connecting",
+      pending_provider_account_id: "acct_late",
+    });
+    // As the pull path really reads it: no reference, the display name in `name`.
+    linkedin.connectedAccounts = [
+      { providerAccountId: "acct_someone", reference: "", displayName: "Sam Patel", status: "ok" },
+      { providerAccountId: "acct_late", reference: "", displayName: "Sam Patel", status: "ok" },
+    ];
+
+    const res = await refresh(app, { workspaceId: WORKSPACE, userId: USER });
+    const body = (await res.json()) as { bound?: number; changed?: boolean };
+
+    const row = db.find("linkedin_accounts", { id: ACCOUNT })!;
+    expect(row.provider_account_id).toBe("acct_late");
+    expect(row.status).toBe("active");
+    expect(row.display_name).toBe("Sam Patel");
+    expect(row.pending_provider_account_id).toBeNull();
+    // A first connection reads as connected, not reconnected.
+    expect(body.bound).toBe(1);
+    expect(body.changed).toBe(false);
+  });
+
+  it("says it is waiting, rather than 'sign in again', while the provider has not listed it", async () => {
+    const { db, app, linkedin } = harness({
+      provider_account_id: null,
+      status: "connecting",
+      pending_provider_account_id: "acct_late",
+    });
+    linkedin.connectedAccounts = [{ providerAccountId: "acct_someone", reference: "", status: "ok" }];
+
+    const res = await refresh(app, { workspaceId: WORKSPACE, userId: USER });
+    const body = (await res.json()) as Record<string, unknown>;
+
+    expect(body.pending).toBe(true);
+    // Nothing about other accounts the provider holds (rule 17).
+    expect(body.referenceShape).toBeUndefined();
+    expect(db.find("linkedin_accounts", { id: ACCOUNT })!.pending_provider_account_id).toBe("acct_late");
+  });
+
+  it("never takes an account another row already holds", async () => {
+    const { db, app, linkedin } = harness({
+      provider_account_id: null,
+      status: "connecting",
+      pending_provider_account_id: "acct_theirs",
+    });
+    db.seed("linkedin_accounts", [
+      {
+        id: OTHER_ROW,
+        workspace_id: WORKSPACE,
+        user_id: OTHER_USER,
+        provider: "mock",
+        provider_account_id: "acct_theirs",
+        status: "active",
+      },
+    ]);
+    linkedin.connectedAccounts = [{ providerAccountId: "acct_theirs", reference: "", status: "ok" }];
+
+    await refresh(app, { workspaceId: WORKSPACE, userId: USER });
+
+    const row = db.find("linkedin_accounts", { id: ACCOUNT })!;
+    expect(row.provider_account_id).toBeNull();
+    expect(row.pending_provider_account_id).toBeNull();
+    expect(db.find("linkedin_accounts", { id: OTHER_ROW })!.provider_account_id).toBe("acct_theirs");
+  });
+
+  it("never re-points a working account at a second sign-in", async () => {
+    const { db, app, linkedin } = harness({
+      provider_account_id: "acct_live",
+      status: "active",
+      pending_provider_account_id: "acct_spare",
+    });
+    linkedin.connectedAccounts = [
+      { providerAccountId: "acct_live", reference: "", status: "ok" },
+      { providerAccountId: "acct_spare", reference: "", status: "ok" },
+    ];
+
+    await refresh(app, { workspaceId: WORKSPACE, userId: USER });
+
+    const row = db.find("linkedin_accounts", { id: ACCOUNT })!;
+    expect(row.provider_account_id).toBe("acct_live");
+    expect(row.pending_provider_account_id).toBeNull();
+  });
+
+  it("is claimed by nightly recovery too, so nobody has to open a page", async () => {
+    const { db, linkedin } = harness({
+      provider_account_id: null,
+      status: "connecting",
+      pending_provider_account_id: "acct_late",
+    });
+    linkedin.connectedAccounts = [{ providerAccountId: "acct_late", reference: "", displayName: "Sam Patel", status: "ok" }];
+    const { recoverAccounts } = await import("../src/accounts.js");
+
+    const result = await recoverAccounts(db.asDb(), linkedin);
+
+    expect(result.repaired).toBe(1);
+    const row = db.find("linkedin_accounts", { id: ACCOUNT })!;
+    expect(row.provider_account_id).toBe("acct_late");
+    expect(row.status).toBe("active");
+    expect(row.pending_provider_account_id).toBeNull();
+  });
+
+  it("does not bind an unlabelled account to a rep by display name in recovery", async () => {
+    const { db, linkedin } = harness({ provider_account_id: null, status: "connecting" });
+    linkedin.connectedAccounts = [{ providerAccountId: "acct_x", reference: "", displayName: "Sam Patel", status: "ok" }];
+    const { recoverAccounts } = await import("../src/accounts.js");
+
+    const result = await recoverAccounts(db.asDb(), linkedin);
+
+    expect(result.repaired).toBe(0);
+    expect(db.find("linkedin_accounts", { id: ACCOUNT })!.provider_account_id).toBeNull();
+  });
+
+  it("is never released as a duplicate while it waits to be claimed", async () => {
+    const { db, ctx, linkedin } = harness({
+      provider_account_id: null,
+      status: "active",
+      pending_provider_account_id: "acct_late",
+    });
+    db.seed("linkedin_accounts", [
+      {
+        id: OTHER_ROW,
+        workspace_id: WORKSPACE,
+        user_id: OTHER_USER,
+        provider: "mock",
+        provider_account_id: "acct_held",
+        status: "active",
+      },
+    ]);
+    // Same display name as a healthy held account: what the release reads as a twin.
+    linkedin.connectedAccounts = [
+      { providerAccountId: "acct_held", reference: "", displayName: "Sam Patel", status: "ok" },
+      { providerAccountId: "acct_late", reference: "", displayName: "Sam Patel", status: "ok" },
+    ];
+    const { releaseDuplicateAccounts } = await import("../src/jobs/duplicate-accounts.js");
+
+    await releaseDuplicateAccounts(ctx);
+
+    expect(linkedin.deletedAccounts).not.toContain("acct_late");
   });
 });

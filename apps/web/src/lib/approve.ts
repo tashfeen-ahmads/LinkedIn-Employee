@@ -24,6 +24,18 @@ export async function approveStrategy(
    */
   extraIfNoCampaign: Record<string, unknown> = {},
 ): Promise<{ ok: false } | { ok: true; hasCampaign: boolean }> {
+  // A strategy with no name was written from nothing — an agent run given
+  // nothing it could read — and approving it would search LinkedIn for a
+  // segment nobody can describe. The screens offer no Approve for one; this is
+  // the same refusal on the one path every approval goes through (rule 9).
+  const { data: named } = await supabase
+    .from("customer_profiles")
+    .select("name")
+    .eq("id", profileId)
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
+  if (!named?.name?.trim()) return { ok: false };
+
   // Asked once, before the write, so the call to action and the answer below
   // cannot disagree about whether there is a campaign.
   const { data: already } = await supabase

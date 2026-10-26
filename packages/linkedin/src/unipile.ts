@@ -127,9 +127,12 @@ export class UnipileProvider implements LinkedInProvider {
    * LinkedIn's own id for a place or an industry, keyed by the words we asked
    * with. The taxonomy does not change between searches and a lookup costs a
    * round trip per term, so the answer is kept for the life of the process.
-   * `null` is cached too: a term LinkedIn does not recognise stays unrecognised.
+   *
+   * Only a match is kept. A miss is asked again next time: a wrong answer
+   * cached here is wrong for every search this process runs, and the price of
+   * asking again is one request.
    */
-  private readonly parameterIds = new Map<string, SearchParameter | null>();
+  private readonly parameterIds = new Map<string, Lookup>();
 
   constructor(config: UnipileConfig) {
     this.dsn = config.dsn.replace(/\/$/, "");
@@ -462,8 +465,15 @@ export class UnipileProvider implements LinkedInProvider {
           continue;
         }
         ids.push(hit.id);
-        if (hit.title.trim().toLowerCase() !== name.trim().toLowerCase()) {
+        // Only a deliberate rename says "searched as". A place matched by its
+        // full name ("New York, NY" is "New York, New York, United States") is
+        // the same place, and saying otherwise teaches people to skip notes.
+        if (looked.renamed) {
           notes.push(`The ${field} "${name}" was searched as LinkedIn's "${hit.title}".`);
+        } else if (looked.ambiguous) {
+          notes.push(
+            `The ${field} "${name}" names more than one place on LinkedIn, so it was searched as "${hit.title}". Name the state or country to pick another.`,
+          );
         }
       }
       return ids;
@@ -476,16 +486,42 @@ export class UnipileProvider implements LinkedInProvider {
     };
   }
 
-  /** One name, one id, asked once per process. */
+  /**
+   * One name, one id, asked once per process once it has matched.
+   *
+   * An industry LinkedIn renamed in 2022 is asked by its current name first,
+   * because the typeahead does not know the old one and answers it with
+   * whatever happens to contain its words.
+   */
   private async lookupParameter(
     accountId: string,
     type: SearchParameterType,
     name: string,
   ): Promise<Lookup> {
-    const key = `${type}:${name.trim().toLowerCase()}`;
+    const key = `${type}:${normaliseParameter(name)}`;
     const cached = this.parameterIds.get(key);
-    if (cached !== undefined) return { found: cached };
+    if (cached) return cached;
 
+    const current = type === "INDUSTRY" ? currentIndustryName(name) : undefined;
+    let looked: Lookup | undefined;
+    if (current) {
+      const renamed = await this.askParameter(accountId, type, current);
+      if (renamed.failed) return renamed;
+      if (renamed.found) looked = { ...renamed, renamed: true };
+    }
+    looked ??= await this.askParameter(accountId, type, name);
+    if (looked.failed) return looked;
+
+    if (looked.found) this.parameterIds.set(key, looked);
+    return looked;
+  }
+
+  /** One typeahead request, and only a candidate that genuinely is the term. */
+  private async askParameter(
+    accountId: string,
+    type: SearchParameterType,
+    name: string,
+  ): Promise<Lookup> {
     const params = new URLSearchParams({ account_id: accountId, type, keywords: name });
     let items: Array<{ id?: string; title?: string; name?: string }> = [];
     try {
@@ -501,19 +537,11 @@ export class UnipileProvider implements LinkedInProvider {
       return { found: null, failed: (err as { message?: string })?.message ?? "the lookup failed" };
     }
 
-    // Exact first: "Design" is a real LinkedIn industry and also a word inside
-    // several others, and the typeahead does not promise to put it first.
-    const wanted = name.trim().toLowerCase();
-    const hit =
-      items.find((i) => (i.title ?? i.name ?? "").trim().toLowerCase() === wanted) ?? items[0];
-    const id = hit?.id;
-    if (!id) {
-      this.parameterIds.set(key, null);
-      return { found: null };
-    }
-    const found = { id, title: hit?.title ?? hit?.name ?? name };
-    this.parameterIds.set(key, found);
-    return { found };
+    const usable = items.filter((i): i is typeof i & { id: string } => typeof i.id === "string" && i.id !== "");
+    const match = matchParameter(type, name, usable.map((i) => i.title ?? i.name ?? ""));
+    if (!match) return { found: null };
+    const hit = usable[match.index]!;
+    return { found: { id: hit.id, title: hit.title ?? hit.name ?? name }, ambiguous: match.ambiguous || undefined };
   }
 
   async getProfile(input: { accountId: string; providerId: string }): Promise<ProviderProfile> {
@@ -883,7 +911,7 @@ export class UnipileProvider implements LinkedInProvider {
 
     const parsed = JSON.parse(input.body) as RawUnipileAccount | { items?: RawUnipileAccount[] };
     const items = "items" in parsed && Array.isArray(parsed.items) ? parsed.items : [parsed as RawUnipileAccount];
-    return toConnectedAccounts(items);
+    return toConnectedAccounts(items, "push");
   }
 
   /**
@@ -1044,37 +1072,46 @@ export class UnipileProvider implements LinkedInProvider {
 
   async listAccounts(): Promise<ConnectedAccount[]> {
     const res = await this.request<{ items?: RawUnipileAccount[] }>(ROUTES.accounts);
-    return toConnectedAccounts(res.items ?? []);
+    return toConnectedAccounts(res.items ?? [], "pull");
   }
 }
 
-/** One shape for a connected account, whether it arrived by push or by pull. */
-function toConnectedAccounts(items: RawUnipileAccount[]): ConnectedAccount[] {
+/**
+ * One shape for a connected account, whether it arrived by push or by pull —
+ * read differently for each, because the two payloads use `name` for
+ * different things.
+ *
+ * Push (the hosted flow's notify webhook) echoes back the rep's user id we
+ * handed the link, in `name`. Pull (`GET /api/v1/accounts`) has no field
+ * holding that id at all — no `reference` — and its `name` is the LinkedIn
+ * profile's display name. Reading `reference ?? name` on both made every
+ * pulled account "reference: Tashfeen Ahmad", so `reference === userId` never
+ * matched and recovery repaired nothing, while `account_name`, which the pull
+ * payload does not carry, left every display name null.
+ *
+ * So a pulled account carries a reference only if the provider ever sends a
+ * real one, and its `name` becomes the display name. Binding on the pull path
+ * goes by the account id that came back on the rep's own signed return
+ * (`pending_provider_account_id`), never by a display name (rule 8).
+ */
+function toConnectedAccounts(items: RawUnipileAccount[], via: "push" | "pull"): ConnectedAccount[] {
   return items
     .map((item) => ({
       providerAccountId: String(item.account_id ?? item.id ?? ""),
-      /*
-       * `reference` first, and the order is the whole bug.
-       *
-       * The hosted flow sends the rep's user id as `name`, and the notify
-       * webhook echoes it back there — so reading `name` first is right on the
-       * push path and was written for it. It is wrong on the pull path:
-       * `GET /api/v1/accounts` returns `name` as the *LinkedIn profile's*
-       * display name, so every account this workspace holds read back as
-       * "Tashfeen Ahmad" and the id we actually sent was never looked at.
-       *
-       * One function serves both shapes, so it has to prefer the field that
-       * only ever means one thing. `reference` wins where it exists; `name`
-       * stays as the fallback the webhook still needs.
-       */
-      reference: String(item.reference ?? item.name ?? ""),
-      displayName: typeof item.account_name === "string" ? item.account_name : undefined,
+      reference: String((via === "push" ? (item.reference ?? item.name) : item.reference) ?? ""),
+      displayName:
+        typeof item.account_name === "string"
+          ? item.account_name
+          : via === "pull" && typeof item.name === "string" && item.name.trim()
+            ? item.name
+            : undefined,
       status: mapAccountStatus(String(item.status ?? "OK")),
     }))
-    // An entry naming neither the account nor the rep cannot be acted on, and
-    // guessing which row it meant is how the wrong account gets bound to the
-    // wrong person.
-    .filter((account) => account.providerAccountId && account.reference);
+    // An entry naming no account cannot be acted on. A delivery naming no rep
+    // cannot either — guessing which row it meant is how the wrong account
+    // gets bound to the wrong person — but a pulled account never names one,
+    // and is kept so the id a rep's own return carried can be found in it.
+    .filter((account) => account.providerAccountId && (via === "pull" || account.reference));
 }
 
 interface RawUnipileAccount {
@@ -1180,6 +1217,127 @@ interface SearchParameter {
 interface Lookup {
   found: SearchParameter | null;
   failed?: string;
+  /** Found under LinkedIn's current name for a renamed industry. */
+  renamed?: boolean;
+  /** A place named without its region, and more than one place has that name. */
+  ambiguous?: boolean;
+}
+
+/**
+ * LinkedIn's 2022 industry taxonomy renamed most industries, and the Strategy
+ * Agent still writes the old names. The typeahead does not know an old name;
+ * asked "Computer Software" it answers with whatever contains those words.
+ *
+ * Only renames whose current name is certain are listed. A wrong entry here is
+ * a confident wrong search, which is the bug this table exists to prevent, so
+ * an old name missing from it is dropped and named instead.
+ */
+export const INDUSTRY_RENAMES: Readonly<Record<string, string>> = {
+  "Computer Software": "Software Development",
+  "Information Technology and Services": "IT Services and IT Consulting",
+  "Hospital & Health Care": "Hospitals and Health Care",
+  "Management Consulting": "Business Consulting and Services",
+  "Health, Wellness & Fitness": "Wellness and Fitness Services",
+  "Marketing and Advertising": "Advertising Services",
+  "Education Management": "Education Administration Programs",
+  Internet: "Technology, Information and Internet",
+  "Human Resources": "Human Resources Services",
+  "Medical Practice": "Medical Practices",
+  "Nonprofit Organization Management": "Non-profit Organizations",
+  "Medical Devices": "Medical Equipment Manufacturing",
+  Pharmaceuticals: "Pharmaceutical Manufacturing",
+  "Food & Beverages": "Food and Beverage Services",
+  "E-Learning": "E-Learning Providers",
+  "Primary/Secondary Education": "Primary and Secondary Education",
+  "Logistics and Supply Chain": "Transportation, Logistics, Supply Chain and Storage",
+  "Public Relations and Communications": "Public Relations and Communications Services",
+  "Venture Capital & Private Equity": "Venture Capital and Private Equity Principals",
+  "Computer Hardware": "Computer Hardware Manufacturing",
+};
+
+const INDUSTRY_RENAME_INDEX = new Map(
+  Object.entries(INDUSTRY_RENAMES).map(([old, current]) => [normaliseParameter(old), current]),
+);
+
+export function currentIndustryName(name: string): string | undefined {
+  return INDUSTRY_RENAME_INDEX.get(normaliseParameter(name));
+}
+
+/** Case, spacing, punctuation and "&" against "and" do not make a different term. */
+export function normaliseParameter(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
+    .trim();
+}
+
+/**
+ * Region abbreviations people write after a city, to what LinkedIn writes.
+ * A value is a list because "CA" is California and also Canada; the city has
+ * already matched by then, so either reading is the place that was meant.
+ */
+const REGION_ALIASES: Record<string, string[]> = {
+  al: ["alabama"], ak: ["alaska"], az: ["arizona"], ar: ["arkansas"], ca: ["california", "canada"],
+  co: ["colorado"], ct: ["connecticut"], de: ["delaware", "germany"], fl: ["florida"], ga: ["georgia"],
+  hi: ["hawaii"], id: ["idaho"], il: ["illinois"], in: ["indiana", "india"], ia: ["iowa"], ks: ["kansas"],
+  ky: ["kentucky"], la: ["louisiana"], me: ["maine"], md: ["maryland"], ma: ["massachusetts"],
+  mi: ["michigan"], mn: ["minnesota"], ms: ["mississippi"], mo: ["missouri"], mt: ["montana"],
+  ne: ["nebraska"], nv: ["nevada"], nh: ["new hampshire"], nj: ["new jersey"], nm: ["new mexico"],
+  ny: ["new york"], nc: ["north carolina"], nd: ["north dakota"], oh: ["ohio"], ok: ["oklahoma"],
+  or: ["oregon"], pa: ["pennsylvania"], ri: ["rhode island"], sc: ["south carolina"],
+  sd: ["south dakota"], tn: ["tennessee"], tx: ["texas"], ut: ["utah"], vt: ["vermont"],
+  va: ["virginia"], wa: ["washington"], wv: ["west virginia"], wi: ["wisconsin"], wy: ["wyoming"],
+  dc: ["district of columbia"], "d c": ["district of columbia"],
+  us: ["united states"], usa: ["united states"], "u s": ["united states"], "u s a": ["united states"],
+  uk: ["united kingdom"], "u k": ["united kingdom"], uae: ["united arab emirates"],
+};
+
+function regionMatches(region: string, segments: string[]): boolean {
+  const wanted = [region, ...(REGION_ALIASES[region] ?? [])];
+  return segments.some((segment) => wanted.includes(segment));
+}
+
+/**
+ * Which typeahead candidate, if any, genuinely is the term.
+ *
+ * The typeahead answers with whatever contains the words, in its own order:
+ * asked "New York, NY" it put Nyack first, asked "Residential Real Estate" it
+ * offered "Leasing Non-residential Real Estate". Taking its first answer sent
+ * a real message about "HUD matters around Nyack". So a candidate counts only
+ * when its name is the term, or, for a place, when its city is the term's city
+ * and it lies in every region the term names. An exact name wins over a city
+ * match. Anything else is nothing, and the caller names it as dropped.
+ */
+export function matchParameter(
+  type: SearchParameterType,
+  term: string,
+  candidates: string[],
+): { index: number; ambiguous: boolean } | null {
+  const wanted = normaliseParameter(term);
+  if (!wanted) return null;
+
+  const exact = candidates.findIndex((c) => normaliseParameter(c) === wanted);
+  if (exact >= 0) return { index: exact, ambiguous: false };
+
+  if (type === "LOCATION") {
+    const [city, ...regions] = term.split(",").map(normaliseParameter).filter(Boolean);
+    const places: number[] = [];
+    candidates.forEach((candidate, index) => {
+      const [candidateCity, ...candidateRegions] = candidate.split(",").map(normaliseParameter).filter(Boolean);
+      if (candidateCity !== city) return;
+      if (!regions.every((region) => regionMatches(region, candidateRegions))) return;
+      places.push(index);
+    });
+    const first = places[0];
+    if (first !== undefined) {
+      const distinct = new Set(places.map((i) => normaliseParameter(candidates[i]!)));
+      return { index: first, ambiguous: regions.length === 0 && distinct.size > 1 };
+    }
+  }
+
+  // Nothing here is the term. Never the first item: that is how "New York, NY" became Nyack.
+  return null;
 }
 
 interface ResolvedFilters {

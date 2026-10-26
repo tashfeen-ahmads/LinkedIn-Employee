@@ -89,6 +89,15 @@ tests that were verified by deliberately breaking the code.
    What both share is the binding rule — an account is only ever matched to
    the rep whose user id it carries as its reference. Do not loosen that.
 
+   The provider's account *list* carries no reference at all, and its `name`
+   there is the LinkedIn display name, so on the pull path nothing ever
+   matched and recovery repaired nobody. The id that does identify a rep's
+   account is the one their own signed return to `/auth/linkedin/done`
+   carries: when the claim there is refused (the list lagging), it is kept as
+   `pending_provider_account_id` (migration 0055) and `accountsForRep` claims
+   it on the next Team page load or nightly run, once the provider lists it
+   and no other row holds it. A display name is never a match.
+
    Repair must never depend on somebody finding a button. `recoverAccounts`
    runs in nightly maintenance and the Team page asks on arrival whenever the
    rep's account is not active, because the common failure is silent from the
@@ -107,6 +116,13 @@ tests that were verified by deliberately breaking the code.
    `/app/strategy` or on onboarding's approval step (rule 65), and both go
    through `approveStrategy` (`apps/web/src/lib/approve.ts`) and show the
    competitor check (rule 49). Nothing else approves one.
+
+   Nothing blank reaches that screen. Sage needs a website or a description
+   (a LinkedIn page alone is a URL nothing here can read), reads the exact page
+   it was given before the site's usual ones, and a run returning an empty
+   business or a nameless strategy fails in words instead of storing it: a
+   LinkedIn-only signup was shown a strategy with no name, an Approve button,
+   and an offer written from nothing. `approveStrategy` refuses a nameless one.
 10. **Nothing held for a human is invisible.** `/app/inbox` lists conversations,
    not drafts: a conversation can be flagged with no draft at all, and while the
    page listed drafts those were shown to nobody. Holds carry a kind
@@ -138,6 +154,12 @@ tests that were verified by deliberately breaking the code.
     term it renamed (its industry taxonomy changed in 2022) narrows the list
     without anyone asking. Several titles or keywords are joined with `OR`, not
     with spaces — space-joined they are an AND that matches nobody.
+
+    **A lookup takes a real match or nothing** (`matchParameter`). It took
+    LinkedIn's first suggestion, so "New York, NY" was searched as Nyack and a
+    city campaign quietly became a small town's. An exact title wins; a place
+    also matches on its first segment plus every region it names; anything
+    else is dropped with a note. Only matches are cached.
 13. **Nobody enters a campaign whose profile cannot be opened and checked**
     (`verifyProfiles` in `apps/worker/src/jobs/targeting.ts`). LinkedIn hides a
     profile's public address from anyone outside the viewer's network, so a
@@ -214,7 +236,10 @@ tests that were verified by deliberately breaking the code.
     it did not run sends someone to investigate the wrong stage, which is the
     same disease as everything else on this list. It is read-only and scoped to
     the caller's own workspace and account; it must never report what other
-    accounts the provider holds.
+    accounts the provider holds. Neither may the table it reads: members see
+    only the `campaign-tick`, `worker-boot` and `webhook:messages` heartbeats
+    (migration 0056), because `accounts:observed` holds every connected
+    account's LinkedIn name and was readable by every signed-in person.
 
 18. **The calendar this product owns knows only what we put in it.**
     Google will not grant calendar scopes to an app that has not been through
@@ -288,7 +313,11 @@ tests that were verified by deliberately breaking the code.
     Find more's own job id once a campaign has fewer than two days of
     allowance queued, at most once a day per campaign, and never after
     `search_exhausted`, and never for a workspace that cannot send, while
-    outreach is paused, or for a strategy not approved or set aside. Lists only
+    outreach is paused, or for a strategy not approved or set aside. Two days
+    is counted **per account**, across every campaign sending from it, and a
+    campaign launched in the last day is left alone: one free account with
+    eleven days queued over five campaigns was still refilled, and every row
+    refill writes takes a person out of every future search (rule 27). Lists only
     grew when somebody pressed the button, and
     by late October three of seven running campaigns had nobody left to invite
     while every owner read the ramp as broken.
@@ -324,6 +353,17 @@ tests that were verified by deliberately breaking the code.
     id is already taken without replacing the job: one failed action keeps its slot for the
     whole `removeOnFail` window, so that person is never re-queued while every
     screen reports a healthy loop. The counts are the only place that shows.
+    It also carries `inFlight`, today's queued invitations per account and
+    campaign, which the campaign page nets off the "more today" it promises;
+    reading them out of the decision sentences was a second reading capped at
+    twenty campaigns.
+
+    A job's due time is the `dueAt` it carries (`jobDueAt`), written when it
+    is placed and again by every reschedule (`rescheduleJob`). BullMQ's
+    `moveToDelayed` keeps the original `timestamp` and makes `delay` relative
+    to the move, so `timestamp + delay` read rescheduled invitations as due
+    hours early, charged them to the wrong day, and placed the rest at the
+    send path's floor instead of the day's pace.
 
     The campaign page answers "when does the next invitation go out" using
     `checkAction` itself (`describePacing` in `apps/web/src/lib/pacing.ts`),
@@ -592,6 +632,11 @@ tests that were verified by deliberately breaking the code.
     be optimising the dashboard at the cost of the product: a rep who cannot
     send the link they actually use does not book fewer meetings through this
     product, they stop using this product.
+
+    A rep with their own link is **never offered built-in times beside it**,
+    and an acceptance is never booked on the built-in calendar for them: that
+    calendar cannot see the diary their link manages, which is rule 18's
+    double-booking by another door.
 
 32. **The product says what to do next, in one voice.** `nextStep` and
     `ONBOARDING_STEPS` have computed where a workspace has got to since the
@@ -926,6 +971,12 @@ tests that were verified by deliberately breaking the code.
     messages somebody twice. And it never touches a `closed`, `failed` or
     `opted_out` row — those are outcomes, and restarting one writes to a person
     who has already been dealt with, or who asked us to stop.
+
+    A row closed because its sequence ran out is the one closed row a reply
+    moves: somebody answering the last follow-up is that campaign's reply,
+    answered under its mode, goal and agent and counted in its funnel. Read as
+    "no campaign", it fell back to approval, a meeting and the workspace's own
+    business. Rows closed for any other reason stay closed.
 
     The one schedule it does pull earlier is a first message an older rule
     pushed days out (rule 43). There is no rep's judgement to collapse there —
@@ -1602,7 +1653,9 @@ tests that were verified by deliberately breaking the code.
     roles that may, the workspace. Autonomy and reply mode are set together
     everywhere (`setAutonomy`, `targeting.ts`): the reply gate holds every
     message on an `approval` campaign whatever its autonomy says, so an
-    "on its own" answer that left the mode alone changed nothing. The business comes
+    "on its own" answer that left the mode alone changed nothing. Launch itself
+    never changes how replies are handled: a rep who chose "Hold for my
+    approval" on the campaign page a second before pressing it keeps that. The business comes
     first because a LinkedIn account belongs to a workspace and the business
     step creates it — and it starts Sage, so the strategies are written while
     the person does the next four steps. Each step is decided from what is

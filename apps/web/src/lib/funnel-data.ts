@@ -3,12 +3,18 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@le/db";
 import type { CtaKind, DatedFunnelRow } from "@le/shared";
 import { fetchAllRows } from "./rows";
+import { CAMPAIGN_CTA_COLUMNS, campaignCtas, type CampaignCtaColumns } from "./campaign-cta";
 
 export interface CampaignFacts {
   id: string;
   name: string;
   status: string;
   owner_user_id: string;
+  /**
+   * What the campaign is actually asking for: its library entry's kind when
+   * it points at one, its own column otherwise (`effectiveCta`, rule 36). Not
+   * the raw column, which goes stale when a campaign is pointed elsewhere.
+   */
   cta_kind: CtaKind;
   customer_profile_id: string | null;
   launched_at: string | null;
@@ -39,11 +45,17 @@ export async function readFunnelData(
 ): Promise<FunnelData> {
   const { data: campaignRows } = await supabase
     .from("campaigns")
-    .select("id, name, status, owner_user_id, cta_kind, customer_profile_id, launched_at")
+    .select(`id, name, status, owner_user_id, customer_profile_id, launched_at, ${CAMPAIGN_CTA_COLUMNS}`)
     .eq("workspace_id", workspaceId)
     .order("created_at", { ascending: false });
 
-  const campaigns = (campaignRows ?? []) as CampaignFacts[];
+  // The goal each campaign is judged on is the one it actually sends toward.
+  const raw = (campaignRows ?? []) as unknown as Array<Omit<CampaignFacts, "cta_kind"> & CampaignCtaColumns>;
+  const ctas = await campaignCtas(supabase, workspaceId, raw);
+  const campaigns: CampaignFacts[] = raw.map(({ cta_id: _id, cta_label: _label, cta_url: _url, ...c }) => ({
+    ...c,
+    cta_kind: ctas.get(c.id)?.kind ?? c.cta_kind ?? "meeting",
+  }));
 
   const { rows, truncated } = await fetchAllRows<DatedFunnelRow & { campaign_id: string }>((from, to) =>
     supabase

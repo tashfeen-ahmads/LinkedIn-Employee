@@ -12,6 +12,8 @@ import { formatDate, formatDateTime, isoAttr } from "@/lib/format";
 import { label } from "@/lib/labels";
 import { profileHref } from "@le/shared";
 import { recordManualBooking } from "@/lib/manual-booking";
+import { inboxStageOf, type InboxStageRow } from "@/lib/inbox-stage";
+import { CAMPAIGN_CTA_COLUMNS, campaignCtas } from "@/lib/campaign-cta";
 
 /** How many invitations the stage tabs read. Said on screen when reached. */
 const FUNNEL_LIMIT = 300;
@@ -253,15 +255,12 @@ const STAGES = [
 ] as const;
 type StageKey = (typeof STAGES)[number]["key"];
 
-/** Where one prospect has actually got to. */
-function stageOf(status: string): Exclude<StageKey, "waiting"> | null {
-  if (status === "meeting_booked") return "booked";
-  if (status === "replied" || status === "positive") return "replied";
-  if (status.startsWith("messaged")) return "messaged";
-  if (status === "accepted") return "accepted";
-  if (status === "invited") return "invited";
-  // queued, closed, failed and opted_out are not stages somebody reached.
-  return null;
+/**
+ * Where one prospect has actually got to, ended rows included: one definition
+ * (`inboxStageOf`), so a closed or negative row is still somebody written to.
+ */
+function stageOf(row: InboxStageRow): Exclude<StageKey, "waiting"> | null {
+  return inboxStageOf(row);
 }
 
 function nameOf(p: { first_name?: string | null; last_name?: string | null } | undefined): string {
@@ -299,7 +298,7 @@ export default async function InboxPage({
     // people a rep wants to see.
     supabase
       .from("campaign_prospects")
-      .select("id, prospect_id, campaign_id, status, invited_at, accepted_at, replied_at")
+      .select("id, prospect_id, campaign_id, status, invited_at, accepted_at, replied_at, last_step_sent")
       .eq("workspace_id", session.workspaceId)
       .not("invited_at", "is", null)
       .order("invited_at", { ascending: false })
@@ -311,9 +310,13 @@ export default async function InboxPage({
     supabase.from("workspaces").select("onboarding").eq("id", session.workspaceId).maybeSingle(),
     // Whether any campaign here can reach a meeting. A "Meeting booked" tab
     // that can only ever read zero reports a link campaign as failing at
-    // something it never asked for (rule 29).
-    supabase.from("campaigns").select("cta_kind").eq("workspace_id", session.workspaceId).eq("cta_kind", "meeting").limit(1),
+    // something it never asked for (rule 29). Every campaign's columns, read
+    // through `campaignCtas` below: the column alone goes stale once a
+    // campaign points at a library entry (rule 36).
+    supabase.from("campaigns").select(`id, ${CAMPAIGN_CTA_COLUMNS}`).eq("workspace_id", session.workspaceId).limit(500),
   ]);
+  const ctaByCampaign = await campaignCtas(supabase, session.workspaceId, goals ?? []);
+  const asksForMeetings = [...ctaByCampaign.values()].some((cta) => cta.kind === "meeting");
   const timezone = me?.timezone ?? null;
   const autonomous =
     (workspace?.onboarding as { autonomy?: string } | null)?.autonomy === "autonomous";
@@ -380,18 +383,18 @@ export default async function InboxPage({
   const stages = STAGES.filter(
     (s) =>
       s.key !== "booked" ||
-      (goals ?? []).length > 0 ||
-      (funnelRows ?? []).some((r) => stageOf(r.status) === "booked"),
+      asksForMeetings ||
+      (funnelRows ?? []).some((r) => stageOf(r) === "booked"),
   );
   const counts = stages.reduce<Record<string, number>>((acc, s) => {
     acc[s.key] =
       s.key === "waiting"
         ? conversationIds.length
-        : (funnelRows ?? []).filter((r) => stageOf(r.status) === s.key).length;
+        : (funnelRows ?? []).filter((r) => stageOf(r) === s.key).length;
     return acc;
   }, {});
 
-  const listed = (funnelRows ?? []).filter((r) => stageOf(r.status) === stage);
+  const listed = (funnelRows ?? []).filter((r) => stageOf(r) === stage);
 
   return (
     <>
@@ -637,7 +640,13 @@ export default async function InboxPage({
                       )}
                     </td>
                     <td data-label="Company" className="muted">{(p?.company as string) || "—"}</td>
-                    <td data-label="Stage">{STAGES.find((s) => s.key === stageOf(row.status))?.label ?? label(row.status)}</td>
+                    <td data-label="Stage">
+                      {STAGES.find((s) => s.key === stageOf(row))?.label ?? label(row.status)}
+                      {/* Where they got to, and that it has since ended. */}
+                      {["closed", "failed", "opted_out", "negative"].includes(row.status) ? (
+                        <span className="muted"> · {label(row.status)}</span>
+                      ) : null}
+                    </td>
                     <td data-label="When" className="muted">
                       {when ? (
                         <time dateTime={isoAttr(when)} title={formatDateTime(when, timezone)}>

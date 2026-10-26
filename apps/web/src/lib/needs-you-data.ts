@@ -5,7 +5,7 @@ import {
   MESSAGE_WEBHOOK_BEAT,
   PACING_LOOP,
   PACING_STALE_MS,
-  effectiveCta,
+  ctaLinkMissing,
   needsYou,
   readWebhookRefusal,
   type NeedsYouFacts,
@@ -13,6 +13,8 @@ import {
 } from "@le/shared";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@le/db";
+import { localMonth, noteAllowance, planOf } from "@le/linkedin";
+import { CAMPAIGN_CTA_COLUMNS, campaignCtas, type CampaignCtaColumns } from "./campaign-cta";
 
 /**
  * The facts behind "what needs you", gathered for one workspace.
@@ -100,12 +102,15 @@ export async function loadNeedsYou(
       .not("approved_at", "is", null),
     supabase
       .from("campaigns")
-      .select("id, cta_id, cta_kind, cta_label, cta_url")
+      .select(`id, ${CAMPAIGN_CTA_COLUMNS}`)
       .eq("workspace_id", workspaceId)
       .eq("status", "draft")
       .limit(200),
     /*
-     * Campaigns about to send a note that reads as personalised and is not.
+     * Campaigns about to send a note that is not written for the person: one
+     * the writer marked thin, or none at all, which falls back to the
+     * campaign's template (rule 16). A note a person cleared on purpose
+     * (`invite_note_edited`) is their choice and is not raised.
      *
      * `queued` only: a note already sent cannot be rewritten, and listing it
      * would put a row on this screen with no action behind it. Distinct in
@@ -116,7 +121,7 @@ export async function loadNeedsYou(
       .select("campaign_id")
       .eq("workspace_id", workspaceId)
       .eq("status", "queued")
-      .eq("invite_note_thin", true)
+      .or("invite_note_thin.eq.true,and(invite_note.is.null,invite_note_edited.eq.false)")
       .limit(1000),
     // Released after a fortnight unused (rule 63): the row says reconnect to
     // start campaigns rather than reading as a fault.
@@ -150,16 +155,13 @@ export async function loadNeedsYou(
   /*
    * A campaign asking somebody to click a link it does not have.
    *
-   * Read through `effectiveCta` rather than by testing the columns here: it is
-   * the one definition of what a campaign's destination actually is, and rule 36
-   * makes the linked library row win over the campaign's own. A second reading
-   * would call a campaign broken that sends perfectly well.
+   * Read through `campaignCtas` and `ctaLinkMissing` rather than by testing the
+   * columns here: the linked library row wins over the campaign's own (rule
+   * 36), and a meeting campaign with no URL of its own still sends one — the
+   * rep's scheduling link or this product's booking page — so it is never
+   * missing a destination. The campaign page reads the same two.
    */
-  const ctaIds = [...new Set((unlaunched ?? []).map((c) => c.cta_id).filter(Boolean))] as string[];
-  const { data: ctaRows } = ctaIds.length
-    ? await supabase.from("ctas").select("id, kind, label, url").in("id", ctaIds)
-    : { data: [] };
-  const ctaById = new Map((ctaRows ?? []).map((row) => [row.id, row]));
+  const unlaunchedCtas = await campaignCtas(supabase, workspaceId, (unlaunched ?? []) as CampaignCtaColumns[]);
 
   const unlaunchedIds = (unlaunched ?? []).map((c) => c.id);
   const { data: steps } = unlaunchedIds.length
@@ -178,25 +180,23 @@ export async function loadNeedsYou(
 
   const campaignsMissingCta = (unlaunched ?? []).filter((campaign) => {
     if (!usesPlaceholder.has(campaign.id)) return false;
-    const cta = effectiveCta(campaign.cta_id ? (ctaById.get(campaign.cta_id) ?? null) : null, {
-      kind: campaign.cta_kind ?? undefined,
-      label: campaign.cta_label,
-      url: campaign.cta_url,
-    } as Parameters<typeof effectiveCta>[1]);
-    return !cta.url;
+    const cta = unlaunchedCtas.get(campaign.id);
+    return cta ? ctaLinkMissing(cta) : false;
   }).length;
 
   /*
    * Meeting campaigns running on hours nobody chose: an owner with neither
-   * saved availability nor their own scheduling link (rule 31).
+   * saved availability nor their own scheduling link (rule 31). "Meeting" is
+   * what the campaign actually asks for, through its library entry.
    */
-  const { data: meetingCampaigns } = await supabase
+  const { data: runningCampaigns } = await supabase
     .from("campaigns")
-    .select("owner_user_id")
+    .select(`id, owner_user_id, ${CAMPAIGN_CTA_COLUMNS}`)
     .eq("workspace_id", workspaceId)
-    .eq("status", "running")
-    .eq("cta_kind", "meeting");
-  const owners = [...new Set((meetingCampaigns ?? []).map((c) => c.owner_user_id).filter(Boolean))] as string[];
+    .eq("status", "running");
+  const runningCtas = await campaignCtas(supabase, workspaceId, (runningCampaigns ?? []) as CampaignCtaColumns[]);
+  const meetingCampaigns = (runningCampaigns ?? []).filter((c) => runningCtas.get(c.id)?.kind === "meeting");
+  const owners = [...new Set(meetingCampaigns.map((c) => c.owner_user_id).filter(Boolean))] as string[];
   let meetingHoursUnset = false;
   if (owners.length) {
     const [{ data: set, error: setError }, { data: links, error: linkError }] = await Promise.all([
@@ -212,6 +212,13 @@ export async function loadNeedsYou(
       meetingHoursUnset = owners.some((owner) => !covered.has(owner));
     }
   }
+
+  const thinNotes = await thinNoteCampaigns(
+    supabase,
+    workspaceId,
+    [...new Set((thin ?? []).map((row) => row.campaign_id))],
+    now,
+  );
 
   const facts: NeedsYouFacts = {
     loopStalled: stamped === null || now.getTime() - stamped > PACING_STALE_MS,
@@ -230,7 +237,8 @@ export async function loadNeedsYou(
     strategiesApproved: approvedStrategies.count ?? 0,
     meetingHoursUnset,
     campaignsUnlaunched: (unlaunched ?? []).length,
-    campaignsWithThinNotes: new Set((thin ?? []).map((row) => row.campaign_id)).size,
+    campaignsWithThinNotes: thinNotes.total,
+    campaignsWithThinNotesDraft: thinNotes.drafts,
     campaignsMissingCta,
     // A read that failed is not "never launched": that would put a setup row
     // on a workspace with live campaigns.
@@ -238,4 +246,58 @@ export async function loadNeedsYou(
   };
 
   return { items: needsYou(facts), facts };
+}
+
+/**
+ * Which of the campaigns with generic or thin queued notes are worth raising.
+ *
+ * Only campaigns that can still send: a draft, a running or a paused one.
+ * And not one whose account's free notes are spent for the month: LinkedIn
+ * then takes the invitation without any note (rule 62), so nobody reads the
+ * note whatever it says, and rewriting it would be work with no effect. The
+ * month is read through `noteAllowance`, the send path's own reading, in the
+ * account owner's zone.
+ */
+async function thinNoteCampaigns(
+  supabase: SupabaseClient<Database>,
+  workspaceId: string,
+  ids: string[],
+  now: Date,
+): Promise<{ total: number; drafts: number }> {
+  if (!ids.length) return { total: 0, drafts: 0 };
+  const { data: campaigns } = await supabase
+    .from("campaigns")
+    .select("id, status, linkedin_account_id")
+    .eq("workspace_id", workspaceId)
+    .in("id", ids);
+  const live = (campaigns ?? []).filter((c) => ["draft", "running", "paused"].includes(c.status));
+  const accountIds = [...new Set(live.map((c) => c.linkedin_account_id).filter(Boolean))] as string[];
+  const { data: accounts } = accountIds.length
+    ? await supabase
+        .from("linkedin_accounts")
+        .select("id, user_id, has_premium, has_sales_navigator, notes_exhausted_month")
+        .eq("workspace_id", workspaceId)
+        .in("id", accountIds)
+    : { data: [] as Array<{ id: string; user_id: string; has_premium: boolean | null; has_sales_navigator: boolean | null; notes_exhausted_month: string | null }> };
+  const userIds = [...new Set((accounts ?? []).map((a) => a.user_id).filter(Boolean))];
+  const { data: owners } = userIds.length
+    ? await supabase.from("profiles").select("id, timezone").in("id", userIds)
+    : { data: [] as Array<{ id: string; timezone: string | null }> };
+  const zone = new Map((owners ?? []).map((o) => [o.id, o.timezone || "UTC"]));
+  const spent = new Set(
+    (accounts ?? [])
+      .filter((a) => {
+        let month: string;
+        try {
+          month = localMonth(now, zone.get(a.user_id) ?? "UTC");
+        } catch {
+          month = localMonth(now, "UTC");
+        }
+        return !noteAllowance({ plan: planOf(a), notesSentThisMonth: 0, exhaustedMonth: a.notes_exhausted_month, month })
+          .allowed;
+      })
+      .map((a) => a.id),
+  );
+  const raised = live.filter((c) => !c.linkedin_account_id || !spent.has(c.linkedin_account_id));
+  return { total: raised.length, drafts: raised.filter((c) => c.status === "draft").length };
 }

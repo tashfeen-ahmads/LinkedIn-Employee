@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { funnelReport, isReadyToSend } from "@le/shared";
+import { funnelReport, isReadyToSend, nextRequiredStep, ONBOARDING_STEPS } from "@le/shared";
 import { requireSession } from "@/lib/workspace";
 import { SetupChecklist } from "@/components/setup-checklist";
 import { NextStep } from "@/components/next-step";
@@ -35,7 +35,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
   const session = await requireSession();
   const supabase = await createClient();
 
-  const [{ state: setup, next }, everything, { data: profiles }, { rows: found }, { data: me }, { data: account }] = await Promise.all([
+  const [{ state: setup }, everything, { data: profiles }, { rows: found }, { data: me }, { data: account }] = await Promise.all([
     readSetupState(supabase, session.workspaceId),
     readFunnelData(supabase, session.workspaceId),
     supabase
@@ -69,6 +69,11 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
       .eq("user_id", session.userId)
       .maybeSingle(),
   ]);
+
+  // Setup, and only the steps that stop anything being sent. The optional
+  // knowledge step is a prompt of its own once those are done.
+  const required = nextRequiredStep(setup);
+  const knowledge = !required && !setup.hasKnowledge ? ONBOARDING_STEPS.find((step) => step.key === "hasKnowledge") : undefined;
 
   // The Strategy Agent's own progress, which is a different question from
   // "which step is this workspace on" and has its own panel.
@@ -173,13 +178,25 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
 
         A workspace mid-setup still gets the full instruction, which is the case
         they were written for. A finished one gets Q1, Q2, Q3 and nothing else.
+
+        "Mid-setup" means a required step outstanding (`nextRequiredStep`). The
+        knowledge base is optional, so keying the block on `nextStep` showed the
+        whole of it, checklist and all, for ever to every workspace that never
+        filled one in. It gets one line of its own instead.
       */}
-      {next ? (
+      {required ? (
         <PageGroup id="setup">
-          <NextStep step={next} ready={isReadyToSend(setup)} />
+          <NextStep step={required} ready={isReadyToSend(setup)} />
           <StrategyStatus state={strategy} />
           <SetupChecklist state={setup} />
         </PageGroup>
+      ) : knowledge ? (
+        <div className="notice">
+          <p className="small">
+            {knowledge.why}{" "}
+            <Link href={knowledge.href}>{knowledge.action}</Link>
+          </p>
+        </div>
       ) : null}
 
       {/*

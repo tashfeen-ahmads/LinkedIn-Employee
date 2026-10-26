@@ -5,6 +5,8 @@ import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { callWorker, errorQuery, noticeQuery } from "@/lib/worker";
 import { planDays } from "@le/calendar";
+import { usableTimezone } from "@le/shared";
+import { TimezoneSelect } from "@/components/timezone-select";
 import { AvailabilityCalendar } from "@/components/availability-calendar";
 import { SubmitButton } from "@/components/submit-button";
 import { formatDateTime, isoAttr, wallTimeToUtc } from "@/lib/format";
@@ -88,7 +90,9 @@ async function addBlackout(formData: FormData) {
     .eq("workspace_id", session.workspaceId)
     .eq("user_id", session.userId)
     .maybeSingle();
-  const timezone = row?.timezone || (await profileTimezone(supabase, session.userId)) || DEFAULTS.timezone;
+  // The zone the screen showed the times in: a stored one the runtime cannot
+  // read falls back to the profile's, exactly as the page drew them.
+  const timezone = usableTimezone(row?.timezone, await profileTimezone(supabase, session.userId)) ?? DEFAULTS.timezone;
 
   const from = String(formData.get("from") ?? "");
   const to = String(formData.get("to") ?? "");
@@ -243,7 +247,16 @@ export async function Availability() {
   // what the worker already falls back to when it offers times. Defaulting to
   // UTC here drew the week hours out of place, and saving it as shown wrote
   // UTC over the right answer.
-  const current = { ...DEFAULTS, timezone: ownTimezone ?? DEFAULTS.timezone, ...(row ?? {}) };
+  const merged = { ...DEFAULTS, timezone: ownTimezone ?? DEFAULTS.timezone, ...(row ?? {}) };
+  /*
+   * A stored zone this runtime cannot read is not used: the Meetings page took
+   * free text, a live row holds "Eastern", and every `Intl` call given it
+   * throws, which took this page down. The profile's zone stands in (rule 65's
+   * fallback), the screen says so, and saving writes a real one.
+   */
+  const zone = usableTimezone(merged.timezone, ownTimezone) ?? DEFAULTS.timezone;
+  const unreadableZone = merged.timezone !== zone ? merged.timezone : null;
+  const current = { ...merged, timezone: zone };
   const hours = parseHours(current.working_hours);
 
   /*
@@ -293,6 +306,15 @@ export async function Availability() {
         It sat behind five number fields for months, so the only way to know
         what Thursday looked like was to book a meeting and see.
       */}
+      {unreadableZone ? (
+        <div className="notice warning">
+          <p className="small">
+            Your saved meeting timezone, &ldquo;{unreadableZone}&rdquo;, is not one the calendar can
+            read, so these times are shown in {zone} instead. Pick yours from the list below and save.
+          </p>
+        </div>
+      ) : null}
+
       <section className="card stack-4">
         <div className="stack-1">
           <h3>The next two weeks</h3>
@@ -361,7 +383,7 @@ export async function Availability() {
           <div className="form-row">
             <label className="field grow">
               <span>Your timezone</span>
-              <input name="timezone" defaultValue={current.timezone} placeholder="Europe/London" />
+              <TimezoneSelect value={current.timezone} />
             </label>
             <label className="field grow">
               <span>Where the meeting happens</span>

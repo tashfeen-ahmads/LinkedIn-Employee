@@ -194,6 +194,13 @@ export type LinkedinAccountRow = {
   user_id: string;
   provider: string;
   provider_account_id: string | null;
+  /**
+   * An account id that arrived on this rep's own signed return from LinkedIn's
+   * sign-in but could not be claimed then — usually because the provider's
+   * account list had not caught up (migration 0055). The refresh and nightly
+   * recovery retry the claim with it. Never matched by display name.
+   */
+  pending_provider_account_id: string | null;
   linkedin_member_id: string | null;
   display_name: string | null;
   profile_url: string | null;

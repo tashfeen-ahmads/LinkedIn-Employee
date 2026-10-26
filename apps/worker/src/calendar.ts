@@ -11,6 +11,7 @@ import {
   type CalendarProvider,
 } from "@le/calendar";
 import type { Db } from "@le/db";
+import { usableTimezone } from "@le/shared";
 import type { Env } from "./config.js";
 import { loadRefreshedCredential } from "./oauth-credentials.js";
 
@@ -83,7 +84,10 @@ export async function resolveCalendar(
     return {
       provider: new MockCalendarProvider(),
       accessToken: "mock",
-      timezone: settings?.timezone || input.timezone,
+      // A stored zone the runtime cannot read ("Eastern") falls back to the
+      // profile's; with neither readable the slot finder offers nothing rather
+      // than guess UTC and propose a 4 AM call.
+      timezone: usableTimezone(settings?.timezone, input.timezone) ?? input.timezone,
       rules: toRules(settings),
       ownOnly: false,
       repSettings: Boolean(settings),
@@ -152,7 +156,7 @@ export async function resolveCalendar(
       ? new MicrosoftCalendarProvider()
       : new GoogleCalendarProvider(),
     accessToken: tokens.accessToken,
-    timezone: settings?.timezone || input.timezone,
+    timezone: usableTimezone(settings?.timezone, input.timezone) ?? input.timezone,
     rules: toRules(settings),
     ownOnly: false,
     repSettings: Boolean(settings),
@@ -332,7 +336,8 @@ function fullDays(binding: CalendarBinding): Set<string> {
 }
 
 function dayKey(iso: string, timezone: string): string {
-  return new Intl.DateTimeFormat("en-CA", { timeZone: timezone, dateStyle: "short" }).format(new Date(iso));
+  const zone = usableTimezone(timezone) ?? "UTC";
+  return new Intl.DateTimeFormat("en-CA", { timeZone: zone, dateStyle: "short" }).format(new Date(iso));
 }
 
 /**
@@ -415,7 +420,7 @@ async function buildOwnCalendar(
       blackouts: [...(blackouts ?? []), ...(feedBusy ?? [])].map(toInterval),
     }),
     accessToken: "own",
-    timezone: settings?.timezone || input.timezone,
+    timezone: usableTimezone(settings?.timezone, input.timezone) ?? input.timezone,
     rules: toRules(settings),
     // Still own-only when the feed is failing: a snapshot going stale is not a
     // calendar we can see, and the screens say so rather than implying the

@@ -13,7 +13,7 @@ import {
   verifyStripeWebhook,
 } from "@le/billing";
 import type { ConnectedAccount } from "@le/linkedin";
-import { MESSAGE_WEBHOOK_BEAT, adminCan, permissionForControl } from "@le/shared";
+import { MESSAGE_WEBHOOK_BEAT, adminCan, permissionForControl, type LinkedInConnectError } from "@le/shared";
 import { decryptJson, encryptJson } from "./crypto.js";
 import { recordBeat } from "./heartbeat.js";
 import type { MiddlewareHandler } from "hono";
@@ -34,7 +34,13 @@ import type IORedis from "ioredis";
 import type { WorkerContext } from "./context.js";
 import { bookFromLink, readBookingPage } from "./jobs/book.js";
 import { connectCalendarFeed, disconnectCalendarFeed } from "./jobs/calendar-feed.js";
-import { reconcileAccount, recordObservedAccounts, recoverAccounts, refreshAccountPlan } from "./accounts.js";
+import {
+  accountsForRep,
+  reconcileAccount,
+  recordObservedAccounts,
+  recoverAccounts,
+  refreshAccountPlan,
+} from "./accounts.js";
 import { runDiagnostics } from "./jobs/diagnostics.js";
 import { eraseProspect, exportWorkspace } from "./jobs/retention.js";
 import { IMPORT_MAX_BYTES, importWorkspace } from "./jobs/import-workspace.js";
@@ -134,11 +140,12 @@ const StrategyRequest = z
   // strategies already stored, which is more material than a first run ever
   // has, and requiring the website again would make "write me four more" fail
   // for anybody who onboarded with a description.
-  .refine(
-    (input) =>
-      Boolean(input.expand || input.websiteUrl || input.linkedinCompanyUrl || input.description),
-    { message: "need a website, a LinkedIn page, or a description to work from" },
-  );
+  //
+  // A LinkedIn page is not material on its own: nothing fetches it, and a run
+  // given only that address came back with every field blank.
+  .refine((input) => Boolean(input.expand || input.websiteUrl || input.description), {
+    message: "need a website or a description to work from; a LinkedIn page alone cannot be read",
+  });
 
 const TargetingRequest = z.object({
   workspaceId: z.string().uuid(),
@@ -1308,7 +1315,7 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
    */
   app.get("/auth/linkedin/failed", async (c) => {
     const back = () =>
-      c.redirect(`${ctx.env.APP_URL}/app/profile?error=${encodeURIComponent(LINKEDIN_SIGN_IN_FAILED)}#team`, 302);
+      c.redirect(`${ctx.env.APP_URL}/app/profile?error=${LINKEDIN_SIGN_IN_FAILED}#team`, 302);
 
     const claim = c.req.query("claim");
     if (!claim || !ctx.env.CREDENTIALS_KEY) return back();
@@ -1366,15 +1373,15 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
 
     const claim = c.req.query("claim");
     const accountId = c.req.query("account_id");
-    if (!claim || !ctx.env.CREDENTIALS_KEY) return back(`error=${encodeURIComponent(LINKEDIN_CONNECT_INCOMPLETE)}`);
+    if (!claim || !ctx.env.CREDENTIALS_KEY) return back(`error=${LINKEDIN_CONNECT_INCOMPLETE}`);
 
     let who: { workspaceId: string; userId: string; issuedAt: number };
     try {
       who = decryptState(claim, ctx.env.CREDENTIALS_KEY);
     } catch {
-      return back(`error=${encodeURIComponent(LINKEDIN_CONNECT_INCOMPLETE)}`);
+      return back(`error=${LINKEDIN_CONNECT_INCOMPLETE}`);
     }
-    if (Date.now() - who.issuedAt > CLAIM_TOKEN_TTL_MS) return back(`error=${encodeURIComponent(LINKEDIN_CONNECT_EXPIRED)}`);
+    if (Date.now() - who.issuedAt > CLAIM_TOKEN_TTL_MS) return back(`error=${LINKEDIN_CONNECT_EXPIRED}`);
 
     // The provider appends this itself. Without it there is nothing to attach,
     // and the page's own check against the provider is the next thing to run.
@@ -1390,6 +1397,28 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
     // and says what it found. Silence here is what left somebody pressing a
     // button that changed nothing.
     console.error("claim on return failed", result.reason);
+
+    /*
+     * And the id is remembered rather than lost.
+     *
+     * This return is the only thing tying the new account to this rep — the
+     * provider's account list carries no reference to who started the flow —
+     * and the usual refusal is that list not having caught up yet. Dropped
+     * here, the row sat `connecting` while the account worked at the provider,
+     * and nothing could ever match it again. Kept, the Team and onboarding
+     * refresh and nightly recovery claim it the moment the provider lists it.
+     *
+     * Only for the two refusals that are about timing. "Already attached to
+     * someone else" stays refused, and a second sign-in beside a working
+     * account is a spare for the duplicate release, not a claim to retry.
+     */
+    if (result.status === "provider_error" || result.reason === CLAIM_NOT_LISTED) {
+      await ctx.db
+        .from("linkedin_accounts")
+        .update({ pending_provider_account_id: accountId })
+        .eq("workspace_id", who.workspaceId)
+        .eq("user_id", who.userId);
+    }
     return back("connected=1");
   });
 
@@ -1431,10 +1460,26 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
       return c.json({ error: describeProviderFailure(err) }, 502);
     }
 
-    // Only this rep's own row is touched, whatever the provider returned.
-    const mine = accounts.filter((a) => a.reference === parsed.data.userId);
-    const bound = await bindAccounts(ctx, mine);
+    // Only this rep's own row is touched, whatever the provider returned —
+    // and only with accounts that are evidently theirs: labelled with their
+    // user id, or the id their own sign-in returned and could not claim then.
+    const { data: row } = await ctx.db
+      .from("linkedin_accounts")
+      .select("id, user_id, status, provider_account_id, pending_provider_account_id")
+      .eq("workspace_id", parsed.data.workspaceId)
+      .eq("user_id", parsed.data.userId)
+      .maybeSingle();
+    const { mine, waiting } = row
+      ? await accountsForRep(ctx.db, row, accounts)
+      : { mine: accounts.filter((a) => a.reference === parsed.data.userId), waiting: false };
+    const firstClaim = Boolean(row && !row.provider_account_id && mine.length);
+    const pushed = await bindAccounts(ctx, mine);
     const reconciled = await reconcileAccount(ctx.db, parsed.data.workspaceId, parsed.data.userId, mine, accounts);
+    // A first connection completed here is "connected", not "reconnected".
+    const bound = pushed || (firstClaim && reconciled.changed ? 1 : 0);
+    if (firstClaim && reconciled.changed) {
+      void releaseDuplicateAccounts(ctx).catch((err) => console.error("could not release duplicates after a claim", err));
+    }
     // Cheap when nothing is waiting: it does nothing without an active account.
     kickPendingSearches(parsed.data.workspaceId);
 
@@ -1443,6 +1488,13 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
     // them is yours" here told a connected rep she was not connected.
     if (reconciled.unlabelled) {
       return c.json({ found: accounts.length, mine: 0, bound, ...reconciled });
+    }
+
+    // The rep's sign-in came back and the provider has not listed it yet.
+    // Said as that, rather than as "sign in again", and never with the
+    // provider's other accounts beside it (rule 17).
+    if (waiting && !bound) {
+      return c.json({ found: accounts.length, mine: 0, bound: 0, pending: true });
     }
 
     if (accounts.length > 0 && mine.length === 0) {
@@ -1492,7 +1544,13 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
       });
     }
 
-    return c.json({ found: accounts.length, mine: mine.length, bound, ...reconciled });
+    return c.json({
+      found: accounts.length,
+      mine: mine.length,
+      bound,
+      ...reconciled,
+      ...(firstClaim && reconciled.changed ? { changed: false } : {}),
+    });
   });
 
   // Google Calendar connect. The Reply Agent cannot offer a time until this is
@@ -2311,23 +2369,24 @@ function claimReturnUrl(ctx: WorkerContext, workspaceId: string, userId: string)
  */
 function claimFailureUrl(ctx: WorkerContext, workspaceId: string, userId: string): string {
   if (!ctx.env.CREDENTIALS_KEY) {
-    return `${ctx.env.APP_URL}/app/profile?error=${encodeURIComponent(LINKEDIN_SIGN_IN_FAILED)}#team`;
+    return `${ctx.env.APP_URL}/app/profile?error=${LINKEDIN_SIGN_IN_FAILED}#team`;
   }
   const claim = encodeState(workspaceId, userId, ctx.env.CREDENTIALS_KEY);
   return `${ctx.env.WORKER_URL}/auth/linkedin/failed?claim=${encodeURIComponent(claim)}`;
 }
 
 /**
- * What a failed LinkedIn sign-in says to the person it happened to.
+ * What a failed LinkedIn sign-in says to the person it happened to — as a
+ * code, never a sentence.
  *
- * The provider does not tell us why, so this names the three causes that
- * account for nearly all of them, most common first. The first is the one
- * nobody guesses: a LinkedIn account opened with "Continue with Google" or
- * Apple has no LinkedIn password at all, so there is nothing to type on the
- * sign-in page, and every attempt fails identically until one is set.
+ * The sentence used to travel in `?error=`, and onboarding, which renders only
+ * words written on its own page (rule 65), replaced it with a generic line: the
+ * advice that fixes most failed sign-ins ("you sign in with Google, so set a
+ * LinkedIn password") reached nobody in setup. The words now live once, in
+ * `LINKEDIN_CONNECT_ERRORS` (@le/shared), read by both screens a code can land
+ * on. `satisfies` keeps each code one that definition has words for.
  */
-const LINKEDIN_SIGN_IN_FAILED =
-  "LinkedIn didn't finish signing you in. The usual reasons: (1) you normally sign in to LinkedIn with Google or Apple, so your LinkedIn account has no password yet — set one in LinkedIn under Settings → Sign in & security → Change password, then try again; (2) LinkedIn asked for a verification code — have your phone or email open when you press Connect; (3) the password was mistyped. Press Connect LinkedIn to try again, or tell us from the Support page and we'll walk through it with you.";
+const LINKEDIN_SIGN_IN_FAILED = "signin-failed" satisfies LinkedInConnectError;
 
 /** What the account row says after a refused sign-in, on every screen that shows it. */
 const LINKEDIN_NO_SIGN_IN =
@@ -2337,10 +2396,11 @@ const LINKEDIN_NO_SIGN_IN =
 const RESTARTABLE_STATUSES: string[] = ["connecting", "disconnected"];
 
 /** The return trip broke before LinkedIn was even reached, or took too long. */
-const LINKEDIN_CONNECT_INCOMPLETE =
-  "The connection to LinkedIn didn't complete. Press Connect LinkedIn to start again — it takes about a minute.";
-const LINKEDIN_CONNECT_EXPIRED =
-  "That LinkedIn sign-in link expired after an hour. Press Connect LinkedIn to start a fresh one.";
+const LINKEDIN_CONNECT_INCOMPLETE = "connect-incomplete" satisfies LinkedInConnectError;
+const LINKEDIN_CONNECT_EXPIRED = "connect-expired" satisfies LinkedInConnectError;
+
+/** The claim refusal that usually means the provider's list has not caught up yet. */
+const CLAIM_NOT_LISTED = "the provider has no such account";
 
 /** A claim token is good for an hour: long enough to sign in to LinkedIn, short enough to be worthless later. */
 const CLAIM_TOKEN_TTL_MS = 60 * 60_000;
@@ -2376,7 +2436,7 @@ async function claimAccount(
   }
 
   const match = accounts.find((a) => a.providerAccountId === input.accountId);
-  if (!match) return { status: "refused", claimed: false, reason: "the provider has no such account" };
+  if (!match) return { status: "refused", claimed: false, reason: CLAIM_NOT_LISTED };
 
   // Somebody else's, and not available to be taken.
   const { data: taken } = await ctx.db
@@ -2429,6 +2489,7 @@ async function claimAccount(
       status_detail: null,
       connected_at: new Date().toISOString(),
       paused_at: null,
+      pending_provider_account_id: null,
     })
     .eq("id", pending.id);
 
