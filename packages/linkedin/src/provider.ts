@@ -297,7 +297,7 @@ export interface LinkedInProvider {
    * stays on their profile. Nothing calls this without an approval row
    * behind it — see mayPublish in @le/shared.
    */
-  publishPost(input: { accountId: string; text: string }): Promise<ActionResult>;
+  publishPost(input: PublishPostInput): Promise<ActionResult>;
   /** A person's most recent posts, newest first. Every call is a read off the rep's seat. */
   listPosts(input: { accountId: string; userId: string; limit?: number }): Promise<ProviderPost[]>;
   /** React to a post. Only ever called from the send path (rule 1). */
@@ -313,4 +313,11 @@ export interface LinkedInProvider {
   listRelations(input: { accountId: string; since?: string; limit?: number }): Promise<ProviderRelation[]>;
   /** Verify a provider webhook signature. Returns the parsed messages it carries. */
   parseWebhook(input: { body: string; signature?: string; authHeader?: string }): InboundMessage[];
+}
+
+/** A post to publish, with the picture a person approved for it, if any. */
+export interface PublishPostInput {
+  accountId: string;
+  text: string;
+  image?: { data: Uint8Array; filename: string; contentType: string };
 }

@@ -1,7 +1,16 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { parseWorkingHours } from "@le/linkedin";
-import { POST_MAX_CHARS, describeWorkingHours, extractLinks, mayPublish } from "@le/shared";
+import {
+  GRAPHIC_HEADLINE_MAX_CHARS,
+  POST_MAX_CHARS,
+  describeWorkingHours,
+  extractLinks,
+  graphicHeadlineProblems,
+  isGraphicStyle,
+  mayPublish,
+  type GraphicStyle,
+} from "@le/shared";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { callWorker, errorQuery, noticeQuery } from "@/lib/worker";
@@ -11,6 +20,7 @@ import { Section, Empty } from "@/components/page";
 import { SubmitButton } from "@/components/submit-button";
 import { ConfirmButton } from "@/components/confirm-button";
 import { wallTimeToUtc } from "@/lib/format";
+import { drawPostGraphic, loadGraphicContext } from "@/lib/post-graphic";
 
 /**
  * Posts on the rep's own profile: written by the agent, approved by a person.
@@ -42,6 +52,31 @@ async function requireManager(action: string) {
     redirect(errorQuery(HERE, `You do not have permission to ${action}.`));
   }
   return session;
+}
+
+/** The styles a graphic can take, in the company's own colours. */
+const STYLE_LABEL: Record<GraphicStyle, string> = {
+  brand: "Your main colour",
+  light: "Light, with your colour as the accent",
+  dark: "Dark, with your colour as the accent",
+};
+
+/**
+ * The graphic's settings as the form posted them, or null for a form that
+ * does not carry them. A headline is checked here as well as by the writer,
+ * because this box is typed into by a person.
+ */
+function graphicFromForm(formData: FormData) {
+  if (!formData.has("graphic_fields")) return null;
+  const enabled = formData.get("graphic_enabled") === "on";
+  const headline = String(formData.get("graphic_headline") ?? "").trim() || null;
+  const styleField = formData.get("graphic_style");
+  const style: GraphicStyle = isGraphicStyle(styleField) ? styleField : "brand";
+  if (enabled && headline) {
+    const problems = graphicHeadlineProblems(headline);
+    if (problems.length) redirect(errorQuery(HERE, problems[0]!));
+  }
+  return { graphic_enabled: enabled, graphic_headline: headline, graphic_style: style };
 }
 
 /** Ask the agent for a set of drafts, or for a revision of the ones on screen. */
@@ -103,7 +138,7 @@ async function saveEdit(formData: FormData) {
     // `facts_used` is cleared on purpose: the grounding named what the *agent*
     // wrote, and it is no longer a description of these words. Left in place it
     // would be a set of citations for a paragraph nobody checked them against.
-    .update({ body, facts_used: [] as never })
+    .update({ body, facts_used: [] as never, ...(graphicFromForm(formData) ?? {}) })
     .eq("id", id)
     .eq("workspace_id", session.workspaceId)
     // Only the rep's own posts, which is all this screen lists: a post goes out
@@ -183,7 +218,53 @@ async function approve(formData: FormData) {
     .neq("body", body);
   if (saveError) redirect(errorQuery(HERE, "That did not save. Please try again."));
 
-  const { error, data } = await supabase
+  /*
+   * The graphic: saved as the form has it, then drawn and stored exactly as
+   * it will go out. An approval is a statement about what will appear, the
+   * picture included, so what is stored here is what the sweep attaches, and
+   * the approval below is conditional on the settings it was drawn from.
+   */
+  const graphic = graphicFromForm(formData);
+  if (graphic) {
+    const { error: graphicError } = await supabase
+      .from("linkedin_posts")
+      .update(graphic)
+      .eq("id", id)
+      .eq("workspace_id", session.workspaceId)
+      .eq("user_id", session.userId)
+      .in("status", ["draft", "failed"]);
+    if (graphicError) redirect(errorQuery(HERE, "That did not save. Please try again."));
+  }
+  const { data: current } = await supabase
+    .from("linkedin_posts")
+    .select("graphic_enabled, graphic_headline, graphic_style")
+    .eq("id", id)
+    .eq("workspace_id", session.workspaceId)
+    .eq("user_id", session.userId)
+    .maybeSingle();
+  if (!current) redirect(errorQuery(HERE, "That post could not be read. Reload the page and try again."));
+  if (current.graphic_enabled) {
+    const headline = current.graphic_headline?.trim() ?? "";
+    if (!headline) {
+      redirect(errorQuery(HERE, "Write a headline for the graphic, or untick “Post with a graphic”."));
+    }
+    const problems = graphicHeadlineProblems(headline);
+    if (problems.length) redirect(errorQuery(HERE, problems[0]!));
+    const context = await loadGraphicContext(supabase, session);
+    const png = await (
+      await drawPostGraphic({
+        headline,
+        style: isGraphicStyle(current.graphic_style) ? current.graphic_style : "brand",
+        ...context,
+      })
+    ).arrayBuffer();
+    const { error: storeError } = await supabase
+      .from("linkedin_post_graphics")
+      .upsert({ post_id: id, workspace_id: session.workspaceId, png_base64: Buffer.from(png).toString("base64") });
+    if (storeError) redirect(errorQuery(HERE, "The graphic could not be saved. Please try again."));
+  }
+
+  let approval = supabase
     .from("linkedin_posts")
     .update({
       status: "approved",
@@ -200,7 +281,13 @@ async function approve(formData: FormData) {
     // re-approving it would queue a second copy of the same post.
     .in("status", ["draft", "failed"])
     .eq("body", body)
-    .select("id");
+    // And the picture as it was drawn a moment ago.
+    .eq("graphic_enabled", current.graphic_enabled)
+    .eq("graphic_style", current.graphic_style);
+  approval = current.graphic_headline === null
+    ? approval.is("graphic_headline", null)
+    : approval.eq("graphic_headline", current.graphic_headline);
+  const { error, data } = await approval.select("id");
 
   if (error) redirect(errorQuery(HERE, "That did not save. Please try again."));
   if (!data?.length) {
@@ -304,6 +391,10 @@ type PostRow = {
   provider_post_id: string | null;
   error: string | null;
   created_at: string;
+  updated_at: string;
+  graphic_enabled: boolean;
+  graphic_headline: string | null;
+  graphic_style: string;
 };
 
 /**
@@ -329,14 +420,48 @@ function when(value: string | null, timezone: string): string {
   }).format(at);
 }
 
+/**
+ * The graphic as it stands, sized for the card. A draft is drawn from its
+ * settings; an approved or published post shows only the picture stored at
+ * approval, so a post that went out as text before graphics existed shows
+ * none rather than a picture it never had.
+ */
+function GraphicPreview({ row, stored }: { row: PostRow; stored: boolean }) {
+  if (!row.graphic_enabled) return null;
+  if (row.approved_at || row.status === "published") {
+    if (!stored) return null;
+  } else if (!row.graphic_headline?.trim()) {
+    return <div className="post-graphic-empty small muted">No headline yet, so no graphic. Write one below.</div>;
+  }
+  return (
+    // The route answers with the stored picture once approved, so this is
+    // exactly what goes out.
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      className="post-graphic-image"
+      src={`${HERE}/${row.id}/graphic?v=${encodeURIComponent(row.updated_at)}`}
+      alt={row.graphic_headline ? `Graphic: ${row.graphic_headline}` : "The post's graphic"}
+      width={320}
+      height={320}
+      loading="lazy"
+    />
+  );
+}
+
 function PostCard({
   row,
   manage,
+  colours,
+  stored = false,
   verdict,
   timezone,
 }: {
   row: PostRow;
   manage: boolean;
+  /** The company's colours as hex codes, or null when none are set. */
+  colours?: string | null;
+  /** A picture was stored for this post when it was approved. */
+  stored?: boolean;
   /** What `mayPublish` says about this row right now, in the rep's own hours. */
   verdict: ReturnType<typeof mayPublish>;
   /** The rep's zone, so every time on the card is on one clock. */
@@ -433,6 +558,7 @@ function PostCard({
            * LinkedIn shows two lines and hides the rest.
            */}
           <p className="prose post-body">{row.body}</p>
+          <GraphicPreview row={row} stored={stored} />
           {details}
         </div>
       </article>
@@ -461,6 +587,48 @@ function PostCard({
             un-approves it.
           </span>
         </label>
+
+        <input type="hidden" name="graphic_fields" value="1" />
+        <fieldset className="post-graphic-fields">
+          <legend>Graphic</legend>
+          <div className="post-graphic">
+            <GraphicPreview row={row} stored={stored} />
+            <div className="stack-3">
+              <label className="inline-check">
+                <input type="checkbox" name="graphic_enabled" defaultChecked={row.graphic_enabled} />
+                <span>Post with a graphic</span>
+              </label>
+              <label className="field">
+                <span>Headline on the graphic</span>
+                <input
+                  name="graphic_headline"
+                  defaultValue={row.graphic_headline ?? ""}
+                  maxLength={GRAPHIC_HEADLINE_MAX_CHARS}
+                />
+                <span className="hint">
+                  Up to {GRAPHIC_HEADLINE_MAX_CHARS} characters. Press Save to see it on the graphic.
+                </span>
+              </label>
+              <label className="field">
+                <span>Style</span>
+                <select
+                  name="graphic_style"
+                  defaultValue={isGraphicStyle(row.graphic_style) ? row.graphic_style : "brand"}
+                >
+                  {(Object.keys(STYLE_LABEL) as GraphicStyle[]).map((style) => (
+                    <option key={style} value={style}>
+                      {STYLE_LABEL[style]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p className="tiny muted">
+                {colours ? `In your company colours, ${colours}. ` : "No company colours set yet, so it uses a plain navy. "}
+                <Link href="/app/profile/company#colours">{colours ? "Change them" : "Set your colours"}</Link>
+              </p>
+            </div>
+          </div>
+        </fieldset>
 
         {details}
 
@@ -517,7 +685,7 @@ export default async function ProfilePostsPage({ searchParams }: { searchParams:
     supabase
       .from("linkedin_posts")
       .select(
-        "id, body, status, facts_used, approved_at, scheduled_for, published_at, provider_post_id, error, created_at",
+        "id, body, status, facts_used, approved_at, scheduled_for, published_at, provider_post_id, error, created_at, updated_at, graphic_enabled, graphic_headline, graphic_style",
       )
       .eq("workspace_id", session.workspaceId)
       .eq("user_id", session.userId)
@@ -531,8 +699,27 @@ export default async function ProfilePostsPage({ searchParams }: { searchParams:
       .maybeSingle(),
     supabase.from("profiles").select("timezone").eq("id", session.userId).maybeSingle(),
   ]);
+  const { data: brand } = await supabase
+    .from("workspaces")
+    .select("brand_primary, brand_accent")
+    .eq("id", session.workspaceId)
+    .maybeSingle();
+  const colours = brand?.brand_primary ? [brand.brand_primary, brand.brand_accent].filter(Boolean).join(" and ") : null;
 
   const posts = (postRows ?? []) as PostRow[];
+  // Which posts have a picture stored at approval. The ids only: a list of
+  // posts never reads the pictures themselves.
+  const { data: storedRows } = posts.length
+    ? await supabase
+        .from("linkedin_post_graphics")
+        .select("post_id")
+        .eq("workspace_id", session.workspaceId)
+        .in(
+          "post_id",
+          posts.map((row) => row.id),
+        )
+    : { data: [] as Array<{ post_id: string }> };
+  const stored = new Set((storedRows ?? []).map((row) => row.post_id));
   const manage = canManage(session.role);
   const timezone = me?.timezone || "UTC";
   const hours = parseWorkingHours(account?.working_hours);
@@ -576,6 +763,8 @@ export default async function ProfilePostsPage({ searchParams }: { searchParams:
                 key={row.id}
                 row={row}
                 manage={manage}
+                colours={colours}
+                stored={stored.has(row.id)}
                 timezone={timezone}
                 verdict={mayPublish(row, now, window)}
               />
@@ -622,6 +811,8 @@ export default async function ProfilePostsPage({ searchParams }: { searchParams:
                 key={row.id}
                 row={row}
                 manage={manage}
+                colours={colours}
+                stored={stored.has(row.id)}
                 timezone={timezone}
                 verdict={mayPublish(row, now, window)}
               />
@@ -646,6 +837,8 @@ export default async function ProfilePostsPage({ searchParams }: { searchParams:
                 key={row.id}
                 row={row}
                 manage={manage}
+                colours={colours}
+                stored={stored.has(row.id)}
                 timezone={timezone}
                 verdict={mayPublish(row, now, window)}
               />

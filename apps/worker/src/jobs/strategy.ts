@@ -1,4 +1,5 @@
 import { cleanWebsiteText, runStrategyAgent, writeHooks, writePitch } from "@le/agents";
+import { detectBrandColors } from "./brand-colors.js";
 import { loadBusinessProfile } from "@le/db";
 import { MAX_STRATEGY_PRIORITY } from "@le/shared";
 import type { WorkerContext } from "../context.js";
@@ -119,6 +120,15 @@ async function strategy(ctx: WorkerContext, job: StrategyJob): Promise<string> {
       .single();
     if (error || !created) throw new Error(`could not store business profile: ${error?.message}`);
     businessProfileId = created.id;
+  }
+
+  // The company's colours, for the graphics published with its posts, read
+  // from the site Sage was just given. Only fills colours nobody has set, and
+  // never fails the run: a strategy matters more than a palette.
+  if (job.websiteUrl) {
+    await detectBrandColors(ctx, { workspaceId: job.workspaceId, websiteUrl: job.websiteUrl, replace: false }).catch(
+      (err) => console.error("could not read brand colours", { workspaceId: job.workspaceId, reason: String(err) }),
+    );
   }
 
   // Anything the agent produced that names a strategy already here is dropped

@@ -1,6 +1,6 @@
 import { POST_DRAFTS_MAX, POST_DRAFTS_MIN, POST_MAX_CHARS } from "@le/shared";
 
-export const POST_PROMPT_VERSION = "post/2026-09-27";
+export const POST_PROMPT_VERSION = "post/2026-10-27-graphic";
 
 export const POST_SYSTEM = `You write the posts a business puts on its own LinkedIn profile.
 
@@ -52,6 +52,13 @@ FORM
   usually better. Most good posts on LinkedIn are under a thousand.
 - End on something a reader can respond to, or end flat. Do not end on "thoughts?"
   or "let me know in the comments" or "agree?".
+
+THE GRAPHIC
+Each post is published with a designed card that carries one line, set large.
+Write it as "graphicHeadline": the post's sharpest point in under ninety
+characters, plain words a reader takes in at a glance. Not the post's first
+line repeated, not a question to the room, not a slogan, and nothing the post
+does not say. No hashtag, emoji, link or quote marks.
 
 NEVER
 - No link of any kind. LinkedIn suppresses the reach of a post carrying an

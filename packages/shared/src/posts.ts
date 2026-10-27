@@ -123,3 +123,48 @@ export function mayPublish(
 
   return { send: true };
 }
+
+/*
+ * The graphic published with a post (migration 0060).
+ *
+ * One line on a designed card, read at a glance in a phone's feed. Short
+ * enough to set large, and held to the same lines as the post itself: no
+ * link, no hashtag, no emoji, no placeholder. Over-long lines are refused
+ * rather than cut, because half a sentence set in 80-point type is worse on a
+ * real professional's profile than no picture at all.
+ */
+export const GRAPHIC_HEADLINE_MAX_CHARS = 90;
+export const GRAPHIC_STYLES = ["brand", "light", "dark"] as const;
+export type GraphicStyle = (typeof GRAPHIC_STYLES)[number];
+
+export function isGraphicStyle(value: unknown): value is GraphicStyle {
+  return typeof value === "string" && (GRAPHIC_STYLES as readonly string[]).includes(value);
+}
+
+/** What is wrong with a graphic's headline, as sentences somebody can act on. */
+export function graphicHeadlineProblems(headline: string): string[] {
+  const text = headline.trim();
+  const problems: string[] = [];
+  if (!text) return ["The graphic needs a headline."];
+  if (text.length > GRAPHIC_HEADLINE_MAX_CHARS) {
+    problems.push(`The headline is ${text.length} characters. Keep it to ${GRAPHIC_HEADLINE_MAX_CHARS} so it reads at a glance.`);
+  }
+  if (/https?:\/\/|www\.|\b[a-z0-9-]+\.(com|io|co|net|org|ai|app)\b/i.test(text)) {
+    problems.push("The headline has a link. A graphic never carries one.");
+  }
+  if (/#\w/.test(text)) problems.push("The headline has a hashtag.");
+  if (/\p{Extended_Pictographic}/u.test(text)) problems.push("The headline has an emoji.");
+  if (/\{\{|\[[A-Z][a-z]+\]/.test(text)) problems.push("The headline has a placeholder in it.");
+  return problems;
+}
+
+/**
+ * A headline for a post that came without one: its first sentence, when that
+ * sentence is short enough to set whole. Never a cut-down sentence, so a post
+ * that opens long gets no graphic until somebody writes the line.
+ */
+export function fallbackGraphicHeadline(body: string): string | null {
+  const first = body.trim().split(/\n/)[0]?.trim() ?? "";
+  const sentence = /^(.+?[.!?])(\s|$)/.exec(first)?.[1] ?? first;
+  return sentence && graphicHeadlineProblems(sentence).length === 0 ? sentence : null;
+}

@@ -104,6 +104,26 @@ describe("writeWorkspacePosts", () => {
     }
   });
 
+  it("gives each draft a headline for its graphic, held to the graphic's rules", async () => {
+    postsMock.mockReset();
+    postsMock.mockResolvedValue({
+      drafts: [
+        { name: "A", body: "Referrals die in the inbox. More below.", angle: "a", factsUsed: [], graphicHeadline: "Referrals die in the inbox" },
+        // A headline with a hashtag is refused, and the post's short first
+        // sentence is used instead.
+        { name: "B", body: "Spreadsheets lose leads. Here is how.", angle: "b", factsUsed: [], graphicHeadline: "Leads #sales" },
+        // No usable headline and a long opening: no graphic line until the rep writes one.
+        { name: "C", body: `${"word ".repeat(40)}end.`, angle: "c", factsUsed: [], graphicHeadline: null },
+      ],
+      droppedForLinks: 0,
+      droppedForLength: 0,
+    });
+    const { ctx, db } = harness();
+    await writeWorkspacePosts(ctx, { workspaceId: WORKSPACE, userId: USER });
+    const headlines = db.rows("linkedin_posts").map((row) => row.graphic_headline);
+    expect(headlines).toEqual(["Referrals die in the inbox", "Spreadsheets lose leads.", null]);
+  });
+
   it("replaces this person's drafts and leaves approved and published rows alone", async () => {
     agentReturns(["A new draft."]);
     const { ctx, db } = harness([

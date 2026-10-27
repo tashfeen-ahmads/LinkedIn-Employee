@@ -11,6 +11,7 @@ import { Section } from "@/components/page";
 import { hasStrategySource, mergeStash, readOnboardingStash } from "@/lib/onboarding-stash";
 import { BUSINESS_DESCRIPTION_MAX, COMPANY_NAME_MAX, readBusinessForm } from "@/lib/profile-business";
 import { PROFILE_SECTIONS } from "../sections";
+import { normalizeHex } from "@le/shared";
 
 const HERE = PROFILE_SECTIONS.company;
 
@@ -145,6 +146,64 @@ async function rebuildBusiness() {
   );
 }
 
+/**
+ * The company's colours, as hex codes, for the graphic published with each
+ * post (migration 0060). Typed codes, because a brand's colours are a fact
+ * somebody already has written down, not something to pick by eye.
+ */
+async function saveColours(formData: FormData) {
+  "use server";
+  const session = await requireSession();
+  if (!["owner", "admin"].includes(session.role)) {
+    redirect(errorQuery(`${HERE}#colours`, "Only an owner or admin can change the company colours."));
+  }
+  const read = (name: string) => {
+    const raw = String(formData.get(name) ?? "").trim();
+    if (!raw) return { ok: true as const, value: null };
+    const hex = normalizeHex(raw);
+    return hex ? { ok: true as const, value: hex } : { ok: false as const };
+  };
+  const primary = read("brand_primary");
+  const accent = read("brand_accent");
+  if (!primary.ok || !accent.ok) {
+    redirect(errorQuery(`${HERE}#colours`, "Write each colour as a hex code, like #0A7CFF."));
+  }
+  if (!primary.value && accent.value) {
+    redirect(errorQuery(`${HERE}#colours`, "Set the main colour first. The accent goes with it."));
+  }
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("workspaces")
+    .update({ brand_primary: primary.value, brand_accent: accent.value })
+    .eq("id", session.workspaceId)
+    .select("id");
+  if (!data?.length) redirect(errorQuery(`${HERE}#colours`, "Your colours could not be saved. Try again."));
+  revalidatePath(HERE);
+  redirect(noticeQuery(`${HERE}#colours`, "Saved. Graphics approved from now on use these colours."));
+}
+
+async function findColours() {
+  "use server";
+  const session = await requireSession();
+  if (!["owner", "admin"].includes(session.role)) {
+    redirect(errorQuery(`${HERE}#colours`, "Only an owner or admin can change the company colours."));
+  }
+  const found = await callWorker<{ colors: { primary: string | null } | null; saved: boolean; reason?: string }>(
+    "/jobs/brand-colors",
+    { workspaceId: session.workspaceId, userId: session.userId },
+    30_000,
+  );
+  revalidatePath(HERE);
+  if (!found.ok) redirect(errorQuery(`${HERE}#colours`, "Your website could not be read just now. Try again, or type the codes."));
+  if (found.data?.reason === "no_website") {
+    redirect(errorQuery(`${HERE}#colours`, "Add your website above first, or type the codes."));
+  }
+  if (!found.data?.saved) {
+    redirect(errorQuery(`${HERE}#colours`, "We could not find brand colours on your website. Type the codes instead."));
+  }
+  redirect(noticeQuery(`${HERE}#colours`, "Found your colours on your website. Check them below."));
+}
+
 interface BusinessSpec {
   companyName?: string;
   oneLiner?: string;
@@ -160,7 +219,11 @@ export default async function CompanyPage({ searchParams }: { searchParams: Noti
   const supabase = await createClient();
 
   const [{ data: ws }, { data: businesses }, { count: campaignCount }, { data: brands }] = await Promise.all([
-    supabase.from("workspaces").select("name, onboarding").eq("id", session.workspaceId).maybeSingle(),
+    supabase
+      .from("workspaces")
+      .select("name, onboarding, brand_primary, brand_accent")
+      .eq("id", session.workspaceId)
+      .maybeSingle(),
     supabase.from("business_profiles").select("id, spec").eq("workspace_id", session.workspaceId),
     supabase.from("campaigns").select("id", { count: "exact", head: true }).eq("workspace_id", session.workspaceId),
     supabase
@@ -258,6 +321,63 @@ export default async function CompanyPage({ searchParams }: { searchParams: Noti
             <p className="small muted">An owner or admin of this workspace can change these.</p>
           </div>
         )}
+      </Section>
+
+      <Section
+        id="colours"
+        title="Company colours"
+        description="Every graphic posted with your LinkedIn posts is drawn in these. We read them from your website when Sage reads it; change them here."
+      >
+        <div className="card profile-card">
+          <div className="brand-swatches" aria-hidden="true">
+            {[ws?.brand_primary, ws?.brand_accent].map((hex, i) =>
+              hex ? <span key={i} className="brand-swatch" style={{ background: hex }} /> : null,
+            )}
+          </div>
+          {canEdit ? (
+            <form action={saveColours} className="stack-3">
+              <div className="profile-field-pair">
+                <label className="field">
+                  <span>Main colour</span>
+                  <input
+                    name="brand_primary"
+                    defaultValue={ws?.brand_primary ?? ""}
+                    placeholder="#0A7CFF"
+                    maxLength={7}
+                    spellCheck={false}
+                    autoComplete="off"
+                  />
+                </label>
+                <label className="field">
+                  <span>Accent colour (optional)</span>
+                  <input
+                    name="brand_accent"
+                    defaultValue={ws?.brand_accent ?? ""}
+                    placeholder="#FF9800"
+                    maxLength={7}
+                    spellCheck={false}
+                    autoComplete="off"
+                  />
+                </label>
+              </div>
+              <div className="form-row">
+                <SubmitButton className="btn small" pendingLabel="Saving…">
+                  Save colours
+                </SubmitButton>
+                <SubmitButton className="btn secondary small" pendingLabel="Reading your website…" formAction={findColours}>
+                  Find them on my website
+                </SubmitButton>
+              </div>
+            </form>
+          ) : (
+            <p className="small">
+              {ws?.brand_primary
+                ? `${ws.brand_primary}${ws.brand_accent ? ` and ${ws.brand_accent}` : ""}.`
+                : "Not set yet."}{" "}
+              <span className="muted">An owner or admin can change these.</span>
+            </p>
+          )}
+        </div>
       </Section>
 
       <Section

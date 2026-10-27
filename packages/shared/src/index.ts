@@ -27,6 +27,7 @@ export * from "./variants.js";
 export * from "./fit-score.js";
 export * from "./timezones.js";
 export * from "./posts.js";
+export * from "./brand-colors.js";
 export * from "./support.js";
 export * from "./accounts.js";
 export * from "./autopilot.js";

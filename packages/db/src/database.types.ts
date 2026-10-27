@@ -86,6 +86,9 @@ export type WorkspaceRow = {
   /** When the newest Stripe event applied here was created, so a late older one never wins. */
   last_billing_event_at: string | null;
   data_retention_days: number;
+  /** The company's own colours as hex codes (migration 0060), for post graphics. */
+  brand_primary: string | null;
+  brand_accent: string | null;
   created_at: string;
 };
 
@@ -275,8 +278,19 @@ export type LinkedInPostRow = {
   published_at: string | null;
   provider_post_id: string | null;
   error: string | null;
+  /** Published with a designed graphic (migration 0060). */
+  graphic_enabled: boolean;
+  graphic_headline: string | null;
+  graphic_style: "brand" | "light" | "dark";
   created_at: string;
   updated_at: string;
+};
+/** The graphic exactly as it was approved, read by the publish sweep. */
+export type LinkedInPostGraphicRow = {
+  post_id: string;
+  workspace_id: string;
+  png_base64: string;
+  created_at: string;
 };
 export type BusinessProfileRow = {
   id: string;
@@ -989,6 +1003,7 @@ export type Database = {
       hooks: Table<HookRow>;
       agents: Table<AgentRow>;
       linkedin_posts: Table<LinkedInPostRow>;
+      linkedin_post_graphics: Table<LinkedInPostGraphicRow>;
       engagement_actions: Table<EngagementActionRow>;
       agent_test_runs: Table<AgentTestRunRow>;
       support_tickets: Table<SupportTicketRow>;

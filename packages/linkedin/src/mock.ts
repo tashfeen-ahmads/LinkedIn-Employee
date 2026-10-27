@@ -2,6 +2,7 @@ import type {
   AccountPlan,
   AccountHealth,
   ActionResult,
+  PublishPostInput,
   PendingInvitation,
   HostedAuthLink,
   InboundMessage,
@@ -212,9 +213,9 @@ export class MockLinkedInProvider implements LinkedInProvider {
   }
 
   /** Posts this mock was asked to publish, so a test can read them back. */
-  publishedPosts: Array<{ accountId: string; text: string }> = [];
+  publishedPosts: PublishPostInput[] = [];
 
-  async publishPost(input: { accountId: string; text: string }): Promise<ActionResult> {
+  async publishPost(input: PublishPostInput): Promise<ActionResult> {
     this.publishedPosts.push(input);
     return { ok: true, providerId: `post_${this.publishedPosts.length}` };
   }

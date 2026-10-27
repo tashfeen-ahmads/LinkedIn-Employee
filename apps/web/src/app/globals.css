@@ -3218,6 +3218,49 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
    paragraphs — which are what makes a post readable on a phone — render as one
    block, and the review screen shows something the reader never sees. */
 .app .post-body { white-space: pre-wrap; }
+/* The graphic published with a post: the picture beside its settings, one
+   column on a phone. The picture is shown at the size it reads in a feed. */
+.app .brand-swatches { display: flex; gap: var(--space-2); }
+.app .brand-swatch {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+}
+.app .post-graphic-fields { margin: 0; padding: 0; border: 0; min-width: 0; }
+.app .post-graphic-fields > legend { font-size: 0.875rem; font-weight: 550; margin-bottom: var(--space-2); padding: 0; }
+.app .post-graphic {
+  display: grid;
+  grid-template-columns: minmax(0, 320px) minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+/* With the graphic switched off there is no picture, and the settings take
+   the whole row rather than the picture's narrow column. */
+.app .post-graphic > :only-child { grid-column: 1 / -1; }
+@media (max-width: 720px) {
+  .app .post-graphic { grid-template-columns: minmax(0, 1fr); }
+}
+.app .post-graphic-image {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  height: auto;
+  aspect-ratio: 1 / 1;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+.app .post-graphic-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1 / 1;
+  max-width: 320px;
+  padding: var(--space-4);
+  text-align: center;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+}
 
 /* The fallback way in, folded away.
 

@@ -38,6 +38,7 @@ function harness(
   ]);
   db.seed("profiles", [{ id: USER, timezone: rep.timezone ?? null }]);
   db.seed("events", []);
+  db.seed("linkedin_post_graphics", []);
   const linkedin = new MockLinkedInProvider();
   return { db, linkedin, ctx: { db: db.asDb(), linkedin } as unknown as WorkerContext };
 }
@@ -66,6 +67,59 @@ describe("publishApprovedPosts", () => {
     expect(row?.status).toBe("published");
     expect(row?.published_at).toBeTruthy();
     expect(row?.provider_post_id).toBeTruthy();
+  });
+
+  it("publishes the picture exactly as it was approved", async () => {
+    const { ctx, db, linkedin } = harness([approved({ graphic_enabled: true })]);
+    const png = Buffer.from([137, 80, 78, 71, 1, 2, 3]);
+    db.seed("linkedin_post_graphics", [{ post_id: "p1", workspace_id: WS, png_base64: png.toString("base64") }]);
+
+    await publishApprovedPosts(ctx, NOW);
+
+    const sent = linkedin.publishedPosts[0]!;
+    expect(sent.image?.contentType).toBe("image/png");
+    expect(Buffer.from(sent.image!.data).equals(png)).toBe(true);
+  });
+
+  it("sends text only when the graphic is off, or none was approved", async () => {
+    const off = harness([approved({ graphic_enabled: false })]);
+    off.db.seed("linkedin_post_graphics", [{ post_id: "p1", workspace_id: WS, png_base64: "iVBORw==" }]);
+    await publishApprovedPosts(off.ctx, NOW);
+    expect(off.linkedin.publishedPosts[0]!.image).toBeUndefined();
+
+    const before = harness([approved({ graphic_enabled: true })]);
+    await publishApprovedPosts(before.ctx, NOW);
+    expect(before.linkedin.publishedPosts[0]!.image).toBeUndefined();
+  });
+
+  it("holds the post, never sends it bare, when its picture cannot be read", async () => {
+    const { db, linkedin } = harness([approved({ graphic_enabled: true })]);
+    const base = db.asDb();
+    const failing: Record<string, unknown> = {};
+    Object.assign(failing, {
+      select: () => failing,
+      eq: () => failing,
+      maybeSingle: async () => ({ data: null, error: { message: "timeout" } }),
+    });
+    const flaky = new Proxy(base, {
+      get(target, prop) {
+        if (prop === "from") {
+          return (table: string) => (table === "linkedin_post_graphics" ? failing : (target as typeof base).from(table as never));
+        }
+        return Reflect.get(target, prop);
+      },
+    });
+    const out = await publishApprovedPosts({ db: flaky, linkedin } as unknown as WorkerContext, NOW);
+    expect(out.held).toBe(1);
+    expect(linkedin.publishedPosts).toHaveLength(0);
+    expect(db.find("linkedin_posts", { id: "p1" })?.status).toBe("approved");
+  });
+
+  it("never attaches another workspace's picture", async () => {
+    const { ctx, db, linkedin } = harness([approved({ graphic_enabled: true })]);
+    db.seed("linkedin_post_graphics", [{ post_id: "p1", workspace_id: "elsewhere", png_base64: "iVBORw==" }]);
+    await publishApprovedPosts(ctx, NOW);
+    expect(linkedin.publishedPosts[0]!.image).toBeUndefined();
   });
 
   it("never publishes a draft, whatever the sweep picks up", async () => {

@@ -1,6 +1,6 @@
 import { writePosts, POST_PROMPT_VERSION } from "@le/agents";
 import { loadBusinessProfile } from "@le/db";
-import { BusinessProfileSchema } from "@le/shared";
+import { BusinessProfileSchema, fallbackGraphicHeadline, graphicHeadlineProblems } from "@le/shared";
 import type { WorkerContext } from "../context.js";
 import { recordEvent } from "../context.js";
 import { knowledgeQuery } from "../knowledge.js";
@@ -129,6 +129,13 @@ export async function writeWorkspacePosts(
     business_profile_id: profileRow?.id ?? null,
     body: draft.body,
     facts_used: draft.factsUsed as never,
+    // The line on the post's graphic, held to its rules in code: a model's
+    // headline that fails them falls back to the post's own first sentence
+    // when that fits, and otherwise waits for the rep to write one.
+    graphic_headline:
+      draft.graphicHeadline && graphicHeadlineProblems(draft.graphicHeadline).length === 0
+        ? draft.graphicHeadline.trim()
+        : fallbackGraphicHeadline(draft.body),
     status: "draft" as const,
     // Explicit, never merely absent: these are words nobody has read yet.
     approved_at: null,

@@ -40,7 +40,7 @@ export async function publishApprovedPosts(
   if (offError) return { published: 0, held: 0, failed: 0 };
   let query = ctx.db
     .from("linkedin_posts")
-    .select("id, workspace_id, user_id, body, status, approved_at, scheduled_for, published_at")
+    .select("id, workspace_id, user_id, body, status, approved_at, scheduled_for, published_at, graphic_enabled")
     .eq("status", "approved");
   if (off?.length) query = query.not("workspace_id", "in", `(${off.map((w) => w.id).join(",")})`);
   // The worker holds the service role, so RLS will not scope this — it has to
@@ -130,9 +130,33 @@ export async function publishApprovedPosts(
       continue;
     }
 
+    /*
+     * The picture exactly as it was approved (migration 0060), stored at the
+     * moment of approval. A post approved without one, or with its graphic
+     * switched off, goes as text. A picture that cannot be read holds the post
+     * rather than sending it without the image somebody approved it with.
+     */
+    let image: { data: Uint8Array; filename: string; contentType: string } | undefined;
+    if (row.graphic_enabled) {
+      const { data: graphic, error: graphicError } = await ctx.db
+        .from("linkedin_post_graphics")
+        .select("png_base64")
+        .eq("post_id", row.id)
+        .eq("workspace_id", row.workspace_id)
+        .maybeSingle();
+      if (graphicError) {
+        held += 1;
+        continue;
+      }
+      if (graphic?.png_base64) {
+        image = { data: Buffer.from(graphic.png_base64, "base64"), filename: "post.png", contentType: "image/png" };
+      }
+    }
+
     const result = await ctx.linkedin.publishPost({
       accountId: account.provider_account_id,
       text: row.body,
+      ...(image ? { image } : {}),
     });
 
     if (!result.ok) {

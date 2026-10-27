@@ -4,6 +4,7 @@ import type {
   AccountPlan,
   AccountHealth,
   ActionResult,
+  PublishPostInput,
   HostedAuthLink,
   InboundMessage,
   LinkedInProvider,
@@ -147,7 +148,9 @@ export class UnipileProvider implements LinkedInProvider {
       headers: {
         "X-API-KEY": this.token,
         accept: "application/json",
-        ...(init.body ? { "content-type": "application/json" } : {}),
+        // JSON bodies only: a form sets its own multipart boundary, and a
+        // content-type written over it makes the body unreadable.
+        ...(typeof init.body === "string" ? { "content-type": "application/json" } : {}),
         ...init.headers,
       },
     });
@@ -737,11 +740,24 @@ export class UnipileProvider implements LinkedInProvider {
    * person who pressed the button cannot reach (rule 25). The caller writes
    * it onto the row so the screen can say what happened.
    */
-  async publishPost(input: { accountId: string; text: string }): Promise<ActionResult> {
+  async publishPost(input: PublishPostInput): Promise<ActionResult> {
     try {
+      // A form, as the provider's own SDK sends it: the picture travels as a
+      // file under `attachments`, and a post without one is the same form
+      // with that field left out.
+      const body = new FormData();
+      body.append("account_id", input.accountId);
+      body.append("text", input.text);
+      if (input.image) {
+        body.append(
+          "attachments",
+          new Blob([input.image.data], { type: input.image.contentType }),
+          input.image.filename,
+        );
+      }
       const res = await this.request<{ post_id?: string; id?: string }>(ROUTES.posts, {
         method: "POST",
-        body: JSON.stringify({ account_id: input.accountId, text: input.text }),
+        body,
       });
       return { ok: true, providerId: res.post_id ?? res.id };
     } catch (err) {

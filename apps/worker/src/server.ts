@@ -26,6 +26,7 @@ import { runAgentTest } from "./jobs/agent-test.js";
 import { writeWorkspacePitch } from "./jobs/write-pitch.js";
 import { writeWorkspaceHooks } from "./jobs/write-hooks.js";
 import { writeWorkspacePosts } from "./jobs/write-posts.js";
+import { detectBrandColors, workspaceWebsite } from "./jobs/brand-colors.js";
 import { publishApprovedPosts } from "./jobs/publish-posts.js";
 import { rewriteCampaignNotes } from "./jobs/rewrite-notes.js";
 import { releaseDuplicateAccounts } from "./jobs/duplicate-accounts.js";
@@ -844,6 +845,19 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
       return c.json({ error: "not a member of that workspace" }, 403);
     }
     return c.json(await publishApprovedPosts(ctx, new Date(), 25, parsed.data.workspaceId));
+  });
+
+  // The company's colours, read from its website on request (Profile →
+  // Company). Synchronous: the page it returns to shows the colours found.
+  app.post("/jobs/brand-colors", async (c) => {
+    const parsed = MembershipRequest.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: "invalid request" }, 400);
+    if (!(await assertMembership(ctx.db, parsed.data.workspaceId, parsed.data.userId))) {
+      return c.json({ error: "not a member of that workspace" }, 403);
+    }
+    const website = await workspaceWebsite(ctx, parsed.data.workspaceId);
+    if (!website) return c.json({ colors: null, saved: false, reason: "no_website" });
+    return c.json(await detectBrandColors(ctx, { workspaceId: parsed.data.workspaceId, websiteUrl: website, replace: true }));
   });
 
   // The openers. Same shape as /jobs/write-pitch, and same reason for being

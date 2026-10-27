@@ -1960,6 +1960,38 @@ tests that were verified by deliberately breaking the code.
     chain so it never delays account repair. Erasing a prospect deletes their
     rows here too.
 
+69. **A post carries a graphic in the company's own colours, approved with
+    the words.** A post with a picture takes several times the room in a feed,
+    and on this product it is what a prospect sees when they look the sender
+    up. Each post has a headline for its graphic (`graphicHeadline` from the
+    writer, held to `graphicHeadlineProblems`, falling back to a short first
+    sentence and never a cut one), a style (`brand`, `light`, `dark`) and a
+    switch (migration 0060).
+
+    **Drawn, never generated.** An image model puts invented text, a made-up
+    logo or a stranger's face on a real professional's profile under their own
+    name, and only some providers make pictures at all. `drawPostGraphic`
+    (`apps/web/src/lib/post-graphic.tsx`) is the one drawing, used by the
+    preview and by approval.
+
+    **In their brand, read by contrast.** `workspaces.brand_primary` and
+    `brand_accent` are hex codes, read from the website when Sage reads it
+    (`detectBrandColors`, which only fills colours nobody set) and editable on
+    Profile → Company, where "Find them on my website" replaces them because a
+    person asked. Greys never count as a brand (`isNeutral`). `graphicPalette`
+    picks every text colour by contrast against its own ground, deepens a
+    mid-tone brand colour just until white reads on it, and gives a light one
+    ink.
+
+    **What is approved is what goes out.** Approval draws the picture from the
+    row's settings and stores the PNG (`linkedin_post_graphics`) before the
+    approval, which is conditional on those settings; changing the headline,
+    style or switch clears the approval in the trigger, as changing the words
+    does (rule 40). The publish sweep attaches the stored picture, scoped to
+    the workspace, and holds the post rather than sending it bare when the
+    picture cannot be read. The provider takes a post as a form with the image
+    under `attachments`, and no JSON content-type is ever set over a form.
+
 ## Conventions
 
 - Agent output is validated against a zod schema before it touches the

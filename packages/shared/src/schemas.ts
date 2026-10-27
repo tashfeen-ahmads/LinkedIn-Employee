@@ -250,6 +250,13 @@ export const PostDraftSchema = z.object({
     ),
   /** Which bet it places, written to the rep and never to the reader. */
   angle: z.string().max(200),
+  graphicHeadline: z
+    .string()
+    .max(90)
+    .nullable()
+    .describe(
+      "One short line, 90 characters at most, set large on a graphic published with the post: the post's sharpest point in plain words. No hashtag, emoji, link or quote marks. Null if nothing fits.",
+    ),
   factsUsed: z
     .array(z.string())
     .describe(
