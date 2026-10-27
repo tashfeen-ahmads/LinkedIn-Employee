@@ -188,6 +188,7 @@ export const loadCampaign = cache(async (id: string) => {
     accountStatus: account?.status ?? null,
     accountReleasedIdle: isIdleReleased(account),
     inviteNotes: queued.map((row) => row.invite_note),
+    resuming: Boolean(campaign.launched_at),
   });
   // The rate the loop will actually keep: the campaign's cap, or the account's
   // ramp if that is lower — a new account starts at ten whatever the campaign

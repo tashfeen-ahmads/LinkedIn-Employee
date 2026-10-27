@@ -51,6 +51,7 @@ async function saveHours(formData: FormData) {
 
   const { data: before } = await supabase.from("profiles").select("timezone").eq("id", session.userId).maybeSingle();
   const { error: profileError } = await supabase.from("profiles").update({ timezone }).eq("id", session.userId);
+  if (profileError) redirect(errorQuery(HERE, "Your timezone could not be saved just now. Try again."));
   // Meeting hours are read in a zone too, and Availability falls back to this
   // one (rule 65). A move to a new zone that left the meeting row behind
   // offered prospects times in the old one, so it is carried across.
@@ -76,13 +77,23 @@ async function saveHours(formData: FormData) {
    */
   let accountAnswersKept = true;
   if (!updatedAccounts?.length) {
-    const { data: wsStash } = await supabase.from("workspaces").select("onboarding").eq("id", session.workspaceId).maybeSingle();
-    const { data: stashed } = await supabase
+    const { data: wsStash, error: stashReadError } = await supabase
       .from("workspaces")
-      .update({ onboarding: mergeStash(wsStash?.onboarding, stashedAccountAnswers(accountPatch)) as never })
+      .select("onboarding")
       .eq("id", session.workspaceId)
-      .select("id");
-    accountAnswersKept = Boolean(stashed?.length);
+      .maybeSingle();
+    // A failed read is never merged into: it would replace every other setup
+    // answer with these hours.
+    if (stashReadError || !wsStash) {
+      accountAnswersKept = false;
+    } else {
+      const { data: stashed } = await supabase
+        .from("workspaces")
+        .update({ onboarding: mergeStash(wsStash.onboarding, stashedAccountAnswers(accountPatch)) as never })
+        .eq("id", session.workspaceId)
+        .select("id");
+      accountAnswersKept = Boolean(stashed?.length);
+    }
   }
 
   revalidatePath("/app/profile", "layout");

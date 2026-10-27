@@ -85,10 +85,16 @@ export function withScheme(raw: string): string {
  * choosing a meeting often puts their Calendly address in the first one. It
  * used to be dropped without a word, and the agent then offered times from our
  * own booking page instead of the link they use (rule 31). So the scheduling
- * box wins when filled, and is otherwise taken from the link box when that is
- * a sendable address. A bad scheduling link is refused; a bad general link on a
- * meeting campaign is not this step's to refuse, so it is left as before.
+ * box wins when filled, and is otherwise taken from the link box only when
+ * that is a scheduling page. Any other address there (a homepage, a free-audit
+ * page left over from choosing "link" first) would become the link the agent
+ * sends to everybody who asks to talk. A bad scheduling link is refused; a bad
+ * general link on a meeting campaign is not this step's to refuse.
  */
+/** The scheduling services people actually paste. */
+const SCHEDULER_HOST =
+  /(^|\.)(calendly\.com|cal\.com|savvycal\.com|tidycal\.com|zcal\.co|youcanbook\.me|hubspot\.com|chilipiper\.com|acuityscheduling\.com|calendar\.app\.google|calendar\.google\.com|outlook\.office\.com|outlook\.office365\.com|bookings\.microsoft\.com|doodle\.com)$/i;
+
 export function meetingBookingUrl(
   bookingRaw: string,
   ctaRaw: string,
@@ -99,7 +105,7 @@ export function meetingBookingUrl(
   }
   if (ctaRaw.trim()) {
     const checked = checkCtaUrl(withScheme(ctaRaw));
-    if (checked.ok) return { ok: true, url: checked.url };
+    if (checked.ok && SCHEDULER_HOST.test(new URL(checked.url).hostname)) return { ok: true, url: checked.url };
   }
   return { ok: true, url: null };
 }

@@ -251,6 +251,31 @@ describe("sending", () => {
     expect(linkedin.reactions).toHaveLength(1);
   });
 
+  it("never posts a queued comment that asks a question or talks about our work", async () => {
+    // Written by the first comment prompt and still queued when it changed:
+    // held to today's line at the moment of sending, and the like still goes.
+    const { db, ctx, linkedin, id } = await planned();
+    const like = db.find("engagement_actions", { id })!;
+    db.seed("engagement_actions", [
+      { ...like, id: "comment-q", post_id: "urn:li:activity:2", kind: "comment", status: "queued",
+        body: "When you say bring it all from customer engagement, do you mean inbound calls?" },
+      { ...like, id: "comment-w", post_id: "urn:li:activity:3", kind: "comment", status: "queued",
+        body: "We help dealers with exactly this kind of BDC growth." },
+      { ...like, id: "comment-ok", post_id: "urn:li:activity:4", kind: "comment", status: "queued",
+        body: "Finishing a children's book after years of family nudging is a lovely thing to share." },
+    ]);
+
+    for (const engagementId of ["comment-q", "comment-w", "comment-ok"]) {
+      await runLinkedInAction(ctx, { kind: "engage", workspaceId: WORKSPACE, engagementId });
+    }
+
+    expect(db.find("engagement_actions", { id: "comment-q" })?.status).toBe("skipped");
+    expect(db.find("engagement_actions", { id: "comment-w" })?.status).toBe("skipped");
+    expect(linkedin.comments.map((c) => c.postId)).toEqual(["urn:li:activity:4"]);
+    // The like on the same post is its own row and is untouched.
+    expect(db.find("engagement_actions", { id })?.status).toBe("queued");
+  });
+
   it("skips rather than sends once somebody is marked do not contact after planning", async () => {
     const { db, ctx, linkedin, id } = await planned();
     db.find("prospects", { id: PROSPECT })!.do_not_contact = true;

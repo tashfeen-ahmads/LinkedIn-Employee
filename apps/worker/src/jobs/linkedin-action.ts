@@ -39,6 +39,7 @@ import {
   parseHeadline,
   missingFields,
   type MergeValues,
+  commentPitchProblems,
 } from "@le/shared";
 import { FIRST_MESSAGE_PROMPT_VERSION } from "@le/agents";
 import { readCampaignCta } from "../cta.js";
@@ -1621,6 +1622,12 @@ async function sendEngagement(
     .select("engage_posts, engage_comments")
     .eq("id", row.workspace_id)
     .maybeSingle();
+  // A comment written by an older prompt is held to today's line: one that
+  // asks a question or talks about what we do is never posted, and the like
+  // on the same post still goes (rule 68).
+  if (row.kind === "comment" && commentPitchProblems(row.body ?? "").length) {
+    return skip("the comment read as selling, so only the like goes");
+  }
   if (row.kind === "comment") {
     const commentsOn =
       typeof workspace?.engage_comments === "boolean" ? workspace.engage_comments : workspace?.engage_posts === true;

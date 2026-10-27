@@ -178,6 +178,7 @@ export async function LimitsSection() {
             label="Comments today"
             used={usage.commentsToday}
             cap={dailyCommentCap(usage.firstActionAt, now)}
+            note={`${LINKEDIN_LIMITS.commentsPerDayNew} a day for a new account's first ${LINKEDIN_LIMITS.commentsRampDays} days, then ${LINKEDIN_LIMITS.commentsPerDay}.`}
           />
           <AllowanceMeter
             label="Invitations, last 7 days"

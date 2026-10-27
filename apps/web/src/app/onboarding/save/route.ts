@@ -237,7 +237,11 @@ export async function POST(request: NextRequest) {
         const booking = meetingBookingUrl(String(form.get("bookingUrl") ?? ""), String(form.get("ctaUrl") ?? ""));
         if (!booking.ok) return again("booking-url");
         if (booking.url) {
-          await supabase.from("profiles").update({ booking_url: booking.url }).eq("id", user.id);
+          const { error: bookingError } = await supabase
+            .from("profiles")
+            .update({ booking_url: booking.url })
+            .eq("id", user.id);
+          if (bookingError) return again("save-failed");
         }
       }
 

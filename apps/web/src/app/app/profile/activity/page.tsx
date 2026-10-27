@@ -95,12 +95,16 @@ export default async function LinkedInActivityPage({ searchParams }: { searchPar
 
           <ActivityCard
             title="Comment on prospects' posts"
-            line="A short, specific comment when a post says something worth answering. Never a pitch, never a link."
+            line="A short, friendly reaction to something they posted. Never a question, never a pitch, never a link."
             on={comments}
             setting="engage_comments"
             canChange={canChange}
             stats={[{ label: "Comments today", used: today?.comments_today ?? 0, cap: commentCap }]}
-            detail="Every comment quotes something the post really says, and you can read each one in the activity log."
+            detail={`${
+              newAccount
+                ? `${LINKEDIN_LIMITS.commentsPerDayNew} a day while your account is new. It rises to ${LINKEDIN_LIMITS.commentsPerDay} a day on its own after ${LINKEDIN_LIMITS.commentsRampDays} days of sending, because a new account that comments a lot looks automated.`
+                : `${LINKEDIN_LIMITS.commentsPerDay} a day.`
+            } Job posts and adverts are skipped, and you can read every comment in the activity log.`}
             links={<Link href="/app/profile/activity/log">Activity log</Link>}
           />
 

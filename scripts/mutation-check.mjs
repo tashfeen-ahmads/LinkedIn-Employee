@@ -5764,7 +5764,7 @@ const MUTATIONS = [
   { id: "setup/launch-step-passes-reply-mode", rule: "The launch step sets reply mode and autonomy together", file: "apps/web/src/lib/autonomy.ts",
     from: "await setAutonomy(supabase, workspaceId, autonomy, replyMode))", to: "await setAutonomy(supabase, workspaceId, autonomy))", pkg: "@le/web" },
   { id: "setup/general-link-becomes-booking", rule: "A meeting CTA's link typed in the general box is the rep's scheduling link", file: "apps/web/src/lib/wizard-launch.ts",
-    from: "    if (checked.ok) return { ok: true, url: checked.url };\n", to: "", pkg: "@le/web" },
+    from: "    if (checked.ok && SCHEDULER_HOST.test(new URL(checked.url).hostname)) return { ok: true, url: checked.url };\n", to: "", pkg: "@le/web" },
   { id: "setup/route-reads-general-link", rule: "The CTA step reads the general link box for a meeting", file: "apps/web/src/app/onboarding/save/route.ts",
     from: "String(form.get(\"ctaUrl\") ?? \"\"));\n        if (!booking.ok)", to: "\"\");\n        if (!booking.ok)", pkg: "@le/web" },
   { id: "rls/heartbeats-scoped", rule: "Members read only the worker's own health rows, never other accounts' names", file: "packages/db/supabase/migrations/0056_heartbeat_read_scope.sql",
@@ -5847,6 +5847,17 @@ const MUTATIONS = [
   { id: "activity/warm-up-read-guard", rule: "A failed read never overwrites the setup answers", file: "apps/web/src/app/app/profile/activity/toggle/route.ts", from: "    if (readError || !ws) return seeOther(", to: "    if (false) return seeOther(", pkg: "@le/web" },
   { id: "voice/asking-for-theirs-is-not-an-offer", rule: "Rule 66: asking for the prospect's own document is not offering one", file: "packages/shared/src/voice.ts", from: "      if (THEIR_ACT.test(match[0]) && ", to: "      if (false && ", pkg: "@le/shared" },
   { id: "needs-you/notes-sent-this-month", rule: "Rule 62: an account whose free notes are spent this month is not asked to rewrite notes", file: "apps/web/src/lib/needs-you-data.ts", from: "const sent = plan === \"basic\" ? await notesSentThisMonth(supabase, a.id, tz, now) : 0;", to: "const sent = 0;", pkg: "@le/web" },
+  // Comments react, never sell, 27 October.
+  { id: "engage/comment-asks-nothing", rule: "Rule 68: a comment never asks a question", file: "packages/shared/src/engagement.ts", from: "  if (comment.includes(\"?\")) {", to: "  if (false) {", pkg: "@le/shared" },
+  { id: "engage/comment-never-talks-shop", rule: "Rule 68: a comment never talks about what we do", file: "packages/shared/src/engagement.ts", from: "  if (PITCH_IN_COMMENT.some((pattern) => pattern.test(comment))) {", to: "  if (false) {", pkg: "@le/shared" },
+  { id: "engage/queued-comment-rechecked", rule: "Rule 68: a queued comment is held to today's line at the moment of sending", file: "apps/worker/src/jobs/linkedin-action.ts", from: "  if (row.kind === \"comment\" && commentPitchProblems(row.body ?? \"\").length) {", to: "  if (false) {", pkg: "@le/worker" },
+  { id: "engage/no-comment-on-job-posts", rule: "Rule 68: job openings and adverts are liked, never commented on", file: "packages/shared/src/engagement.ts", from: "length >= 25 && !sellingPost(post.text);", to: "length >= 25;", pkg: "@le/shared" },
+  // Review of the screen write paths, 27 October.
+  { id: "launch/resume-with-empty-queue", rule: "A paused campaign resumes with nobody left to invite, so follow-ups still go", file: "apps/web/src/lib/campaign.ts", from: "  if (state.prospectCount === 0 && !state.resuming) {", to: "  if (state.prospectCount === 0) {", pkg: "@le/web" },
+  { id: "agents/never-another-workspaces", rule: "Rule 58: a campaign never writes in another workspace's agent", file: "apps/worker/src/agent.ts", from: "    .eq(\"id\", agentId)\n    .eq(\"workspace_id\", workspaceId)\n", to: "    .eq(\"id\", agentId)\n", pkg: "@le/worker" },
+  { id: "setup/booking-link-only-a-scheduler", rule: "Rule 31: only a scheduling page becomes the booking link", file: "apps/web/src/lib/wizard-launch.ts", from: "if (checked.ok && SCHEDULER_HOST.test(new URL(checked.url).hostname)) return", to: "if (checked.ok) return", pkg: "@le/web" },
+  { id: "launch/stamped-before-running", rule: "A campaign is never running with no launch on record", file: "apps/web/src/lib/launch.ts", from: "  if (stampError) {\n    console.error(`[campaign] launch stamp: ${stampError.message}`);\n    return { status: \"failed\" };\n  }", to: "  void stampError;", pkg: "@le/web" },
+  { id: "hours/failed-read-never-merged", rule: "A failed read never overwrites the setup answers", file: "apps/web/src/app/app/profile/hours/page.tsx", from: "    if (stashReadError || !wsStash) {\n      accountAnswersKept = false;", to: "    if (false) {\n      accountAnswersKept = false;", pkg: "@le/web" },
 ];
 
 /**

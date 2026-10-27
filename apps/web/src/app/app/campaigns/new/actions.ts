@@ -157,6 +157,18 @@ export async function createCampaign(formData: FormData) {
   // The workspace's default agent writes for it until step 3 says otherwise,
   // so the fallback note is in that agent's voice from the first moment.
   let writer = agentId || null;
+  if (writer) {
+    // A claim like the rest: another workspace's agent would write this
+    // campaign in its voice, from its playbook.
+    const { data: own } = await supabase
+      .from("agents")
+      .select("id")
+      .eq("id", writer)
+      .eq("workspace_id", session.workspaceId)
+      .is("archived_at", null)
+      .maybeSingle();
+    if (!own) refuse(formData, "That agent is not available any more. Pick another.");
+  }
   if (!writer) {
     const { data: fallback } = await supabase
       .from("agents")
@@ -178,6 +190,14 @@ export async function createCampaign(formData: FormData) {
         .maybeSingle()
     : { data: null };
 
+  // How much Nora finishes on its own, from the workspace's answer, exactly as
+  // a campaign built from a search carries it (`targeting.ts`). Without it a
+  // builder campaign was born `supervised` in a workspace told Nora answers on
+  // its own, and held every pricing question (rule 65).
+  const { data: ws } = await supabase.from("workspaces").select("onboarding").eq("id", session.workspaceId).maybeSingle();
+  const autonomy =
+    (ws?.onboarding as { autonomy?: string } | null)?.autonomy === "autonomous" ? "autonomous" : "supervised";
+
   const { data: campaign, error } = await supabase
     .from("campaigns")
     .insert({
@@ -191,14 +211,16 @@ export async function createCampaign(formData: FormData) {
       // is the only thing standing between a list and a real person's inbox.
       status: "draft",
       connection_note: template,
-      cta_id: ctaId || null,
+      // Only an entry this workspace owns; the lookup above is the check.
+      cta_id: cta ? ctaId : null,
       cta_kind: (cta?.kind as "meeting" | "link" | "reply") ?? "reply",
       cta_label: cta?.label ?? null,
       cta_url: cta?.url ?? null,
       warm_up: warmUp,
       daily_invite_cap: LINKEDIN_LIMITS.invitesPerDayStart,
       stop_conditions: ["prospect replies", "prospect opts out"] as never,
-      rules: { builtFrom: "prospect list" } as never,
+      reply_mode: autonomy === "autonomous" ? "autopilot" : "approval",
+      rules: { builtFrom: "prospect list", autonomy } as never,
     })
     .select("id")
     .single();

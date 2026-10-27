@@ -153,8 +153,11 @@ describe("account answers saved before an account exists", () => {
     const profile = read("app", "app", "profile", "hours", "page.tsx");
     expect(profile).toMatch(/\.from\("linkedin_accounts"\)\s*\.update\(accountPatch as never\)[\s\S]{0,200}?\.select\("id"\)/);
     expect(profile).toMatch(
-      /if \(!updatedAccounts\?\.length\) \{[\s\S]{0,600}?onboarding: mergeStash\(wsStash\?\.onboarding, stashedAccountAnswers\(accountPatch\)\)/,
+      /if \(!updatedAccounts\?\.length\) \{[\s\S]{0,900}?onboarding: mergeStash\(wsStash\.onboarding, stashedAccountAnswers\(accountPatch\)\)/,
     );
+    // And never merged into a read that failed, which would replace every
+    // other setup answer with these hours.
+    expect(profile).toMatch(/if \(stashReadError \|\| !wsStash\) \{\s*accountAnswersKept = false;/);
   });
 
   it("does not say Saved over a stash write the database refused", () => {

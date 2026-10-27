@@ -36,7 +36,10 @@ async function saveReplies(formData: FormData) {
   /* ---- how much the agent finishes on its own ---- */
   // On the workspace and on every campaign in it: one definition, shared with
   // onboarding, so neither writes half of it.
-  await setAutonomy(supabase, session.workspaceId, wanted === "autonomous" ? "autonomous" : "supervised");
+  const saved = await setAutonomy(supabase, session.workspaceId, wanted === "autonomous" ? "autonomous" : "supervised");
+  if (!saved) {
+    redirect(errorQuery(HERE, "That could not be saved on every campaign just now. Nothing you see here changed. Try again."));
+  }
 
   revalidatePath("/app/profile", "layout");
   redirect(

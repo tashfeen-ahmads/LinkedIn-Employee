@@ -38,14 +38,19 @@ async function setLinkedInPlan(formData: FormData) {
     .eq("user_id", session.userId)
     .select("id");
   if (!updated?.length) {
-    const { data: wsStash } = await supabase
+    const { data: wsStash, error: stashReadError } = await supabase
       .from("workspaces")
       .select("onboarding")
       .eq("id", session.workspaceId)
       .maybeSingle();
+    // Never merged into a read that failed: it would replace every other
+    // setup answer with this one.
+    if (stashReadError || !wsStash) {
+      redirect(errorQuery(HERE, "That could not be saved just now. Try again."));
+    }
     const { data: stashed } = await supabase
       .from("workspaces")
-      .update({ onboarding: mergeStash(wsStash?.onboarding, stashedAccountAnswers(patch)) as never })
+      .update({ onboarding: mergeStash(wsStash.onboarding, stashedAccountAnswers(patch)) as never })
       .eq("id", session.workspaceId)
       .select("id");
     if (!stashed?.length) {

@@ -23,19 +23,21 @@ import type {
 /** A context that answers each call with the next parse in the list. */
 function scriptedCtx(parses: unknown[]) {
   const users: string[] = [];
+  const systems: unknown[] = [];
   const ctx = {
     workspaceId: "w",
     client: {
       models: { writer: "w", classifier: "c" },
-      complete: async (request: { user: string }) => {
+      complete: async (request: { user: string; system?: unknown }) => {
         users.push(request.user);
+        systems.push(request.system);
         const parsed = parses[Math.min(users.length - 1, parses.length - 1)];
         return { usage: { inputTokens: 1, outputTokens: 1, cacheReadTokens: 0 }, refusal: null, incomplete: null, parsed };
       },
     },
     recordCall: async () => {},
   } as unknown as AgentContext;
-  return { ctx, users };
+  return { ctx, users, systems };
 }
 
 const business: BusinessProfile = {
@@ -307,7 +309,6 @@ describe("writeComment", () => {
     postText: POST,
     authorFirstName: "Jane",
     repName: "Sam",
-    repContext: "An answering service for home service companies.",
     companyName: "Acme",
   };
   const out = (comment: string, grounding: string, skip = false) => ({ comment, grounding, skip });
@@ -319,6 +320,16 @@ describe("writeComment", () => {
       grounding: "cover Friday afternoons",
     });
     expect(users).toHaveLength(1);
+  });
+
+  it("is never told what the rep sells, and a question is sent back", async () => {
+    const question = out("How are you covering Friday afternoons now?", "cover Friday afternoons");
+    const fine = out("Making a four-day week work for a dispatch team is no small thing.", "moved our dispatch team to a four-day week");
+    const { ctx, users, systems } = scriptedCtx([question, fine]);
+    expect((await writeComment(ctx, input))?.comment).toBe(fine.comment);
+    expect(users[1]).toMatch(/asks a question/);
+    expect(JSON.stringify(systems)).toMatch(/You are Sam/);
+    expect(JSON.stringify(systems)).not.toMatch(/answering service/i);
   });
 
   it("sends back generic praise once, and gives up rather than post it", async () => {

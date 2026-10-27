@@ -32,9 +32,42 @@ export const GENERIC_COMMENT_PHRASES = [
   "food for thought",
   "this is gold",
   "100%",
-  "congrats",
-  "congratulations",
 ];
+
+/*
+ * A comment that sells.
+ *
+ * The first live comments named no product and still read as outreach: "Which
+ * metric matters more to you, time saved or revenue?", "Do you warm up from
+ * platform domains or users' own sending domains?". A question under
+ * somebody's post is a discovery call in public, and "we help teams like
+ * yours" is the pitch with the company name left off. A comment is a person
+ * reacting to a post and nothing more, so neither is allowed, checked here
+ * because the prompt saying so is not what makes it true (rule 66).
+ */
+const PITCH_IN_COMMENT = [
+  /\b(i|we) (help|work with|support|partner with|specialise in|specialize in)\b/i,
+  /\bour (clients?|customers?|team|company|product|service|services|platform|tool|solution|agency|firm)\b/i,
+  /\b(at|with) my (company|agency|firm)\b/i,
+  /\b(happy|glad) to (help|share|chat|walk you through)\b/i,
+  /\b(reach out|feel free to|if you ever need|let me know if)\b/i,
+];
+
+/**
+ * The reasons a comment sells rather than reacts, or none. Run on every
+ * comment the writer returns and again on a queued one immediately before it
+ * is posted, so a comment written by an older prompt is held to the same line.
+ */
+export function commentPitchProblems(comment: string): string[] {
+  const problems: string[] = [];
+  if (comment.includes("?")) {
+    problems.push("It asks a question. A comment reacts to the post in a sentence or two and asks nothing.");
+  }
+  if (PITCH_IN_COMMENT.some((pattern) => pattern.test(comment))) {
+    problems.push("It talks about what you or your company do. A comment is about their post, never your work.");
+  }
+  return problems;
+}
 
 /**
  * A post nobody should see a machine respond to: grief, illness, losing a job,
@@ -84,7 +117,25 @@ export function choosePost<T extends PostCandidate>(posts: T[], now: Date = new 
 
 /** Whether a post has enough of the person's own words to comment on honestly. */
 export function worthCommentingOn(post: PostCandidate): boolean {
-  return post.canComment && post.text.trim().split(/\s+/).length >= 25;
+  return post.canComment && post.text.trim().split(/\s+/).length >= 25 && !sellingPost(post.text);
+}
+
+/*
+ * A job opening or an advert. A comment under either reads as applying for the
+ * job or answering the ad, which is the wrong conversation to open under a
+ * rep's name, so these are liked and never commented on. The first live week
+ * commented "Is remote acceptable for the fractional, equity-only role?" under
+ * a hiring post and asked whether a free food sample needed reheating.
+ */
+const SELLING_POST = [
+  /\b(we'?re|we are|now|is) hiring\b|\bjob (opening|opportunity|posting)\b|\bopen (role|position)s?\b|\bjoin our team\b|\bapply (now|here|today|below)\b|\bon the hunt for an? \b|\blooking for an? [a-z ]{2,40}(leader|manager|director|engineer|rep|representative|candidate|hire)\b/i,
+  /\b(free sample|promo code|use code|discount code|\d+% off|limited time|shop now|order now|buy now|sign up today|book your|subscription box)\b/i,
+];
+
+/** Whether a post is a job opening or an advert, which a comment never answers. */
+export function sellingPost(text: string): boolean {
+  const flat = text.replace(/\s+/g, " ");
+  return SELLING_POST.some((pattern) => pattern.test(flat));
 }
 
 /**
@@ -121,5 +172,6 @@ export function commentProblems(
   if (/\b(dm|message) me\b|\blet'?s (connect|chat|talk)\b|\b(book|hop on|jump on|grab) a (call|meeting|demo)\b/i.test(comment)) {
     problems.push("It asks them to talk or meet. A comment responds to the post and nothing else.");
   }
+  problems.push(...commentPitchProblems(comment));
   return problems;
 }

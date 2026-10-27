@@ -75,6 +75,15 @@ describe("a scheduling link typed in the general link box is kept", () => {
     expect(meetingBookingUrl("", "not a link")).toEqual({ ok: true, url: null });
     expect(meetingBookingUrl("", "")).toEqual({ ok: true, url: null });
   });
+
+  it("never takes a homepage or a leftover page from the link box as the booking link", () => {
+    expect(meetingBookingUrl("", "acme.com/free-audit")).toEqual({ ok: true, url: null });
+    expect(meetingBookingUrl("", "https://www.acme.com")).toEqual({ ok: true, url: null });
+    expect(meetingBookingUrl("", "https://meetings.hubspot.com/sam")).toEqual({
+      ok: true,
+      url: "https://meetings.hubspot.com/sam",
+    });
+  });
 });
 
 describe("the launch screen reads what the send path decides from", () => {

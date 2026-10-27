@@ -532,7 +532,7 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
   // The voice the rep gave the agent (setup's voice step, Profile), so the
   // follow-ups sound like the same person as the invitation note. Without it
   // the note was written in their voice and every message after it in none.
-  const planAgent = planAgentId ? await agentById(db, planAgentId) : null;
+  const planAgent = planAgentId ? await agentById(db, planAgentId, job.workspaceId) : null;
   const askForPlan = () =>
     buildCampaign(ctx.agentsFor(job.workspaceId), {
       business: planBusiness,

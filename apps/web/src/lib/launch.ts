@@ -25,7 +25,7 @@ export async function launchState(campaignId: string, workspaceId: string): Prom
   const supabase = await createClient();
   const { data: campaign } = await supabase
     .from("campaigns")
-    .select("connection_note, daily_invite_cap, linkedin_account_id")
+    .select("connection_note, daily_invite_cap, linkedin_account_id, launched_at")
     .eq("id", campaignId)
     .eq("workspace_id", workspaceId)
     .maybeSingle();
@@ -55,6 +55,7 @@ export async function launchState(campaignId: string, workspaceId: string): Prom
     accountStatus: account?.status ?? null,
     accountReleasedIdle: isIdleReleased(account),
     inviteNotes: (queuedNotes ?? []).map((row) => row.invite_note),
+    resuming: Boolean(campaign.launched_at),
   };
 }
 
@@ -75,6 +76,23 @@ export async function launch(
   if (blockers.length > 0) return { status: "blocked", blockers };
 
   const supabase = await createClient();
+  // The first launch only, and before the status. Every reader of
+  // `launched_at` means "first went live" (refill's day of grace, idle
+  // release, the console's "launched", the end of setup), and stamping it on
+  // every resume held a resumed campaign's refill off for a day. Stamped
+  // first and checked, so a campaign is never running with no launch on
+  // record, which would send its owner back to setup while it sends.
+  const { error: stampError } = await supabase
+    .from("campaigns")
+    .update({ launched_at: new Date().toISOString() })
+    .eq("id", campaignId)
+    .eq("workspace_id", session.workspaceId)
+    .is("launched_at", null);
+  if (stampError) {
+    console.error(`[campaign] launch stamp: ${stampError.message}`);
+    return { status: "failed" };
+  }
+
   // Checked by the rows it changed: an update that matched nothing (refused,
   // or the campaign gone since the read above) launched nothing, and saying
   // "launched" over it is a live campaign on no screen but this one.
@@ -88,17 +106,6 @@ export async function launch(
     if (error) console.error(`[campaign] launch: ${error.message}`);
     return { status: "failed" };
   }
-  // The first launch only. Every reader of `launched_at` means "first went
-  // live" (refill's day of grace, idle release, the console's "launched"), and
-  // stamping it again on every resume held a resumed campaign's refill off for
-  // a day while it had nobody left to invite.
-  await supabase
-    .from("campaigns")
-    .update({ launched_at: new Date().toISOString() })
-    .eq("id", campaignId)
-    .eq("workspace_id", session.workspaceId)
-    .is("launched_at", null);
-
   // A round trip to the worker rather than a row the schedule notices later:
   // a worker that was not running used to produce no error at all, and the
   // first invitation is paced from the press rather than the next tick.

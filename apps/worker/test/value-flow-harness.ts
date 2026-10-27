@@ -392,7 +392,7 @@ export class RecordingLlm implements LlmClient {
       case "comment": {
         const post = between(user, 'The post:\n"""\n', '\n"""') ?? "";
         const grounding = post.split(/\s+/).slice(0, 6).join(" ");
-        return { comment: `Agree that ${grounding.toLowerCase()}. How did your team spot it?`, grounding, skip: false };
+        return { comment: `Agree that ${grounding.toLowerCase()}, and it is good to see it said plainly.`, grounding, skip: false };
       }
       default:
         throw new Error(`RecordingLlm has no canned answer for ${agent}`);

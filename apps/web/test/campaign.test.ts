@@ -27,6 +27,14 @@ describe("launchBlockers", () => {
     expect(launchBlockers(state({ prospectCount: 0 }))).toContain("There is nobody on the list yet.");
   });
 
+  it("resumes a paused campaign with nobody left to invite, so follow-ups to people who accepted still go", () => {
+    expect(launchBlockers(state({ prospectCount: 0, resuming: true }))).not.toContain("There is nobody on the list yet.");
+    // Every other check still applies to a resume.
+    expect(launchBlockers(state({ prospectCount: 0, resuming: true, connectionNote: "" }))).toContain(
+      "The connection note is empty.",
+    );
+  });
+
   it("refuses an empty connection note", () => {
     expect(launchBlockers(state({ connectionNote: "   " }))).toContain("The connection note is empty.");
   });

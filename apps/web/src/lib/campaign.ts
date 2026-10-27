@@ -30,13 +30,19 @@ export interface LaunchState {
    * list the agent wrote.
    */
   inviteNotes?: ReadonlyArray<string | null>;
+  /**
+   * The campaign has been launched before, so this is a resume. Its queue can
+   * be empty while people who accepted are part-way through their follow-ups,
+   * and refusing the resume would leave them stranded on a paused campaign.
+   */
+  resuming?: boolean;
 }
 
 
 export function launchBlockers(state: LaunchState): string[] {
   const blockers: string[] = [];
 
-  if (state.prospectCount === 0) {
+  if (state.prospectCount === 0 && !state.resuming) {
     blockers.push("There is nobody on the list yet.");
   }
 

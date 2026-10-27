@@ -54,18 +54,25 @@ function parseCustomFields(value: unknown): CustomField[] {
 export async function agentForCampaign(db: Db, campaignId: string): Promise<CampaignAgent | null> {
   const { data: campaign } = await db
     .from("campaigns")
-    .select("agent_id")
+    .select("agent_id, workspace_id")
     .eq("id", campaignId)
     .maybeSingle();
   if (!campaign?.agent_id) return null;
-  return agentById(db, campaign.agent_id);
+  return agentById(db, campaign.agent_id, campaign.workspace_id);
 }
 
-export async function agentById(db: Db, agentId: string): Promise<CampaignAgent | null> {
+/**
+ * One agent, read only within the workspace that asked: the worker holds the
+ * service role, and an agent id that arrived from a form is a claim (rule 58).
+ * Another company's agent would write this campaign's notes and replies in
+ * its voice, from its playbook.
+ */
+export async function agentById(db: Db, agentId: string, workspaceId: string): Promise<CampaignAgent | null> {
   const { data } = await db
     .from("agents")
     .select("id, name, model, system_prompt, from_name, playbook, custom_fields, archived_at")
     .eq("id", agentId)
+    .eq("workspace_id", workspaceId)
     .maybeSingle();
   if (!data) return null;
 

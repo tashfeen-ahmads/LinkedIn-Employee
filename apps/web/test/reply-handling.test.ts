@@ -105,7 +105,9 @@ describe("launch never changes how replies are handled", () => {
     const db = launchDb({ rules: { autonomy: "autonomous" }, reply_mode: "approval" });
     h.client = db.client;
     expect((await launch("c1", { workspaceId: WS, userId: "u" })).status).toBe("launched");
-    const update = db.calls.find((c) => c.table === "campaigns" && c.op === "update")!;
+    const update = db.calls.find(
+      (c) => c.table === "campaigns" && c.op === "update" && (c.payload as { status?: string }).status,
+    )!;
     expect(update.payload).toMatchObject({ status: "running" });
     expect(update.payload).not.toHaveProperty("reply_mode");
   });
@@ -120,8 +122,37 @@ describe("launch never changes how replies are handled", () => {
       (c) => c.table === "campaigns" && c.op === "update" && (c.payload as { launched_at?: string }).launched_at,
     )!;
     expect(stamp.filters).toContainEqual(["is", "launched_at", null]);
-    const running = db.calls.find((c) => c.table === "campaigns" && c.op === "update")!;
+    const running = db.calls.find(
+      (c) => c.table === "campaigns" && c.op === "update" && (c.payload as { status?: string }).status,
+    )!;
     expect(running.payload).not.toHaveProperty("launched_at");
+    // Stamped before the status, so a campaign is never running with no
+    // launch on record.
+    expect(db.calls.indexOf(stamp)).toBeLessThan(db.calls.indexOf(running));
+  });
+
+  it("refuses, and sets nothing running, when the first-launch stamp cannot be written", async () => {
+    // Running with no launch on record sends the owner back to setup while
+    // the campaign sends.
+    const db = fakeSupabase((call) => {
+      if (call.table === "campaigns" && call.op === "select") {
+        return { data: { connection_note: "", daily_invite_cap: 10, linkedin_account_id: "acc", launched_at: null } };
+      }
+      if (call.table === "campaigns" && call.op === "update") {
+        return (call.payload as { launched_at?: string }).launched_at
+          ? { error: { message: "timeout" } }
+          : { data: [{ id: "c1" }] };
+      }
+      if (call.table === "campaign_prospects") return { data: [], count: 3 };
+      if (call.table === "campaign_steps") return { data: [] };
+      if (call.table === "linkedin_accounts") return { data: { status: "active", status_detail: null } };
+      return undefined;
+    });
+    h.client = db.client;
+    expect((await launch("c1", { workspaceId: WS, userId: "u" })).status).toBe("failed");
+    expect(
+      db.calls.some((c) => c.table === "campaigns" && c.op === "update" && (c.payload as { status?: string }).status),
+    ).toBe(false);
   });
 
   it("leaves a supervised campaign's mode alone", async () => {

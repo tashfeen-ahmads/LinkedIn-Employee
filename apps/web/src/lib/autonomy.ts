@@ -35,7 +35,14 @@ export async function setAutonomy(
   autonomy: "autonomous" | "supervised",
   replyMode?: ReplyMode,
 ): Promise<boolean> {
-  const { data: ws } = await supabase.from("workspaces").select("onboarding").eq("id", workspaceId).maybeSingle();
+  const { data: ws, error: wsError } = await supabase
+    .from("workspaces")
+    .select("onboarding")
+    .eq("id", workspaceId)
+    .maybeSingle();
+  // `onboarding` holds every other setup answer: a read that failed must not
+  // become a write of `{ autonomy }` over all of them.
+  if (wsError || !ws) return false;
   const answers = (ws?.onboarding && typeof ws.onboarding === "object" ? ws.onboarding : {}) as Record<string, unknown>;
   const { data: saved } = await supabase
     .from("workspaces")

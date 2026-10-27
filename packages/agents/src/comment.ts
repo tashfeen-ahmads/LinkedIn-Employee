@@ -2,20 +2,30 @@ import { z } from "zod";
 import { VOICE_RULES, commentProblems, rewriteInstruction, tidyVoice } from "@le/shared";
 import { callStructured, type AgentContext } from "./client.js";
 
-export const COMMENT_PROMPT_VERSION = "comment/2026-10-26";
+export const COMMENT_PROMPT_VERSION = "comment/2026-10-27-no-pitch";
 
-const COMMENT_SYSTEM = `You write one short comment that a salesperson posts under somebody's LinkedIn post, in their own name.
+/*
+ * A comment is a person being friendly under somebody's post, and nothing
+ * else. The first version was told what the rep sells "for context" and asked
+ * to sound "like a peer in their industry", and it wrote shop talk: probing
+ * questions about the poster's tools, metrics and process, which is a
+ * discovery call held in public. So the writer is no longer told what the rep
+ * does at all, asks nothing, and talks only about what the post says.
+ */
+const COMMENT_SYSTEM = `You write one short, friendly comment that somebody posts under a LinkedIn post, in their own name.
 
-It is a person reacting to what this person wrote. It is not outreach, not a pitch and not a compliment.
+It is a warm, human reaction to what this person shared. It is never sales, never about your own work, and never a question.
 
-- Pick one specific thing they actually wrote and respond to it: agree and add one concrete thought, share a short related experience, or ask one light question about it.
+- Pick one specific thing they wrote and react to it in your own words: say what you liked about it, agree with it, or wish them well on news they shared (a launch, a book, a milestone, a new role).
 - Return that phrase, copied exactly from the post, as "grounding". Three to ten words.
-- One or two sentences, under 200 characters. Plain and warm, like a peer in their industry.
-- Never praise the post in general ("great post", "thanks for sharing", "love this", "so true", "well said"). Never congratulate.
-- Never mention your company, your product, a call, a meeting or a link. Never ask them to message you.
-- Never invent a fact, a number or an experience you were not given. If you have nothing specific to add, ask one short question about what they wrote.
+- One or two sentences, under 160 characters. Plain and kind, like a friendly acquaintance.
+- Never ask a question. Never give advice about how they run their work.
+- Never talk about tools, methods, metrics, numbers, hiring or anything you or a company do. Never say "we", "our team", "our clients" or "I help".
+- Never mention a company, a product, a call, a meeting or a link. Never ask them to message you.
+- Never use stock lines like "great post", "thanks for sharing", "love this", "well said" or "so true".
+- Never invent a fact, a number or an experience.
 - Write in the language of the post.
-- If the post is about something personal or painful, or you cannot say anything specific, set "skip" to true.
+- Set "skip" to true when the post is a job opening, an advert or promotion, something personal or painful, or says nothing you can react to warmly.
 
 ${VOICE_RULES}`;
 
@@ -29,8 +39,6 @@ export interface CommentInput {
   postText: string;
   authorFirstName: string | null;
   repName: string;
-  /** What the rep does, so the comment can sound like a peer, never to be named. */
-  repContext: string;
   companyName: string | null;
   productNames?: string[];
   /** How the campaign's agent has been told to write. */
@@ -63,7 +71,7 @@ export async function writeComment(ctx: AgentContext, input: CommentInput): Prom
       system: [
         { text: COMMENT_SYSTEM, cached: true },
         ...(input.voice ? [{ text: input.voice, cached: true }] : []),
-        { text: `You are ${input.repName}. What you do, for context only: ${input.repContext}`, cached: true },
+        { text: `You are ${input.repName}.`, cached: true },
       ],
       userContent: [
         input.authorFirstName ? `Posted by ${input.authorFirstName}.` : "",

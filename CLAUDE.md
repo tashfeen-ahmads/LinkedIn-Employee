@@ -1455,7 +1455,9 @@ tests that were verified by deliberately breaking the code.
     *The worker is the tenant boundary.* It holds the service role, so every
     id that arrived from a form is filtered by `workspace_id` — the targeting
     job used to run another company's strategy on another company's seat given
-    the right UUID.
+    the right UUID. An agent is read the same way (`agentById` takes the
+    workspace), and the campaign forms check the agent and the CTA they post
+    belong to the workspace before saving them.
 
     *Nothing waits on a moment that may not come.* A strategy approved before
     LinkedIn was connected is searched when the account connects and hourly
@@ -1928,7 +1930,20 @@ tests that were verified by deliberately breaking the code.
     must name a phrase the post really contains (`grounding`), pass the voice
     checks, praise nothing in general, carry no link or bare domain, never name
     the company and never ask for a call (`commentProblems`). One rewrite; a
-    comment that still fails is not written and the post is only liked. Every
+    comment that still fails is not written and the post is only liked.
+
+    **A comment reacts; it never sells.** The first live week named no product
+    and still read as outreach: every comment was a probing question about the
+    poster's tools, metrics or process, a discovery call held in public,
+    because the writer was told what the rep sells "for context". It is no
+    longer told. A comment asks nothing and never talks about what we do
+    (`commentPitchProblems`: a `?`, "we help", "our clients", "happy to
+    help"), checked again on a queued comment immediately before it posts so
+    copy from an older prompt is held to the same line. Job openings and
+    adverts are liked and never commented on (`sellingPost`). Congratulating
+    somebody on news they shared is allowed; a stock line on its own is not.
+    Comments are 2 a day in an account's first 14 days of sending, then 5, and
+    the screens say so beside the meter. Every
     like and comment, with the words of the post and of the comment, is listed
     on `/app/engagement`, where an owner or admin can turn it off.
 
@@ -1957,7 +1972,15 @@ tests that were verified by deliberately breaking the code.
   build's current one: the writer stamps it, the nightly repair stamps its
   revision, and a person's edit clears it.
 - `launched_at` is the first launch and is stamped once (`.is("launched_at",
-  null)`); a resume sets the status only.
+  null)`), before the status and checked, so a campaign is never running with
+  no launch on record; a resume sets the status only. A resume is never
+  refused for an empty invitation queue (`resuming` on `LaunchState`): the
+  people who accepted are still mid-sequence and only a running campaign
+  sends their follow-ups.
+- A read of `workspaces.onboarding` that failed is never merged into: that
+  column holds every setup answer, and a write of one key over a failed read
+  replaces all of them. On setup's CTA step only a scheduling service's page
+  typed in the general link box becomes the rep's booking link (rule 31).
 - Prompt-cache the stable context (business profile, customer profile, rep bio)
   and leave the varying part after the breakpoint. `/app/usage` shows whether
   it is working; a low cached share there means a breakpoint moved.

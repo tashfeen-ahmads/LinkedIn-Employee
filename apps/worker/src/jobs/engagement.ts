@@ -297,7 +297,6 @@ async function commentFor(
       postText,
       authorFirstName: firstName,
       repName: agent?.fromName?.trim() || repName || "the rep",
-      repContext: business.oneLiner || business.offering || business.companyName,
       companyName: business.companyName,
       voice: voiceOf(agent),
       model: modelFor(agents.client, agent).model,

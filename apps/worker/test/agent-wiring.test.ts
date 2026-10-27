@@ -53,6 +53,13 @@ describe("the agent a campaign sends through", () => {
     const db = harness({ withAgent: false });
     expect(await agentForCampaign(db.asDb(), CAMPAIGN)).toBeNull();
   });
+
+  it("is never another workspace's agent, whatever id the campaign carries", async () => {
+    // A form can post any agent id; the worker is the tenant boundary (rule 58).
+    const db = harness({ withAgent: true });
+    db.find("agents", { id: AGENT })!.workspace_id = "99999999-9999-4999-8999-999999999999";
+    expect(await agentForCampaign(db.asDb(), CAMPAIGN)).toBeNull();
+  });
 });
 
 describe("the name a prospect actually reads", () => {

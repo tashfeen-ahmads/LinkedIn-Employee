@@ -96,10 +96,15 @@ async function rebuildBusiness() {
     redirect(errorQuery(HERE, "Only an owner or admin can rebuild the business profile."));
   }
   const supabase = await createClient();
-  const [{ count: campaigns }, { data: ws }] = await Promise.all([
+  const [{ count: campaigns, error: countError }, { data: ws, error: wsError }] = await Promise.all([
     supabase.from("campaigns").select("id", { count: "exact", head: true }).eq("workspace_id", session.workspaceId),
     supabase.from("workspaces").select("onboarding").eq("id", session.workspaceId).maybeSingle(),
   ]);
+  // Deleting the profile takes every strategy with it, so a count that could
+  // not be read is never "no campaigns" (rule 17).
+  if (countError || campaigns === null || wsError) {
+    redirect(errorQuery(HERE, "Your campaigns could not be checked just now, so nothing was changed. Try again."));
+  }
   if (campaigns) {
     redirect(
       errorQuery(

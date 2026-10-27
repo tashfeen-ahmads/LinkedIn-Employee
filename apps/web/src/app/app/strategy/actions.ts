@@ -117,13 +117,14 @@ export async function dropProfile(formData: FormData) {
 
   // Kept, not deleted: "we decided not to pursue this market" is worth
   // remembering, and undoing it is one click.
-  const { error } = await supabase
+  const { data: dropped, error } = await supabase
     .from("customer_profiles")
     .update({ do_not_pursue: true, approved_at: null })
     .eq("id", id)
-    .eq("workspace_id", session.workspaceId);
-  if (error) {
-    console.error(`[strategy] drop profile: ${error.message}`);
+    .eq("workspace_id", session.workspaceId)
+    .select("id");
+  if (error || !dropped?.length) {
+    if (error) console.error(`[strategy] drop profile: ${error.message}`);
     redirect(said(back, "error", "That strategy could not be set aside. Try again."));
   }
 

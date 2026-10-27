@@ -85,7 +85,21 @@ async function applyCampaignEdits(
     patch.connection_note = note;
   }
   if (carriesWarmUp) patch.warm_up = formData.get("warm_up") === "on";
-  if (agentField !== null) patch.agent_id = String(agentField) || null;
+  if (agentField !== null) {
+    const agentId = String(agentField) || null;
+    if (agentId) {
+      // The id came from a form: only this workspace's own, live agents.
+      const { data: agent } = await supabase
+        .from("agents")
+        .select("id")
+        .eq("id", agentId)
+        .eq("workspace_id", workspaceId)
+        .is("archived_at", null)
+        .maybeSingle();
+      if (!agent) redirect(errorQuery(here, "That agent is not available any more. Pick another."));
+    }
+    patch.agent_id = agentId;
+  }
   if (capField !== null) {
     // Clamped rather than rejected: the caps are product rules, and a typo in
     // this box must not be able to raise them. Rule 2 in CLAUDE.md.
@@ -206,7 +220,7 @@ export async function saveInviteNote(formData: FormData) {
     redirect(errorQuery(here, `That note is ${note.length} characters. LinkedIn refuses anything over ${INVITE_NOTE_MAX_CHARS}.`));
   }
 
-  const { error } = await supabase
+  const { data: changed, error } = await supabase
     .from("campaign_prospects")
     .update({
       invite_note: note || null,
@@ -218,12 +232,18 @@ export async function saveInviteNote(formData: FormData) {
     })
     .eq("id", campaignProspectId)
     .eq("workspace_id", session.workspaceId)
-    .eq("status", "queued");
+    .eq("status", "queued")
+    .select("id");
 
   refresh(campaignId);
   if (error) {
     console.error(`[campaign] save note: ${error.message}`);
     redirect(errorQuery(here, `The note for ${who} could not be saved. Try again.`));
+  }
+  // Nothing matched: the invitation went out since this page loaded, and the
+  // note it carried is a record now, not a draft.
+  if (!changed?.length) {
+    redirect(errorQuery(here, `${who} has been invited since this page loaded, so their note can no longer change.`));
   }
   redirect(
     noticeQuery(here, note ? `Saved the note for ${who}.` : `Cleared the note for ${who}. They get the campaign template.`),
@@ -290,15 +310,18 @@ export async function setStatus(formData: FormData) {
   }
 
   const supabase = await createClient();
-  const { error } = await supabase
+  const { data: paused, error } = await supabase
     .from("campaigns")
     .update({ status })
     .eq("id", campaignId)
-    .eq("workspace_id", session.workspaceId);
+    .eq("workspace_id", session.workspaceId)
+    .select("id");
   refresh(campaignId);
   revalidatePath("/app/campaigns");
-  if (error) {
-    console.error(`[campaign] pause: ${error.message}`);
+  // Checked by the rows it changed: "Paused" over a campaign that is still
+  // sending is the one wrong sentence this button can say.
+  if (error || !paused?.length) {
+    if (error) console.error(`[campaign] pause: ${error.message}`);
     redirect(errorQuery(back, "The campaign could not be paused. Try again."));
   }
   // Said, because a paused campaign and a running one that is waiting out its
