@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MockLinkedInProvider } from "@le/linkedin";
-import { LINKEDIN_LIMITS, PACING_LAST_ACTION, PACING_LOOP, normalizeExclusionValue } from "@le/shared";
+import { LINKEDIN_LIMITS, PACING_DETAIL, PACING_LAST_ACTION, PACING_LOOP, normalizeExclusionValue } from "@le/shared";
 import { FakeDb } from "./fake-db.js";
 import { setBillingEnv } from "./billing-env.js";
 import { FIRST_SEND_MAX_MS, FIRST_SEND_MIN_MS, runCampaignTick } from "../src/jobs/campaign-tick.js";
@@ -246,7 +246,7 @@ describe("campaign pipeline", () => {
     const count = await runCampaignTick(db.asDb(), queues, night);
 
     expect(count).toBe(0);
-    const beat = db.rows("worker_heartbeats")[0];
+    const beat = db.rows("worker_heartbeats").find((h) => h.name === PACING_LOOP);
     expect(beat?.name).toBe("campaign-tick");
     expect(beat?.beat_at).toBe(night.toISOString());
   });
@@ -273,7 +273,7 @@ describe("campaign pipeline", () => {
 
     await expect(runCampaignTick(db.asDb(), queues, NOW)).rejects.toThrow(/queue refused/);
 
-    const beat = db.rows("worker_heartbeats")[0];
+    const beat = db.rows("worker_heartbeats").find((h) => h.name === PACING_LOOP);
     expect(beat?.name).toBe("campaign-tick");
     // The message, not just the fact. It is the only description of the failure
     // that reaches anybody who cannot open the deployment's logs.
@@ -296,7 +296,7 @@ describe("campaign pipeline", () => {
 
     await runCampaignTick(db.asDb(), queues, night);
 
-    const detail = db.rows("worker_heartbeats")[0]?.detail as { decisions: Array<{ reason: string }> };
+    const detail = db.rows("worker_heartbeats").find((h) => h.name === PACING_DETAIL)?.detail as { decisions: Array<{ reason: string }> };
     // The limiter's own word for it. Correct behaviour, and it needs saying as
     // such rather than reading as a product that does not work.
     expect(detail.decisions[0]?.reason).toContain("outside_working_hours");
@@ -308,7 +308,7 @@ describe("campaign pipeline", () => {
 
     await runCampaignTick(db.asDb(), queues, NOW);
 
-    const detail = db.rows("worker_heartbeats")[0]?.detail as { decisions: Array<{ reason: string }> };
+    const detail = db.rows("worker_heartbeats").find((h) => h.name === PACING_DETAIL)?.detail as { decisions: Array<{ reason: string }> };
     expect(detail.decisions[0]?.reason).toMatch(/account is not active/);
   });
 
@@ -318,7 +318,7 @@ describe("campaign pipeline", () => {
 
     await runCampaignTick(db.asDb(), queues, NOW);
 
-    const detail = db.rows("worker_heartbeats")[0]?.detail as { decisions: Array<{ reason: string }> };
+    const detail = db.rows("worker_heartbeats").find((h) => h.name === PACING_DETAIL)?.detail as { decisions: Array<{ reason: string }> };
     expect(detail.decisions[0]?.reason).toMatch(/nobody left to invite/);
   });
 
@@ -327,9 +327,9 @@ describe("campaign pipeline", () => {
 
     await runCampaignTick(db.asDb(), queues, NOW);
 
-    const detail = db.rows("worker_heartbeats")[0]?.detail as {
-      enqueued: number;
-      decisions: Array<{ reason: string }>;
+    const detail = {
+      ...(db.rows("worker_heartbeats").find((h) => h.name === PACING_LOOP)?.detail as { enqueued: number }),
+      ...(db.rows("worker_heartbeats").find((h) => h.name === PACING_DETAIL)?.detail as { decisions: Array<{ reason: string }> }),
     };
     expect(detail.enqueued).toBe(1);
     expect(detail.decisions[0]?.reason).toMatch(/queued 1 invitation/);
@@ -346,7 +346,7 @@ describe("campaign pipeline", () => {
 
     await runCampaignTick(db.asDb(), queues, NOW);
 
-    const detail = db.rows("worker_heartbeats")[0]?.detail as { queue: { failed: number; delayed: number } };
+    const detail = db.rows("worker_heartbeats").find((h) => h.name === PACING_LOOP)?.detail as { queue: { failed: number; delayed: number } };
     expect(detail.queue.failed).toBe(1);
     expect(detail.queue.delayed).toBe(4);
   });
@@ -363,7 +363,7 @@ describe("campaign pipeline", () => {
     const count = await runCampaignTick(db.asDb(), queues, NOW);
 
     expect(count).toBe(1);
-    const detail = db.rows("worker_heartbeats")[0]?.detail as { queue: { counts: string } };
+    const detail = db.rows("worker_heartbeats").find((h) => h.name === PACING_LOOP)?.detail as { queue: { counts: string } };
     expect(detail.queue.counts).toBe("redis gone");
   });
 
@@ -554,6 +554,53 @@ describe("campaign pipeline", () => {
 
     expect(linkedin.sentMessages).toHaveLength(0);
     expect(db.rows("conversations")[0]?.needs_human_kind).toBe("copy");
+  });
+
+  it("holds a follow-up that pastes the call to action's label like a button", async () => {
+    // "If yes, Book a Free Consultation and pick a time" went to real people.
+    const { db, ctx, linkedin } = harness();
+    db.rows("campaigns")[0]!.cta_kind = "link";
+    db.rows("campaigns")[0]!.cta_label = "Book a Free Consultation";
+    db.rows("campaigns")[0]!.cta_url = "https://acme.test/consult";
+    db.rows("campaign_steps")[0]!.message = "If yes, Book a Free Consultation and pick a time: {{cta_link}}";
+    db.find("campaign_prospects", { id: CP })!.status = "accepted";
+
+    await runLinkedInAction(ctx, { kind: "follow_up", workspaceId: WORKSPACE, campaignProspectId: CP, stepNumber: 1 });
+
+    expect(linkedin.sentMessages).toHaveLength(0);
+    expect(db.rows("conversations")[0]?.needs_human_kind).toBe("copy");
+    expect(db.find("campaign_prospects", { id: CP })?.status).toBe("accepted");
+  });
+
+  it("never holds a follow-up for a label inside the approved pitch", async () => {
+    // A pitch is approved text the repair never rewrites (rule 40); holding on
+    // it would hold every follow-up for good while pointing at the step.
+    const { db, ctx, linkedin } = harness();
+    db.rows("campaigns")[0]!.cta_kind = "link";
+    db.rows("campaigns")[0]!.cta_label = "Free Growth Audit";
+    db.rows("campaigns")[0]!.cta_url = "https://acme.test/audit";
+    db.rows("campaign_steps")[0]!.message = "{{pitch}} Worth a look?";
+    db.find("campaign_prospects", { id: CP })!.status = "accepted";
+    db.seed("pitches", [
+      { id: "pt", workspace_id: WORKSPACE, agent_id: null, body: "A Free Growth Audit shows where leads leak.", approved_at: NOW.toISOString(), is_default: true },
+    ]);
+
+    await runLinkedInAction(ctx, { kind: "follow_up", workspaceId: WORKSPACE, campaignProspectId: CP, stepNumber: 1 });
+
+    expect(linkedin.sentMessages[0]?.text).toBe("A Free Growth Audit shows where leads leak. Worth a look?");
+  });
+
+  it("sends the same ask written in plain words", async () => {
+    const { db, ctx, linkedin } = harness();
+    db.rows("campaigns")[0]!.cta_kind = "link";
+    db.rows("campaigns")[0]!.cta_label = "Book a Free Consultation";
+    db.rows("campaigns")[0]!.cta_url = "https://acme.test/consult";
+    db.rows("campaign_steps")[0]!.message = "If it's worth a look, happy to grab 20 minutes? {{cta_link}}";
+    db.find("campaign_prospects", { id: CP })!.status = "accepted";
+
+    await runLinkedInAction(ctx, { kind: "follow_up", workspaceId: WORKSPACE, campaignProspectId: CP, stepNumber: 1 });
+
+    expect(linkedin.sentMessages[0]?.text).toBe("If it's worth a look, happy to grab 20 minutes? https://acme.test/consult");
   });
 
   it("uses our own booking page when a meeting campaign has no destination", async () => {
@@ -1853,7 +1900,7 @@ describe("when LinkedIn refuses an invitation", () => {
 
     // And says which no it is. "Nothing queued" is what this loop says at two
     // in the morning too.
-    const beat = db.rows("worker_heartbeats").find((h) => h.name === PACING_LOOP);
+    const beat = db.rows("worker_heartbeats").find((h) => h.name === PACING_DETAIL);
     const reasons = JSON.stringify((beat?.detail as { decisions?: unknown })?.decisions ?? []);
     expect(reasons).toMatch(/temporarily refusing/i);
   });

@@ -54,6 +54,17 @@ describe("releaseDuplicateAccounts", () => {
     expect(linkedin.deletedAccounts).toEqual([]);
   });
 
+  it("never matches on a display name when the provider gives no reference", async () => {
+    // The provider's account list carries the LinkedIn name and no
+    // reference: two people called Phil Whitebloom are not each other's twin.
+    const { ctx, linkedin } = harness([held], [
+      { providerAccountId: "yq9", reference: "", displayName: "Phil Whitebloom", status: "ok" },
+      { providerAccountId: "stranger", reference: "", displayName: "Phil Whitebloom", status: "ok" },
+    ]);
+    await releaseDuplicateAccounts(ctx);
+    expect(linkedin.deletedAccounts).toEqual([]);
+  });
+
   it("leaves alone anybody part-way through connecting", async () => {
     const { ctx, linkedin } = harness(
       [held, { id: "row2", workspace_id: "w2", user_id: PHIL, provider_account_id: null, status: "connecting" }],

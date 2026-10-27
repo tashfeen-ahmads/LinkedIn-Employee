@@ -356,7 +356,15 @@ tests that were verified by deliberately breaking the code.
     It also carries `inFlight`, today's queued invitations per account and
     campaign, which the campaign page nets off the "more today" it promises;
     reading them out of the decision sentences was a second reading capped at
-    twenty campaigns.
+    twenty campaigns. The decisions and `inFlight` are written to
+    `campaign-tick:detail` (`PACING_DETAIL`), which only platform admins read,
+    never to the row every member can: they name every workspace's campaigns.
+    A member gets their own account's count through `pacing_in_flight`
+    (migration 0059), whose membership check is the whole authorisation, and
+    `/app/system` shows only the caller's own campaigns' decisions. The page
+    never promises more today than the day's allowance less what was sent,
+    because the stamp can be minutes old and count a sent invitation as
+    queued.
 
     A job's due time is the `dueAt` it carries (`jobDueAt`), written when it
     is placed and again by every reschedule (`rescheduleJob`). BullMQ's
@@ -583,6 +591,12 @@ tests that were verified by deliberately breaking the code.
     a visible `{{cta_link}}` is caught on the review screen. Visible on the
     screen, never in the send: a follow-up whose rendered text still carries
     any `{{…}}` is held as copy (rule 66).
+
+    **The label is a button's name, never a sentence.** "If yes, Book a Free
+    Consultation and pick a time:" is what a writer told `Name it as "<label>"`
+    produces. The writer asks in plain words, `titleCaseCta` flags the label
+    pasted mid-sentence, the send path holds a follow-up that still carries
+    it (as copy, rule 66), and the label never goes into a campaign's name.
 
     **Clicks are not measured and never will be.** It would mean wrapping the
     customer's URL in a redirect we own, which breaks the affiliate and tracking
@@ -911,6 +925,16 @@ tests that were verified by deliberately breaking the code.
     everybody in the batch receives the same sentence. They are **shapes to lean
     on and never text to paste**, which is what the prompt says and what rule 16
     already required of every note.
+
+    **An opener belongs to its audience.** Once one opener was approved it
+    replaced every strategy's own, so recruiters were asked "do founders still
+    run outbound where you hire". The angle's attached opener and the
+    strategy's own lead; agent and workspace openers go to the writer only as
+    `otherOpeners`, to use where their question fits the person.
+    `openerProblems` (`packages/shared/src/voice.ts`) refuses a note that
+    borrows five words running from another audience's opener or pastes its
+    own; a campaign built from an existing list gets a note written for each
+    person at build time, never the agent's opener pasted for everyone.
 
     A campaign step carries `{{pitch}}` rather than a copy of the words, for
     rule 36's reason: a business that retyped its offer into each campaign would
@@ -1273,6 +1297,13 @@ tests that were verified by deliberately breaking the code.
     nothing on any screen could explain why a three-week-old connection still
     sits at the starting cap.
 
+    The overview carries the short version (`AccountSafety`: today's and the
+    last seven days' invitations against their caps, and the ramp in one
+    sentence); every meter and the charts are on `/app/analytics` (Results),
+    read through the same `readAllowance`, so the two cannot disagree. The
+    overview is for somebody who does not run outreach for a living: counts
+    before percentages, and no chart a layperson has to decode.
+
     `StackedDays` answers "are we sending" and "is it working" in one column per
     day, because reading them off two charts means eyeballing one date against
     another. The empty days keep their slots: dropping them joins Friday to
@@ -1600,7 +1631,8 @@ tests that were verified by deliberately breaking the code.
     every claim) deletes a spare only when no row holds it, it carries the
     same person's label as a held account, that held account is healthy, and
     nobody with that label is part-way through connecting. A spare labelled
-    with another person's user id is never anybody's twin.
+    with another person's user id is never anybody's twin, a spare with no
+    reference at all is nobody's, and a display name never matches (rule 8).
 
 64. **The day's pace is held at the moment of sending, not only when a job is
     placed.** Rule 48 spread a day's invitations when the loop placed them, and
@@ -1772,6 +1804,13 @@ tests that were verified by deliberately breaking the code.
     problems is rewritten **once**, handed the exact list. `tidyVoice` makes
     only edits that cannot change meaning, and nothing is ever truncated.
 
+    **Nothing is offered that cannot be sent.** "Want a two sentence example?"
+    and "can I send a quick checklist?" promised things no knowledge document
+    held, so a yes could not be answered. `offeredAsset` flags an offered
+    example, checklist, guide, template, audit or case study unless a
+    knowledge title, the CTA label or its URL path names it (a link's host
+    never counts), and the writers are told what exists to send.
+
     What still fails is never sent quietly: a reply is held for a person, a
     personal note is left out so the angle's reviewed note goes instead, a
     campaign records `campaign.voice_problems` for its reviewer, and a
@@ -1870,6 +1909,13 @@ tests that were verified by deliberately breaking the code.
     ended conversation, the pause, the plan and the limiter at the moment of
     sending.
 
+    **Each activity has its own switch**, on one page (Profile → LinkedIn
+    activity): likes (`engage_posts`), comments (`engage_comments`) and
+    publishing approved posts (`publish_posts`, migration 0058), plus profile
+    views before inviting, which new campaigns take from the workspace. Each
+    is read again on the send path. A workspace that had turned the old shared
+    switch off keeps comments off.
+
     Likes and comments have their own allowances (25 and 5 a day, 2 a day in an
     account's first fortnight), counted in the same statement as every other
     action (rule 2), and neither starts the invitation ramp (rule 3). A day's
@@ -1906,7 +1952,12 @@ tests that were verified by deliberately breaking the code.
   structured outputs reject optional keys.
 - Every sent message records the `prompt_version` that produced it, so a
   regression traces back to the change that caused it. Bump the version
-  constant when you edit a prompt.
+  constant when you edit a prompt. A follow-up records the version stored on
+  its own step (`campaign_steps.prompt_version`, migration 0059), never the
+  build's current one: the writer stamps it, the nightly repair stamps its
+  revision, and a person's edit clears it.
+- `launched_at` is the first launch and is stamped once (`.is("launched_at",
+  null)`); a resume sets the status only.
 - Prompt-cache the stable context (business profile, customer profile, rep bio)
   and leave the varying part after the breakpoint. `/app/usage` shows whether
   it is working; a low cached share there means a breakpoint moved.
@@ -1929,6 +1980,14 @@ worth knowing: PostgREST returns the related row, the fake cannot, and for a
 while it returned the parent row without it — so the caller silently took its
 "no such record" branch and the tests were green and wrong. It now throws. Select
 the foreign key and fetch the related rows separately, as `digest.ts` does.
+
+`apps/worker/test/value-flow.test.ts` runs the whole journey — setup answers,
+Sage, approval, search, notes, launch, sends, acceptance, follow-ups, a reply,
+booking, likes and comments — through the real job functions with a fake model
+that records every prompt, and asserts each answer lands where it is used.
+Unit tests pass while a value is dropped between two stages; this suite is
+what catches it. When a stage starts reading a new setting, add the
+assertion here.
 
 When you add a test for a safety rule, add a mutation to
 `scripts/mutation-check.mjs` too. It breaks each rule on purpose and requires

@@ -58,8 +58,16 @@ export function inviteRoom(input: InviteRoomInput): InviteRoom {
   const budget = Math.max(0, Math.min(accountCap, weeklyLeft, campaignLeft));
   // Its own queued invitations still go today, but never more than its cap
   // and the account's day allow.
+  // The queue counts come from the loop's last stamp, which can be minutes
+  // old: an invitation it counted as queued may already be in the sent count,
+  // and adding both would promise more than the day holds.
   const own = Math.max(0, n(input.campaignInFlightToday));
-  return { accountCap, weeklyLeft, campaignLeft, budget, moreToday: budget + own };
+  const dayLeft = Math.max(0, n(input.dayAllowance) - n(input.accountSentToday));
+  const capLeft =
+    input.campaignCap === Number.POSITIVE_INFINITY
+      ? Number.POSITIVE_INFINITY
+      : Math.max(0, n(input.campaignCap) - n(input.campaignSentToday));
+  return { accountCap, weeklyLeft, campaignLeft, budget, moreToday: Math.min(budget + own, dayLeft, capLeft) };
 }
 
 /**

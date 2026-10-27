@@ -1,4 +1,4 @@
-import { buildCampaign, personalizeInvites, scoreProspects } from "@le/agents";
+import { buildCampaign, CAMPAIGN_PROMPT_VERSION, personalizeInvites, scoreProspects } from "@le/agents";
 import type { ProspectCandidate } from "@le/shared";
 import {
   BusinessProfileSchema,
@@ -15,11 +15,12 @@ import {
 } from "@le/shared";
 import { describeRefusal, isAccountGone, isSalesNavigatorFallbackNote } from "@le/linkedin";
 import { markAccountGone } from "../accounts.js";
-import { agentForCampaign, modelFor, openersFor, voiceOf } from "../agent.js";
+import { agentById, agentForCampaign, modelFor, openersFor, voiceOf } from "../agent.js";
 import { brandOf, withBrand } from "../brand.js";
 import type { WorkerContext } from "../context.js";
 import { recordEvent } from "../context.js";
 import { loadExclusions } from "../exclusions.js";
+import { knowledgeFor } from "../knowledge.js";
 import type { TargetingJob } from "../queues.js";
 
 
@@ -519,13 +520,27 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
   // The copy is written for the brand of the agent this campaign will run on
   // (the workspace default, assigned below). The scorer above kept the
   // strategy's own business: who would buy is the strategy's question.
-  const planBusiness =
-    withBrand(business, await brandOf(db, job.workspaceId, await defaultAgentId(ctx, job.workspaceId))) ?? business;
+  const planAgentId = await defaultAgentId(ctx, job.workspaceId);
+  const planBusiness = withBrand(business, await brandOf(db, job.workspaceId, planAgentId)) ?? business;
+  // What a "yes" could actually be handed: the titles of the knowledge this
+  // agent reads. A step may offer an example or a checklist only when one of
+  // these names it; otherwise the offer is a promise nobody can keep. A read
+  // that fails leaves the list empty, which only makes the check stricter.
+  const planAssets = (await knowledgeFor(db, job.workspaceId, planAgentId).catch(() => []))
+    .map((doc) => doc.title?.trim() ?? "")
+    .filter(Boolean);
+  // The voice the rep gave the agent (setup's voice step, Profile), so the
+  // follow-ups sound like the same person as the invitation note. Without it
+  // the note was written in their voice and every message after it in none.
+  const planAgent = planAgentId ? await agentById(db, planAgentId) : null;
   const askForPlan = () =>
     buildCampaign(ctx.agentsFor(job.workspaceId), {
       business: planBusiness,
       profile,
-      repName,
+      // The name a prospect reads is the agent's when it has one, exactly as
+      // the invitation note's is.
+      repName: planAgent?.fromName?.trim() || repName,
+      voice: voiceOf(planAgent),
       dailyInviteCap: Math.min(LINKEDIN_LIMITS.invitesPerDayMax, 20),
       // Inherited from the strategy, because the copy is written toward the
       // ask. Changing it afterwards on the campaign leaves a sequence whose
@@ -535,6 +550,7 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
         label: profileRow.cta_label,
         url: profileRow.cta_url,
       },
+      assets: planAssets,
     });
 
   let plan: Awaited<ReturnType<typeof buildCampaign>>;
@@ -603,6 +619,9 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
       // lists this campaign under it and a corrected URL reaches it (rule 36).
       cta_id: profileRow.cta_id ?? null,
       daily_invite_cap: plan.dailyInviteCap,
+      // The workspace's "view profiles before inviting" switch, set once on
+      // the LinkedIn activity page; a campaign built here follows it.
+      warm_up: (wsRow?.onboarding as { warmUp?: unknown } | null)?.warmUp === true,
       // The reply gate holds every message on an `approval` campaign whatever
       // its autonomy says, so "answers on its own" has to set the mode too or
       // it changes nothing.
@@ -698,6 +717,7 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
       step_number: index + 1,
       delay_days: stepDelay(index + 1, step.delayDays),
       message: step.message,
+      prompt_version: CAMPAIGN_PROMPT_VERSION,
     })),
     ...plannedVariants.flatMap((variant) => {
       const variantId = variantIdByName.get(variant.name);
@@ -709,6 +729,7 @@ async function targeting(ctx: WorkerContext, job: TargetingJob): Promise<string 
         step_number: index + 1,
         delay_days: stepDelay(index + 1, step.delayDays),
         message: step.message,
+        prompt_version: CAMPAIGN_PROMPT_VERSION,
       }));
     }),
   ]);
@@ -871,22 +892,38 @@ async function loadHooks(
   return { byVariantId, all: agentOpeners.length ? agentOpeners : [...bodyById.values()] };
 }
 
-function groupByAngle(
+export function groupByAngle(
   insertedProspects: Array<{ id: string }>,
   variantByProspectId: Map<string, { id: string; angle: string } | null>,
   providerIdByProspectId: Map<string, string>,
-  input: { campaignAngle: string; shortlist: Array<{ candidate: ProspectCandidate }> },
+  input: {
+    campaignAngle: string;
+    shortlist: Array<{ candidate: ProspectCandidate }>;
+    /** The strategy's own openers, written for the people this search found. */
+    profile?: { hooks?: string[] };
+  },
   /**
    * The approved openers, and which angle owns which.
    *
-   * The angle's own leads, then the rest of the approved set: the writer picks
-   * whichever fits the person in front of it, and being handed one line only
-   * would make it a template again.
+   * What a group leads with is what was written for it: the angle's own
+   * attached opener, then the strategy's own. The agent's and the workspace's
+   * approved openers are not tied to any strategy, so they go over as
+   * `otherOpeners`, optional shapes the writer may use only where the question
+   * applies to the person. They used to replace the strategy's openers the
+   * moment one was approved, and a line written for founders then opened every
+   * invitation to recruiters and brokers as well.
    */
   hooks: { byVariantId: Map<string, string>; all: string[] } = { byVariantId: new Map(), all: [] },
-): Array<{ angle: string; hooks: string[]; prospects: ProspectCandidate[] }> {
+): Array<{ angle: string; hooks: string[]; otherOpeners: string[]; sharedOpeners: string[]; prospects: ProspectCandidate[] }> {
   const candidateByProviderId = new Map(input.shortlist.map((r) => [r.candidate.providerId, r.candidate]));
-  const groups = new Map<string, { angle: string; hooks: string[]; prospects: ProspectCandidate[] }>();
+  const strategyOpeners = (input.profile?.hooks ?? []).map((line) => line.trim()).filter(Boolean);
+  // An opener attached to an angle belongs to that angle's audience; one
+  // attached to none is this business's own line, for any audience it fits.
+  const attached = new Set(hooks.byVariantId.values());
+  const groups = new Map<
+    string,
+    { angle: string; hooks: string[]; otherOpeners: string[]; sharedOpeners: string[]; prospects: ProspectCandidate[] }
+  >();
 
   for (const p of insertedProspects) {
     const candidate = candidateByProviderId.get(providerIdByProspectId.get(p.id) ?? "");
@@ -894,11 +931,14 @@ function groupByAngle(
     const variant = variantByProspectId.get(p.id) ?? null;
     const key = variant?.id ?? "none";
     const own = variant ? hooks.byVariantId.get(variant.id) : undefined;
+    const lead = own ? [own, ...strategyOpeners.filter((line) => line !== own)] : strategyOpeners;
     const group =
       groups.get(key) ??
       {
         angle: variant?.angle ?? input.campaignAngle,
-        hooks: own ? [own, ...hooks.all.filter((line) => line !== own)] : hooks.all,
+        hooks: lead,
+        otherOpeners: hooks.all.filter((line) => attached.has(line) && !lead.includes(line)),
+        sharedOpeners: hooks.all.filter((line) => !attached.has(line) && !lead.includes(line)),
         prospects: [],
       };
     group.prospects.push(candidate);
@@ -1195,14 +1235,17 @@ async function attachProspects(
         // mailshot.
         repName: agent?.fromName?.trim() || input.repName,
         campaignAngle: group.angle,
-        // The openers a person approved, with this angle's own leading.
-        //
-        // Read from `hooks` rather than from the strategy's jsonb: a line that
-        // reaches real people has to be approvable, retirable and attachable
-        // on its own, and inside a spec none of those are possible. The
-        // strategy's own hooks are the fallback, so a workspace that has not
-        // written openers yet keeps exactly the behaviour it had.
+        // What was written for these people leads: the angle's own attached
+        // opener, then the strategy's own. An opener attached to another
+        // angle was written for another audience (`otherOpeners`): a note
+        // borrowing its words is rewritten. One attached to none is this
+        // business's own line (`sharedOpeners`): its shape may be used where
+        // it fits, never its words. Replacing the strategy's openers with
+        // them sent a founders question to every recruiter on the staffing
+        // campaign.
         hooks: group.hooks.length ? group.hooks : input.profile.hooks,
+        otherOpeners: group.otherOpeners,
+        sharedOpeners: group.sharedOpeners,
         voice: voiceOf(agent),
         model: chosenModel.model,
         prospects: group.prospects,

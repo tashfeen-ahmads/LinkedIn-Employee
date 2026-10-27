@@ -110,6 +110,20 @@ describe("launch never changes how replies are handled", () => {
     expect(update.payload).not.toHaveProperty("reply_mode");
   });
 
+  it("stamps the launch date only on the first launch, never on a resume", async () => {
+    // Refill's day of grace reads it; a resume restamping it held a drained
+    // campaign's refill off for a day.
+    const db = launchDb({ rules: { autonomy: "supervised" }, reply_mode: "approval" });
+    h.client = db.client;
+    await launch("c1", { workspaceId: WS, userId: "u" });
+    const stamp = db.calls.find(
+      (c) => c.table === "campaigns" && c.op === "update" && (c.payload as { launched_at?: string }).launched_at,
+    )!;
+    expect(stamp.filters).toContainEqual(["is", "launched_at", null]);
+    const running = db.calls.find((c) => c.table === "campaigns" && c.op === "update")!;
+    expect(running.payload).not.toHaveProperty("launched_at");
+  });
+
   it("leaves a supervised campaign's mode alone", async () => {
     const db = launchDb({ rules: { autonomy: "supervised" }, reply_mode: "autopilot" });
     h.client = db.client;

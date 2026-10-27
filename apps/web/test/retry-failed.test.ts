@@ -45,7 +45,7 @@ describe("restoreFromFailure", () => {
   it("is what the Retry failed action actually uses", () => {
     // Rule 39's lesson: the bug lived in the call site. A correct helper that
     // the button never calls fixes nothing.
-    const page = readFileSync(join(__dirname, "../src/app/app/campaigns/[id]/page.tsx"), "utf8");
+    const page = readFileSync(join(__dirname, "../src/app/app/campaigns/[id]/actions.ts"), "utf8");
     const action = page.slice(page.indexOf("async function retryFailed"), page.indexOf("async function", page.indexOf("async function retryFailed") + 10));
     expect(action).toContain("restoreFromFailure(");
     expect(action).not.toMatch(/update\(\{ status: "queued"/);

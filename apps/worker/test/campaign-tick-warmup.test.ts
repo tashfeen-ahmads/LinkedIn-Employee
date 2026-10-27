@@ -190,7 +190,7 @@ describe("the loop deciding whether to warm", () => {
 
     await runCampaignTick(db.asDb(), queues, NOW);
 
-    const beat = db.rows("worker_heartbeats").find((row) => row.name === "campaign-tick");
+    const beat = db.rows("worker_heartbeats").find((row) => row.name === "campaign-tick:detail");
     const detail = JSON.stringify(beat?.detail ?? {});
     expect(detail).toContain("holding the warm-up");
   });

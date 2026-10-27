@@ -220,7 +220,7 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
   return (
     <>
       <PageHeader
-        eyebrow="Pipeline"
+        eyebrow="Setup"
         title="Agents"
         lede="An agent is everything a prospect reads: how it writes, what it opens with, what it offers, and what it is trying to find out. A campaign picks one."
         /*
@@ -327,6 +327,28 @@ export default async function AgentsPage({ searchParams }: { searchParams: Promi
             </table>
           </div>
         )}
+      </Section>
+
+      {/*
+        The libraries every agent draws on. They left the sidebar so a new
+        customer reads two setup links rather than five, and they are reached
+        from here, where somebody shaping how the agent sounds goes looking.
+      */}
+      <Section id="libraries" title="What your agents use">
+        <div className="agent-libraries">
+          <Link className="agent-library" href="/app/pitch">
+            <strong>Opener and pitch</strong>
+            <span className="small muted">The lines each message leans on. Approve them one at a time.</span>
+          </Link>
+          <Link className="agent-library" href="/app/cta">
+            <strong>Calls to action</strong>
+            <span className="small muted">The links and asks a campaign can end on.</span>
+          </Link>
+          <Link className="agent-library" href="/app/knowledge">
+            <strong>Knowledge</strong>
+            <span className="small muted">Facts about your business the agent may quote.</span>
+          </Link>
+        </div>
       </Section>
 
       {(retired ?? []).length ? (

@@ -51,6 +51,15 @@ const PATHS: Record<string, React.ReactNode> = {
       <rect x="3" y="14" width="7" height="7" rx="1.5" />
     </>
   ),
+  /* Results — three bars on a baseline. */
+  results: (
+    <>
+      <path d="M4 20h16" />
+      <path d="M7 16v-5" />
+      <path d="M12 16V6" />
+      <path d="M17 16v-8" />
+    </>
+  ),
   /* Inbox — a tray with the slot a message drops into. */
   inbox: (
     <>
@@ -63,6 +72,14 @@ const PATHS: Record<string, React.ReactNode> = {
     <>
       <path d="m21.5 2.5-9 19-3-8-8-3 20-8Z" />
       <path d="m21.5 2.5-12 11" />
+    </>
+  ),
+  /* Opportunities — conversations going somewhere. It borrowed the
+     campaigns glyph, so two rows of the rail looked like the same place. */
+  opportunities: (
+    <>
+      <path d="M3 17l6-6 4 4 8-8" />
+      <path d="M15 7h6v6" />
     </>
   ),
   /* Strategies — who to go after. */

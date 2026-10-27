@@ -21,8 +21,10 @@ function harness(
   posts: Array<Record<string, unknown>>,
   accountStatus = "active",
   rep: { working_hours?: unknown; timezone?: string } = {},
+  publishPosts = true,
 ) {
   const db = new FakeDb();
+  db.seed("workspaces", [{ id: WS, publish_posts: publishPosts }]);
   db.seed("linkedin_posts", posts);
   db.seed("linkedin_accounts", [
     {
@@ -187,5 +189,32 @@ describe("publishApprovedPosts", () => {
     // Verbatim, because that sentence is the most useful thing in the failure
     // and it used to go to a log nobody reading the screen can reach.
     expect(row?.error).toContain("422");
+  });
+});
+
+describe("the workspace's publishing switch", () => {
+  it("publishes nothing while it is off, and keeps the post approved for later", async () => {
+    const { db, linkedin, ctx } = harness([approved()], "active", {}, false);
+    const result = await publishApprovedPosts(ctx, NOW);
+    expect(result.published).toBe(0);
+    expect(linkedin.publishedPosts).toHaveLength(0);
+    expect(db.rows("linkedin_posts")[0]?.status).toBe("approved");
+  });
+
+  it("never lets a switched-off workspace's posts crowd out everybody else's", async () => {
+    // The sweep reads the oldest approved posts; held rows that stay approved
+    // would fill that window every run and stop publishing for everyone.
+    const OTHER = "99999999-9999-4999-8999-999999999999";
+    const crowd = Array.from({ length: 3 }, (_, i) =>
+      approved({ id: `off-${i}`, workspace_id: OTHER, scheduled_for: `2026-10-0${i + 1}T09:00:00Z` }),
+    );
+    const { db, linkedin, ctx } = harness([...crowd, approved({ id: "mine", scheduled_for: "2026-10-04T10:00:00Z" })]);
+    db.seed("workspaces", [{ id: OTHER, publish_posts: false }]);
+
+    const out = await publishApprovedPosts(ctx, NOW, 3);
+
+    expect(out.published).toBe(1);
+    expect(linkedin.publishedPosts).toHaveLength(1);
+    expect(db.find("linkedin_posts", { id: "mine" })?.status).toBe("published");
   });
 });

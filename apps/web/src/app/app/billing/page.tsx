@@ -1,16 +1,20 @@
 import { redirect } from "next/navigation";
+import { forwardQuery } from "@/lib/forward-query";
 
 /**
  * The old route, kept working.
  *
- * Team, billing and the rep's own details are one screen now: somebody
- * managing a workspace does all three in the same sitting, and three tabs
- * meant three places to find and three saves to remember. Every link,
- * bookmark and email that pointed here still lands somewhere sensible.
+ * Billing is a section of the profile now (`/app/profile/billing`). Every
+ * link, bookmark and email that pointed here still lands on it, with its
+ * query string, so a `?checkout=` answer is never dropped on the way.
  *
  * The section itself lives in `profile/billing-section.tsx`, because Next
  * refuses any export from a `page.tsx` other than the page.
  */
-export default async function BillingPage() {
-  redirect("/app/profile#billing");
+export default async function BillingPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  redirect(`/app/profile/billing${forwardQuery(await searchParams)}`);
 }

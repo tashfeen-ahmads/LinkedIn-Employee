@@ -4,15 +4,15 @@ import Link from "next/link";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { callWorker, errorQuery, noticeQuery } from "@/lib/worker";
-import { describeClaim } from "./claim";
 import { linkedInState } from "./linkedin-state";
+import { PROFILE_SECTIONS } from "./sections";
 import { CopyButton } from "@/components/copy-button";
 import { PLAN_SEATS, trialLimitEnforced } from "@le/billing";
 
 /** Members a workspace may hold while the product is free. */
 const FREE_MEMBER_LIMIT = 25;
 import { createInviteToken, inviteExpiry, INVITE_TTL_DAYS } from "@/lib/invitations";
-import { PageHeader, Section, Empty } from "@/components/page";
+import { Section, Empty } from "@/components/page";
 import { cannotSend } from "../team/repair";
 import { SITE } from "@/lib/site";
 import { SubmitButton } from "@/components/submit-button";
@@ -23,15 +23,17 @@ import { countersForToday } from "@/lib/account-day";
 import type { AccountRecord } from "@le/linkedin";
 
 /**
- * Where a team action reports back: the profile screen, at the team section.
+ * Where a team action reports back: the profile's Team section, by its own
+ * address.
  *
- * These actions redirected to `/app/team?error=…`, and `/app/team` redirects
- * to `/app/profile#team` — dropping the query on the way, so every refusal
- * and every "the email was not sent" was said to nobody. The fragment goes
- * after the query, or the browser treats the query as part of the anchor.
+ * These actions redirected to `/app/team?error=…`, and `/app/team` redirected
+ * to `/app/profile#team` — dropping the query on the way, so every refusal and
+ * every "the email was not sent" was said to nobody. Then they carried the
+ * query to `/app/profile` with the anchor after it. Team is a section with its
+ * own route now, so the answer goes straight there and needs no anchor at all.
  */
 function teamQuery(build: (path: string, message: string) => string, message: string): string {
-  return `${build("/app/profile", message)}#team`;
+  return build(PROFILE_SECTIONS.team, message);
 }
 
 /**
@@ -135,7 +137,7 @@ async function inviteMember(formData: FormData) {
     // `delivered: false` rather than an error. Reading only `ok` reported that
     // as sent, and the colleague waited for an email that never existed.
     if (sent.data?.delivered === false) {
-      revalidatePath("/app/profile");
+      revalidatePath("/app/profile", "layout");
       redirect(
         teamQuery(
           noticeQuery,
@@ -145,7 +147,7 @@ async function inviteMember(formData: FormData) {
     }
   }
 
-  revalidatePath("/app/profile");
+  revalidatePath("/app/profile", "layout");
   redirect(teamQuery(noticeQuery, `Invitation sent to ${email}.`));
 }
 
@@ -173,7 +175,7 @@ async function revokeInvitation(formData: FormData) {
   // Said either way. A revoke that failed quietly leaves a live link that
   // anyone holding it can still join with, while the list looks cleared.
   if (error) redirect(teamQuery(errorQuery, "That invitation is still live. Please try again."));
-  revalidatePath("/app/profile");
+  revalidatePath("/app/profile", "layout");
   const email = data?.[0]?.email;
   redirect(
     teamQuery(
@@ -195,56 +197,9 @@ function formatExpiry(value: string | null, timezone: string | null | undefined)
   return formatDate(value, timezone);
 }
 
-export async function TeamSection({
-  searchParams,
-}: {
-  searchParams: Promise<{ error?: string; notice?: string; connected?: string; account_id?: string }>;
-}) {
-  const params = await searchParams;
+export async function TeamSection() {
   const session = await requireSession();
   const supabase = await createClient();
-
-  /*
-   * The hosted flow comes back here, and the id it carries is the connection.
-   *
-   * The provider's accounts list returns nothing holding the identifier the
-   * hosted link was given — `name` is the LinkedIn profile's display name —
-   * so an account finished at the provider could not be tied to the rep who
-   * started it by asking. It can by being handed the id on the way back, which
-   * is what `account_id` on this redirect is, and the worker checks it against
-   * the provider and against the rep's own pending row before it binds.
-   *
-   * Done on arrival rather than behind a button: the rep has just finished
-   * signing in and believes they are connected. Anything they have to press
-   * after that is a step nobody told them about.
-   */
-  /*
-   * And it reports what actually happened, which it did not.
-   *
-   * The result was discarded and the redirect said "LinkedIn is connected." —
-   * in the green notice, unconditionally. So a claim the worker refused, or a
-   * provider it could not reach at all, produced a page telling the rep they
-   * were connected while the row sat at `connecting`. That is the exact
-   * report this product spent three days chasing: a screen that contradicts
-   * the database, with the reassuring half being the one somebody reads.
-   *
-   * There is no version of this worth showing as success. A refusal names
-   * something to do; a provider failure says plainly that it is ours.
-   */
-  if (params.connected && params.account_id) {
-    const claim = await callWorker<{ claimed?: boolean; reason?: string }>("/jobs/linkedin-claim", {
-      workspaceId: session.workspaceId,
-      userId: session.userId,
-      accountId: params.account_id,
-    });
-
-    const said = describeClaim(claim);
-    redirect(
-      said.tone === "notice"
-        ? noticeQuery("/app/profile", said.message)
-        : errorQuery("/app/profile", said.message),
-    );
-  }
 
   const [{ data: members }, { data: accounts }, { data: invitations }, { data: workspace }] =
     await Promise.all([
@@ -290,11 +245,10 @@ export async function TeamSection({
 
 
       {/*
-        Members and invitations are one section, not two.
-        Who is on this workspace and who has been asked to join are the same
-        question a minute apart — adding somebody and then looking for them in
-        a different card is a page describing its own storage rather than the
-        job. The invite form keeps its anchor so existing links still land.
+        Who is on the workspace first, then the way to add somebody, then who
+        has been asked. Three short sections under one menu item rather than
+        an invite form wedged between two tables: the form is a card with its
+        fields above one Send, and each list says what it is.
       */}
       <Section
         id="members"
@@ -346,7 +300,7 @@ export async function TeamSection({
                           {" "}
                           <Link
                             className="small"
-                            href="/app/profile#linkedin"
+                            href={PROFILE_SECTIONS.linkedin}
                             aria-label="Fix your LinkedIn connection"
                           >
                             Fix
@@ -363,95 +317,99 @@ export async function TeamSection({
           </table>
         </div>
 
+      </Section>
+
       {canManage ? (
         <>
-          <div className="stack-2" id="invites">
-            <h3>Invite somebody</h3>
-            <p className="small muted">
-              A link is valid for {INVITE_TTL_DAYS} days. Anyone holding it can join this
-              workspace, so send it the way you would send a password.
-            </p>
-          </div>
-          <div className="card">
-            <form action={inviteMember} className="form-row">
-              <label className="field grow">
-                <span>Email address</span>
-                <input
-                  type="email"
-                  name="email"
-                  placeholder="colleague@company.com"
-                  required
-                  autoComplete="off"
-                  spellCheck={false}
-                />
-              </label>
-              <label className="field compact-wide">
-                <span>Role</span>
-                <select name="role" defaultValue="rep">
-                  <option value="rep">Rep</option>
-                  <option value="manager">Manager</option>
-                  <option value="admin">Admin</option>
-                </select>
-              </label>
-              <SubmitButton pendingLabel="Sending…">Send invitation</SubmitButton>
+          <Section
+            id="invites"
+            title="Invite somebody"
+            description={`A link is valid for ${INVITE_TTL_DAYS} days. Anyone holding it can join this workspace, so send it the way you would send a password.`}
+          >
+            <form action={inviteMember} className="card profile-card profile-form">
+              <div className="profile-field-pair is-wide-first">
+                <label className="field">
+                  <span>Email address</span>
+                  <input
+                    type="email"
+                    name="email"
+                    placeholder="colleague@company.com"
+                    required
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                </label>
+                <label className="field">
+                  <span>Role</span>
+                  <select name="role" defaultValue="rep">
+                    <option value="rep">Rep</option>
+                    <option value="manager">Manager</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </label>
+              </div>
+              <div className="profile-form-foot">
+                <SubmitButton pendingLabel="Sending…">Send invitation</SubmitButton>
+              </div>
             </form>
-          </div>
+          </Section>
 
-          {invitations?.length ? (
-            <div className="table-scroll card-rows">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Email</th>
-                    <th>Role</th>
-                    <th>Expires</th>
-                    <th>Link</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {invitations.map((invitation) => (
-                    <tr key={invitation.id}>
-                      <td data-label="Email">{invitation.email}</td>
-                      <td data-label="Role" className="small">{label(invitation.role)}</td>
-                      <td data-label="Expires" className="small subtle">
-                        {/*
-                          `new Date(x).toLocaleDateString()` prints the literal
-                          words "Invalid Date" for anything it cannot parse,
-                          and puts them in a table cell on a customer's screen.
-                          A date we do not have is said as a dash, the way
-                          every other missing value on this page is.
-                        */}
-                        <time dateTime={isoAttr(invitation.expires_at)}>
-                          {formatExpiry(invitation.expires_at, myTimezone)}
-                        </time>
-                      </td>
-                      <td data-label="Link">
-                        <div className="row">
-                          <CopyButton value={`${appUrl}/invite/${invitation.token}`} />
-                          <form action={revokeInvitation}>
-                            <input type="hidden" name="invitationId" value={invitation.id} />
-                            <ConfirmButton
-                              confirmLabel={`Revoke ${invitation.email}'s link`}
-                              pendingLabel="Revoking…"
-                            >
-                              Revoke
-                            </ConfirmButton>
-                          </form>
-                        </div>
-                      </td>
+          <Section id="waiting" title="Waiting to join">
+            {invitations?.length ? (
+              <div className="table-scroll card-rows">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Email</th>
+                      <th>Role</th>
+                      <th>Expires</th>
+                      <th>Link</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <Empty title="Nobody is waiting to join">
-              An invitation sent here appears in this list until it is accepted or revoked.
-            </Empty>
-          )}
+                  </thead>
+                  <tbody>
+                    {invitations.map((invitation) => (
+                      <tr key={invitation.id}>
+                        <td data-label="Email">{invitation.email}</td>
+                        <td data-label="Role" className="small">{label(invitation.role)}</td>
+                        <td data-label="Expires" className="small subtle">
+                          {/*
+                            `new Date(x).toLocaleDateString()` prints the literal
+                            words "Invalid Date" for anything it cannot parse,
+                            and puts them in a table cell on a customer's screen.
+                            A date we do not have is said as a dash, the way
+                            every other missing value on this page is.
+                          */}
+                          <time dateTime={isoAttr(invitation.expires_at)}>
+                            {formatExpiry(invitation.expires_at, myTimezone)}
+                          </time>
+                        </td>
+                        <td data-label="Link">
+                          <div className="row">
+                            <CopyButton value={`${appUrl}/invite/${invitation.token}`} />
+                            <form action={revokeInvitation}>
+                              <input type="hidden" name="invitationId" value={invitation.id} />
+                              <ConfirmButton
+                                confirmLabel={`Revoke ${invitation.email}'s link`}
+                                pendingLabel="Revoking…"
+                              >
+                                Revoke
+                              </ConfirmButton>
+                            </form>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <Empty title="Nobody is waiting to join">
+                An invitation sent here appears in this list until it is accepted or revoked.
+              </Empty>
+            )}
+          </Section>
         </>
       ) : null}
-      </Section>
     </>
   );
 }

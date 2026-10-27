@@ -16,15 +16,28 @@ function followUp(campaignProspectId: string, stepNumber = 1) {
 }
 
 describe("a sent follow-up", () => {
-  it("records the campaign writer's prompt version for a campaign step", async () => {
+  it("records the prompt version stored on the step that was sent", async () => {
     const { db, ctx, prospect } = harness(NOW);
+    for (const step of db.rows("campaign_steps")) step.prompt_version = "targeting.campaign/2026-09-01";
     const id = prospect({ status: "accepted", next_action_at: new Date(NOW.getTime() - 60_000).toISOString() });
 
     await runLinkedInAction(ctx, followUp(id));
 
     const sent = db.rows("messages").filter((m) => m.direction === "outbound");
     expect(sent).toHaveLength(1);
-    expect(sent[0]!.prompt_version).toBe(CAMPAIGN_PROMPT_VERSION);
+    // The version that wrote these words, never the build's current constant.
+    expect(sent[0]!.prompt_version).toBe("targeting.campaign/2026-09-01");
+    expect(sent[0]!.prompt_version).not.toBe(CAMPAIGN_PROMPT_VERSION);
+  });
+
+  it("records no version for a step a person wrote or edited", async () => {
+    const { db, ctx, prospect } = harness(NOW);
+    for (const step of db.rows("campaign_steps")) step.prompt_version = null;
+    const id = prospect({ status: "accepted", next_action_at: new Date(NOW.getTime() - 60_000).toISOString() });
+
+    await runLinkedInAction(ctx, followUp(id));
+
+    expect(db.rows("messages").find((m) => m.direction === "outbound")!.prompt_version).toBeNull();
   });
 
   it("records the version the personal first message was written with", async () => {

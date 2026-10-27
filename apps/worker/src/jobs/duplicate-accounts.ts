@@ -60,7 +60,6 @@ export async function releaseDuplicateAccounts(ctx: WorkerContext): Promise<{ re
   if (rememberedError) return { released: 0, failed: 0 };
   const pending = new Set((remembered ?? []).map((r) => r.pending_provider_account_id as string));
 
-  const label = (a: ConnectedAccount) => (a.displayName || a.reference || "").trim().toLowerCase();
   const healthyHeld = accounts.filter((a) => heldBy.has(a.providerAccountId) && a.status === "ok");
 
   let released = 0;
@@ -68,14 +67,17 @@ export async function releaseDuplicateAccounts(ctx: WorkerContext): Promise<{ re
   const done: Array<{ released: string; kept: string }> = [];
   for (const spare of accounts) {
     if (heldBy.has(spare.providerAccountId) || pending.has(spare.providerAccountId)) continue;
-    const name = label(spare);
     const twin = healthyHeld.find((held) => {
       const owner = heldBy.get(held.providerAccountId);
       // The hosted flow labels an account with the rep's user id. A spare
       // labelled with somebody's id is that person's, and only that person's
       // twin; two different people who share a name are never each other's.
       if (UUID.test(spare.reference)) return spare.reference === owner?.user_id;
-      return (spare.reference && spare.reference === held.reference) || (name.length > 0 && name === label(held));
+      // Never by display name (rule 8): the provider's list carries the
+      // LinkedIn name, two people share names, and a match on it deleted a
+      // stranger's freshly connected account. A spare with no reference of
+      // its own is nobody's provable twin, so it is left alone.
+      return Boolean(spare.reference) && spare.reference === held.reference;
     });
     if (!twin) continue;
     const owner = heldBy.get(twin.providerAccountId);

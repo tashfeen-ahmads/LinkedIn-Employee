@@ -163,7 +163,7 @@ export default async function CtaPage({ searchParams }: { searchParams: NoticePa
   return (
     <>
       <PageHeader
-        eyebrow="Settings"
+        eyebrow="Setup"
         title="Calls to action"
         lede="What your campaigns ask for. Keep as many as you run: a campaign picks one, and changing a destination here changes it everywhere it is used."
       />
@@ -173,12 +173,12 @@ export default async function CtaPage({ searchParams }: { searchParams: NoticePa
       <Section
         id="add"
         title="Add one"
-        description="The goal decides what counts as success: a campaign sending a link is never reported as failing to book meetings."
+        description="A link to send, a call to book, or simply a reply. Name it once and any campaign can use it."
       >
         <div className="card">
           <form action={saveCta} className="stack-3">
-            <div className="form-row">
-              <label className="field grow">
+            <div className="form-grid">
+              <label className="field">
                 <span>Name it</span>
                 <input type="text" name="name" placeholder="Free teardown" maxLength={80} required />
                 <span className="hint">What you will recognize in a list of twenty.</span>
@@ -193,16 +193,14 @@ export default async function CtaPage({ searchParams }: { searchParams: NoticePa
                   ))}
                 </select>
               </label>
-            </div>
-            <div className="form-row">
-              <label className="field grow">
+              <label className="field">
                 <span>Destination</span>
                 <input type="url" name="url" placeholder="https://example.com/teardown" />
                 <span className="hint">
                   Needed for a link. Left empty for a meeting or a conversation.
                 </span>
               </label>
-              <label className="field grow">
+              <label className="field">
                 <span>How the message refers to it</span>
                 <input type="text" name="label" placeholder="a 5-minute teardown" maxLength={80} />
                 <span className="hint">Optional. The words that appear in the sentence.</span>
@@ -234,8 +232,8 @@ export default async function CtaPage({ searchParams }: { searchParams: NoticePa
                   */}
                   <form action={saveCta} className="stack-3">
                     <input type="hidden" name="id" value={cta.id} />
-                    <div className="form-row">
-                      <label className="field grow">
+                    <div className="form-grid">
+                      <label className="field">
                         <span>Name</span>
                         <input type="text" name="name" defaultValue={cta.name} maxLength={80} required />
                       </label>
@@ -254,9 +252,7 @@ export default async function CtaPage({ searchParams }: { searchParams: NoticePa
                           </span>
                         ) : null}
                       </label>
-                    </div>
-                    <div className="form-row">
-                      <label className="field grow">
+                      <label className="field">
                         <span>Destination</span>
                         <input
                           type="url"
@@ -266,25 +262,27 @@ export default async function CtaPage({ searchParams }: { searchParams: NoticePa
                         />
                         {cta.kind === "meeting" && !cta.url ? <span className="hint">Sends: {meetingGoesTo}</span> : null}
                       </label>
-                      <label className="field grow">
+                      <label className="field">
                         <span>How the message refers to it</span>
                         <input type="text" name="label" defaultValue={cta.label ?? ""} maxLength={80} />
                       </label>
                     </div>
-                    <div className="form-row">
+                    <p className="tiny subtle">
+                      {used.length === 0
+                        ? "Not used by any campaign yet."
+                        : `Used by ${used.length} campaign${used.length === 1 ? "" : "s"}: ${used.join(", ")}. Saving changes where all of them point.`}
+                    </p>
+                    {/* Save and Archive on one line at the card's foot. Archive
+                        belongs to its own form below, named by `form`. */}
+                    <div className="cluster">
                       <SubmitButton pendingLabel="Saving…">Save</SubmitButton>
-                      <span className="tiny subtle">
-                        {used.length === 0
-                          ? "Not used by any campaign yet."
-                          : `Used by ${used.length} campaign${used.length === 1 ? "" : "s"}: ${used.join(", ")}. Saving changes where all of them point.`}
-                      </span>
+                      <button className="btn ghost" type="submit" form={`archive-${cta.id}`}>
+                        Archive
+                      </button>
                     </div>
                   </form>
-                  <form action={archiveCta}>
+                  <form action={archiveCta} id={`archive-${cta.id}`} hidden>
                     <input type="hidden" name="id" value={cta.id} />
-                    <SubmitButton className="btn ghost small" pendingLabel="Archiving…">
-                      Archive
-                    </SubmitButton>
                   </form>
                 </article>
               );

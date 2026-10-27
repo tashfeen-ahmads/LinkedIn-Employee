@@ -32,10 +32,17 @@ export async function publishApprovedPosts(
    */
   workspaceId?: string,
 ): Promise<{ published: number; held: number; failed: number }> {
-  const query = ctx.db
+  // Workspaces that switched publishing off (migration 0058) are left out of
+  // the read itself, not skipped after it: their approved posts would
+  // otherwise fill the window every run and nobody else's would go out. An
+  // unreadable list publishes nothing, because a post goes to everyone at once.
+  const { data: off, error: offError } = await ctx.db.from("workspaces").select("id").eq("publish_posts", false);
+  if (offError) return { published: 0, held: 0, failed: 0 };
+  let query = ctx.db
     .from("linkedin_posts")
     .select("id, workspace_id, user_id, body, status, approved_at, scheduled_for, published_at")
     .eq("status", "approved");
+  if (off?.length) query = query.not("workspace_id", "in", `(${off.map((w) => w.id).join(",")})`);
   // The worker holds the service role, so RLS will not scope this — it has to
   // filter by workspace itself, exactly as every other job here does.
   const { data: rows } = await (workspaceId ? query.eq("workspace_id", workspaceId) : query)

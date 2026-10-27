@@ -9,7 +9,7 @@ import {
 } from "@le/shared";
 import { callStructured, type AgentContext } from "./client.js";
 
-export const REVISE_PROMPT_VERSION = "revise/2026-10-19";
+export const REVISE_PROMPT_VERSION = "revise/2026-10-27-deliverable";
 
 const REVISE_SYSTEM = `You rewrite one LinkedIn message that a salesperson already wrote, so that it reads like a busy person typed it to one other person.
 
@@ -18,6 +18,8 @@ Keep what it is for: the same reason for writing and the same ask. Make it short
 - Keep {{first_name}}, {{cta_link}} and {{pitch}} exactly as written wherever the original has them. Never add any other placeholder, and replace any other placeholder ({{company}}, [Name] and the like) with plain words.
 - Never add a fact, a number, a claim or a link that is not in the original.
 - A first message after somebody accepts a connection does not pitch and does not name the product. It says why you wrote and asks one easy question.
+- Never offer an example, a checklist, a guide, a template, an audit, a case study or a sample unless it is listed as something that exists. Where the original offers one that does not, ask a plain question instead.
+- Write a call to action in plain lowercase words ("happy to grab 20 minutes?"), never as a Title Case label like "Book a Free Consultation".
 
 ${VOICE_RULES}`;
 
@@ -40,9 +42,16 @@ function keeps(original: string, revised: string): boolean {
  */
 export async function reviseForVoice(
   ctx: AgentContext,
-  input: { text: string; kind: MessageKind; template: boolean },
+  input: {
+    text: string;
+    kind: MessageKind;
+    template: boolean;
+    /** What exists to offer, and the CTA's label: the same checks the writers ran. */
+    assets?: string[];
+    ctaLabel?: string | null;
+  },
 ): Promise<string | null> {
-  const options = { template: input.template };
+  const options = { template: input.template, assets: input.assets, ctaLabel: input.ctaLabel };
   let last = input.text;
   let problems = voiceProblems(tidyVoice(input.text), input.kind, options);
   if (!problems.length) return tidyVoice(input.text);
@@ -56,6 +65,9 @@ export async function reviseForVoice(
       system: [{ text: REVISE_SYSTEM, cached: true }],
       userContent: [
         `Kind of message: ${input.kind.replace("_", " ")}.`,
+        input.assets?.length
+          ? `What exists to send: ${input.assets.join("; ")}.`
+          : "Nothing exists to send: offer no example, checklist, guide, template, audit or sample.",
         rewriteInstruction(problems),
         `\nThe message:\n"""\n${last}\n"""`,
       ].join("\n"),

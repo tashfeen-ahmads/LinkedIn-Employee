@@ -168,7 +168,7 @@ describe("a conversation held for copy", () => {
     // same errand, and listing both makes the list look longer than the work.
     const items = needsYou({ ...CALM, heldForCopy: 2, pitchesUnapproved: 3 });
     expect(items.filter((i) => i.kind === "pitch_unapproved")).toHaveLength(1);
-    expect(items[0]?.title).toContain("held");
+    expect(items[0]?.title).toMatch(/conversations are waiting for you to approve/);
   });
 
   it("is a plain warning when nothing is actually held", () => {

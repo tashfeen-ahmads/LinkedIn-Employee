@@ -83,7 +83,11 @@ describe("sendEstimate", () => {
 });
 
 describe("what the campaign screens say", () => {
-  const page = readFileSync(join(__dirname, "../src/app/app/campaigns/[id]/page.tsx"), "utf8");
+  // The overview says how many are still to invite; People carries the list,
+  // its search notices and the cut-off.
+  const page = ["page.tsx", "people/page.tsx"]
+    .map((file) => readFileSync(join(__dirname, "../src/app/app/campaigns/[id]", file), "utf8"))
+    .join("\n");
 
   it("counts still to invite from the actionable queue, not every queued row", () => {
     expect(page).toMatch(/\{actionable\} still to invite/);

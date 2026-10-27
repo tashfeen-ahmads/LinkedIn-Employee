@@ -11,6 +11,7 @@ import {
   toUsage,
   type AccountRecord,
 } from "@le/linkedin";
+import Link from "next/link";
 import { AllowanceMeter, StackedDays } from "@/components/charts";
 import { Section } from "@/components/page";
 import { requireSession } from "@/lib/workspace";
@@ -32,7 +33,12 @@ import { countersForToday } from "@/lib/account-day";
  * question is "how close am I to the line". And the bar is the cap rather than
  * the largest value seen, or the meter always looks full.
  */
-export async function LimitsSection() {
+/**
+ * The viewer's own account's counters for today, and which day of the ramp it
+ * is on. One reading for both the full panel on Results and the short one on
+ * the overview, so the two can never show different numbers.
+ */
+async function readAllowance() {
   const session = await requireSession();
   const supabase = await createClient();
 
@@ -65,7 +71,7 @@ export async function LimitsSection() {
   const cap = dailyInviteCap(usage.firstActionAt, now);
 
   /*
-   * Which day of the ramp this is, said out loud.
+   * Which day of the ramp this is.
    *
    * The ramp is measured from an account's first action rather than from when
    * it was connected (rule 3), and that difference is invisible from every
@@ -75,6 +81,48 @@ export async function LimitsSection() {
   const day = usage.firstActionAt
     ? Math.floor((now.getTime() - usage.firstActionAt.getTime()) / 86_400_000)
     : null;
+  return { session, supabase, usage, cap, day, now };
+}
+
+/**
+ * The overview's short version: today's invitations against today's cap, the
+ * week against the week's, and one sentence. Everything else is on Results.
+ */
+export async function AccountSafety() {
+  const read = await readAllowance();
+  if (!read) return null;
+  const { usage, cap, day } = read;
+  return (
+    <Section
+      framed
+      id="safety"
+      title="Account safety"
+      description="LinkedIn restricts accounts that send too much. Nora stays under these limits on its own."
+    >
+      <div className="allowance-stack">
+        <AllowanceMeter label="Invitations today" used={usage.invitesToday} cap={cap} />
+        <AllowanceMeter
+          label="Invitations, last 7 days"
+          used={usage.invitesThisWeek}
+          cap={LINKEDIN_LIMITS.invitesPerWeek}
+        />
+      </div>
+      <p className="small muted ramp-note">
+        {day === null
+          ? "Your account starts slowly and speeds up over a few weeks, from its first invitation."
+          : day >= LINKEDIN_LIMITS.warmupDays
+            ? "Fully warmed up."
+            : `Warming up: day ${day + 1} of ${LINKEDIN_LIMITS.warmupDays + 1}. The daily limit rises on its own.`}{" "}
+        <Link href="/app/analytics#allowance">See all limits</Link>
+      </p>
+    </Section>
+  );
+}
+
+export async function LimitsSection() {
+  const read = await readAllowance();
+  if (!read) return null;
+  const { session, supabase, usage, cap, day, now } = read;
   const rampNote =
     day === null ? (
       <>
@@ -106,7 +154,7 @@ export async function LimitsSection() {
         framed
         id="allowance"
         title="Today’s allowance"
-        description="Product rules rather than settings, so nobody can raise them. The invitation cap grows on its own during warm-up. Campaigns on one LinkedIn account share its daily and weekly limits."
+        description="LinkedIn restricts accounts that send too much, so Nora stays under these limits and nobody can raise them. New accounts start slowly and speed up over a few weeks. All your campaigns share them."
       >
         <div className="allowance-stack">
           <AllowanceMeter label="Invitations today" used={usage.invitesToday} cap={cap} />

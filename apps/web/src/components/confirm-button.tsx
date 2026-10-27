@@ -45,7 +45,9 @@ export function ConfirmButton({
   return (
     <button
       type="submit"
-      className={className}
+      // A quiet button turns red once it is armed, so the second press is
+      // never mistaken for the first.
+      className={armed && !/\bdanger\b/.test(className) ? `${className.replace(/\bghost\b/, "")} danger` : className}
       disabled={pending}
       aria-busy={pending}
       formAction={formAction}

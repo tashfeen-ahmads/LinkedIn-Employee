@@ -225,3 +225,46 @@ export function effectiveCta(
     fromLibrary: false,
   };
 }
+
+/**
+ * A campaign's name without its call to action.
+ *
+ * The writer was told to name the CTA by its label "when the copy needs a
+ * phrase for it", and it put it everywhere, the name included: "Staffing
+ * agency owners (Book a Free Consultation)". The name is what a rep reads in a
+ * list and what the note writer is handed as the angle when a campaign has no
+ * other, so the button's label in it is noise on one screen and a template
+ * phrase in the other. Deterministic, because the prompt saying so is not what
+ * makes it true. A name that would be left empty is returned as it was.
+ */
+export function campaignNameWithoutCta(
+  name: string,
+  label: string | null | undefined,
+  /**
+   * `generic: false` strips the known label only. The nightly repair passes
+   * it: a stored name may be one a person chose, and "Chamber leaders (Join
+   * program)" is their name for it, not a button. The writer's own names are
+   * cleaned of any CTA-shaped bracket, because the model put it there.
+   */
+  options: { generic?: boolean } = {},
+): string {
+  const original = name.trim();
+  const own = label?.trim();
+  let out = original;
+  const escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  if (own) {
+    const quoted = escape(own);
+    out = out
+      // "Owners (Book a Free Consultation)", "Owners [Free Audit]"
+      .replace(new RegExp(String.raw`\s*[([]\s*${quoted}\s*[)\]]`, "gi"), "")
+      // "Owners - Book a Free Consultation", "Owners: Free Audit", "Owners · Free Audit"
+      .replace(new RegExp(String.raw`\s*(?:[-–—:|·]|\bfor\b|\bto\b)\s*${quoted}\s*$`, "i"), "");
+  }
+  // A trailing bracket that is a CTA whatever the label said.
+  if (options.generic !== false) out = out.replace(
+    /\s*[([]\s*(?:Book|Get|Schedule|Claim|Grab|Request|Download|Start|Try|Join|Reserve|Apply)\b[^)\]]*[)\]]\s*$/,
+    "",
+  );
+  out = out.replace(/\s{2,}/g, " ").trim();
+  return out || original;
+}

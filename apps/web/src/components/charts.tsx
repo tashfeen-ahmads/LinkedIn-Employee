@@ -75,7 +75,7 @@ export function FunnelChart({ steps }: { steps: FunnelStep[] }) {
                 halfway down the funnel. */}
             <span className="funnel-rate tiny subtle">
               {i === 0
-                ? "entered"
+                ? "where everybody starts"
                 : share === null
                   ? "—"
                   : `${Math.round(share * 100)}% of ${steps[i - 1]!.label.toLowerCase()}`}

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { INVITE_CAPACITY_BEAT, PACING_LOOP } from "@le/shared";
+import { INVITE_CAPACITY_BEAT, PACING_DETAIL, PACING_LOOP } from "@le/shared";
 import {
   inviteCapacityBeat,
   jobDueAt,
@@ -122,7 +122,7 @@ describe("a warm-up campaign between a view and its invitation", () => {
 
     await runCampaignTick(db.asDb(), queues, NOW);
 
-    const decisions = (db.find("worker_heartbeats", { name: PACING_LOOP })?.detail as {
+    const decisions = (db.find("worker_heartbeats", { name: PACING_DETAIL })?.detail as {
       decisions?: Array<{ reason: string }>;
     })?.decisions;
     const said = (decisions ?? []).map((d) => d.reason).join(" | ");
@@ -172,7 +172,7 @@ describe("what the loop says is queued for today", () => {
     const placedToday = [...jobs.values()].filter(
       (j) => j.name === "invite" && ((j.data as { dueAt?: number }).dueAt ?? 0) < NOW.getTime() + 11 * HOUR,
     ).length;
-    const beat = db.find("worker_heartbeats", { name: PACING_LOOP });
+    const beat = db.find("worker_heartbeats", { name: PACING_DETAIL });
     const entry = (beat?.detail as { inFlight?: Record<string, { account: number; campaigns: Record<string, number> }> })
       .inFlight?.[ACCOUNT];
     expect(placedToday).toBeGreaterThan(0);
@@ -180,3 +180,18 @@ describe("what the loop says is queued for today", () => {
     expect(entry?.campaigns[CAMPAIGN]).toBe(placedToday);
   });
 });
+
+describe("what every member can read of the loop", () => {
+  it("names no campaign or account on the row members can read", async () => {
+    // That row is readable by every signed-in person (migration 0056); the
+    // per-campaign decisions and per-account counts live on the admin-only one.
+    const { db } = harness(NOW, { cap: 2 });
+    const { queues } = memoryQueue();
+    await runCampaignTick(db.asDb(), queues, NOW);
+    const open = db.find("worker_heartbeats", { name: PACING_LOOP })?.detail as Record<string, unknown>;
+    expect(open).not.toHaveProperty("decisions");
+    expect(open).not.toHaveProperty("inFlight");
+    expect(db.find("worker_heartbeats", { name: PACING_DETAIL })?.detail).toHaveProperty("decisions");
+  });
+});
+

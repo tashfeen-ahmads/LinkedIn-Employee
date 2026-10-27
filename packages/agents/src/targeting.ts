@@ -11,11 +11,13 @@ import {
   type InviteNote,
   type ProspectCandidate,
   INVITE_NOTE_MAX_CHARS,
+  campaignNameWithoutCta,
   clampFitScore,
   rewriteInstruction,
   tidyVoice,
   voiceProblems,
   type MessageKind,
+  type VoiceOptions,
 } from "@le/shared";
 import { callStructured, type AgentContext } from "./client.js";
 import {
@@ -205,15 +207,39 @@ export async function buildCampaign(
      * it does to the copy.
      */
     cta: { kind: CtaKind; label: string | null; url: string | null };
+    /**
+     * What exists to hand a prospect who says yes: the titles of the knowledge
+     * documents this campaign's agent may read. The CTA is added here. An
+     * offer of an example, a checklist or a guide is allowed only when one of
+     * these names it, because a yes to "want a quick checklist?" with nothing
+     * behind it is a promise nobody can keep.
+     */
+    assets?: string[];
+    /**
+     * How this workspace wants the agent to write, in the rep's own words
+     * (`voiceOf`), exactly as the invitation writer is handed it. Appended
+     * after the shipped rules, never instead of them. Without it the note was
+     * written in the rep's voice and every follow-up in nobody's.
+     */
+    voice?: string;
     extraGuidance?: string;
   },
 ): Promise<CheckedCampaignPlan> {
+  const assets = [
+    ...(input.assets ?? []),
+    ...(input.cta.label ? [input.cta.label] : []),
+    ...(input.cta.url ? [input.cta.url] : []),
+  ].filter((asset) => asset.trim());
   const context = [
     `Business profile:\n${JSON.stringify(input.business, null, 2)}`,
     `Customer profile being targeted:\n${JSON.stringify(input.profile, null, 2)}`,
     `The messages are sent by ${input.repName}${input.repTitle ? `, ${input.repTitle}` : ""}.`,
     ctaBrief(input.cta),
+    assets.length
+      ? `What exists to send (the only things a message may offer to hand over):\n${assets.map((a) => `- ${a}`).join("\n")}`
+      : "What exists to send: nothing. Offer no example, checklist, guide, template, audit, case study or sample.",
   ].join("\n\n");
+  const checks: VoiceOptions = { assets, ctaLabel: input.cta.label };
 
   const ask = (extra?: string) =>
     callStructured(ctx, {
@@ -223,6 +249,9 @@ export async function buildCampaign(
       schema: CampaignPlanSchema,
       system: [
         { text: CAMPAIGN_SYSTEM },
+        // After the shipped rules and before the breakpoint: identical for
+        // the first call and its one rewrite.
+        ...(input.voice ? [{ text: input.voice, cached: true }] : []),
         { text: context, cached: true },
       ],
       userContent: [
@@ -245,8 +274,8 @@ export async function buildCampaign(
    * returned, not hidden, so the campaign records it; a person reviews the
    * copy before launch, and the send path holds an unfilled placeholder.
    */
-  const first = tidyPlan(await ask());
-  const firstProblems = planVoiceProblems(first);
+  const first = tidyPlan(await ask(), input.cta.label);
+  const firstProblems = planVoiceProblems(first, checks);
   if (!firstProblems.length) return { ...first, voiceProblems: [] };
   let second: CampaignPlan;
   try {
@@ -254,12 +283,13 @@ export async function buildCampaign(
       await ask(
         `${rewriteInstruction(firstProblems)}\n\nRewrite only the messages named above and keep everything else. Your last version was:\n${JSON.stringify(first)}`,
       ),
+      input.cta.label,
     );
   } catch {
     // The rewrite is an improvement, never a reason to lose the campaign.
     return { ...first, voiceProblems: firstProblems };
   }
-  const secondProblems = planVoiceProblems(second);
+  const secondProblems = planVoiceProblems(second, checks);
   return secondProblems.length > firstProblems.length
     ? { ...first, voiceProblems: firstProblems }
     : { ...second, voiceProblems: secondProblems };
@@ -275,9 +305,11 @@ function stepKind(index: number): MessageKind {
   return index === 0 ? "first_message" : "follow_up";
 }
 
-function tidyPlan(plan: CampaignPlan): CampaignPlan {
+function tidyPlan(plan: CampaignPlan, ctaLabel: string | null): CampaignPlan {
   return {
     ...plan,
+    // Never the call to action in the name (`campaignNameWithoutCta`).
+    name: campaignNameWithoutCta(plan.name ?? "", ctaLabel),
     connectionNote: tidyVoice(plan.connectionNote),
     steps: plan.steps.map((step) => ({ ...step, message: tidyVoice(step.message) })),
     variants: plan.variants.map((variant) => ({
@@ -288,12 +320,16 @@ function tidyPlan(plan: CampaignPlan): CampaignPlan {
   };
 }
 
-/** Every message in a plan, checked, each problem prefixed with where it is. */
-export function planVoiceProblems(plan: CampaignPlan): string[] {
+/**
+ * Every message in a plan, checked, each problem prefixed with where it is.
+ * `options` carries what exists to offer and the CTA's label, so an
+ * undeliverable offer or a pasted label is a problem like a dash is.
+ */
+export function planVoiceProblems(plan: CampaignPlan, options: Omit<VoiceOptions, "template"> = {}): string[] {
   const out: string[] = [];
   const check = (where: string, text: string, kind: MessageKind) => {
     // Templates: {{first_name}} is filled per person at send time.
-    for (const problem of voiceProblems(text, kind, { template: true })) out.push(`${where}: ${problem}`);
+    for (const problem of voiceProblems(text, kind, { ...options, template: true })) out.push(`${where}: ${problem}`);
   };
   check("Connection note", plan.connectionNote, "invite_note");
   plan.steps.forEach((step, i) => check(`Follow-up ${i + 1}`, step.message, stepKind(i)));
@@ -316,7 +352,14 @@ function ctaBrief(cta: { kind: CtaKind; label: string | null; url: string | null
   const definition = CTA_DEFINITIONS[cta.kind];
   const lines = [`The call to action for this campaign is: ${definition.label}.`, `Ask for ${definition.asks}.`];
 
-  if (cta.label) lines.push(`Name it as "${cta.label}" when the copy needs a phrase for it.`);
+  // The label is what the business calls the button. Told to "name it as" the
+  // label, the writer pasted it in title case into the last step and the
+  // campaign's name: "If yes, Book a Free Consultation and pick a time".
+  if (cta.label) {
+    lines.push(
+      `The business calls it "${cta.label}". That is a button's name, not a phrase for a sentence: say what they get in plain lowercase words, the way a person texting would ("happy to grab 20 minutes?"), and never put it in the campaign name.`,
+    );
+  }
   if (cta.kind === "link") {
     lines.push(
       "Write {{cta_link}} where the address goes — never the address itself, and never before the final step.",
@@ -374,6 +417,25 @@ export async function personalizeInvites(
      */
     hooks?: string[];
     /**
+     * Openers a person approved for the agent or the workspace, not for this
+     * strategy or angle.
+     *
+     * Offered as optional shapes and nothing more. They used to replace the
+     * strategy's own openers outright, so one line written for founders went
+     * to every strategy the workspace ran and recruiters received "Quick yes
+     * or no Maria: do founders still run outbound where you hire". The writer
+     * is told to use one only when its question applies to this person, and a
+     * note that borrows its words is rewritten (`openerProblems`).
+     */
+    otherOpeners?: string[];
+    /**
+     * Approved openers tied to no audience: the agent's or the workspace's
+     * own, attached to no angle. They are this business's lines rather than
+     * another audience's, so the note may lean on one's shape where it fits;
+     * it is only checked for pasting, never for borrowing.
+     */
+    sharedOpeners?: string[];
+    /**
      * How this workspace wants the agent to write, in the rep's own words.
      *
      * Appended to the shipped prompt rather than replacing it. That prompt
@@ -399,6 +461,11 @@ export async function personalizeInvites(
 ): Promise<Map<string, PersonalizedInvite>> {
   const byId = new Map<string, PersonalizedInvite>();
   if (input.prospects.length === 0) return byId;
+  const ownOpeners = input.hooks ?? [];
+  const foreignOpeners = (input.otherOpeners ?? []).filter((line) => !ownOpeners.includes(line));
+  const sharedOpeners = (input.sharedOpeners ?? []).filter(
+    (line) => !ownOpeners.includes(line) && !foreignOpeners.includes(line),
+  );
 
   // Constant for every batch in this run, so it sits before the cache
   // breakpoint and only the people vary after it.
@@ -416,6 +483,8 @@ export async function personalizeInvites(
       // Named `openingAngles` rather than `hooks` because the model is being
       // told what they are for: shapes the note may take, not lines to paste.
       openingAngles: input.hooks?.length ? input.hooks : undefined,
+      otherApprovedOpeners: foreignOpeners.length ? foreignOpeners : undefined,
+      sharedOpeners: sharedOpeners.length ? sharedOpeners : undefined,
     },
     null,
     2,
@@ -460,10 +529,13 @@ export async function personalizeInvites(
   // note that may go. LinkedIn refuses the whole invitation over its ceiling,
   // so length is a second check on top of the schema's, because a note that
   // fails to send is indistinguishable from a prospect who was never contacted.
+  //
+  // Nothing exists to send from a connection request (no assets), and the
+  // openers are checked so an approved line is a shape and never the text.
   const problemsOf = (text: string) =>
     text.length > INVITE_NOTE_MAX_CHARS
       ? [`It is ${text.length} characters. Keep it under ${INVITE_NOTE_MAX_CHARS}.`]
-      : voiceProblems(text, "invite_note");
+      : voiceProblems(text, "invite_note", { openers: { own: [...ownOpeners, ...sharedOpeners], foreign: foreignOpeners } });
 
   const failed = new Map<string, string[]>();
   for (const batch of results) {

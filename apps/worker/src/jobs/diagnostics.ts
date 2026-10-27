@@ -3,6 +3,7 @@ import {
   MAINTENANCE_BEAT,
   MESSAGE_WEBHOOK_BEAT,
   MAINTENANCE_STALE_MS,
+  PACING_DETAIL,
   PACING_LOOP,
   PACING_STALE_MS,
 } from "@le/shared";
@@ -227,7 +228,7 @@ export async function runDiagnostics(
       ? `This workspace has an account in state "${account.status}"${account.status_detail ? `: ${account.status_detail}` : "."}`
       : "No LinkedIn account has been connected.",
     fix: account?.status === "active" ? undefined : "Connect LinkedIn.",
-    href: account?.status === "active" ? undefined : "/app/team",
+    href: account?.status === "active" ? undefined : "/app/profile/linkedin",
   });
 
   // The check the first deployment did not have. The row said active for a
@@ -302,7 +303,7 @@ export async function runDiagnostics(
             count >= PENDING_CROWDED
               ? "Withdraw the oldest ones to make room. Nothing else this product does will clear it."
               : undefined,
-          href: "/app/team",
+          href: "/app/profile/linkedin",
         });
       } catch (err) {
         add({
@@ -404,8 +405,13 @@ export async function runDiagnostics(
   const { data: beats } = await db
     .from("worker_heartbeats")
     .select("name, beat_at, detail")
-    .in("name", [PACING_LOOP, BOOT_BEAT, MAINTENANCE_BEAT, MESSAGE_WEBHOOK_BEAT, WEBHOOKS_BEAT]);
+    .in("name", [PACING_LOOP, PACING_DETAIL, BOOT_BEAT, MAINTENANCE_BEAT, MESSAGE_WEBHOOK_BEAT, WEBHOOKS_BEAT]);
   const beat = (beats ?? []).find((b) => b.name === PACING_LOOP);
+  // The loop's reasons, for this workspace's campaigns only: the row names
+  // every workspace's, and this screen is the caller's (rule 17).
+  const { data: ownCampaigns } = await db.from("campaigns").select("id").eq("workspace_id", input.workspaceId);
+  const ownIds = new Set((ownCampaigns ?? []).map((c) => c.id as string));
+  const pacingDetail = (beats ?? []).find((b) => b.name === PACING_DETAIL)?.detail;
   const boot = (beats ?? []).find((b) => b.name === BOOT_BEAT);
   const bootDetail =
     boot?.detail && typeof boot.detail === "object" ? (boot.detail as Record<string, unknown>) : {};
@@ -521,7 +527,7 @@ export async function runDiagnostics(
     label: "The sending loop is running",
     state: beating ? "ok" : "blocked",
     detail: beating
-      ? `Last ran ${Math.max(0, Math.round(beatAge! / 60_000))} minutes ago. It wakes every five.${lastDecision(beat)}`
+      ? `Last ran ${Math.max(0, Math.round(beatAge! / 60_000))} minutes ago. It wakes every five.${lastDecision(beat, pacingDetail, ownIds)}`
       : beat?.beat_at
         ? `It last ran ${new Date(beat.beat_at).toISOString()} and should run every five minutes. Nothing you have launched is being sent.`
         : "It has never reported in. Nothing is being sent, whatever the campaign screens say.",
@@ -724,13 +730,16 @@ export async function runDiagnostics(
  * every screen reports a healthy loop. The counts are the only place that
  * shows.
  */
-function lastDecision(beat: { detail?: unknown } | undefined): string {
+function lastDecision(beat: { detail?: unknown } | undefined, pacingDetail: unknown, ownIds: Set<string>): string {
   const detail = beat?.detail && typeof beat.detail === "object" ? (beat.detail as Record<string, unknown>) : {};
   const parts: string[] = [];
 
-  const decisions = Array.isArray(detail.decisions) ? detail.decisions : [];
+  const decided =
+    pacingDetail && typeof pacingDetail === "object" ? (pacingDetail as { decisions?: unknown }).decisions : undefined;
+  const decisions = Array.isArray(decided) ? decided : [];
   const reasons = decisions
-    .map((d) => (d && typeof d === "object" ? (d as { reason?: unknown }).reason : null))
+    .filter((d) => d && typeof d === "object" && ownIds.has(String((d as { campaign?: unknown }).campaign)))
+    .map((d) => (d as { reason?: unknown }).reason)
     .filter((r): r is string => typeof r === "string");
   if (reasons.length) parts.push(`Last run: ${reasons.join("; ")}.`);
 
@@ -777,7 +786,7 @@ async function probeAccount(
       state: health === "warning" ? "waiting" : "blocked",
       detail: `The provider reports this account as "${health}".`,
       fix: health === "reauth_required" ? "Reconnect LinkedIn." : "Wait for the restriction to lift.",
-      href: health === "reauth_required" ? "/app/team" : undefined,
+      href: health === "reauth_required" ? "/app/profile/linkedin" : undefined,
     };
   } catch (err) {
     const gone = isAccountGone(err);
@@ -796,7 +805,7 @@ async function probeAccount(
         ? "Your LinkedIn connection is stale — the account it points at no longer exists. This is what makes every campaign fail with nothing to show for it."
         : "We could not reach LinkedIn on your behalf, so nothing is sending. This one is ours rather than yours.",
       fix: gone ? "Reconnect LinkedIn." : "Nothing for you to do here. Tell us and we will look.",
-      href: gone ? "/app/team" : "/app/support",
+      href: gone ? "/app/profile/linkedin" : "/app/support",
       operator: gone
         ? "The provider has no account with the stored id. Recovery re-points the row when the provider holds a replacement labelled with this user."
         : `Could not ask the provider: ${(err as { message?: string })?.message ?? "unknown error"}`,
@@ -845,7 +854,7 @@ async function probeReplacement(
       detail:
         "No LinkedIn account is connected for you. Nothing can be sent until one is, and reconnecting from the Team page is what fixes it.",
       fix: "Connect LinkedIn again from the Team page.",
-      href: "/app/team",
+      href: "/app/profile/linkedin",
       operator:
         "The provider lists no account labelled with this user id and none matching the id their last signed sign-in returned. If its own dashboard shows one connected, the return never reached /auth/linkedin/done with an account id.",
     };
@@ -859,7 +868,7 @@ async function probeReplacement(
       detail:
         "The provider has a different account for you than the one stored here — this is what makes its dashboard show a healthy connection while this app says reconnect. Opening the Team page attaches the live one.",
       fix: "Open the Team page; it repairs this on arrival.",
-      href: "/app/team",
+      href: "/app/profile/linkedin",
     };
   }
 
@@ -921,7 +930,7 @@ async function probeSearch(
         ? "Your LinkedIn connection is no longer valid, so no new prospects can be found until it is reconnected."
         : "A test search was refused, so no new prospects can be found right now. It is ours to look into rather than yours.",
       fix: gone ? "Reconnect LinkedIn." : "Nothing for you to do here. Tell us and we will look.",
-      href: gone ? "/app/team" : "/app/support",
+      href: gone ? "/app/profile/linkedin" : "/app/support",
       operator: `A test search was refused: ${(err as { message?: string })?.message ?? "unknown error"}`,
     };
   }

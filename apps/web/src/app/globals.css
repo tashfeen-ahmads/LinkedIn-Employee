@@ -1318,7 +1318,7 @@ input, select, textarea, button { margin: 0; }
 .field .hint { font-size: 0.8125rem; color: var(--text-subtle); font-weight: 400; }
 
 .field input, .field textarea, .field select,
-input[type="text"], input[type="email"], input[type="url"], input[type="number"], textarea, select {
+input[type="text"], input[type="email"], input[type="url"], input[type="number"], input[type="search"], input[type="tel"], input[type="date"], input[type="time"], textarea, select {
   width: 100%;
   padding: 0.55rem 0.7rem;
   border: 1px solid var(--input-border);
@@ -1394,7 +1394,7 @@ form.form-row > button.btn:not(.block) { align-self: flex-end; }
    the text wraps beside it. */
 .check { display: flex; align-items: flex-start; gap: var(--space-2); }
 .check input { flex: none; margin-top: 0.15rem; }
-.check .hint { display: block; margin-top: var(--space-1); }
+.check .hint { display: block; margin-top: var(--space-1); font-size: 0.8125rem; font-weight: 400; color: var(--text-subtle); }
 
 /*
  * `.meter` and its family are gone, and their going is the point.
@@ -3185,17 +3185,6 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
 /* A dead loop is not a paragraph among paragraphs. */
 .app .report-alarm p:first-child { color: var(--danger); font-weight: 500; }
 
-.app .report-counts {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-5);
-  margin: var(--space-4) 0 0;
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--border);
-}
-.app .report-counts div { display: flex; flex-direction: column; gap: 0.1rem; }
-.app .report-counts dd { margin: 0; font-size: 1.375rem; font-weight: 500; letter-spacing: -0.02em; }
-
 /* ---------------------------------------------------- the availability week
  *
  * A rep reading "9 to 17, 30 minutes, 12 hours notice, 3 a day" cannot tell
@@ -3863,8 +3852,12 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
   gap: var(--space-4);
   align-items: stretch;
 }
+/* The overview's row is the other way round: the day's story is the wide
+   column and the two safety meters the narrow one. */
+.app .overview-today { grid-template-columns: minmax(0, 1fr) minmax(16rem, 21rem); }
 @media (max-width: 860px) {
-  .app .overview-pair { grid-template-columns: minmax(0, 1fr); }
+  .app .overview-pair,
+  .app .overview-today { grid-template-columns: minmax(0, 1fr); }
 }
 .app .allowance-stack { display: flex; flex-direction: column; gap: var(--space-4); }
 .app .ramp-note { margin-top: auto; padding-top: var(--space-3); border-top: 1px solid var(--border); }
@@ -6672,4 +6665,768 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
 
 @media (min-width: 48em) {
   .walkthrough { inset: auto var(--space-6) var(--space-6) auto; width: min(24rem, 100% - 2 * var(--space-6)); }
+}
+
+/* --------------------------------------------------------------------------
+ * Section menu (`components/section-nav.tsx`): a large screen split into
+ * sections, one on screen at a time. A sticky column beside the section on a
+ * wide screen; a row of tabs that scrolls sideways on a phone.
+ * ------------------------------------------------------------------------ */
+.app .section-layout {
+  display: grid;
+  grid-template-columns: minmax(14rem, 17rem) minmax(0, 1fr);
+  gap: var(--app-gap);
+  align-items: start;
+}
+.app .section-layout-nav { position: sticky; top: var(--space-5); }
+.app .section-layout-body { display: flex; flex-direction: column; gap: var(--app-gap); min-width: 0; }
+
+.app .section-nav ol { position: relative; list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.app .section-nav-link {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-raised);
+  color: var(--text);
+  text-decoration: none;
+  transition: border-color .15s ease, background .15s ease;
+}
+.app .section-nav-link:hover { border-color: var(--border-strong); }
+.app .section-nav-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.app .section-nav li.is-active .section-nav-link {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
+.app .section-nav li.is-locked .section-nav-link { opacity: .55; cursor: not-allowed; background: var(--surface); }
+.app .section-nav-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 auto; }
+.app .section-nav-title { display: flex; align-items: center; gap: var(--space-2); font-weight: 600; font-size: .95rem; }
+.app .section-nav li.is-active .section-nav-title { color: var(--accent); }
+/* One short line, always: a hint that wraps to three lines turns a menu into
+   a column of paragraphs and every item a different height. The title may
+   take two lines (a strategy is named in a sentence) and no more. */
+.app .section-nav-hint { font-size: .8125rem; color: var(--text-subtle); line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.app .section-nav-title > .section-nav-name { min-width: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.app .section-nav-count {
+  font-size: .75rem;
+  font-variant-numeric: tabular-nums;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+}
+.app .section-nav-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--warning); }
+.app .section-nav-step {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.app .section-nav li.is-active .section-nav-step { background: var(--accent); color: var(--text-inverse); }
+
+@media (max-width: 900px) {
+  .app .section-layout { grid-template-columns: minmax(0, 1fr); }
+  .app .section-layout-nav { position: static; margin-inline: calc(-1 * var(--space-4)); }
+  .app .section-nav ol {
+    flex-direction: row;
+    overflow-x: auto;
+    padding-inline: var(--space-4);
+    scroll-snap-type: x proximity;
+  }
+  .app .section-nav li { flex: none; scroll-snap-align: start; }
+  .app .section-nav-hint { display: none; }
+  .app .section-nav-link { padding: var(--space-2) var(--space-3); }
+}
+
+/* --------------------------------------------------------------------------
+ * Strategies, prospects and the opportunities board
+ * (`app/app/strategy`, `app/app/prospects`, `app/app/opportunities`).
+ * Every class here is new and scoped under `.app`; none redefines a word the
+ * sheet already owns (rules 38 and 53).
+ * ------------------------------------------------------------------------ */
+.app .strategy-nav-state { font-weight: 600; }
+.app .strategy-nav-state[data-state="approved"] { color: var(--positive); }
+.app .strategy-nav-state[data-state="waiting"] { color: var(--warning); }
+.app .strategy-row-aside td { color: var(--text-subtle); }
+/* The menu's list contains its own visually hidden labels; see strategy-nav.tsx. */
+.app .strategy-menu ol,
+.app .prospect-menu ol { position: relative; }
+.app .strategy-facts { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+
+.app .prospect-headline {
+  display: -webkit-box;
+  max-width: 30ch;
+  line-height: 1.35;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.app .prospect-fit-vs {
+  display: block;
+  max-width: 9rem;
+  margin-inline-start: auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.app .prospect-note { max-width: 44ch; line-height: 1.4; }
+/* The scroller is the containing block, so a visually hidden label in a
+   wide row cannot escape it and widen the whole page. */
+.app .prospect-table { position: relative; }
+.app .prospect-search {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.app .prospect-search input[type="search"] { flex: 1 1 16rem; max-width: 26rem; min-height: 2.5rem; }
+.app .prospect-find-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-3); }
+.app .prospect-find-item {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3) var(--space-5);
+}
+.app .prospect-find-text { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; flex: 1 1 18rem; }
+.app .prospect-find-action { flex: none; }
+
+.app .opp-filters {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-3);
+}
+.app .opp-filter-field { flex: 1 1 14rem; max-width: 20rem; }
+.app .opp-filter-actions { display: flex; align-items: center; gap: var(--space-3); min-height: 2.5rem; }
+.app .opp-board {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: var(--space-4);
+  align-items: start;
+}
+.app .opp-column {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+  min-height: 12rem;
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+.app .opp-column-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 650;
+}
+.app .opp-dot { flex: none; width: 0.55rem; height: 0.55rem; border-radius: 50%; background: var(--text-subtle); }
+.app .opp-dot[data-stage="replied"] { background: var(--warning); }
+.app .opp-dot[data-stage="interested"] { background: var(--accent); }
+.app .opp-dot[data-stage="booked"] { background: var(--positive); }
+.app .opp-dot[data-stage="closed"] { background: var(--border-strong); }
+.app .opp-count {
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--surface-sunken);
+  color: var(--text-muted);
+}
+.app .opp-none { margin: auto 0; padding-block: var(--space-5); text-align: center; }
+.app .opp-cards { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
+.app .opp-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  margin-top: var(--space-3);
+}
+.app .opp-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-xs);
+  transition: border-color .15s ease;
+}
+.app .opp-card:hover,
+.app .opp-card:focus-within { border-color: var(--border-strong); }
+.app .opp-card-top { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-2); }
+.app .opp-card-name { font-weight: 600; color: var(--text); text-decoration: none; overflow-wrap: anywhere; }
+.app .opp-card-name:hover { text-decoration: underline; }
+.app .opp-card-name:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius-sm); }
+.app .opp-card-role { margin: 0; overflow-wrap: anywhere; }
+.app .opp-card-meta { margin: 0; }
+.app .opp-folded { display: flex; flex-direction: column; gap: var(--space-3); }
+.app .opp-fold {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+.app .opp-fold > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 2.25rem;
+  font-weight: 650;
+  cursor: pointer;
+  list-style: none;
+}
+.app .opp-fold > summary::-webkit-details-marker { display: none; }
+.app .opp-fold > summary::after {
+  content: "";
+  margin-inline-start: auto;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-right: 2px solid var(--text-muted);
+  border-bottom: 2px solid var(--text-muted);
+  transform: rotate(45deg);
+  transition: transform .15s ease;
+}
+.app .opp-fold[open] > summary::after { transform: rotate(225deg); }
+.app .opp-fold > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius-sm); }
+
+/* --------------------------------------------------------------------------
+ * Profile & settings (`app/app/profile/*`): one section at a time beside the
+ * section menu, and the LinkedIn activity cards.
+ *
+ * Every settings form here is one card with the same shape: labels above
+ * their inputs, fields at one readable width, and the card's actions at its
+ * foot, right-aligned, under a hairline. The cards are drawn flat with a solid
+ * border and no shadow, because a soft shadow on a pale surface is what reads
+ * as a blurred edge, and these pages are mostly cards.
+ * ------------------------------------------------------------------------ */
+.app .profile-card { box-shadow: none; border: 1px solid var(--border); background: var(--surface-raised); }
+.app .profile-form { display: flex; flex-direction: column; gap: var(--space-5); }
+.app .profile-fields { display: flex; flex-direction: column; gap: var(--space-4); max-width: 40rem; }
+.app .profile-field-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+  max-width: 40rem;
+}
+.app .profile-field-pair.is-wide-first { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+.app .profile-form-foot {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  margin: 0;
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+/* A sentence in the foot takes the room on the left; the buttons stay right. */
+.app .profile-form-foot > p { flex: 1 1 16rem; margin: 0; }
+.app .profile-form-foot > form { display: flex; flex-direction: row; }
+.app .profile-divided { padding-top: var(--space-5); border-top: 1px solid var(--border); }
+.app .profile-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3) var(--space-5);
+}
+.app .profile-row > div { flex: 1 1 18rem; min-width: 0; }
+.app .profile-now { margin: 0; overflow-wrap: anywhere; }
+
+/* Read-only facts: a label over its value, in columns that fold on a phone. */
+.app .profile-facts {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: var(--space-4) var(--space-5);
+}
+.app .profile-facts > div { display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; }
+.app .profile-facts > div.is-wide { grid-column: 1 / -1; }
+.app .profile-facts dt { font-size: 0.8125rem; color: var(--text-subtle); }
+.app .profile-facts dd { margin: 0; font-size: 0.9375rem; line-height: 1.5; overflow-wrap: anywhere; }
+
+/* Two or three choices drawn as rows a person can read before picking, rather
+   than a dropdown that hides the option not chosen. One hit target each. */
+.app .profile-choices { display: flex; flex-direction: column; gap: var(--space-2); margin: 0; padding: 0; border: 0; min-width: 0; }
+.app .profile-choices > legend { font-size: 0.875rem; font-weight: 550; margin-bottom: var(--space-2); padding: 0; }
+.app .profile-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  cursor: pointer;
+  transition: border-color .15s ease, background-color .15s ease;
+}
+.app .profile-choice:hover { border-color: var(--border-strong); }
+.app .profile-choice:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.app .profile-choice input { flex: none; margin-top: 0.2rem; accent-color: var(--accent); }
+.app .profile-choice-text { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
+.app .profile-plan-form { display: flex; flex-direction: column; gap: var(--space-4); }
+
+/* Sending days as a row of tick chips, all the same width. */
+.app .profile-days { margin: 0; padding: 0; border: 0; min-width: 0; }
+.app .profile-days > legend { font-size: 0.875rem; font-weight: 550; margin-bottom: var(--space-2); padding: 0; }
+.app .profile-day-list { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.app .profile-day {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-width: 4.25rem;
+  min-height: 2.5rem;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+.app .profile-day:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); color: var(--text); }
+.app .profile-day input { accent-color: var(--accent); margin: 0; }
+
+/* Four allowances in two even columns, never three and an orphan. */
+.app .profile-meters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-4) var(--space-6); }
+.app .profile-status-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
+.app .profile-status-row p { margin: 0; }
+.app .profile-blocked { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-3); }
+.app .profile-blocked > p { margin: 0; }
+.app .profile-blocked-actions { display: flex; gap: var(--space-2); }
+
+/* LinkedIn activity: one card per thing Nora does in the rep's name. */
+.app .activity-list { display: flex; flex-direction: column; gap: var(--space-4); }
+.app .activity-card { box-shadow: none; border: 1px solid var(--border); background: var(--surface-raised); gap: var(--space-4); }
+.app .activity-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-4); }
+.app .activity-card-text { display: flex; flex-direction: column; gap: var(--space-1); min-width: 0; }
+.app .activity-card-text h3 { margin: 0; font-size: 1rem; font-weight: 650; }
+.app .activity-card-text p { margin: 0; max-width: 40rem; }
+.app .activity-card-control { display: flex; flex-direction: row; flex: none; }
+.app .activity-card-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+.app .activity-card-foot > p { flex: 1 1 18rem; margin: 0; }
+.app .activity-card-links { display: inline-flex; gap: var(--space-4); font-size: 0.875rem; font-weight: 550; }
+.app .activity-facts { margin: 0; display: flex; flex-wrap: wrap; gap: var(--space-3) var(--space-6); }
+.app .activity-facts > div { display: flex; flex-direction: column; gap: 0.15rem; }
+.app .activity-facts dt { font-size: 0.8125rem; color: var(--text-subtle); }
+.app .activity-facts dd { margin: 0; font-size: 1.25rem; font-weight: 600; }
+
+/* The switch: a track and a thumb, with the state written beside it. */
+.app .activity-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 2.75rem;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.app .activity-switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.app .activity-switch[disabled] { cursor: progress; opacity: .7; }
+.app .activity-switch-track {
+  position: relative;
+  display: inline-block;
+  width: 2.75rem;
+  height: 1.5rem;
+  border-radius: var(--radius-pill);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-strong);
+  transition: background-color .15s ease, border-color .15s ease;
+}
+.app .activity-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 1.125rem;
+  height: 1.125rem;
+  border-radius: 50%;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-strong);
+  transition: transform .15s ease;
+}
+.app .activity-switch[aria-checked="true"] .activity-switch-track { background: var(--accent); border-color: var(--accent); }
+.app .activity-switch[aria-checked="true"] .activity-switch-thumb { transform: translateX(1.25rem); border-color: var(--accent); }
+.app .activity-switch-text { min-width: 2rem; text-align: left; }
+@media (prefers-reduced-motion: reduce) {
+  .app .activity-switch-track,
+  .app .activity-switch-thumb { transition: none; }
+}
+
+@media (max-width: 640px) {
+  .app .profile-field-pair,
+  .app .profile-field-pair.is-wide-first,
+  .app .profile-meters { grid-template-columns: minmax(0, 1fr); }
+  .app .profile-form-foot { justify-content: stretch; }
+  .app .profile-form-foot > form,
+  .app .profile-form-foot > .btn { flex: 1 1 auto; }
+  .app .activity-card-head { flex-direction: column; }
+}
+
+/* --------------------------------------------------------------------------
+ * Campaigns: the list as cards, a campaign's sections, and the builder.
+ * (`app/app/campaigns/**`, `components/campaign-card.tsx`,
+ * `components/campaign-goal-cards.tsx`.) Every class here starts with
+ * `campaign-` so none of them lands on a name the sheet already owns.
+ * ------------------------------------------------------------------------ */
+
+/* The list: cards in a grid that fills the row and stacks on a phone. */
+.app .campaign-cards {
+  display: grid;
+  /* auto-fit, not auto-fill: auto-fill keeps an empty track for a third card
+     that does not exist, so a strategy with two campaigns left a hole the
+     width of a card at the end of its row. */
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr));
+  gap: var(--space-4);
+}
+.app .campaign-cards > .campaign-card { max-width: 36rem; }
+.app .campaign-card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xs);
+  transition: border-color .15s ease;
+}
+.app .campaign-card:hover { border-color: var(--border-strong); }
+.app .campaign-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-5) var(--space-5) var(--space-4);
+  min-width: 0;
+  flex: 1 1 auto;
+}
+.app .campaign-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); min-width: 0; }
+/* One line, with the full name on hover: a title that wraps on one card and
+   not its neighbour pushes everything under it out of line. */
+.app .campaign-card-title { margin: 0; min-width: 0; font-size: 1.0625rem; line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.app .campaign-card-title a { color: var(--text); text-decoration: none; }
+.app .campaign-card-title a:hover { color: var(--accent); }
+.app .campaign-card-title a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius-sm); }
+.app .campaign-card-head .pill { flex: none; }
+.app .campaign-card-via { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app .campaign-card-progress { display: flex; flex-direction: column; gap: var(--space-1); }
+.app .campaign-card-track {
+  height: 6px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-sunken);
+  overflow: hidden;
+}
+.app .campaign-card-fill { display: block; height: 100%; border-radius: inherit; background: var(--accent); }
+/* The last line of the body, pinned to its foot so the buttons of cards side
+   by side line up however long the sentence is. */
+.app .campaign-card-needs { display: flex; align-items: flex-start; gap: var(--space-2); margin-top: auto; padding-top: var(--space-1); color: var(--text-muted); line-height: 1.4; }
+.app .campaign-card-needs.is-attention { color: var(--text); }
+.app .campaign-card-dot { width: 8px; height: 8px; flex: none; margin-top: .4em; border-radius: 50%; background: var(--border-strong); }
+.app .campaign-card-needs.is-attention .campaign-card-dot { background: var(--warning); }
+.app .campaign-card-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin: var(--space-1) 0;
+}
+.app .campaign-card-tiles > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--surface-sunken);
+}
+.app .campaign-card-tiles dt { font-size: .8125rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.app .campaign-card-tiles dd { margin: 0; font-size: 1.25rem; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--text); }
+.app .campaign-card-foot {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--border);
+}
+.app .campaign-card-main { display: flex; flex-direction: column; flex: 1 1 auto; min-width: 0; justify-content: center; align-items: center; text-align: center; }
+.app .campaign-card-main > .btn { width: 100%; }
+.app .campaign-card-side { display: flex; flex-direction: column; flex: none; }
+
+/* A campaign's overview: what happens next beside the funnel, wrapping to one
+   column when the section menu leaves too little room for two. */
+.app .campaign-overview-pair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  gap: var(--app-gap);
+  align-items: start;
+}
+
+/* A campaign's overview: a short list of facts, each with where to change it. */
+.app .campaign-facts { display: flex; flex-direction: column; gap: var(--space-3); list-style: none; margin: 0; padding: 0; }
+.app .campaign-facts li { line-height: 1.5; }
+
+/* Two cards side by side above People's list, one under the other on a phone. */
+.app .campaign-actions-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr));
+  gap: var(--space-4);
+  align-items: stretch;
+}
+
+/* A filter as a row of links: People's states, and step 1's two sources. */
+.app .campaign-filter { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.app .campaign-filter a {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface-raised);
+  color: var(--text-muted);
+  font-size: .875rem;
+  text-decoration: none;
+  touch-action: manipulation;
+}
+.app .campaign-filter a:hover { border-color: var(--border-strong); color: var(--text); }
+.app .campaign-filter a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.app .campaign-filter a.is-active { border-color: var(--accent-border); background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+
+/* Goal cards (and the builder's reply choice): a radio is the whole card. */
+.app .campaign-goals { display: flex; flex-direction: column; gap: var(--space-3); }
+.app .campaign-goal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 13rem), 1fr));
+  gap: var(--space-3);
+}
+.app .campaign-goal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-raised);
+  transition: border-color .15s ease, background .15s ease;
+}
+.app .campaign-goal:hover { border-color: var(--border-strong); }
+.app .campaign-goal:has(input[type="radio"]:checked) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
+.app .campaign-goal:has(input[type="radio"]:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+.app .campaign-goal-pick {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: var(--space-2);
+  row-gap: 2px;
+  align-items: center;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.app .campaign-goal-pick input[type="radio"] { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.app .campaign-goal-icon { width: 20px; height: 20px; color: var(--text-subtle); grid-row: 1; }
+.app .campaign-goal:has(input[type="radio"]:checked) .campaign-goal-icon { color: var(--accent); }
+.app .campaign-goal-title { font-weight: 600; overflow-wrap: anywhere; }
+.app .campaign-goal-hint { grid-column: 1 / -1; font-size: .8125rem; color: var(--text-subtle); line-height: 1.35; overflow-wrap: anywhere; }
+.app .campaign-goal-fields { display: flex; flex-direction: column; gap: var(--space-2); }
+
+/* Under every builder step: back on the left, forward on the right. */
+.app .campaign-step-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+}
+
+/* The builder's last step: the campaign as a list of answers, each changeable. */
+.app .campaign-review { display: flex; flex-direction: column; margin: 0; }
+.app .campaign-review > div {
+  display: grid;
+  grid-template-columns: minmax(7rem, 10rem) minmax(0, 1fr);
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--border);
+}
+.app .campaign-review dt { color: var(--text-subtle); font-size: .875rem; }
+.app .campaign-review dd { overflow-wrap: anywhere; }
+
+@media (max-width: 640px) {
+  .app .campaign-card-body { padding: var(--space-4); }
+  .app .campaign-review > div { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); }
+  .app .campaign-step-buttons > * { flex: 1 1 auto; justify-content: center; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app .campaign-card,
+  .app .campaign-goal { transition: none; }
+}
+@media (max-width: 900px) {
+  .app .opp-column { min-height: 0; }
+}
+
+/* --------------------------------------------------------------------------
+ * Plain-words pass: the strategy summary, the agents' libraries, action
+ * cards and the inbox's reply foot. Scoped under `.app`, new names only
+ * (rules 38 and 53).
+ * ------------------------------------------------------------------------ */
+.app .strategy-summary { display: flex; flex-direction: column; gap: var(--space-2); }
+.app .strategy-summary-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-2); }
+
+.app .agent-libraries {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: var(--space-3);
+}
+.app .agent-library {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-raised);
+  color: var(--text);
+  text-decoration: none;
+  transition: border-color .15s ease;
+}
+.app .agent-library:hover { border-color: var(--border-strong); }
+.app .agent-library:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) {
+  .app .agent-library { transition: none; }
+}
+
+/* The new link's fields sit under the goal cards and appear once that card is
+   picked. `:has()` rather than script, so the form still works without it. */
+.app .campaign-goal-newlink {
+  display: none;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr));
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--accent-border);
+  border-radius: var(--radius);
+  background: var(--surface-raised);
+}
+.app .campaign-goals:has(input[type="radio"][value="kind:link"]:checked) .campaign-goal-newlink { display: grid; }
+
+/* The inbox's reply: the text box, then Send on the left and the way out on
+   the right, on one line. The first form is `display: contents` so its field
+   and button join this grid; it still submits as a form. */
+.app .inbox-reply {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-3);
+}
+.app .inbox-reply > form:first-child { display: contents; }
+.app .inbox-reply > form:first-child > label { grid-column: 1 / -1; }
+.app .inbox-reply > form:last-child { justify-self: end; }
+
+/* A card that offers one thing to do: what it does, then its button at the
+   card's foot. Text and button side by side wrapped the button under the
+   text at an indent, and ghost-styled it looked like a stray link. */
+.app .action-card { display: flex; flex-direction: column; gap: var(--space-3); }
+.app .action-card-text { display: flex; flex-direction: column; gap: var(--space-1); }
+.app .action-card > .btn { align-self: flex-start; margin-top: auto; }
+
+/* A number with two digits in it: the box is short, its label and hint keep
+   the field's full width so the hint is not squeezed into a column. */
+.app .field > input.input-short { max-width: 9rem; }
+
+/* Two columns of fields that line up at the top whatever hints sit under
+   them. `.form-row` aligns to the foot, so a field with a hint beside one
+   without put the two labels at different heights. */
+.app .form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+  gap: var(--space-4);
+  align-items: start;
+}
+/* A form that exists only to be submitted by a button elsewhere (`form=`).
+   `form` is a flex container in this sheet, which beats the `hidden`
+   attribute's own display. */
+.app form[hidden] { display: none; }
+
+/* A fill-in a preview cannot know yet, said in words rather than as the
+   stored `{{…}}` (components/copy-preview.tsx). */
+.copy-gap {
+  padding: 0 .25em;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-style: italic;
+}
+
+/* A link inside a sentence looks like a link. The sheet's `a` inherits its
+   colour and drops the underline, which is right for navigation and wrong in
+   prose: "See the sequence" and "your profile" read as plain words, so the
+   way to the next step was on screen and invisible. Classed links (buttons,
+   menus, cards) keep their own look. */
+.app :where(p, dd, .hint, .notice, .campaign-facts li, .bullets li) a:not([class]) {
+  color: var(--accent);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+/* One dropdown, drawn the same in every browser: the native arrow sat at a
+   different inset in each and vanished against a dark ground. The chevron is
+   two gradients in the text colour, so it follows the theme. */
+.app select:not([multiple]) {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-inline-end: 2.25rem;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--text-muted) 50%),
+    linear-gradient(135deg, var(--text-muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - 1.05rem) 50%,
+    calc(100% - 0.7rem) 50%;
+  background-size: 0.35rem 0.35rem, 0.35rem 0.35rem;
+  background-repeat: no-repeat;
+  cursor: pointer;
+}
+.app .field > input.input-medium { max-width: 16rem; }
+
+/* A flush table that turns into cards on a phone keeps the cards' width:
+   `.table-flush`'s minimum, declared later, pushed every value off the
+   right edge and left a column of labels with nothing beside them. */
+@media (max-width: 820px) {
+  .app .table-flush.card-rows table { min-width: 0; }
 }

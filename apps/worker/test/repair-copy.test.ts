@@ -101,6 +101,146 @@ describe("repairCopy", () => {
   });
 });
 
+describe("repairCopy and copy that cannot be delivered or reads like a button", () => {
+  const LABEL = "Book a Free Consultation";
+  const FOUNDERS = "Quick yes or no: do founders still run outbound at your company, or do you have an SDR team?";
+  const MARIA = "Quick yes or no Maria: do founders still run outbound where you hire";
+  const PASTED = `If yes, ${LABEL} and pick a time: {{cta_link}}`;
+  const EXAMPLE = "Hi {{first_name}}, want a two sentence example you can try this week?";
+
+  function live(
+    options: { docs?: Array<{ title: string; agent_id?: string | null }>; ownHook?: boolean; foundersAngle?: boolean } = {},
+  ) {
+    // By default the founders opener belongs to another campaign's angle,
+    // which is what makes it another audience's line.
+    const foundersAngle = options.foundersAngle ?? !options.ownHook;
+    const db = new FakeDb();
+    db.seed("campaigns", [
+      {
+        id: CAMPAIGN,
+        workspace_id: WORKSPACE,
+        status: "running",
+        name: `Staffing owners (${LABEL})`,
+        connection_note: "Hi {{first_name}}, would be good to connect.",
+        agent_id: "agent-1",
+        customer_profile_id: "cp-staffing",
+        cta_id: "cta-1",
+        cta_label: null,
+        cta_url: null,
+      },
+      ...(foundersAngle
+        ? [{ id: "camp-founders", workspace_id: WORKSPACE, status: "running", name: "Founders", connection_note: null, agent_id: "agent-1", customer_profile_id: null, cta_id: null, cta_label: null, cta_url: null }]
+        : []),
+    ]);
+    db.seed("ctas", [{ id: "cta-1", workspace_id: WORKSPACE, label: LABEL, url: "https://cal.example.com/consult" }]);
+    db.seed("hooks", [
+      { id: "hook-founders", workspace_id: WORKSPACE, agent_id: "agent-1", body: FOUNDERS, approved_at: "2026-10-20T00:00:00Z" },
+    ]);
+    db.seed("customer_profiles", [
+      { id: "cp-staffing", workspace_id: WORKSPACE, spec: { name: "Staffing agency owners", hooks: ["Are new clients still mostly referrals?"] } },
+    ]);
+    db.seed("campaign_variants", [
+      {
+        id: "v1",
+        workspace_id: WORKSPACE,
+        campaign_id: CAMPAIGN,
+        connection_note: "Hi {{first_name}}, I talk to a lot of staffing owners. Would be good to connect.",
+        hook_id: options.ownHook ? "hook-founders" : null,
+      },
+      ...(foundersAngle
+        ? [{ id: "v-founders", workspace_id: WORKSPACE, campaign_id: "camp-founders", connection_note: null, hook_id: "hook-founders" }]
+        : []),
+    ]);
+    db.seed("campaign_steps", [
+      { id: "s2", workspace_id: WORKSPACE, campaign_id: CAMPAIGN, step_number: 2, message: EXAMPLE },
+      { id: "s3", workspace_id: WORKSPACE, campaign_id: CAMPAIGN, step_number: 3, message: PASTED },
+    ]);
+    db.seed("campaign_prospects", [
+      { id: "q1", workspace_id: WORKSPACE, campaign_id: CAMPAIGN, variant_id: "v1", status: "queued", invite_note: MARIA },
+    ]);
+    db.seed(
+      "knowledge_documents",
+      (options.docs ?? []).map((d, i) => ({ id: `kd-${i}`, workspace_id: WORKSPACE, agent_id: d.agent_id ?? null, title: d.title })),
+    );
+    const ctx = {
+      db: db.asDb(),
+      agentsFor: () => ({ client: { models: { writer: "w", classifier: "c" } } }),
+    } as unknown as WorkerContext;
+    return { db, ctx };
+  }
+
+  it("revises a pasted title-case label and an offer nobody can keep, handing the reviser the same checks", async () => {
+    const { db, ctx } = live();
+    reviseMock.mockImplementation(async (_ctx: unknown, input?: { text: string }) =>
+      input?.text === PASTED
+        ? "If it's worth a look, happy to grab 20 minutes? {{cta_link}}"
+        : "Most owners still sell every client themselves. You too?",
+    );
+    await repairCopy(ctx);
+    expect(db.find("campaign_steps", { id: "s3" })?.message).toBe("If it's worth a look, happy to grab 20 minutes? {{cta_link}}");
+    expect(db.find("campaign_steps", { id: "s2" })?.message).toMatch(/sell every client/);
+    const pasted = reviseMock.mock.calls.find((call) => (call[1] as { text: string }).text === PASTED)?.[1] as {
+      ctaLabel: string;
+      assets: string[];
+    };
+    // The library entry's label, as the writer was handed it.
+    expect(pasted.ctaLabel).toBe(LABEL);
+    expect(pasted.assets).toContain("https://cal.example.com/consult");
+  });
+
+  it("leaves an offer alone when the knowledge base has the thing offered", async () => {
+    const { db, ctx } = live({ docs: [{ title: "Two sentence outbound examples" }] });
+    reviseMock.mockResolvedValue("If it's worth a look, happy to grab 20 minutes? {{cta_link}}");
+    await repairCopy(ctx);
+    expect(db.find("campaign_steps", { id: "s2" })?.message).toBe(EXAMPLE);
+    const texts = reviseMock.mock.calls.map((call) => (call[1] as { text: string }).text);
+    expect(texts).not.toContain(EXAMPLE);
+  });
+
+  it("never counts another brand's document as something this campaign can send", async () => {
+    const { db, ctx } = live({ docs: [{ title: "Two sentence outbound examples", agent_id: "agent-2" }] });
+    reviseMock.mockResolvedValue(null);
+    await repairCopy(ctx);
+    const texts = reviseMock.mock.calls.map((call) => (call[1] as { text: string }).text);
+    expect(texts).toContain(EXAMPLE);
+    expect(db.find("campaign_steps", { id: "s2" })?.message).toBe(EXAMPLE);
+  });
+
+  it("clears a queued note built on another audience's opener, without asking the model", async () => {
+    const { db, ctx } = live();
+    reviseMock.mockResolvedValue(null);
+    const result = await repairCopy(ctx);
+    expect(db.find("campaign_prospects", { id: "q1" })?.invite_note).toBeNull();
+    expect(result.cleared).toBe(1);
+    const texts = reviseMock.mock.calls.map((call) => (call[1] as { text: string }).text);
+    expect(texts).not.toContain(MARIA);
+  });
+
+  it("keeps a note leaning on the business's own opener, attached to no audience", async () => {
+    // The line approved on the launch step is this business's own, not
+    // another audience's, and notes written from it are not borrowing.
+    const { db, ctx } = live({ foundersAngle: false });
+    reviseMock.mockResolvedValue(null);
+    await repairCopy(ctx);
+    expect(db.find("campaign_prospects", { id: "q1" })?.invite_note).toBe(MARIA);
+  });
+
+  it("keeps a note leaning on the opener its own angle carries", async () => {
+    const { db, ctx } = live({ ownHook: true });
+    reviseMock.mockResolvedValue(null);
+    await repairCopy(ctx);
+    expect(db.find("campaign_prospects", { id: "q1" })?.invite_note).toBe(MARIA);
+  });
+
+  it("takes the call to action out of the campaign's name", async () => {
+    const { db, ctx } = live();
+    reviseMock.mockResolvedValue(null);
+    const result = await repairCopy(ctx);
+    expect(db.find("campaigns", { id: CAMPAIGN })?.name).toBe("Staffing owners");
+    expect(result.renamed).toBe(1);
+  });
+});
+
 describe("repairSeededLines", () => {
   const business = {
     companyName: "Palma Podcast Productions",
@@ -151,5 +291,20 @@ describe("repairSeededLines", () => {
     expect(db.find("pitches", { id: "seeded" })?.body).toBe("We produce and distribute short.");
     expect(db.find("pitches", { id: "mine" })?.body).toBe("Short episodes your patients actually finish.");
     expect(result.approvedLeft).toBe(1);
+  });
+});
+
+describe("repairCopy and names a person chose", () => {
+  it("never strips a bracket of the person's own that only looks like a call to action", async () => {
+    const { FakeDb: Db } = await import("./fake-db.js");
+    const db = new Db();
+    db.seed("campaigns", [
+      { id: "c-own", workspace_id: "11111111-1111-4111-8111-111111111111", status: "running", name: "Chamber leaders (Join program)", connection_note: null, agent_id: null, customer_profile_id: null, cta_id: null, cta_label: "Book a call", cta_url: null },
+    ]);
+    for (const t of ["ctas", "hooks", "customer_profiles", "campaign_variants", "campaign_steps", "campaign_prospects", "knowledge_documents"]) db.seed(t, []);
+    const ctx = { db: db.asDb(), agentsFor: () => ({ client: { models: { writer: "w", classifier: "c" } } }) } as unknown as WorkerContext;
+    const result = await repairCopy(ctx);
+    expect(db.find("campaigns", { id: "c-own" })?.name).toBe("Chamber leaders (Join program)");
+    expect(result.renamed).toBe(0);
   });
 });

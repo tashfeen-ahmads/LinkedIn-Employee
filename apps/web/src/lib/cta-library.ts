@@ -20,17 +20,23 @@ export async function ensureCta(
   cta: StashedCta,
 ): Promise<string | null> {
   const url = CTA_DEFINITIONS[cta.kind].needsUrl ? cta.url : null;
+  // Matched on what the entry says, not on which column says it: a row
+  // written with the words in `name` and a null `label` is the same ask as
+  // one written with them in `label`, and matching only the column made a
+  // second "Book a Free Consultation" beside the first.
   let query = supabase
     .from("ctas")
-    .select("id")
+    .select("id, name, label")
     .eq("workspace_id", workspaceId)
     .eq("kind", cta.kind)
     .is("archived_at", null);
   query = url ? query.eq("url", url) : query.is("url", null);
-  query = cta.label ? query.eq("label", cta.label) : query.is("label", null);
-  const { data: existing, error } = await query.limit(1);
+  const { data: existing, error } = await query.order("created_at", { ascending: true });
   if (error) return null;
-  if (existing?.[0]) return existing[0].id;
+  const words = (value: string | null | undefined) => (value ?? "").trim().toLowerCase();
+  const wanted = words(cta.label || CTA_DEFINITIONS[cta.kind].label);
+  const same = (existing ?? []).find((row) => words(row.label || row.name) === wanted);
+  if (same) return same.id;
 
   const { data: created } = await supabase
     .from("ctas")

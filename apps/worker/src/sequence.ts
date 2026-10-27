@@ -37,12 +37,20 @@ export function ownSequence<T extends { variant_id?: string | null }>(
 export async function campaignSteps(
   db: Db,
   campaignId: string,
-): Promise<Array<{ variant_id: string | null; step_number: number; message: string; delay_days: number }>> {
+): Promise<
+  Array<{ variant_id: string | null; step_number: number; message: string; delay_days: number; prompt_version?: string | null }>
+> {
   const { data } = await db
     .from("campaign_steps")
-    .select("variant_id, step_number, message, delay_days")
+    .select("variant_id, step_number, message, delay_days, prompt_version")
     .eq("campaign_id", campaignId);
-  return (data ?? []) as Array<{ variant_id: string | null; step_number: number; message: string; delay_days: number }>;
+  return (data ?? []) as Array<{
+    variant_id: string | null;
+    step_number: number;
+    message: string;
+    delay_days: number;
+    prompt_version?: string | null;
+  }>;
 }
 
 /**
@@ -54,7 +62,7 @@ export async function stepFor(
   campaignId: string,
   variantId: string | null,
   stepNumber: number,
-): Promise<{ message: string; delay_days: number } | null> {
+): Promise<{ message: string; delay_days: number; prompt_version?: string | null } | null> {
   const steps = ownSequence(await campaignSteps(db, campaignId), variantId);
   return steps.find((step) => step.step_number === stepNumber) ?? null;
 }

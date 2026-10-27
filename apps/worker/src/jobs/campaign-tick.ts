@@ -5,6 +5,7 @@ import {
   LINKEDIN_LIMITS,
   PACING_LAST_ACTION,
   PACING_LAST_FAILURE,
+  PACING_DETAIL,
   PACING_LOOP,
   type CampaignProspectStatus,
 } from "@le/shared";
@@ -214,11 +215,11 @@ async function tick(db: Db, queues: Queues, now: Date, linkedin?: unknown): Prom
     }
   }
 
+  // Per campaign and per account, so never on the row every member can read.
+  await recordBeat(db, PACING_DETAIL, { decisions, inFlight: inFlightToday }, now);
   await beat(db, now, {
     campaigns: campaigns.length,
     enqueued,
-    decisions,
-    inFlight: inFlightToday,
     // What is actually sitting in the queue. A job already holding the id this
     // loop would use is accepted silently by BullMQ and never added, so a
     // single stuck or failed invitation can stop a campaign for ever with the

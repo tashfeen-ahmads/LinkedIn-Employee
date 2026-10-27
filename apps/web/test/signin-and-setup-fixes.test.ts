@@ -30,7 +30,8 @@ describe("LinkedIn sign-in errors travel as codes", () => {
   it("is the one definition both the onboarding step and the profile read", () => {
     const onboarding = read("app", "onboarding", "page.tsx");
     expect(onboarding).toMatch(/\.\.\.LINKEDIN_CONNECT_ERRORS/);
-    const profile = read("app", "app", "profile", "page.tsx");
+    // Said on the LinkedIn account section, where the sign-in returns to.
+    const profile = read("app", "app", "profile", "linkedin", "page.tsx");
     expect(profile).toMatch(/linkedInConnectError\(params\.error\)/);
   });
 });
@@ -85,8 +86,11 @@ describe("the LinkedIn repair notice", () => {
  */
 describe("a strategy with no name", () => {
   it("gets no Approve button on either strategy screen", () => {
-    const strategy = read("app", "app", "strategy", "page.tsx");
-    const approve = strategy.indexOf("<form action={approveProfile}>\n                      <input type=\"hidden\" name=\"profileId\" value={row.id} />\n                      <SubmitButton className=\"btn small\"");
+    // Each strategy is approved on its own page now (`/app/strategy/[id]`).
+    const strategy = read("app", "app", "strategy", "[id]", "page.tsx");
+    const approve = strategy.search(
+      /<form action=\{approveProfile\}>\s*<input type="hidden" name="profileId" value=\{row\.id\} \/>\s*<input type="hidden" name="strategyPage" value=\{row\.id\} \/>\s*<SubmitButton className="btn small"/,
+    );
     expect(approve).toBeGreaterThan(0);
     expect(strategy.slice(approve - 400, approve)).toMatch(/!row\.name\?\.trim\(\)/);
 

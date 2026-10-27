@@ -28,6 +28,7 @@ import {
   exclusionReason,
   matchExclusion,
   renderCta,
+  titleCaseCta,
   type CampaignProspectStatus,
   INVITE_NOTE_MAX_CHARS,
   CTA_PLACEHOLDER,
@@ -39,7 +40,7 @@ import {
   missingFields,
   type MergeValues,
 } from "@le/shared";
-import { CAMPAIGN_PROMPT_VERSION, FIRST_MESSAGE_PROMPT_VERSION } from "@le/agents";
+import { FIRST_MESSAGE_PROMPT_VERSION } from "@le/agents";
 import { readCampaignCta } from "../cta.js";
 import type { WorkerContext } from "../context.js";
 import { recordEvent } from "../context.js";
@@ -666,13 +667,15 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
    * the change that caused it (Conventions). Every sent message stored null
    * here, so nothing could say which writer a bad follow-up came from.
    *
-   * The personal first message carries the version it was written with. A
-   * campaign step stores none of its own, so it is the campaign writer's,
-   * the one prompt that writes steps.
+   * The personal first message carries the version it was written with, and
+   * a campaign step the version stored on it when it was written or revised
+   * (migration 0059). Null for a step a person wrote or edited, or one older
+   * than the column: today's writer constant would name a prompt that never
+   * touched those words.
    */
   const promptVersion = personal
     ? ((cp as { first_message_prompt_version?: string | null }).first_message_prompt_version ?? FIRST_MESSAGE_PROMPT_VERSION)
-    : CAMPAIGN_PROMPT_VERSION;
+    : ((step as { prompt_version?: string | null }).prompt_version ?? null);
 
   // The destination goes in here rather than being written into the copy, so
   // changing where a campaign points does not mean rewriting three messages and
@@ -844,6 +847,37 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
       db,
       conversation.id,
       `A follow-up still has ${unfilled.map((f) => `{{${f}}}`).join(", ")} in it, which would reach the prospect as written. Edit the step and it sends on the next run.`,
+      "copy",
+    );
+    await db
+      .from("campaign_prospects")
+      .update({ status_reason: HELD_FOR_COPY })
+      .eq("id", cp.id)
+      .eq("status", cp.status);
+    return;
+  }
+
+  /*
+   * Nor with the call to action pasted in as its label.
+   *
+   * "If yes, Book a Free Consultation and pick a time" went to real people:
+   * a button's name typed into a sentence, which reads as software filling a
+   * slot. The writers and the nightly repair check for it, and copy stored
+   * before either did is still on the conveyor belt, so it is held here too,
+   * exactly as an unfilled placeholder is: flagged as copy, schedule
+   * untouched, sent the moment the step is reworded. The known label only:
+   * the rendered text carries the prospect's company, which may well be in
+   * title case. And the step's own words only, before the approved pitch
+   * goes in: a pitch is approved text (rule 40) that the repair never
+   * rewrites, so a label inside it would hold every follow-up for good while
+   * telling the rep to fix a step that does not contain it.
+   */
+  const pastedCta = titleCaseCta(step.message.replace(/\{\{\s*pitch\s*\}\}/gi, ""), cta.label, { generic: false });
+  if (pastedCta) {
+    await flagForHuman(
+      db,
+      conversation.id,
+      `A follow-up pastes the call to action "${pastedCta}" into a sentence like a button. Reword the step in plain words and it sends on the next run.`,
       "copy",
     );
     await db
@@ -1580,8 +1614,20 @@ async function sendEngagement(
     if (campaign?.status !== "running") return skip("the campaign is not running");
   }
 
-  const { data: workspace } = await db.from("workspaces").select("engage_posts").eq("id", row.workspace_id).maybeSingle();
-  if (!workspace?.engage_posts) return skip("liking and commenting is turned off for this workspace");
+  // Each kind has its own switch (migration 0058), read at the moment of
+  // sending. A row from before the comment switch follows the old shared one.
+  const { data: workspace } = await db
+    .from("workspaces")
+    .select("engage_posts, engage_comments")
+    .eq("id", row.workspace_id)
+    .maybeSingle();
+  if (row.kind === "comment") {
+    const commentsOn =
+      typeof workspace?.engage_comments === "boolean" ? workspace.engage_comments : workspace?.engage_posts === true;
+    if (!commentsOn) return skip("commenting is turned off for this workspace");
+  } else if (!workspace?.engage_posts) {
+    return skip("liking is turned off for this workspace");
+  }
 
   if (row.prospect_id) {
     const { data: prospect } = await db

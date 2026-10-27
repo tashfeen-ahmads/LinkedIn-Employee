@@ -107,6 +107,21 @@ describe("inviteRoom", () => {
     expect(inviteRoom({ ...base, campaignCap: 5, campaignSentToday: 4 }).budget).toBe(1);
     expect(inviteRoom({ ...base, campaignCap: Number.POSITIVE_INFINITY }).budget).toBe(10);
   });
+
+  it("never promises more than the day has left when the queue count is stale", () => {
+    // Seven sent; the loop's stamp still counts all ten as queued, so the
+    // sent ones are counted twice. Three is all the day holds.
+    const room = inviteRoom({
+      ...base,
+      accountSentToday: 7,
+      campaignSentToday: 7,
+      accountInFlightToday: 10,
+      accountInFlight: 10,
+      campaignInFlightToday: 10,
+    });
+    expect(room.moreToday).toBe(3);
+    expect(inviteRoom({ ...base, campaignCap: 5, campaignSentToday: 4, campaignInFlightToday: 3 }).moreToday).toBe(1);
+  });
 });
 
 describe("queuedFromLoop", () => {

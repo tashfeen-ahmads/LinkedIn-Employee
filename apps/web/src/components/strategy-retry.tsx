@@ -65,8 +65,7 @@ export function StrategyDetailsForm({ source = {}, from }: { source?: StrategySo
             defaultValue={source.description ?? ""}
           />
           <span className="hint">
-            A website or a description — one of them is required. Sage will not invent a business
-            from nothing.
+            A website or a description is needed, so Sage has something real to read.
           </span>
         </label>
         <PostButton className="btn" pendingLabel="Reading your site…">

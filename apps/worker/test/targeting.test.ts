@@ -607,9 +607,14 @@ describe("personalised connection notes", () => {
 
     await runTargetingJob(ctx, job);
 
-    const handed = (notesMock.mock.calls[0]?.[1] ?? {}) as { hooks?: string[] };
-    expect(handed.hooks).toContain("How does your chapter measure which introductions convert?");
-    expect(handed.hooks).not.toContain("Nobody has read this one yet.");
+    const handed = (notesMock.mock.calls[0]?.[1] ?? {}) as { hooks?: string[]; otherOpeners?: string[]; sharedOpeners?: string[] };
+    // A workspace opener is tied to no strategy, so it is offered as an
+    // optional shape and the strategy's own openers lead. It used to replace
+    // them, and a line written for founders opened every invitation to
+    // recruiters too.
+    expect(handed.sharedOpeners).toContain("How does your chapter measure which introductions convert?");
+    expect(handed.hooks).toEqual(["a", "b", "c"]);
+    expect([...(handed.hooks ?? []), ...(handed.otherOpeners ?? []), ...(handed.sharedOpeners ?? [])]).not.toContain("Nobody has read this one yet.");
   });
 
   it("hands over nothing at all rather than a line nobody approved", async () => {
@@ -656,8 +661,8 @@ describe("personalised connection notes", () => {
     // anything, which is the way this test would quietly stop checking.
     expect(notesMock.mock.calls.length).toBeGreaterThan(0);
     for (const call of notesMock.mock.calls) {
-      const handed = (call?.[1] ?? {}) as { hooks?: string[] };
-      expect(handed.hooks ?? []).not.toContain("Nobody has read this one yet.");
+      const handed = (call?.[1] ?? {}) as { hooks?: string[]; otherOpeners?: string[]; sharedOpeners?: string[] };
+      expect([...(handed.hooks ?? []), ...(handed.otherOpeners ?? []), ...(handed.sharedOpeners ?? [])]).not.toContain("Nobody has read this one yet.");
     }
   });
 
@@ -2053,8 +2058,79 @@ describe("the openers a brand's invite writer is handed", () => {
     expect(db.rows("campaigns")[0]?.agent_id).toBe("agent-a");
     expect(notesMock.mock.calls.length).toBeGreaterThan(0);
     for (const call of notesMock.mock.calls) {
-      const handed = (call?.[1] ?? {}) as { hooks?: string[] };
-      expect(handed.hooks ?? []).not.toContain("Brand B's opening line about brand B's product.");
+      const handed = (call?.[1] ?? {}) as { hooks?: string[]; otherOpeners?: string[]; sharedOpeners?: string[] };
+      expect([...(handed.hooks ?? []), ...(handed.otherOpeners ?? []), ...(handed.sharedOpeners ?? [])]).not.toContain(
+        "Brand B's opening line about brand B's product.",
+      );
     }
+  });
+});
+
+describe("what a campaign's writer is handed, so a yes can be answered", () => {
+  it("names the knowledge documents that exist to offer", async () => {
+    /*
+     * Step 2 of a live campaign offered "a two sentence example you can try
+     * this week" with nothing behind it. The writer may offer an artefact only
+     * when one exists, so it is told which do.
+     */
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    db.seed("knowledge_documents", [
+      { id: "kd-1", workspace_id: WORKSPACE, agent_id: null, title: "Outbound opener examples", content: "…", created_at: "2026-09-01T00:00:00Z" },
+    ]);
+    linkedin.candidates = {
+      items: [candidate("p1", "https://www.linkedin.com/in/jane-one")],
+      cursor: null,
+      droppedFilters: [],
+    };
+    scoreMock.mockResolvedValue([ranked("https://www.linkedin.com/in/jane-one", "p1", 90)]);
+    notesMock.mockResolvedValue(new Map());
+
+    await runTargetingJob(ctx, job);
+
+    expect(campaignMock).toHaveBeenCalled();
+    const handed = campaignMock.mock.calls[0]?.[1] as { assets?: string[] };
+    expect(handed.assets).toEqual(["Outbound opener examples"]);
+  });
+});
+
+describe("groupByAngle", () => {
+  it("leads with the angle's own opener and the strategy's, and offers the rest as optional", async () => {
+    /*
+     * An opener approved for the agent is tied to no strategy. It used to
+     * replace each strategy's own openers, and recruiters received "Quick yes
+     * or no Maria: do founders still run outbound where you hire".
+     */
+    const { groupByAngle } = await import("../src/jobs/targeting.js");
+    const founders = "Quick yes or no: do founders still run outbound at your company?";
+    const angleLine = "Are you still the one bringing in every new client?";
+    const person = { providerId: "pv1", firstName: "Maria" } as never;
+    const groups = groupByAngle(
+      [{ id: "p1" }, { id: "p2" }],
+      new Map([
+        ["p1", { id: "v1", angle: "Owner-led sales" }],
+        ["p2", null],
+      ]),
+      new Map([
+        ["p1", "pv1"],
+        ["p2", "pv2"],
+      ]),
+      {
+        campaignAngle: "Staffing owners",
+        shortlist: [{ candidate: person }, { candidate: { providerId: "pv2", firstName: "Ana" } as never }],
+        profile: { hooks: ["Are new clients still mostly referrals?"] },
+      },
+      { byVariantId: new Map([["v1", angleLine]]), all: [founders, angleLine] },
+    );
+    const angled = groups.find((g) => g.angle === "Owner-led sales")!;
+    const plain = groups.find((g) => g.angle === "Staffing owners")!;
+    expect(angled.hooks).toEqual([angleLine, "Are new clients still mostly referrals?"]);
+    // Attached to no angle: this business's own line, a shape for anybody.
+    expect(angled.sharedOpeners).toEqual([founders]);
+    expect(angled.otherOpeners).toEqual([]);
+    expect(plain.hooks).toEqual(["Are new clients still mostly referrals?"]);
+    // Attached to another angle: written for that audience, never borrowed.
+    expect(plain.otherOpeners).toEqual([angleLine]);
+    expect(plain.sharedOpeners).toEqual([founders]);
   });
 });

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Panel, Section } from "@/components/page";
+import { Section } from "@/components/page";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { loadDailyReport } from "@/lib/daily-report";
@@ -16,35 +16,23 @@ import { loadDailyReport } from "@/lib/daily-report";
  *
  * Sentences first and numbers second, in that order and not the other way
  * round. A row of counters is a dashboard; a paragraph is a colleague. The
- * counters are underneath for the person who wants to check the arithmetic,
- * which is a different and rarer need.
+ * counts live on Results, for the person who wants to check the arithmetic.
  */
 export async function DailyReportSection() {
   const session = await requireSession();
   const supabase = await createClient();
   const { lines, facts } = await loadDailyReport(supabase, session.workspaceId);
 
-  const counts = [
-    { label: "Profiles viewed", value: facts.warmed },
-    { label: "Invitations", value: facts.invited },
-    { label: "Accepted", value: facts.accepted },
-    { label: "Messages", value: facts.messaged },
-    { label: "Replies", value: facts.replies },
-  ].filter((entry) => entry.value > 0);
-
-  const waiting = facts.held.reduce((sum, item) => sum + item.count, 0);
-
   return (
     <Section
+      framed
       id="today"
       title="Today"
-      description="What your agent did, and anything it needs from you."
+      description="What Nora did today, in plain words."
+      // The inbox is already the first row of Needs you when replies wait,
+      // so a second "Open the inbox" here would be the same button twice.
       action={
-        waiting > 0 ? (
-          <Link className="btn small" href="/app/inbox">
-            Open the inbox
-          </Link>
-        ) : facts.loopStalled ? (
+        facts.loopStalled ? (
           <Link className="btn small" href="/app/system">
             System check
           </Link>
@@ -52,31 +40,14 @@ export async function DailyReportSection() {
       }
     >
       {/*
-        The day's sentences and its counters are one statement, so they share
-        one surface. Bare on the page background this read as loose paragraphs
-        beside the bordered blocks under it, which is the drift `Panel` exists
-        to stop.
+        Framed, so it shares a row with Account safety on the overview: the
+        day's story beside how close the day is to its limits.
       */}
-      <Panel>
-        <div className={`report${facts.loopStalled ? " report-alarm" : ""}`}>
-          {lines.map((line) => (
-            <p key={line}>{line}</p>
-          ))}
-        </div>
-
-        {/* Only what happened. A row of zeroes reads as a failed day; an
-            absent counter reads as "it did not come up", which is the truth. */}
-        {counts.length > 0 ? (
-          <dl className="report-counts">
-            {counts.map((entry) => (
-              <div key={entry.label}>
-                <dt className="tiny subtle">{entry.label}</dt>
-                <dd className="nums">{entry.value}</dd>
-              </div>
-            ))}
-          </dl>
-        ) : null}
-      </Panel>
+      <div className={`report${facts.loopStalled ? " report-alarm" : ""}`}>
+        {lines.map((line) => (
+          <p key={line}>{line}</p>
+        ))}
+      </div>
     </Section>
   );
 }

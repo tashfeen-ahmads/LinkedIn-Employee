@@ -61,8 +61,8 @@ export async function BillingSection({ checkout }: { checkout?: string } = {}) {
           ending={Boolean(workspace?.cancel_at_period_end)}
         />
         {isAdmin && workspace?.stripe_customer_id ? (
-          <form action="/app/billing/portal" method="post">
-            <button className="btn secondary small" type="submit">
+          <form action="/app/billing/portal" method="post" className="profile-form-foot">
+            <button className="btn secondary" type="submit">
               Manage billing, card and invoices
             </button>
           </form>
@@ -82,10 +82,7 @@ export async function BillingSection({ checkout }: { checkout?: string } = {}) {
         workspace whose sending is genuinely stopped.
       */}
       <Section id="data" title="Your data" description="Everything in this workspace, as one file you can take with you.">
-        <Panel>
-          <p className="small muted">
-            Every prospect, conversation, message, meeting and campaign, as one JSON file.
-          </p>
+        <Panel className="profile-card">
           {/*
             A link, not a form: the answer is a download, and a server action can
             only redirect or re-render. Owners and admins only, because the file
@@ -96,11 +93,17 @@ export async function BillingSection({ checkout }: { checkout?: string } = {}) {
           */}
           {["owner", "admin"].includes(session.role) ? (
             <>
-              <p>
-                <a className="btn secondary small" href="/app/export">
+              <div className="profile-row">
+                <div>
+                  <p><strong>Download</strong></p>
+                  <p className="small muted">
+                    Every prospect, conversation, message, meeting and campaign, as one JSON file.
+                  </p>
+                </div>
+                <a className="btn secondary" href="/app/export">
                   Download workspace export
                 </a>
-              </p>
+              </div>
               {/*
                 A plain form post to a route, not a server action: an action's
                 body is capped at a megabyte and its id changes every deploy.
@@ -108,26 +111,29 @@ export async function BillingSection({ checkout }: { checkout?: string } = {}) {
                 prospects or conversations — and everything a person approves
                 arrives unapproved.
               */}
-              <form action="/app/import" method="post" encType="multipart/form-data">
-                <p className="small muted">
-                  Import an export file into this workspace: agents, knowledge, calls to action, pitches,
-                  openers and strategies, plus everyone on its exclusion list or already contacted. Prospects,
-                  campaigns, conversations and team members are not imported, and strategies, pitches and
-                  openers arrive unapproved so you can check them first. Up to 5 MB.
-                </p>
-                <div className="row">
-                  <label className="sr-only" htmlFor="import-file">
-                    Export file
-                  </label>
+              <form action="/app/import" method="post" encType="multipart/form-data" className="profile-form profile-divided">
+                <label className="field">
+                  <span>Import an export file</span>
                   <input id="import-file" name="file" type="file" accept="application/json,.json" required />
-                  <button className="btn secondary small" type="submit">
+                  <span className="hint">
+                    Brings in agents, knowledge, calls to action, pitches, openers and strategies, plus everyone on
+                    the exclusion list or already contacted. Prospects, campaigns, conversations and team members are
+                    not imported, and strategies, pitches and openers arrive unapproved so you can check them first.
+                    Up to 5 MB.
+                  </span>
+                </label>
+                <div className="profile-form-foot">
+                  <button className="btn secondary" type="submit">
                     Import
                   </button>
                 </div>
               </form>
             </>
           ) : (
-            <p className="tiny subtle">An owner or an admin can download this.</p>
+            <p className="small muted">
+              Every prospect, conversation, message, meeting and campaign, as one JSON file. An owner or an admin can
+              download it.
+            </p>
           )}
         </Panel>
       </Section>

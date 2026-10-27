@@ -484,9 +484,9 @@ export default async function PitchPage({ searchParams }: { searchParams: Promis
   return (
     <>
       <PageHeader
-        eyebrow="Pipeline"
+        eyebrow="Setup"
         title="Opener and pitch"
-        lede="The two lines a campaign is really made of. The opener is the shape of the connection request; the pitch is what goes out the moment somebody asks what this is. Several of each, because one is an opinion nobody can check."
+        lede="The opener is the idea each connection note is built on. The pitch is the one-line offer Nora makes when somebody asks what you do. Keep a few of each, and approve each one before it is used."
       />
 
       <PageNotice error={params.error} notice={params.notice} />

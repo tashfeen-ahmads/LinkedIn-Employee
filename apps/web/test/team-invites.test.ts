@@ -31,8 +31,9 @@ describe("team actions report back", () => {
     expect(section).not.toMatch(/(errorQuery|noticeQuery)\("\/app\/team"/);
   });
 
-  it("land on the profile's team section with the query before the anchor", () => {
-    expect(section).toMatch(/return `\$\{build\("\/app\/profile", message\)\}#team`;/);
+  it("land on the profile's team section, which has its own address now", () => {
+    expect(section).toMatch(/return build\(PROFILE_SECTIONS\.team, message\);/);
+    expect(readFileSync(join(SRC, "app", "app", "profile", "sections.ts"), "utf8")).toMatch(/team: "\/app\/profile\/team",/);
   });
 
   it("say so when the email was not delivered", () => {
@@ -46,6 +47,6 @@ describe("team actions report back", () => {
   });
 
   it("the old route forwards its query string", () => {
-    expect(teamPage).toMatch(/redirect\(`\/app\/profile\$\{forwardQuery\(await searchParams\)\}#team`\)/);
+    expect(teamPage).toMatch(/redirect\(`\/app\/profile\/team\$\{forwardQuery\(await searchParams\)\}`\)/);
   });
 });

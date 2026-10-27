@@ -400,7 +400,7 @@ export default async function InboxPage({
     <>
       <PageHeader
         title="Inbox"
-        lede="Everyone this workspace has written to, and what happened next. Anything Reese will not answer on its own waits under “Waiting on you”."
+        lede="Everyone you have written to, and what happened next. Replies that need you wait under “Waiting on you”."
       />
       <PageNotice error={params.error} notice={params.notice} />
 
@@ -553,7 +553,10 @@ export default async function InboxPage({
                   </div>
                 </>
               ) : draft ? (
-                <>
+                // One row under the reply: Send, and the way out on the right.
+                // Two forms stacked put a full-width outlined button under
+                // Send, which read as a second, equal choice.
+                <div className="inbox-reply">
                   <form action={approveDraft}>
                     <input type="hidden" name="draftId" value={draft.id} />
                     <label className="field">
@@ -570,20 +573,21 @@ export default async function InboxPage({
                     {/* Two presses: this throws the draft away and takes the
                         conversation off this list, and neither comes back. */}
                     <ConfirmButton
-                      className="btn secondary small"
+                      className="btn ghost"
                       confirmLabel="Discard the draft"
                       pendingLabel="Discarding…"
                     >
-                      Dismiss, I will handle it on LinkedIn
+                      I&rsquo;ll answer on LinkedIn
                     </ConfirmButton>
                   </form>
-                </>
+                </div>
               ) : (
                 <>
                   <p className="small muted">
                     The agent did not write a reply for this one. Yours goes out through the same
                     account and the same daily limits.
                   </p>
+                  <div className="inbox-reply">
                   <form action={sendManualReply}>
                     <input type="hidden" name="conversationId" value={conversationId} />
                     <label className="field">
@@ -595,13 +599,14 @@ export default async function InboxPage({
                   <form action={dismissDraft}>
                     <input type="hidden" name="conversationId" value={conversationId} />
                     <ConfirmButton
-                      className="btn secondary small"
+                      className="btn ghost"
                       confirmLabel="Take it off this list"
                       pendingLabel="Dismissing…"
                     >
-                      Dismiss, I will handle it on LinkedIn
+                      I&rsquo;ll answer on LinkedIn
                     </ConfirmButton>
                   </form>
+                  </div>
                 </>
               )}
             </article>

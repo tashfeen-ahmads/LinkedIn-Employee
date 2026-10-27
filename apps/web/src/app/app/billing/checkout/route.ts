@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
   return new Response(null, { status: 303, headers: { Location: result.data.url } });
 }
 
-/** Back to the billing section, carrying the reason. The fragment goes after the query. */
+/** Back to the billing section, carrying the reason. */
 function back(message: string): string {
-  return `${errorQuery("/app/profile", message)}#billing`;
+  return errorQuery("/app/profile/billing", message);
 }

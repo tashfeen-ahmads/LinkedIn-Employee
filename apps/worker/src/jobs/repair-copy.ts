@@ -1,5 +1,12 @@
-import { reviseForVoice, writeHooks, writePitch } from "@le/agents";
-import { DEFAULT_OPENER_TEMPLATE, voiceProblems, type MessageKind } from "@le/shared";
+import { REVISE_PROMPT_VERSION, reviseForVoice, writeHooks, writePitch } from "@le/agents";
+import {
+  DEFAULT_OPENER_TEMPLATE,
+  campaignNameWithoutCta,
+  openerProblems,
+  voiceProblems,
+  type MessageKind,
+  type VoiceOptions,
+} from "@le/shared";
 import { businessFor } from "../brand.js";
 import { offerFrom } from "./seed-agent.js";
 import type { WorkerContext } from "../context.js";
@@ -36,6 +43,12 @@ interface Item {
   text: string;
   kind: MessageKind;
   template: boolean;
+  /**
+   * The same checks the writers now run, for the campaign this copy belongs
+   * to: what exists to offer, the CTA's label, and for a personal note the
+   * openers it could have borrowed from (rule 40, rule 66).
+   */
+  checks: Omit<VoiceOptions, "template">;
 }
 
 interface LooseFilter extends PromiseLike<{ error: { message: string } | null }> {
@@ -51,33 +64,112 @@ export interface RepairCopyResult {
   repaired: number;
   cleared: number;
   unchanged: number;
+  /** Campaign names that carried the call to action, renamed without it. */
+  renamed: number;
 }
 
 export async function repairCopy(ctx: WorkerContext): Promise<RepairCopyResult> {
   const { db } = ctx;
   const { data: campaigns, error } = await db
     .from("campaigns")
-    .select("id, workspace_id, connection_note")
+    .select("id, workspace_id, name, connection_note, agent_id, customer_profile_id, cta_id, cta_label, cta_url")
     .in("status", [...ACTIVE]);
   if (error) throw new Error(`could not read campaigns: ${error.message}`);
   const ids = (campaigns ?? []).map((c) => c.id as string);
-  const result: RepairCopyResult = { checked: 0, failing: 0, repaired: 0, cleared: 0, unchanged: 0 };
+  const result: RepairCopyResult = { checked: 0, failing: 0, repaired: 0, cleared: 0, unchanged: 0, renamed: 0 };
   if (!ids.length) return result;
+  const workspaceIds = [...new Set((campaigns ?? []).map((c) => c.workspace_id as string))];
+  const ctaIds = [...new Set((campaigns ?? []).map((c) => c.cta_id as string | null).filter((id): id is string => Boolean(id)))];
+  const profileIds = [
+    ...new Set((campaigns ?? []).map((c) => c.customer_profile_id as string | null).filter((id): id is string => Boolean(id))),
+  ];
+  const none = Promise.resolve({ data: [] as never[], error: null });
 
-  const [steps, variants, notes] = await Promise.all([
-    db.from("campaign_steps").select("id, workspace_id, step_number, message").in("campaign_id", ids),
-    db.from("campaign_variants").select("id, workspace_id, connection_note").in("campaign_id", ids),
+  const [steps, variants, notes, ctas, docs, hooks, profiles] = await Promise.all([
+    db.from("campaign_steps").select("id, workspace_id, campaign_id, step_number, message").in("campaign_id", ids),
+    db.from("campaign_variants").select("id, workspace_id, campaign_id, connection_note, hook_id").in("campaign_id", ids),
     db
       .from("campaign_prospects")
-      .select("id, workspace_id, invite_note")
+      .select("id, workspace_id, campaign_id, variant_id, invite_note")
       .in("campaign_id", ids)
       .eq("status", "queued")
       .not("invite_note", "is", null),
+    ctaIds.length ? db.from("ctas").select("id, label, url").in("id", ctaIds) : none,
+    db.from("knowledge_documents").select("workspace_id, agent_id, title").in("workspace_id", workspaceIds),
+    db
+      .from("hooks")
+      .select("id, workspace_id, body")
+      .in("workspace_id", workspaceIds)
+      .not("approved_at", "is", null),
+    profileIds.length ? db.from("customer_profiles").select("id, spec").in("id", profileIds) : none,
   ]);
   // A read that failed is not "nothing to repair" (rule 17): stop, and try again tomorrow.
-  for (const read of [steps, variants, notes]) {
+  for (const read of [steps, variants, notes, ctas, docs, hooks, profiles]) {
     if (read.error) throw new Error(`could not read copy: ${read.error.message}`);
   }
+
+  // What each campaign may offer and what its CTA is called, read the way the
+  // writer was handed them: the library entry wins over the campaign's own
+  // columns (`effectiveCta`), and knowledge is the shared documents plus the
+  // campaign agent's own (`knowledgeFor`).
+  const ctaById = new Map(
+    ((ctas.data ?? []) as Array<{ id: string; label: string | null; url: string | null }>).map((row) => [row.id, row]),
+  );
+  const docRows = (docs.data ?? []) as Array<{ workspace_id: string; agent_id: string | null; title: string | null }>;
+  const campaignChecks = new Map<string, { workspaceId: string; checks: Omit<VoiceOptions, "template"> }>();
+  for (const c of campaigns ?? []) {
+    const linked = c.cta_id ? ctaById.get(c.cta_id as string) : undefined;
+    const label = linked?.label ?? (c.cta_label as string | null) ?? null;
+    const url = linked?.url ?? (c.cta_url as string | null) ?? null;
+    const titles = docRows
+      .filter((d) => d.workspace_id === c.workspace_id && (d.agent_id === null || d.agent_id === c.agent_id))
+      .map((d) => d.title?.trim() ?? "");
+    campaignChecks.set(c.id as string, {
+      workspaceId: c.workspace_id as string,
+      checks: { assets: [label ?? "", url ?? "", ...titles].filter(Boolean), ctaLabel: label },
+    });
+  }
+  const checksFor = (campaignId: string | null | undefined) => campaignChecks.get(campaignId ?? "")?.checks ?? {};
+
+  // The openers a queued note could have borrowed from. Its own are the
+  // angle's attached opener and its strategy's; every other approved line in
+  // the workspace was written for somebody else (`openerProblems`).
+  const approvedByWorkspace = new Map<string, Map<string, string>>();
+  for (const row of (hooks.data ?? []) as Array<{ id: string; workspace_id: string; body: string | null }>) {
+    const body = row.body?.trim();
+    if (!body) continue;
+    const map = approvedByWorkspace.get(row.workspace_id) ?? new Map<string, string>();
+    map.set(row.id, body);
+    approvedByWorkspace.set(row.workspace_id, map);
+  }
+  const strategyHooks = new Map(
+    ((profiles.data ?? []) as Array<{ id: string; spec: unknown }>).map((row) => [
+      row.id,
+      ((row.spec as { hooks?: unknown } | null)?.hooks as unknown[] | undefined ?? [])
+        .filter((line): line is string => typeof line === "string" && Boolean(line.trim()))
+        .map((line) => line.trim()),
+    ]),
+  );
+  const variantById = new Map(
+    ((variants.data ?? []) as Array<{ id: string; hook_id: string | null }>).map((row) => [row.id, row]),
+  );
+  const attachedHookIds = new Set(
+    ((variants.data ?? []) as Array<{ hook_id: string | null }>).map((row) => row.hook_id).filter(Boolean) as string[],
+  );
+  const campaignById = new Map((campaigns ?? []).map((c) => [c.id as string, c]));
+  const openersFor = (note: { workspace_id: string; campaign_id: string; variant_id: string | null }) => {
+    const approved = approvedByWorkspace.get(note.workspace_id) ?? new Map<string, string>();
+    const hookId = note.variant_id ? variantById.get(note.variant_id)?.hook_id : null;
+    const profileId = campaignById.get(note.campaign_id)?.customer_profile_id as string | null | undefined;
+    const own = [...(hookId && approved.get(hookId) ? [approved.get(hookId)!] : []), ...(strategyHooks.get(profileId ?? "") ?? [])];
+    // Foreign only when attached to another angle: an opener attached to none
+    // is this business's own line, such as the one approved on the launch
+    // step, and a note leaning on it is not borrowing from anybody.
+    const foreign = [...approved.entries()]
+      .filter(([id, line]) => attachedHookIds.has(id) && !own.includes(line))
+      .map(([, line]) => line);
+    return { own, foreign };
+  };
 
   const items: Item[] = [
     ...(campaigns ?? []).map((c) => ({
@@ -88,6 +180,7 @@ export async function repairCopy(ctx: WorkerContext): Promise<RepairCopyResult> 
       text: (c.connection_note as string | null) ?? "",
       kind: "invite_note" as const,
       template: true,
+      checks: checksFor(c.id as string),
     })),
     ...(variants.data ?? []).map((v) => ({
       workspaceId: v.workspace_id as string,
@@ -97,6 +190,7 @@ export async function repairCopy(ctx: WorkerContext): Promise<RepairCopyResult> 
       text: (v.connection_note as string | null) ?? "",
       kind: "invite_note" as const,
       template: true,
+      checks: checksFor(v.campaign_id as string),
     })),
     ...(steps.data ?? []).map((s) => ({
       workspaceId: s.workspace_id as string,
@@ -106,6 +200,7 @@ export async function repairCopy(ctx: WorkerContext): Promise<RepairCopyResult> 
       text: (s.message as string | null) ?? "",
       kind: (s.step_number === 1 ? "first_message" : "follow_up") as MessageKind,
       template: true,
+      checks: checksFor(s.campaign_id as string),
     })),
     ...(notes.data ?? []).map((n) => ({
       workspaceId: n.workspace_id as string,
@@ -115,11 +210,19 @@ export async function repairCopy(ctx: WorkerContext): Promise<RepairCopyResult> 
       text: (n.invite_note as string | null) ?? "",
       kind: "invite_note" as const,
       template: false,
+      // A connection request offers nothing, so no assets: the writer's own rule.
+      checks: {
+        openers: openersFor({
+          workspace_id: n.workspace_id as string,
+          campaign_id: n.campaign_id as string,
+          variant_id: (n.variant_id as string | null) ?? null,
+        }),
+      },
     })),
   ].filter((item) => item.text.trim());
 
   result.checked = items.length;
-  const failing = items.filter((item) => voiceProblems(item.text, item.kind, { template: item.template }).length);
+  const failing = items.filter((item) => voiceProblems(item.text, item.kind, { ...item.checks, template: item.template }).length);
   result.failing = failing.length;
   const batch = failing.slice(0, MAX_REVISIONS);
 
@@ -131,18 +234,52 @@ export async function repairCopy(ctx: WorkerContext): Promise<RepairCopyResult> 
     result[key] += 1;
   };
 
+  // A campaign named after its call to action ("Staffing owners (Book a Free
+  // Consultation)"): the name is handed to the note writer as an angle when a
+  // campaign has no other, so it is cleaned too. No model: the label is known.
+  for (const c of campaigns ?? []) {
+    const name = (c.name as string | null) ?? "";
+    const label = campaignChecks.get(c.id as string)?.checks.ctaLabel ?? null;
+    // The known label only: the name may be one a person chose (rule 66's
+    // repair rewrites only what fails, and a bracket of theirs has not).
+    const cleaned = campaignNameWithoutCta(name, label, { generic: false });
+    if (!name || cleaned === name.trim()) continue;
+    const { data: renamedRows, error: renameError } = await db
+      .from("campaigns")
+      .update({ name: cleaned })
+      .eq("id", c.id as string)
+      .eq("workspace_id", c.workspace_id as string)
+      // Only if nobody renamed it meanwhile.
+      .eq("name", name)
+      .select("id");
+    if (renameError) console.error("could not rename a campaign", { id: c.id, reason: renameError.message });
+    else if (renamedRows?.length) result.renamed += 1;
+  }
+
   for (let i = 0; i < batch.length; i += CONCURRENCY) {
     await Promise.all(
       batch.slice(i, i + CONCURRENCY).map(async (item) => {
         let revised: string | null = null;
-        try {
-          revised = await reviseForVoice(ctx.agentsFor(item.workspaceId), {
-            text: item.text,
-            kind: item.kind,
-            template: item.template,
-          });
-        } catch (err) {
-          console.error("could not revise stored copy", { table: item.table, id: item.id, reason: String(err) });
+        // A personal note built on another audience's opener (or pasting one)
+        // is about the wrong person or is a template, and the reviser has none
+        // of this person's details to write a better one from. It is cleared,
+        // so the angle's own reviewed note goes instead.
+        const borrowed =
+          item.table === "campaign_prospects" && item.checks.openers
+            ? openerProblems(item.text, item.checks.openers).length > 0
+            : false;
+        if (!borrowed) {
+          try {
+            revised = await reviseForVoice(ctx.agentsFor(item.workspaceId), {
+              text: item.text,
+              kind: item.kind,
+              template: item.template,
+              assets: item.checks.assets ? [...item.checks.assets] : undefined,
+              ctaLabel: item.checks.ctaLabel ?? null,
+            });
+          } catch (err) {
+            console.error("could not revise stored copy", { table: item.table, id: item.id, reason: String(err) });
+          }
         }
         // A personal note nobody could fix goes back to the campaign's own
         // note, which is reviewed copy and is repaired by this same pass.
@@ -154,7 +291,9 @@ export async function repairCopy(ctx: WorkerContext): Promise<RepairCopyResult> 
         // The four tables share the columns used here; the builder's types
         // cannot follow a table chosen at run time.
         let write = (db.from(item.table) as unknown as LooseTable)
-          .update({ [item.column]: next })
+          // A step records the prompt that wrote it, so a sent message traces
+          // to this revision rather than to whichever writer built the campaign.
+          .update(item.table === "campaign_steps" ? { [item.column]: next, prompt_version: REVISE_PROMPT_VERSION } : { [item.column]: next })
           .eq("id", item.id)
           .eq("workspace_id", item.workspaceId)
           // Only if nobody changed it while the model was writing.

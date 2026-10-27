@@ -148,6 +148,15 @@ export const FIRST_STEP_TIMING_LABEL = "as soon as they accept";
 export const PACING_LOOP = "campaign-tick";
 
 /**
+ * What the pacing loop decided for each campaign and what it has queued for
+ * each account. Kept off `PACING_LOOP` because that row is readable by every
+ * signed-in member (migration 0056) and this one names every workspace's
+ * campaigns and accounts. Members read their own account's count through
+ * `pacing_in_flight` (migration 0059); the console reads the row itself.
+ */
+export const PACING_DETAIL = "campaign-tick:detail";
+
+/**
  * Two more stamps the pacing loop writes, because one row cannot answer the
  * question anybody actually has.
  *

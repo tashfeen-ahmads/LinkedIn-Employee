@@ -1,15 +1,20 @@
 import Link from "next/link";
 import { revalidatePath } from "next/cache";
 import { Empty, PageHeader } from "@/components/page";
+import { SectionLayout } from "@/components/section-nav";
+import { ProspectNav } from "@/components/prospect-nav";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { callWorker, errorQuery, noticeQuery } from "@/lib/worker";
-import { fitCutoffSentence, isPublicProfileUrl, profileHref } from "@le/shared";
+import { isPublicProfileUrl, profileHref } from "@le/shared";
 import { redirect } from "next/navigation";
 import { PageNotice } from "@/components/page-notice";
 import { ConfirmButton } from "@/components/confirm-button";
 import { formatDate, formatDateTime, isoAttr } from "@/lib/format";
 import { fetchAllRows } from "@/lib/rows";
+import { label } from "@/lib/labels";
+import { inboxStageOf, type InboxStage } from "@/lib/inbox-stage";
+import { displayName, loadProspectMenu, shortName } from "./data";
 
 /** How many rows the list reads at once. Said on screen when there are more. */
 const PAGE_LIMIT = 200;
@@ -86,7 +91,7 @@ async function eraseProspect(formData: FormData) {
       ),
     );
   }
-  revalidatePath("/app/prospects");
+  revalidatePath("/app/prospects", "layout");
   redirect(withMessage(back, "notice", `Erased ${who}. Only a do-not-contact record remains.`));
 }
 
@@ -109,7 +114,28 @@ const SIGNAL_LABELS: Record<string, string> = {
   other: "Signal",
 };
 
-/** The lead list, with the evidence behind every score visible on the row. */
+/** The inbox's own stage names, so a person reads the same word on both screens. */
+const STAGE_LABELS: Record<InboxStage, string> = {
+  invited: "Invited",
+  accepted: "Accepted",
+  messaged: "Messaged",
+  replied: "Replied",
+  booked: "Meeting booked",
+};
+const STAGE_RANK: Record<InboxStage, number> = { invited: 1, accepted: 2, messaged: 3, replied: 4, booked: 5 };
+const ENDED = new Set(["closed", "failed", "opted_out", "negative"]);
+
+interface CampaignRow {
+  prospect_id: string;
+  campaign_id: string;
+  status: string;
+  invited_at: string | null;
+  accepted_at: string | null;
+  replied_at: string | null;
+  last_step_sent: number | null;
+}
+
+/** Everyone this workspace has found, with where each of them got to. */
 export default async function ProspectsPage({
   searchParams,
 }: {
@@ -123,18 +149,14 @@ export default async function ProspectsPage({
   // I have reached out to, who I know" was the report, and it was accurate: the
   // list was ranked by fit score, so somebody messaged last week sat wherever
   // their score put them, indistinguishable at a glance from somebody nobody
-  // has ever written to.
+  // has ever written to (rule 24).
   const showing = params.show === "contacted" ? "contacted" : params.show === "new" ? "new" : "all";
 
-  // Which strategy found them. A business runs fifteen or twenty of these —
-  // different markets, different pains, different angles — and until now they
-  // all emptied into one undifferentiated list, so "is the agencies angle
-  // producing anybody" had no way of being asked.
-  //
-  // Read from the customer profiles rather than trusted from the query string:
-  // an id in a URL is a claim, and this one would otherwise be a way to name
-  // another workspace's strategy and see whether it exists.
-  const [{ data: strategies }, { data: me }] = await Promise.all([
+  // Which strategy found them (rule 26). Read from the customer profiles rather
+  // than trusted from the query string: an id in a URL is a claim, and this one
+  // would otherwise be a way to name another workspace's strategy and see
+  // whether it exists.
+  const [{ data: strategies }, { data: me }, menu] = await Promise.all([
     supabase
       .from("customer_profiles")
       .select("id, name")
@@ -142,6 +164,7 @@ export default async function ProspectsPage({
       .order("priority", { ascending: true }),
     // Dates on this page are the rep's own days, not the server's.
     supabase.from("profiles").select("timezone").eq("id", session.userId).maybeSingle(),
+    loadProspectMenu(supabase, session.workspaceId),
   ]);
   const timezone = me?.timezone ?? null;
 
@@ -176,12 +199,11 @@ export default async function ProspectsPage({
   }
 
   const { data: prospects, count: matching } = await query
-    // Most recently contacted first when that is what is being read; by fit
-    // otherwise, which is the order you build a list in rather than review one.
-    .order(showing === "contacted" ? "last_contacted_at" : "fit_score", {
-      ascending: false,
-      nullsFirst: false,
-    })
+    // Contacted first, most recent first, on every view: this page is the
+    // history (rule 24). Within the never-contacted, best fit first, which is
+    // the order a list is built in.
+    .order("last_contacted_at", { ascending: false, nullsFirst: false })
+    .order("fit_score", { ascending: false, nullsFirst: false })
     .limit(PAGE_LIMIT);
 
   // Counted within the strategy being viewed, not across the workspace. A
@@ -197,23 +219,35 @@ export default async function ProspectsPage({
     return strategy ? q.eq("customer_profile_id", strategy.id) : q;
   }
 
-  const [{ count: contactedCount }, { count: totalCount }, { rows: perStrategy }] = await Promise.all([
-    scopeCount((q) => q.not("last_contacted_at", "is", null)),
-    scopeCount((q) => q),
-    // One row per prospect, reduced below. A count per strategy would be one
-    // query per strategy, and a business is expected to run twenty of them.
-    // Paged, because a plain select stops at the thousandth row without
-    // saying so, and every tab then read 1,000 against a header that said
-    // more.
-    fetchAllRows<{ customer_profile_id: string | null }>((from, to) =>
-      supabase
-        .from("prospects")
-        .select("customer_profile_id")
-        .eq("workspace_id", session.workspaceId)
-        .order("id", { ascending: true })
-        .range(from, to),
-    ),
-  ]);
+  const shownIds = (prospects ?? []).map((p) => p.id);
+  const [{ count: contactedCount }, { count: totalCount }, { rows: perStrategy }, { data: placements }, { data: campaigns }] =
+    await Promise.all([
+      scopeCount((q) => q.not("last_contacted_at", "is", null)),
+      scopeCount((q) => q),
+      // One row per prospect, reduced below. A count per strategy would be one
+      // query per strategy, and a business is expected to run twenty of them.
+      // Paged, because a plain select stops at the thousandth row without
+      // saying so, and every tab then read 1,000 against a header that said
+      // more.
+      fetchAllRows<{ customer_profile_id: string | null }>((from, to) =>
+        supabase
+          .from("prospects")
+          .select("customer_profile_id")
+          .eq("workspace_id", session.workspaceId)
+          .order("id", { ascending: true })
+          .range(from, to),
+      ),
+      // Where each person on screen got to. `campaign_prospects` is the record,
+      // read through the inbox's own stage reading so the two screens agree.
+      shownIds.length
+        ? supabase
+            .from("campaign_prospects")
+            .select("prospect_id, campaign_id, status, invited_at, accepted_at, replied_at, last_step_sent")
+            .eq("workspace_id", session.workspaceId)
+            .in("prospect_id", shownIds)
+        : Promise.resolve({ data: [] as CampaignRow[] }),
+      supabase.from("campaigns").select("id, name, status").eq("workspace_id", session.workspaceId).limit(500),
+    ]);
 
   const countByStrategy = new Map<string, number>();
   for (const row of perStrategy ?? []) {
@@ -221,6 +255,22 @@ export default async function ProspectsPage({
     countByStrategy.set(key, (countByStrategy.get(key) ?? 0) + 1);
   }
   const strategyNames = new Map(strategyList.map((s) => [s.id, s.name]));
+  const campaignById = new Map((campaigns ?? []).map((c) => [c.id, c]));
+
+  /*
+   * The furthest any campaign got with each person. Rule 24 means there is
+   * almost always one row, but a person queued on two drafts built from the
+   * same customer profile is legitimate until one of them sends, and the
+   * further one is the true answer.
+   */
+  const placementByProspect = new Map<string, { row: CampaignRow; stage: InboxStage | null }>();
+  for (const row of (placements ?? []) as CampaignRow[]) {
+    const stage = inboxStageOf(row);
+    const current = placementByProspect.get(row.prospect_id);
+    const rank = stage ? STAGE_RANK[stage] : 0;
+    const currentRank = current?.stage ? STAGE_RANK[current.stage] : current ? 0 : -1;
+    if (rank > currentRank) placementByProspect.set(row.prospect_id, { row, stage });
+  }
 
   /*
    * Whether anybody on this list has an intent signal at all.
@@ -232,6 +282,10 @@ export default async function ProspectsPage({
    */
   const anySignals = (prospects ?? []).some(
     (prospect) => Array.isArray(prospect.signals) && prospect.signals.length > 0,
+  );
+
+  const nav = (
+    <ProspectNav everyone={menu.everyone} review={menu.review} searchable={menu.searchable} excluded={menu.excluded} />
   );
 
   /*
@@ -247,15 +301,17 @@ export default async function ProspectsPage({
     return (
       <>
         <PageHeader
-          eyebrow="Pipeline"
+          eyebrow="Work"
           title="Prospects"
           lede="Everyone this workspace has found, and who has been reached out to."
         />
         <PageNotice error={params.error} notice={params.notice} />
-        <Empty title="No prospects yet." action="Approve a strategy" href="/app/strategy">
-          A strategy produces a search, and a search produces this list. Nobody is contacted until
-          you have read the names and the copy.
-        </Empty>
+        <SectionLayout nav={nav}>
+          <Empty title="No prospects yet." action="Find people" href="/app/prospects/find">
+            A strategy produces a search, and a search produces this list. Nobody is contacted until
+            you have read the names and the copy.
+          </Empty>
+        </SectionLayout>
       </>
     );
   }
@@ -266,290 +322,315 @@ export default async function ProspectsPage({
   return (
     <>
       <PageHeader
-        eyebrow="Pipeline"
+        eyebrow="Work"
         title="Prospects"
         lede={
           <>
-            {totalCount ?? 0} {strategy ? `found by "${strategy.name}"` : "in this workspace"},{" "}
-            {contactedCount ?? 0} of whom have been contacted. Once somebody has been reached out to
-            they are never added to another campaign, and that is checked again in the moment before
-            every send, not only when a list is built. {fitCutoffSentence()}
+            {totalCount ?? 0} {totalCount === 1 ? "person" : "people"}{" "}
+            {strategy ? `found by “${strategy.name}”` : "found so far"}, {contactedCount ?? 0} contacted.
+            Nobody is ever contacted twice, even from a different campaign.
           </>
+        }
+        actions={
+          // Everybody who answered, by where it is going: the pipeline this
+          // list feeds.
+          <Link className="btn ghost small" href="/app/opportunities">
+            See who answered
+          </Link>
         }
       />
       <PageNotice error={params.error} notice={params.notice} />
-      {/* The filters, which are the whole reason this page is usable at all. */}
-      <div className="stack-3">
-        {/*
-          The history, as a place to stand rather than a column to squint at.
-          Ranked by fit, somebody messaged last week sat wherever their score
-          put them and looked exactly like somebody nobody had ever written to.
-        */}
+      <SectionLayout nav={nav}>
         {/*
           Two filters, kept separate because they answer different questions:
           which market a person came from, and whether we have written to them.
           Folded into one row they read as alternatives, and "Contacted" would
           look like a strategy.
         */}
-        {strategyList.length > 0 ? (
-          <nav className="tabs" aria-label="Which strategy found them">
-            <Link
-              className={`pill ${strategy ? "" : "accent"}`}
-              href={listHref({ show: showing, q: search })}
-              aria-current={strategy ? undefined : "page"}
-            >
-              All strategies ({perStrategy.length})
-            </Link>
-            {strategyList.map((s) => (
+        <div className="stack-3">
+          {strategyList.length > 0 ? (
+            <nav className="tabs" aria-label="Which strategy found them">
               <Link
-                key={s.id}
-                className={`pill ${strategy?.id === s.id ? "accent" : ""}`}
-                href={listHref({ strategy: s.id, show: showing, q: search })}
-                aria-current={strategy?.id === s.id ? "page" : undefined}
-                title={s.name}
+                className={`pill ${strategy ? "" : "accent"}`}
+                href={listHref({ show: showing, q: search })}
+                aria-current={strategy ? undefined : "page"}
               >
-                {shortName(s.name)} ({countByStrategy.get(s.id) ?? 0})
+                All strategies ({perStrategy.length})
+              </Link>
+              {strategyList.map((s) => (
+                <Link
+                  key={s.id}
+                  className={`pill ${strategy?.id === s.id ? "accent" : ""}`}
+                  href={listHref({ strategy: s.id, show: showing, q: search })}
+                  aria-current={strategy?.id === s.id ? "page" : undefined}
+                  title={s.name}
+                >
+                  {shortName(s.name)} ({countByStrategy.get(s.id) ?? 0})
+                </Link>
+              ))}
+              {countByStrategy.get("none") ? (
+                // Named rather than hidden. These are people found before the
+                // link existed, and a count that does not add up is its own
+                // question somebody has to chase.
+                <span className="pill" title="Found before prospects recorded their strategy">
+                  No strategy ({countByStrategy.get("none")})
+                </span>
+              ) : null}
+            </nav>
+          ) : null}
+
+          <nav className="tabs" aria-label="Which prospects to show">
+            {(
+              [
+                { key: "all", label: `Everyone (${totalCount ?? 0})` },
+                { key: "contacted", label: `Contacted (${contactedCount ?? 0})` },
+                { key: "new", label: `Not yet contacted (${Math.max(0, (totalCount ?? 0) - (contactedCount ?? 0))})` },
+              ] as const
+            ).map((tab) => (
+              <Link
+                key={tab.key}
+                className={`pill ${showing === tab.key ? "accent" : ""}`}
+                href={listHref({ strategy: strategy?.id, show: tab.key, q: search })}
+                aria-current={showing === tab.key ? "page" : undefined}
+              >
+                {tab.label}
               </Link>
             ))}
-            {countByStrategy.get("none") ? (
-              // Named rather than hidden. These are people found before the
-              // link existed, and a count that does not add up is its own
-              // question somebody has to chase.
-              <span className="pill" title="Found before prospects recorded their strategy">
-                No strategy ({countByStrategy.get("none")})
-              </span>
-            ) : null}
           </nav>
+
+          {/* The search box, here as well as in the top bar, so a filtered
+              list can be narrowed without losing its filters. */}
+          <form method="get" action="/app/prospects" className="prospect-search" role="search">
+            {strategy ? <input type="hidden" name="strategy" value={strategy.id} /> : null}
+            {showing !== "all" ? <input type="hidden" name="show" value={showing} /> : null}
+            <label className="sr-only" htmlFor="prospect-q">
+              Search prospects
+            </label>
+            <input
+              id="prospect-q"
+              type="search"
+              name="q"
+              defaultValue={search}
+              autoComplete="off"
+              spellCheck={false}
+              placeholder="Name, company or job title…"
+            />
+            <button className="btn secondary small" type="submit">
+              Search
+            </button>
+            {search ? <Link href={listHref({ strategy: strategy?.id, show: showing })}>Clear</Link> : null}
+          </form>
+        </div>
+
+        {shown === 0 ? (
+          // Said under the filters rather than instead of them, so the way back
+          // to a list with people in it is still on the screen.
+          <Empty
+            title={
+              search
+                ? `Nobody here matches “${search}”.`
+                : showing === "contacted"
+                  ? "Nobody here has been contacted yet."
+                  : showing === "new"
+                    ? "Everybody here has been contacted."
+                    : "This strategy has not found anybody yet."
+            }
+          >
+            {search
+              ? "Search looks at first and last names, companies and job titles. Try fewer words, or clear the search."
+              : strategy
+                ? "Its search runs once it is approved, and people appear here as it finds them. Choose another strategy above to see theirs."
+                : "Choose another filter above to see the rest of the list."}
+          </Empty>
         ) : null}
 
-        <nav className="tabs" aria-label="Which prospects to show">
-          {(
-            [
-              { key: "all", label: `Everyone (${totalCount ?? 0})` },
-              { key: "contacted", label: `Contacted (${contactedCount ?? 0})` },
-              { key: "new", label: `Not yet contacted (${Math.max(0, (totalCount ?? 0) - (contactedCount ?? 0))})` },
-            ] as const
-          ).map((tab) => (
-            <Link
-              key={tab.key}
-              className={`pill ${showing === tab.key ? "accent" : ""}`}
-              href={listHref({ strategy: strategy?.id, show: tab.key, q: search })}
-              aria-current={showing === tab.key ? "page" : undefined}
-            >
-              {tab.label}
-            </Link>
-          ))}
-        </nav>
-
-        {search ? (
-          <p className="small">
-            Results for “{search}” · <Link href={listHref({ strategy: strategy?.id, show: showing })}>Clear</Link>
+        {matching !== null && matching > shown ? (
+          // Two hundred rows is where this list stops reading, and it used to
+          // stop silently — the 201st person looked like they did not exist.
+          <p className="small muted">
+            Showing the first {shown.toLocaleString()} of {matching.toLocaleString()}. Choose a strategy
+            or search to narrow it.
           </p>
         ) : null}
-      </div>
 
-      {shown === 0 ? (
-        // Said under the filters rather than instead of them, so the way back
-        // to a list with people in it is still on the screen.
-        <Empty
-          title={
-            search
-              ? `Nobody here matches “${search}”.`
-              : showing === "contacted"
-                ? "Nobody here has been contacted yet."
-                : showing === "new"
-                  ? "Everybody here has been contacted."
-                  : "This strategy has not found anybody yet."
-          }
-        >
-          {search
-            ? "Search looks at first and last names, companies and job titles. Try fewer words, or clear the search."
-            : strategy
-              ? "Its search runs once it is approved, and people appear here as it finds them. Choose another strategy above to see theirs."
-              : "Choose another filter above to see the rest of the list."}
-        </Empty>
-      ) : null}
-
-      {matching !== null && matching > shown ? (
-        // Two hundred rows is where this list stops reading, and it used to
-        // stop silently — the 201st person looked like they did not exist.
-        <p className="small muted">
-          Showing the first {shown.toLocaleString()} of {matching.toLocaleString()}. Choose a strategy
-          or search to narrow it.
-        </p>
-      ) : null}
-
-      {shown > 0 ? (
-      <div className="table-scroll card-rows">
-        <table>
-          <thead>
-            <tr>
-              <th>Person</th>
-              <th className="num">Fit</th>
-              {/*
-                Intent and its reasons arrive together or not at all.
-
-                Signals come from campaign activity, so a workspace in its
-                first fortnight has none — and these two columns stood over a
-                row of zeros and a row of blanks on the screen a rep reads to
-                decide who to write to next. Width taken from the columns that
-                do have something in them. They come back the moment there is
-                anything to put in them, together, because a score with no
-                reason beside it is a number nobody can act on.
-              */}
-              {anySignals ? <th className="num">Intent</th> : null}
-              {anySignals ? <th>Why</th> : null}
-              <th>Status</th>
-              <th>
-                <span className="sr-only">Actions</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {(prospects ?? []).map((prospect) => {
-              const signals = Array.isArray(prospect.signals) ? (prospect.signals as unknown as Signal[]) : [];
-              const reasons = Array.isArray(prospect.fit_reasons) ? (prospect.fit_reasons as string[]) : [];
-              return (
-                <tr key={prospect.id}>
-                  <td data-label="Person">
-                    {/* A name is whatever we actually know. LinkedIn's search
-                        returns one `name` field and the profile endpoint splits
-                        it, so a card built only from the split pair showed a
-                        blank for every real person on the list — and the
-                        headline, which was there all along, was hidden under
-                        it. Falling back to the headline is not a placeholder:
-                        "Membership Director at Lawton Fort Sill Chamber of
-                        Commerce" is the most useful line on the card. */}
-                    {isPublicProfileUrl(prospect.linkedin_url, prospect.provider_id) ? (
-                      <a
-                        className="strongish"
-                        href={profileHref(prospect.linkedin_url) ?? undefined}
-                        target="_blank"
-                        rel="noreferrer noopener"
-                      >
-                        {displayName(prospect)}
-                      </a>
-                    ) : (
-                      /* Not every profile has a public address: LinkedIn hides
-                         the vanity URL outside your network and shows those
-                         people as "LinkedIn Member". They are real and can
-                         still be messaged through the provider — but a link
-                         here would 404, and a rep who clicks one concludes the
-                         whole list is invented. */
-                      <span className="strongish" title="This profile has no public LinkedIn address. They can still be invited and messaged.">
-                        {displayName(prospect)}
-                      </span>
-                    )}
-                    <p className="small muted">
-                      {[prospect.title, prospect.company].filter(Boolean).join(" · ") ||
-                        (displayName(prospect) === prospect.headline ? "" : prospect.headline ?? "")}
-                    </p>
-                  </td>
+        {shown > 0 ? (
+          <div className="table-scroll card-rows prospect-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>Person</th>
+                  <th>Company</th>
+                  <th className="num">Fit</th>
                   {/*
-                    `num`, not `mono`. The cell's font-family is inherited by
-                    everything in it, so the monospace meant for the figure was
-                    also setting the strategy's *name* underneath it — a
-                    segment somebody wrote, rendered as though it were code.
-                    Geist has real tabular figures, so the column lines up
-                    without the number having to look like a terminal.
+                    Intent and its reasons arrive together or not at all.
+                    Signals come from campaign activity, so a workspace in its
+                    first fortnight has none, and two columns of zeros and
+                    blanks stood on the screen a rep reads to decide who to
+                    write to next. They come back the moment there is anything
+                    to put in them, together, because a score with no reason
+                    beside it is a number nobody can act on.
                   */}
-                  <td data-label="Fit" className="num">
-                    {/*
-                      A fit score is a fact about a person AND a strategy: 87
-                      against "small B2B agencies" says nothing about how well
-                      they fit "chamber leaders". Shown unlabelled for months,
-                      it was a ranking nobody could interpret and everybody had
-                      to take on trust. The strategy is only repeated on the
-                      row when the list is not already filtered to one.
-                    */}
-                    {prospect.fit_score ?? "—"}
-                    {prospect.fit_score !== null && !strategy && prospect.customer_profile_id ? (
-                      <span className="tiny subtle block" title={strategyNames.get(prospect.customer_profile_id)}>
-                        vs {shortName(strategyNames.get(prospect.customer_profile_id) ?? "")}
-                      </span>
-                    ) : null}
-                  </td>
-                  {anySignals ? <td data-label="Intent" className="num">{prospect.intent_score ?? 0}</td> : null}
-                  {anySignals ? (
-                    <td data-label="Why" className="medium">
-                      <div className="cluster">
-                        {signals.slice(0, 3).map((signal, index) => (
-                          <span key={index} className="pill accent" title={signal.detail}>
-                            {SIGNAL_LABELS[signal.type] ?? signal.type}
-                          </span>
-                        ))}
-                      </div>
-                      <span className="small muted">{reasons.join("; ")}</span>
-                    </td>
-                  ) : null}
-                  <td data-label="Status">
-                    {prospect.do_not_contact ? (
-                      <span className="pill danger">Do not contact</span>
-                    ) : prospect.last_contacted_at ? (
-                      // The date, not just the fact. "Contacted" alone cannot
-                      // answer the question somebody opens this page with,
-                      // which is when, and therefore whether it was this
-                      // campaign or one from two months ago.
-                      <span className="pill" title={formatDateTime(prospect.last_contacted_at, timezone)}>
-                        Contacted{" "}
-                        <time dateTime={isoAttr(prospect.last_contacted_at)}>
-                          {formatDate(prospect.last_contacted_at, timezone)}
-                        </time>
-                      </span>
-                    ) : (
-                      <span className="pill positive">New</span>
-                    )}
-                  </td>
-                  <td data-label="Actions">
-                    {prospect.do_not_contact ? null : (
-                      <form
-                        action={eraseProspect}
-                        title="Delete everything we hold about this person, keeping only a do-not-contact record"
-                      >
-                        <input type="hidden" name="prospectId" value={prospect.id} />
-                        <input type="hidden" name="prospectName" value={displayName(prospect)} />
-                        <input type="hidden" name="back" value={here} />
-                        {/* Two presses: erasure cannot be undone, and it sat
-                            one misclick away on every row of the list. */}
-                        <ConfirmButton confirmLabel="Erase for good" pendingLabel="Erasing…">
-                          Erase<span className="sr-only"> {displayName(prospect)}</span>
-                        </ConfirmButton>
-                      </form>
-                    )}
-                  </td>
+                  {anySignals ? <th className="num">Intent</th> : null}
+                  {anySignals ? <th>Why</th> : null}
+                  <th>Stage</th>
+                  <th>Last contact</th>
+                  <th>
+                    <span className="sr-only">Actions</span>
+                  </th>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-      ) : null}
+              </thead>
+              <tbody>
+                {(prospects ?? []).map((prospect) => {
+                  const signals = Array.isArray(prospect.signals) ? (prospect.signals as unknown as Signal[]) : [];
+                  const reasons = Array.isArray(prospect.fit_reasons) ? (prospect.fit_reasons as string[]) : [];
+                  const placed = placementByProspect.get(prospect.id);
+                  const campaign = placed ? campaignById.get(placed.row.campaign_id) : undefined;
+                  const scoredAgainst = prospect.customer_profile_id
+                    ? strategyNames.get(prospect.customer_profile_id)
+                    : undefined;
+                  const name = displayName(prospect);
+                  return (
+                    <tr key={prospect.id}>
+                      <td data-label="Person">
+                        {/* A name is whatever we actually know; the headline
+                            stands in when the search returned none. Not every
+                            profile has a public address: LinkedIn hides the
+                            vanity URL outside your network, and a link to the
+                            provider id 404s, which reads as an invented list. */}
+                        {isPublicProfileUrl(prospect.linkedin_url, prospect.provider_id) ? (
+                          <a
+                            className="strongish"
+                            href={profileHref(prospect.linkedin_url) ?? undefined}
+                            target="_blank"
+                            rel="noreferrer noopener"
+                          >
+                            {name}
+                          </a>
+                        ) : (
+                          <span
+                            className="strongish"
+                            title="This profile has no public LinkedIn address. They can still be invited and messaged."
+                          >
+                            {name}
+                          </span>
+                        )}
+                        {prospect.headline && prospect.headline !== name ? (
+                          <span className="prospect-headline small muted" title={prospect.headline}>{prospect.headline}</span>
+                        ) : null}
+                      </td>
+                      <td data-label="Company">
+                        {prospect.company || prospect.title ? (
+                          <>
+                            {prospect.company ?? ""}
+                            {prospect.title ? <span className="tiny subtle block">{prospect.title}</span> : null}
+                          </>
+                        ) : (
+                          <span className="subtle">—</span>
+                        )}
+                      </td>
+                      {/*
+                        A fit score is a fact about a person AND a strategy: 87
+                        against "small B2B agencies" says nothing about how well
+                        they fit "chamber leaders" (rule 26). So the score is
+                        never shown without the strategy it was scored against.
+                        `num`, not `mono`: Geist has real tabular figures, and
+                        a monospace would set the strategy's name like code.
+                      */}
+                      <td data-label="Fit" className="num">
+                        {prospect.fit_score ?? "—"}
+                        {scoredAgainst ? (
+                          <Link
+                            className="tiny subtle prospect-fit-vs"
+                            href={`/app/strategy/${prospect.customer_profile_id}`}
+                            title={scoredAgainst}
+                          >
+                            for {shortName(scoredAgainst)}
+                          </Link>
+                        ) : (
+                          <span className="tiny subtle block">No strategy</span>
+                        )}
+                      </td>
+                      {anySignals ? (
+                        <td data-label="Intent" className="num">
+                          {prospect.intent_score ?? 0}
+                        </td>
+                      ) : null}
+                      {anySignals ? (
+                        <td data-label="Why" className="medium">
+                          <div className="cluster">
+                            {signals.slice(0, 3).map((signal, index) => (
+                              <span key={index} className="pill accent" title={signal.detail}>
+                                {SIGNAL_LABELS[signal.type] ?? signal.type}
+                              </span>
+                            ))}
+                          </div>
+                          <span className="small muted">{reasons.join("; ")}</span>
+                        </td>
+                      ) : null}
+                      <td data-label="Stage">
+                        {prospect.do_not_contact ? (
+                          <span className="pill danger">Do not contact</span>
+                        ) : placed ? (
+                          <>
+                            <span
+                              className={`pill ${placed.stage === "booked" || placed.row.status === "positive" ? "positive" : placed.stage === "replied" ? "accent" : "plain"}`}
+                            >
+                              {placed.stage && ENDED.has(placed.row.status)
+                                ? `${STAGE_LABELS[placed.stage]} · ${label(placed.row.status)}`
+                                : label(placed.row.status)}
+                            </span>
+                            {campaign ? (
+                              <Link className="tiny subtle block" href={`/app/campaigns/${campaign.id}`}>
+                                {campaign.name}
+                                {campaign.status === "draft" ? " · not launched" : ""}
+                              </Link>
+                            ) : null}
+                          </>
+                        ) : (
+                          <span className="pill plain">Not on a campaign</span>
+                        )}
+                      </td>
+                      <td data-label="Last contact">
+                        {prospect.last_contacted_at ? (
+                          // The date, not just the fact. "Contacted" alone cannot
+                          // answer the question somebody opens this page with,
+                          // which is when, and therefore whether it was this
+                          // campaign or one from two months ago.
+                          <time
+                            dateTime={isoAttr(prospect.last_contacted_at)}
+                            title={formatDateTime(prospect.last_contacted_at, timezone)}
+                          >
+                            {formatDate(prospect.last_contacted_at, timezone)}
+                          </time>
+                        ) : (
+                          <span className="small subtle">Not yet</span>
+                        )}
+                      </td>
+                      <td data-label="Actions">
+                        {prospect.do_not_contact ? null : (
+                          <form
+                            action={eraseProspect}
+                            title="Delete everything we hold about this person, keeping only a do-not-contact record"
+                          >
+                            <input type="hidden" name="prospectId" value={prospect.id} />
+                            <input type="hidden" name="prospectName" value={name} />
+                            <input type="hidden" name="back" value={here} />
+                            {/* Two presses: erasure cannot be undone, and it sat
+                                one misclick away on every row of the list. */}
+                            <ConfirmButton className="btn ghost small" confirmLabel="Erase for good" pendingLabel="Erasing…">
+                              Erase<span className="sr-only"> {name}</span>
+                            </ConfirmButton>
+                          </form>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+      </SectionLayout>
     </>
   );
-}
-
-/**
- * A strategy name short enough to sit in a filter pill.
- *
- * The Strategy Agent writes descriptive names — "Networking group leaders &
- * organizations (BNI chapters, Chambers, masterminds)" — which are exactly
- * right on the strategy page and unusable as a tab. The full name stays in the
- * title attribute rather than being lost.
- */
-function shortName(name: string): string {
-  const head = name.split(/[(\u2014\u2013]/)[0]!.trim();
-  return head.length > 34 ? `${head.slice(0, 33).trimEnd()}\u2026` : head;
-}
-
-/**
- * What to call somebody on screen.
- *
- * A blank name is never shown: fourteen real prospects rendering as "Unknown"
- * is what made a working list look like fake data. The headline is the next
- * best thing and is usually the most informative line we have about them.
- */
-function displayName(prospect: { first_name: string | null; last_name: string | null; headline: string | null }): string {
-  const name = `${prospect.first_name ?? ""} ${prospect.last_name ?? ""}`.trim();
-  if (name) return name;
-  return prospect.headline?.trim() || "LinkedIn member";
 }

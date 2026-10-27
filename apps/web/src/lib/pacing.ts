@@ -262,13 +262,17 @@ function notSending(
   const detail = boot?.detail && typeof boot.detail === "object" ? (boot.detail as Record<string, unknown>) : {};
   const startedAgo = boot ? minutesAgo(now.getTime() - new Date(boot.beat_at).getTime()) : null;
 
+  // The customer's half says what it costs them and whose it is to fix, in
+  // words; which part of the deployment is down is the operator's half, where
+  // the person who can fix it reads it (rule 54). The three situations below
+  // need three different people, so they stay apart there.
   if (boot && detail.queueReachable === false) {
     // The specific afternoon this cost: process up, platform reporting the
     // service healthy, and every queued job unconsumed.
     return {
-      title: "The worker is running, but it cannot reach its job queue.",
-      body: `It started ${startedAgo}. Nothing queued will be sent until that is fixed. This is a problem with the deployment, not with your campaign, and it is ours to fix.`,
-      operator: `Queue unreachable from the worker at ${typeof detail.redisHost === "string" ? detail.redisHost : "its configured address"}${typeof detail.commit === "string" ? ` (build ${detail.commit.slice(0, 7)})` : ""}. Check REDIS_URL on the worker.`,
+      title: "Sending is stuck on our side.",
+      body: `Nothing waiting to go will be sent until we fix it. It is a problem with our system, not with your campaign, and it is ours to fix.`,
+      operator: `The worker cannot reach its job queue at ${typeof detail.redisHost === "string" ? detail.redisHost : "its configured address"}${typeof detail.commit === "string" ? ` (build ${detail.commit.slice(0, 7)})` : ""}; it started ${startedAgo}. Check REDIS_URL on the worker.`,
     };
   }
 
@@ -276,22 +280,24 @@ function notSending(
     // Booted, saw the queue, and the loop still never ran. Not a config
     // problem, so it must not be reported as one.
     return {
-      title: "The worker started but its sending loop has not run.",
-      body: `It started ${startedAgo}, but no run has been recorded. This is a problem with the deployment, not with your campaign, and it is ours to fix.`,
-      operator: `Booted${typeof detail.commit === "string" ? ` on build ${detail.commit.slice(0, 7)}` : ""} and reached the queue, but no PACING_LOOP stamp. Check the worker's logs.`,
+      title: "Sending has not started on our side.",
+      body: `Nothing has been sent since our system restarted ${startedAgo}. It is a problem with our system, not with your campaign, and it is ours to fix.`,
+      operator: `Booted${typeof detail.commit === "string" ? ` on build ${detail.commit.slice(0, 7)}` : ""} and reached the queue, but the sending loop has not run (no PACING_LOOP stamp). Check the worker's logs.`,
     };
   }
 
   if (!boot) {
     return {
-      title: "The worker is not running.",
-      body: "It has not reported starting, so nothing this campaign has queued will be sent. Either the process is down or the build carrying this check has not deployed yet. This is a problem with the deployment, not with your campaign.",
+      title: "Sending is not running on our side.",
+      body: "Nothing this campaign has waiting will be sent until it is back. It is a problem with our system, not with your campaign.",
+      operator: "No boot stamp: the worker is not running, or the build carrying this check has not deployed yet.",
     };
   }
 
   return {
-    title: "The sending loop has stopped.",
-    body: `It last ran ${minutesAgo(now.getTime() - beat!)} and should run every five minutes. Nothing will go out until it is back. This is a problem with the deployment, not with your campaign.`,
+    title: "Sending has stopped on our side.",
+    body: `It last ran ${minutesAgo(now.getTime() - beat!)} and normally runs every five minutes. Nothing will go out until it is back. It is a problem with our system, not with your campaign.`,
+    operator: "The sending loop's heartbeat is stale. Check the worker and its queue.",
   };
 }
 

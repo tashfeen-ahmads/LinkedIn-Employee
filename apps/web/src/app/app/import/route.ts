@@ -23,33 +23,33 @@ export async function POST(request: NextRequest) {
   // A form posted from another site does not get to rewrite somebody's
   // exclusion list with their cookie.
   if (request.headers.get("sec-fetch-site") === "cross-site") {
-    return seeOther(errorQuery("/app/profile", "That import was refused. Please upload the file from this page."));
+    return seeOther(errorQuery("/app/profile/billing", "That import was refused. Please upload the file from this page."));
   }
 
   const session = await requireSession();
   if (!["owner", "admin"].includes(session.role)) {
-    return seeOther(errorQuery("/app/profile", "Only an owner or admin can import into a workspace."));
+    return seeOther(errorQuery("/app/profile/billing", "Only an owner or admin can import into a workspace."));
   }
 
   const declared = Number(request.headers.get("content-length") ?? "0");
   if (declared > MAX_BYTES + 64 * 1024) {
-    return seeOther(errorQuery("/app/profile", "That file is too large to import. The limit is 5 MB."));
+    return seeOther(errorQuery("/app/profile/billing", "That file is too large to import. The limit is 5 MB."));
   }
 
   const form = await request.formData().catch(() => null);
   const upload = form?.get("file");
   if (!upload || typeof upload === "string" || upload.size === 0) {
-    return seeOther(errorQuery("/app/profile", "Choose an export file to import."));
+    return seeOther(errorQuery("/app/profile/billing", "Choose an export file to import."));
   }
   if (upload.size > MAX_BYTES) {
-    return seeOther(errorQuery("/app/profile", "That file is too large to import. The limit is 5 MB."));
+    return seeOther(errorQuery("/app/profile/billing", "That file is too large to import. The limit is 5 MB."));
   }
 
   let file: unknown;
   try {
     file = JSON.parse(await upload.text());
   } catch {
-    return seeOther(errorQuery("/app/profile", "That file is not a workspace export. Nothing was imported."));
+    return seeOther(errorQuery("/app/profile/billing", "That file is not a workspace export. Nothing was imported."));
   }
 
   const result = await callWorker<{ summary?: string }>(
@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
     { workspaceId: session.workspaceId, userId: session.userId, file },
     60_000,
   );
-  if (!result.ok) return seeOther(errorQuery("/app/profile", result.error));
+  if (!result.ok) return seeOther(errorQuery("/app/profile/billing", result.error));
 
-  return seeOther(noticeQuery("/app/profile", result.data?.summary ?? "Imported."));
+  return seeOther(noticeQuery("/app/profile/billing", result.data?.summary ?? "Imported."));
 }

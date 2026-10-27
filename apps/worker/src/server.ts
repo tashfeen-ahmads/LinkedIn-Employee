@@ -1315,7 +1315,7 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
    */
   app.get("/auth/linkedin/failed", async (c) => {
     const back = () =>
-      c.redirect(`${ctx.env.APP_URL}/app/profile?error=${LINKEDIN_SIGN_IN_FAILED}#team`, 302);
+      c.redirect(`${ctx.env.APP_URL}/app/profile?error=${LINKEDIN_SIGN_IN_FAILED}`, 302);
 
     const claim = c.req.query("claim");
     if (!claim || !ctx.env.CREDENTIALS_KEY) return back();
@@ -1369,7 +1369,7 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
   });
 
   app.get("/auth/linkedin/done", async (c) => {
-    const back = (query: string) => c.redirect(`${ctx.env.APP_URL}/app/profile?${query}#team`, 302);
+    const back = (query: string) => c.redirect(`${ctx.env.APP_URL}/app/profile?${query}`, 302);
 
     const claim = c.req.query("claim");
     const accountId = c.req.query("account_id");
@@ -2346,7 +2346,7 @@ function operatorProviderFailure(err: unknown): string {
  * losing the ability to connect at all.
  */
 function claimReturnUrl(ctx: WorkerContext, workspaceId: string, userId: string): string {
-  if (!ctx.env.CREDENTIALS_KEY) return `${ctx.env.APP_URL}/app/profile?connected=1#team`;
+  if (!ctx.env.CREDENTIALS_KEY) return `${ctx.env.APP_URL}/app/profile?connected=1`;
   const claim = encodeState(workspaceId, userId, ctx.env.CREDENTIALS_KEY);
   return `${ctx.env.WORKER_URL}/auth/linkedin/done?claim=${encodeURIComponent(claim)}`;
 }
@@ -2369,7 +2369,7 @@ function claimReturnUrl(ctx: WorkerContext, workspaceId: string, userId: string)
  */
 function claimFailureUrl(ctx: WorkerContext, workspaceId: string, userId: string): string {
   if (!ctx.env.CREDENTIALS_KEY) {
-    return `${ctx.env.APP_URL}/app/profile?error=${LINKEDIN_SIGN_IN_FAILED}#team`;
+    return `${ctx.env.APP_URL}/app/profile?error=${LINKEDIN_SIGN_IN_FAILED}`;
   }
   const claim = encodeState(workspaceId, userId, ctx.env.CREDENTIALS_KEY);
   return `${ctx.env.WORKER_URL}/auth/linkedin/failed?claim=${encodeURIComponent(claim)}`;

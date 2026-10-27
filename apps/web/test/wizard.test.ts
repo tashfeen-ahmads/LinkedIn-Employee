@@ -17,6 +17,7 @@ import {
   type WizardFacts,
 } from "../src/lib/wizard";
 import { readConfirmations, readOnboardingStash, stampConfirmation } from "../src/lib/onboarding-stash";
+import { CAMPAIGN_SECTIONS, sectionHref } from "../src/app/app/campaigns/[id]/sections";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (...p: string[]) => readFileSync(join(here, "..", "src", ...p), "utf8");
@@ -90,6 +91,18 @@ describe("the app waits for setup (rule 65)", () => {
     }
   });
 
+  it("opens every section of a campaign, because People is where each name is read", () => {
+    // The campaign is a set of sections now, and the launch step links to it
+    // to read every name. A section the gate did not know would send somebody
+    // mid-review back to onboarding from the menu.
+    for (const section of CAMPAIGN_SECTIONS) {
+      const path = sectionHref("7d3c", section.slug);
+      expect(openDuringSetup(`${path}?notice=x`), path).toBe(true);
+    }
+    expect(openDuringSetup("/app/campaigns/7d3c/elsewhere")).toBe(false);
+    expect(openDuringSetup("/app/campaigns/new/people")).toBe(false);
+  });
+
   it("carries LinkedIn's answer to the LinkedIn step, and nothing else", () => {
     expect(setupRedirect("/app/profile?connected=1#team")).toBe("/onboarding?connected=1&step=linkedin");
     expect(setupRedirect("/app/profile?error=Sign+in+failed")).toBe("/onboarding?error=Sign+in+failed&step=linkedin");
@@ -123,7 +136,7 @@ describe("the app waits for setup (rule 65)", () => {
   });
 
   it("sends the campaign page's first launch to the launch step, deferred or not", () => {
-    const page = read("app", "app", "campaigns", "[id]", "page.tsx");
+    const page = read("app", "app", "campaigns", "[id]", "launch-campaign.ts");
     // The launch step asks who answers the replies and approves the opener
     // and offer; a first launch from the campaign page skipped both.
     expect(page).toMatch(
@@ -149,7 +162,7 @@ describe("each step is saved and checked on the server", () => {
 
   it("launches through the same helper as the campaign page", () => {
     expect(route).toMatch(/await launch\(campaignId,/);
-    expect(read("app", "app", "campaigns", "[id]", "page.tsx")).toMatch(/await launch\(campaignId, session\)/);
+    expect(read("app", "app", "campaigns", "[id]", "launch-campaign.ts")).toMatch(/await launch\(campaignId, session\)/);
   });
 
   it("searches through the same helper as the strategy page", () => {
@@ -250,7 +263,11 @@ describe("every onboarding answer reaches the app (rule 65)", () => {
   });
 
   it("approves the opener and offer on the launch screen, only as shown", () => {
-    expect(read("app", "onboarding", "page.tsx")).toMatch(/lines: await linesAwaitingApproval\(workspaceId\)/);
+    // The lines shown are the lines awaiting approval, read once and handed to
+    // the review (and to its message previews) as they are.
+    const page = read("app", "onboarding", "page.tsx");
+    expect(page).toMatch(/const lines = await linesAwaitingApproval\(workspaceId\)/);
+    expect(page).toMatch(/return \{\s*lines,/);
     expect(route).toMatch(/\.eq\("body", bodies\[i\] \?\? ""\)\s*\.is\("approved_at", null\)/);
   });
 });
@@ -293,7 +310,7 @@ describe("launching later (rule 65)", () => {
   it("is honoured by the middleware and by the campaign page's launch", () => {
     expect(read("middleware.ts")).toMatch(/readConfirmations\(me\?\.setup_confirmed, membership\.workspace_id\)\.deferred/);
     // A deferred person's first launch still happens on the launch step.
-    expect(read("app", "app", "campaigns", "[id]", "page.tsx")).toMatch(/redirect\(`\/onboarding\?step=launch/);
+    expect(read("app", "app", "campaigns", "[id]", "launch-campaign.ts")).toMatch(/redirect\(`\/onboarding\?step=launch/);
   });
 });
 

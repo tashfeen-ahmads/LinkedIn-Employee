@@ -148,7 +148,7 @@ export async function ResultsSection() {
       <Section
         id="sending"
         title="Invitations per day"
-        description="The one figure here that can fall. Totals only ever go up, so a campaign that stopped two weeks ago and one sending today look identical without this."
+        description="How many invitations went out each day for the last 30 days. A line at zero means nothing was sent that day."
       >
         <div className="card">
           <TrendChart points={trend} label="Invitations per day" />
@@ -161,7 +161,7 @@ export async function ResultsSection() {
         description={[
           funnel.goals.includes("link")
             ? CLICKS_ARE_INVISIBLE
-            : "Each stage as a share of everyone invited, and the conversion from the stage above it.",
+            : "Out of everyone invited, how many said yes, replied and booked.",
           // Rule 31: a meetings stage beside a rep's own scheduling link
           // undercounts, and says so rather than reading as a campaign that
           // booked nobody.
@@ -185,7 +185,7 @@ export async function ResultsSection() {
       <Section
         id="by-strategy"
         title="By strategy"
-        description="A fit score means nothing without the strategy it was scored against, and neither does a funnel. This is what each one actually produced."
+        description="How many people each strategy has reached, and how many said yes."
         action={
           <Link className="btn ghost small" href="/app/strategy">
             Manage strategies
@@ -204,7 +204,7 @@ export async function ResultsSection() {
       </Section>
 
       {campaignBars.length ? (
-        <Section id="campaigns" title="By campaign" description="The eight that have sent the most.">
+        <Section id="campaigns" title="By campaign" description="Your eight busiest campaigns.">
           <div className="card">
             <RankedBars data={campaignBars} />
           </div>
@@ -213,8 +213,8 @@ export async function ResultsSection() {
 
       <Section
         id="table"
-        title="Every number"
-        description={`A rate appears once there are ${MIN_FOR_RATE} in its denominator. Below that a percentage says more about the sample than the work.`}
+        title="All the numbers"
+        description={`Everything in one table. A percentage shows once there are ${MIN_FOR_RATE} people to count from.`}
       >
         <div className="table-scroll card-rows">
           <table>
@@ -300,18 +300,14 @@ export async function ResultsSection() {
   );
 }
 
-function rateValue(r: Rate): string {
-  return r.value === null ? "Not yet" : `${(r.value * 100).toFixed(1)}%`;
-}
-
 /**
- * The overview's stat row: the four figures that answer "is it working".
+ * The overview's four figures, in the words a business owner uses.
  *
- * Plain numbers on the page's ground, divided by hairlines rather than boxed:
- * four tiles of equal weight under a list of work read as four more things to
- * do, and these are a reading, not a task. Computed from the same
- * `funnelReport` Results uses, so the two can never disagree, and Meetings
- * only appears where a campaign here can reach that stage (rule 29).
+ * Counts first and percentages second: "22 said yes" means something to
+ * anybody, "Acceptance 62.9%" only to somebody who already runs outreach. All
+ * four are totals from the same `funnelReport` the Results page reads, so a
+ * figure here and the funnel there can never disagree, and Meetings only
+ * appears where a campaign here can reach that stage (rule 29).
  */
 export function HeadlineStats({
   report,
@@ -321,44 +317,60 @@ export function HeadlineStats({
   /** Somebody here sends their own scheduling link, whose bookings are not counted (rule 31). */
   ownBookingLink?: boolean;
 }) {
+  const week = report.momentum.current;
   return (
-    <section className="headline-stats" aria-label="This week">
-      <HeadlineStat
-        label="Invited, last 7 days"
-        value={report.momentum.current.toLocaleString()}
-        note={
-          report.momentum.change === null
-            ? "First week of sending, so there is no week before it to compare."
-            : `${report.momentum.change >= 0 ? "+" : ""}${Math.round(
-                report.momentum.change * 100,
-              )}% on the week before`
-        }
-      />
-      <HeadlineStat
-        label="Acceptance"
-        value={rateValue(report.acceptance)}
-        tone={toneFor(report.acceptance)}
-        note={describeRate(report.acceptance)}
-      />
-      <HeadlineStat
-        label="Reply"
-        value={rateValue(report.reply)}
-        tone={toneFor(report.reply)}
-        note={describeRate(report.reply)}
-      />
-      {report.stages.some((stage) => stage.key === "meetings") ? (
+    <Section
+      id="how-its-going"
+      title="How it’s going"
+      action={
+        <Link className="btn ghost small" href="/app/analytics">
+          See full results
+        </Link>
+      }
+    >
+      <div className="headline-stats" role="group" aria-label="Totals so far">
         <HeadlineStat
-          label="Meetings"
-          value={report.counts.meetings.toLocaleString()}
-          note={
-            ownBookingLink
-              ? "Booked here. Meetings booked through your own scheduling link are not counted."
-              : "Booked, across every campaign."
-          }
+          label="People invited"
+          value={report.counts.invited.toLocaleString()}
+          note={week ? `${week.toLocaleString()} in the last 7 days.` : "None in the last 7 days."}
         />
-      ) : null}
-    </section>
+        <HeadlineStat
+          label="Said yes"
+          value={report.counts.accepted.toLocaleString()}
+          tone={toneFor(report.acceptance)}
+          note={plainRate(report.acceptance, "of the people invited")}
+        />
+        <HeadlineStat
+          label="Replied"
+          value={report.counts.replied.toLocaleString()}
+          tone={toneFor(report.reply)}
+          note={plainRate(report.reply, "of the people who said yes")}
+        />
+        {report.stages.some((stage) => stage.key === "meetings") ? (
+          <HeadlineStat
+            label="Meetings booked"
+            value={report.counts.meetings.toLocaleString()}
+            note={
+              ownBookingLink
+                ? "Meetings booked through your own scheduling link are not counted."
+                : "Across every campaign."
+            }
+          />
+        ) : null}
+      </div>
+    </Section>
   );
+}
+
+/** A rate as a sentence: the share, and whether that is good, in words. */
+function plainRate(r: Rate, ofWhom: string): string {
+  if (r.verdict === "too-early") {
+    return `A percentage shows once there are ${MIN_FOR_RATE} to count from.`;
+  }
+  const share = `${Math.round((r.value ?? 0) * 100)}% ${ofWhom}.`;
+  return r.verdict === "on-target"
+    ? `${share} Better than the usual ${Math.round(r.target * 100)}%.`
+    : `${share} The usual is about ${Math.round(r.target * 100)}%.`;
 }
 
 /** One figure in the row. The tone is a state, and the note always says it in words. */

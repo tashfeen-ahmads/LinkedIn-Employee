@@ -38,7 +38,7 @@ export function TeamPanel({ facts }: { facts: TeamFacts }) {
     <Section
       id="your-team"
       title="Your team"
-      description={`${NORA} runs this dashboard; four specialists do the work. Every line is read from this workspace.`}
+      description={`What each part of ${NORA} is working on right now.`}
     >
       <Panel>
         <ul className="roster">

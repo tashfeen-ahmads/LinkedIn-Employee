@@ -43,3 +43,14 @@ describe("worker heartbeat read scope", () => {
     expect(lastPolicy("worker_heartbeats_admin_read")).toMatch(/is_platform_admin\(\)/);
   });
 });
+
+describe("a member's own queued count", () => {
+  it("is handed back only to somebody in that account's workspace", () => {
+    const sql = readFileSync(join(dir, "0059_pacing_scope_and_step_versions.sql"), "utf8");
+    const fn = /create or replace function pacing_in_flight[\s\S]*?\$\$;/i.exec(sql)?.[0] ?? "";
+    expect(fn).toMatch(/security definer/i);
+    expect(fn).toMatch(/m\.user_id = auth\.uid\(\)/);
+    expect(fn).toMatch(/where a\.id = p_account_id/);
+    expect(sql).toMatch(/revoke execute on function pacing_in_flight\(uuid\) from public, anon/i);
+  });
+});

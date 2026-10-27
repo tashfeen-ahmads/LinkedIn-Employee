@@ -5,7 +5,7 @@ import { SetupChecklist } from "@/components/setup-checklist";
 import { NextStep } from "@/components/next-step";
 import { NeedsYou } from "@/components/needs-you";
 import { loadNeedsYou } from "@/lib/needs-you-data";
-import { PageHeader, PageGroup, Section, Empty } from "@/components/page";
+import { PageHeader, PageGroup } from "@/components/page";
 import { createClient } from "@/lib/supabase-server";
 import { fetchAllRows } from "@/lib/rows";
 import { PageNotice, type NoticeParams } from "@/components/page-notice";
@@ -18,8 +18,8 @@ import { TeamPanel } from "@/components/team-panel";
 import type { TeamFacts } from "@/lib/team";
 
 import { DailyReportSection } from "./report-section";
-import { LimitsSection } from "./limits-section";
-import { HeadlineStats, ResultsSection } from "./analytics-section";
+import { AccountSafety } from "./limits-section";
+import { HeadlineStats } from "./analytics-section";
 import { workspaceUsesOwnBookingLink } from "@/lib/booking-link";
 /**
  * The morning screen: what to do, and whether what was done is working.
@@ -44,8 +44,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
       .eq("workspace_id", session.workspaceId)
       .order("priority", { ascending: true }),
     // Which strategy found each person, and nothing else about them: the team
-    // panel needs how many Scout has found, and the Strategies table below
-    // needs how many each strategy found. Counted from `prospects` by
+    // panel needs how many Scout has found. Counted from `prospects` by
     // `customer_profile_id`, the same reading the Strategy page and the
     // Prospects tabs make (rules 26 and 32). Paged, because a plain select
     // stops at a thousand rows without saying so.
@@ -108,21 +107,6 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
   const ownBookingLink =
     report.stages.some((stage) => stage.key === "meetings") &&
     (await workspaceUsesOwnBookingLink(supabase, session.workspaceId));
-  /*
-   * People found per strategy.
-   *
-   * This used to add up campaign rows, which is a different number from the
-   * one the Strategy page shows for the same strategy: a person found and not
-   * yet on a campaign counted there and not here, and a person on two of a
-   * strategy's campaigns counted twice here. Two answers to one question, on
-   * two screens a rep moves between.
-   */
-  const byProfile = new Map<string, number>();
-  for (const row of found) {
-    if (!row.customer_profile_id) continue;
-    byProfile.set(row.customer_profile_id, (byProfile.get(row.customer_profile_id) ?? 0) + 1);
-  }
-
   // The team panel's facts, every one already on this page except the count
   // above. Pursued strategies only: one marked "not pursuing" is neither
   // waiting for approval nor something Scout will search.
@@ -146,11 +130,6 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
 
   return (
     <>
-      {/*
-        No "All results" action: Results is a section further down this page,
-        and /app/analytics only redirects back here — a button that reloads the
-        screen you are on reads as a button that did nothing.
-      */}
       <PageHeader
         title={session.fullName ? `${greeting(me?.timezone)}, ${session.fullName.split(" ")[0]}` : "Overview"}
         lede={statusLine(team, waiting)}
@@ -200,108 +179,30 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
       ) : null}
 
       {/*
-        Is it working, as four plain figures under the list of work: the same
-        reading Results used to open with, moved up rather than repeated.
-      */}
-      {/*
-        The Sales Navigator question is asked once, on onboarding's LinkedIn
-        step, and kept on the profile. It used to be asked again here on every
-        visit to anybody who had answered "no" — a setup prompt for a setting
-        that was already set. A campaign built without it says so on its own
-        page, where it explains the list.
+        Is it working: four totals in plain words, and a link to every chart
+        on Results. The Sales Navigator question is asked once, on
+        onboarding's LinkedIn step, and kept on the profile.
       */}
       <HeadlineStats report={report} ownBookingLink={ownBookingLink} />
 
       {/*
-        The guardrails, on the screen somebody opens daily.
-
-        Every advantage this product has over the category lives in caps, a
-        ramp, a backoff and a spread, and all of it is invisible unless it
-        fails. A customer who cannot see the guardrails has no way to tell this
-        apart from the tool that got them restricted, which is the one thing
-        they are actually afraid of. Today's allowance sits beside the last
-        fourteen days, because they answer one question from two ends.
+        What happened today beside how close today is to the limits. Two short
+        panels on one row rather than two panels of meters, a fourteen-day
+        chart and the day's story stacked down the page. The guardrails stay
+        on the screen somebody opens daily (rule 51); the full set of meters
+        and the chart are on Results.
       */}
-      <LimitsSection />
-
-      {/* What happened today, in words, for the person who wants the story
-          behind the figures above. */}
-      <DailyReportSection />
+      <div className="overview-pair overview-today">
+        <DailyReportSection />
+        <AccountSafety />
+      </div>
 
       {/*
-        Who is doing what, under the figures rather than above them: the list
-        is the work, and this is the reassurance that everything not on it is
-        in hand, or, where a teammate is stopped, the reason.
+        Who is doing what, last: the list at the top is the work, and this is
+        the reassurance that everything not on it is in hand, or, where a
+        teammate is stopped, the reason.
       */}
       <TeamPanel facts={team} />
-
-      <Section
-        id="strategies"
-        title="Strategies"
-        description="Nothing is searched for until one is approved. A fit score only means something against the strategy that produced it."
-        action={
-          <Link href="/app/strategy" className="btn secondary small">
-            Review and approve
-          </Link>
-        }
-      >
-        {profiles?.length ? (
-          <div className="table-scroll card-rows">
-            <table>
-              <thead>
-                <tr>
-                  <th>Strategy</th>
-                  <th className="num">Priority</th>
-                  <th className="num">Prospects</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {profiles.map((profile) => (
-                  <tr key={profile.id}>
-                    <td data-label="Strategy">{profile.name}</td>
-                    <td data-label="Priority" className="num">{profile.priority}</td>
-                    <td data-label="Prospects" className="num">
-                      {/* What it has actually produced, which is the only way
-                          to tell an approved strategy that is working from one
-                          that has never been given a campaign. */}
-                      {(byProfile.get(profile.id) ?? 0).toLocaleString()}
-                    </td>
-                    <td data-label="Status">
-                      {profile.do_not_pursue ? (
-                        <span className="pill">Not pursuing</span>
-                      ) : profile.approved_at ? (
-                        <span className="pill positive">Approved</span>
-                      ) : profiles.some((p) => p.approved_at) ? (
-                        // One is approved, so this is an option rather than a
-                        // job waiting on anybody: no warning colour (rule 65).
-                        <span className="pill">Not used yet</span>
-                      ) : (
-                        <span className="pill warning">Needs review</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <Empty title="No strategies yet." action="Ask Sage for strategies" href="/app/strategy">
-            Sage, your strategist, reads your site and writes who to go after. Your business profile and
-            its first customer profiles appear here when it finishes.
-          </Empty>
-        )}
-      </Section>
-
-      {/*
-        Results and spend, on the screen somebody already lands on.
-        They were two more tabs carrying two more readings of numbers this page
-        already had, and "is this working" should not require knowing which of
-        three screens to open. The anchors keep the old links working.
-      */}
-      <PageGroup id="results">
-        <ResultsSection />
-      </PageGroup>
     </>
   );
 }

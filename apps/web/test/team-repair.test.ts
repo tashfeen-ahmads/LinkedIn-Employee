@@ -116,8 +116,10 @@ describe("describeRefreshRefusal", () => {
   });
 
   it("is what the profile's Check again uses", () => {
-    const profile = readFileSync(join(__dirname, "..", "src", "app", "app", "profile", "page.tsx"), "utf8");
-    expect(profile).toMatch(/redirect\(errorQuery\("\/app\/profile", describeRefreshRefusal\(result\.data\)\)\)/);
+    // The Check button is defined once and rendered by the LinkedIn section.
+    const profile = readFileSync(join(__dirname, "..", "src", "app", "app", "profile", "linkedin-connect.tsx"), "utf8");
+    expect(profile).toMatch(/const HERE = PROFILE_SECTIONS\.linkedin;/);
+    expect(profile).toMatch(/redirect\(errorQuery\(HERE, describeRefreshRefusal\(result\.data\)\)\)/);
     expect(profile).not.toMatch(/Fields the provider sent|JSON\.stringify\(result\.data/);
   });
 });

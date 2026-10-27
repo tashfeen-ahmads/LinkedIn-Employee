@@ -81,6 +81,8 @@ export type WorkspaceRow = {
   cancel_at_period_end: boolean;
   /** Like and comment on prospects' posts (migration 0053). */
   engage_posts: boolean;
+  engage_comments: boolean;
+  publish_posts: boolean;
   /** When the newest Stripe event applied here was created, so a late older one never wins. */
   last_billing_event_at: string | null;
   data_retention_days: number;
@@ -415,6 +417,8 @@ export type CampaignStepRow = {
   step_number: number;
   delay_days: number;
   message: string;
+  /** Which prompt wrote it; null when a person wrote or edited it (migration 0059). */
+  prompt_version: string | null;
 };
 
 /**

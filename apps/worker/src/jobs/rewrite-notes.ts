@@ -1,5 +1,6 @@
 import { personalizeInvites } from "@le/agents";
 import {
+  campaignNameWithoutCta,
   parseCustomerProfile,
   type ProspectCandidate,
 } from "@le/shared";
@@ -65,7 +66,7 @@ export async function rewriteCampaignNotes(
 
   const { data: campaign } = await db
     .from("campaigns")
-    .select("id, name, agent_id, customer_profile_id, owner_user_id, rules")
+    .select("id, name, agent_id, customer_profile_id, owner_user_id, rules, cta_label")
     .eq("id", input.campaignId)
     .eq("workspace_id", input.workspaceId)
     .maybeSingle();
@@ -95,33 +96,50 @@ export async function rewriteCampaignNotes(
     return { ok: false, reason: "Tell us what you sell first — the notes are written from your business profile." };
   }
 
-  const { data: customerRow } = campaign.customer_profile_id
-    ? await db
-        .from("customer_profiles")
-        .select("spec")
-        .eq("id", campaign.customer_profile_id)
-        .eq("workspace_id", input.workspaceId)
-        .maybeSingle()
-    : { data: null };
-  const customer = parseCustomerProfile(customerRow?.spec);
-  if (!customer.success) {
-    // Named rather than guessed at: a note written without the segment is
-    // written for nobody in particular, which is the generic copy this exists
-    // to replace.
-    return {
-      ok: false,
-      reason: "This campaign is not attached to a strategy, so there is nothing to say who these people are.",
-    };
-  }
-
   // Fetched separately rather than as an embedded join: PostgREST returns the
   // related row and the fake database used in the tests cannot, so a join here
   // is a query that behaves differently in the two places it runs.
   const { data: people } = await db
     .from("prospects")
-    .select("id, provider_id, first_name, last_name, headline, title, company, location, linkedin_url")
+    .select("id, provider_id, first_name, last_name, headline, title, company, location, linkedin_url, customer_profile_id")
     .eq("workspace_id", input.workspaceId)
     .in("id", queued.map((row) => row.prospect_id));
+
+  /*
+   * The segment each note is written for. A campaign built from a strategy
+   * has one; a campaign built from people already in the workspace does not,
+   * but each of those people was found by a strategy of their own (rule 26),
+   * and their note is written against that one. Somebody nobody's strategy
+   * found keeps the note they have: a note written without the segment is
+   * written for nobody in particular, which is the copy this replaces.
+   */
+  const strategyIds = new Set<string>();
+  if (campaign.customer_profile_id) strategyIds.add(campaign.customer_profile_id);
+  else for (const person of people ?? []) if (person.customer_profile_id) strategyIds.add(person.customer_profile_id);
+  const { data: customerRows } = strategyIds.size
+    ? await db
+        .from("customer_profiles")
+        .select("id, spec")
+        .eq("workspace_id", input.workspaceId)
+        .in("id", [...strategyIds])
+    : { data: [] as Array<{ id: string; spec: unknown }> };
+  const profiles = new Map<string, NonNullable<ReturnType<typeof parseCustomerProfile>["data"]>>();
+  for (const row of customerRows ?? []) {
+    const parsed = parseCustomerProfile(row.spec);
+    if (parsed.success) profiles.set(row.id, parsed.data);
+  }
+  if (campaign.customer_profile_id && !profiles.has(campaign.customer_profile_id)) {
+    return {
+      ok: false,
+      reason: "This campaign's strategy could not be read, so there is nothing to say who these people are.",
+    };
+  }
+  if (profiles.size === 0) {
+    return {
+      ok: false,
+      reason: "None of these people came from a strategy, so there is nothing to say who they are.",
+    };
+  }
 
   const byProspectId = new Map((people ?? []).map((row) => [row.id, row]));
 
@@ -146,7 +164,9 @@ export async function rewriteCampaignNotes(
   // campaign-wide copy is not a leftover — it is the whole sequence for that
   // person (rule 28).
   const campaignAngle =
-    (campaign.rules as { angle?: string } | null)?.angle?.trim() || campaign.name;
+    (campaign.rules as { angle?: string } | null)?.angle?.trim() ||
+    // Never the call to action: the name is handed to the writer as an angle.
+    campaignNameWithoutCta(campaign.name, campaign.cta_label);
 
   const { data: hookRows } = await db
     .from("hooks")
@@ -159,6 +179,17 @@ export async function rewriteCampaignNotes(
       .map((row) => [row.id, row.body?.trim() ?? ""] as const)
       .filter(([, body]) => body.length > 0),
   );
+  // Openers attached to any angle in the workspace belong to that angle's
+  // audience; the rest are this business's own lines (`groupByAngle`).
+  const { data: workspaceVariants } = await db
+    .from("campaign_variants")
+    .select("hook_id")
+    .eq("workspace_id", input.workspaceId);
+  const attached = new Set(
+    (workspaceVariants ?? [])
+      .map((row) => (row.hook_id ? hookById.get(row.hook_id) : undefined))
+      .filter((line): line is string => Boolean(line)),
+  );
 
   /*
    * One call per angle, not one for everybody.
@@ -169,20 +200,43 @@ export async function rewriteCampaignNotes(
    */
   const groups = new Map<
     string,
-    { angle: string; hooks: string[]; rows: Array<{ id: string }>; prospects: ProspectCandidate[] }
+    {
+      profile: NonNullable<ReturnType<typeof parseCustomerProfile>["data"]>;
+      angle: string;
+      hooks: string[];
+      otherOpeners: string[];
+      sharedOpeners: string[];
+      rows: Array<{ id: string }>;
+      prospects: ProspectCandidate[];
+    }
   >();
+  let withoutStrategy = 0;
 
   for (const row of queued) {
     const person = byProspectId.get(row.prospect_id);
     if (!person?.provider_id) continue;
+    const strategyId = campaign.customer_profile_id ?? person.customer_profile_id ?? null;
+    const profile = strategyId ? profiles.get(strategyId) : undefined;
+    if (!profile) {
+      withoutStrategy += 1;
+      continue;
+    }
+    // The strategy's own openers were written for these people; the agent's
+    // are tied to no strategy and go over only as optional shapes, exactly as
+    // a new campaign's notes are written (`groupByAngle` in targeting.ts).
+    const strategyOpeners = (profile.hooks ?? []).map((line) => line.trim()).filter(Boolean);
     const variant = row.variant_id ? variantById.get(row.variant_id) : undefined;
     const own = variant?.hook_id ? hookById.get(variant.hook_id) : undefined;
-    const key = variant?.id ?? "none";
+    const key = `${strategyId}|${variant?.id ?? "none"}`;
+    const lead = own ? [own, ...strategyOpeners.filter((line) => line !== own)] : strategyOpeners;
     const group =
       groups.get(key) ??
       {
+        profile,
         angle: variant?.angle ?? campaignAngle,
-        hooks: own ? [own, ...openers.filter((line) => line !== own)] : openers,
+        hooks: lead,
+        otherOpeners: openers.filter((line) => attached.has(line) && !lead.includes(line)),
+        sharedOpeners: openers.filter((line) => !attached.has(line) && !lead.includes(line)),
         rows: [],
         prospects: [],
       };
@@ -210,10 +264,12 @@ export async function rewriteCampaignNotes(
     for (const group of groups.values()) {
       const written = await personalizeInvites(ctx.agentsFor(input.workspaceId), {
         business,
-        profile: customer.data,
+        profile: group.profile,
         repName: agent?.fromName?.trim() || rep?.full_name || business.companyName,
         campaignAngle: group.angle,
-        hooks: group.hooks.length ? group.hooks : customer.data.hooks,
+        hooks: group.hooks.length ? group.hooks : group.profile.hooks,
+        otherOpeners: group.otherOpeners,
+        sharedOpeners: group.sharedOpeners,
         voice: voiceOf(agent),
         model: chosenModel.model,
         prospects: group.prospects,
@@ -235,7 +291,8 @@ export async function rewriteCampaignNotes(
   }
 
   let rewritten = 0;
-  let unanswered = 0;
+  // Nobody's strategy found these people, so they keep the note they have.
+  let unanswered = withoutStrategy;
   for (const group of groups.values()) {
     for (const [index, candidate] of group.prospects.entries()) {
       const row = group.rows[index];

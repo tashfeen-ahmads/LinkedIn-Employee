@@ -80,7 +80,7 @@ export async function launch(
   // "launched" over it is a live campaign on no screen but this one.
   const { data: updated, error } = await supabase
     .from("campaigns")
-    .update({ status: "running", launched_at: new Date().toISOString() })
+    .update({ status: "running" })
     .eq("id", campaignId)
     .eq("workspace_id", session.workspaceId)
     .select("id");
@@ -88,6 +88,16 @@ export async function launch(
     if (error) console.error(`[campaign] launch: ${error.message}`);
     return { status: "failed" };
   }
+  // The first launch only. Every reader of `launched_at` means "first went
+  // live" (refill's day of grace, idle release, the console's "launched"), and
+  // stamping it again on every resume held a resumed campaign's refill off for
+  // a day while it had nobody left to invite.
+  await supabase
+    .from("campaigns")
+    .update({ launched_at: new Date().toISOString() })
+    .eq("id", campaignId)
+    .eq("workspace_id", session.workspaceId)
+    .is("launched_at", null);
 
   // A round trip to the worker rather than a row the schedule notices later:
   // a worker that was not running used to produce no error at all, and the

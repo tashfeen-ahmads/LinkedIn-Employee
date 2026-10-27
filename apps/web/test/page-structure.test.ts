@@ -19,14 +19,29 @@ import { describe, expect, it } from "vitest";
 
 const appDir = join(dirname(fileURLToPath(import.meta.url)), "../src/app/app");
 
-function pages(dir: string): string[] {
+function pages(dir: string, file = "page.tsx"): string[] {
   const found: string[] = [];
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const path = join(dir, entry.name);
-    if (entry.isDirectory()) found.push(...pages(path));
-    else if (entry.name === "page.tsx") found.push(path);
+    if (entry.isDirectory()) found.push(...pages(path, file));
+    else if (entry.name === file) found.push(path);
   }
   return found;
+}
+
+/**
+ * The nearest layout between a page and the app's root that renders the
+ * screen's `PageHeader`, if any. The app's own root layout is the frame and
+ * never carries one.
+ */
+function layoutHeaderAbove(page: string): string | null {
+  let dir = dirname(page);
+  while (dir.length > appDir.length) {
+    const layout = join(dir, "layout.tsx");
+    if (existsSync(layout) && /<PageHeader\b/.test(readFileSync(layout, "utf8"))) return layout;
+    dir = dirname(dir);
+  }
+  return null;
 }
 
 const PAGES = pages(appDir);
@@ -57,10 +72,33 @@ describe("application page structure", () => {
        */
       if (/^\s*redirect\(/m.test(source) && !source.includes("return (")) continue;
       const used = source.match(/<PageHeader\b/g) ?? [];
+      /*
+       * A section of a larger screen takes its header from the layout above
+       * it: a campaign is one screen with a side menu of sections, and the
+       * campaign's name is the one `<h1>` over all of them. Such a page must
+       * then have none of its own, or the screen has two.
+       */
+      const framed = layoutHeaderAbove(page);
+      if (framed) {
+        expect(used.length, `${relative(page)} has a PageHeader under ${relative(framed)}, which has one`).toBe(0);
+        continue;
+      }
       // More than one is allowed only where a page returns early — a loading
       // or empty branch and the real one — because only one ever renders. Zero
       // is not: a page with no header has no name on it.
       expect(used.length, `${relative(page)} has no PageHeader`).toBeGreaterThan(0);
+    }
+  });
+
+  it("gives a layout that carries the header exactly one", () => {
+    // Otherwise the exemption above would pass a section whose layout has no
+    // name on it at all.
+    const layouts = pages(appDir, "layout.tsx").filter((l) => /<PageHeader\b/.test(readFileSync(l, "utf8")));
+    expect(layouts.length, "no layout carries a PageHeader; the exemption above is unused").toBeGreaterThan(0);
+    for (const layout of layouts) {
+      const source = readFileSync(layout, "utf8");
+      expect((source.match(/<PageHeader\b/g) ?? []).length, `${relative(layout)} renders more than one`).toBe(1);
+      expect(source, `${relative(layout)} writes its own <h1>`).not.toMatch(/<h1[\s>]/);
     }
   });
 

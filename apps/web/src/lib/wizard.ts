@@ -179,11 +179,16 @@ export function stepPosition(key: WizardStepKey): { n: number; of: number } {
  * ends up tuning an agent for a campaign that does not exist.
  */
 export function openDuringSetup(path: string): boolean {
-  const bare = path.split(/[?#]/)[0] ?? "";
+  // A campaign is a set of sections now (People is where every name is read),
+  // and each is the campaign's own page for this question.
+  const bare = (path.split(/[?#]/)[0] ?? "").replace(CAMPAIGN_SECTION, "");
   // A campaign's own page, never the screen that makes a new one: "new" fits
   // the same pattern and opened the campaign builder to somebody still setting up.
   return bare === "/app/support" || (/^\/app\/campaigns\/[^/]+$/.test(bare) && bare !== "/app/campaigns/new");
 }
+
+/** The sections of a campaign (`app/app/campaigns/[id]/sections.ts`), as a suffix of its address. */
+const CAMPAIGN_SECTION = /(?<=^\/app\/campaigns\/[^/]+)\/(?:goal|people|opener|follow-ups|replies|settings)$/;
 
 /**
  * Whether a request is one the setup redirect applies to: an app page being

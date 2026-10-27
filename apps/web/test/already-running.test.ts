@@ -29,18 +29,19 @@ describe("startedNotice", () => {
 
 describe("every web caller of the strategy and targeting jobs", () => {
   it("the strategy page reads alreadyRunning on all four", () => {
-    const page = read("app", "app", "strategy", "page.tsx");
+    // Every strategy screen's actions live in one file.
+    const page = read("app", "app", "strategy", "actions.ts");
     // The search starter lives in one helper every approval goes through.
     expect(read("lib", "search.ts")).toMatch(/alreadyRunning: isAlreadyRunning\(queued\.data\)/);
-    // Write more, add a business.
-    expect(page.match(/startedNotice\(\s*queued\.data,/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+    // Write more, None of these fit?, add a business.
+    expect(page.match(/startedNotice\(\s*queued\.data,/g)?.length ?? 0).toBeGreaterThanOrEqual(3);
     // Approve, and Find prospects.
     expect(page).toMatch(/started\.alreadyRunning\s*\?\s*`Approved\. \$\{ALREADY_RUNNING\}`/);
     expect(page).toMatch(/started\.alreadyRunning\s*\?\s*ALREADY_RUNNING/);
   });
 
   it("the campaign page's Find more", () => {
-    const page = read("app", "app", "campaigns", "[id]", "page.tsx");
+    const page = read("app", "app", "campaigns", "[id]", "actions.ts");
     expect(page).toMatch(/startedNotice\(\s*queued\.data,\s*"Reading the next page/);
   });
 

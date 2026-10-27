@@ -44,44 +44,39 @@ function navGroups(waiting: number, marks: NavMarks): NavGroup[] {
     /*
      * The daily loop, and nothing else in it.
      *
-     * Three screens are the product: the overview answers what needs you, the
-     * inbox holds the conversations, and campaigns is where sending is watched
-     * and launched. Everything a rep touches on an ordinary Tuesday is here and
-     * everything else folds away — which is what a map is for. `alwaysOpen`
-     * because a remembered collapse that hides the Inbox is a rep who stops
-     * opening the Inbox.
+     * Everything a rep touches on an ordinary Tuesday: what needs them, the
+     * conversations, who answered, what is sending, who is on the lists and
+     * the calls that got booked. `alwaysOpen` because a remembered collapse
+     * that hides the Inbox is a rep who stops opening the Inbox.
      */
     {
       label: "Work",
       alwaysOpen: true,
       items: [
         { href: "/app", label: "Overview", icon: "overview" },
+        // The charts and tables, off the overview so the overview stays short.
+        { href: "/app/analytics", label: "Results", icon: "results" },
         { href: "/app/inbox", label: "Inbox", icon: "inbox", count: waiting },
+        { href: "/app/opportunities", label: "Opportunities", icon: "opportunities" },
         { href: "/app/campaigns", label: "Campaigns", icon: "campaigns", ...next("/app/campaigns", "Campaigns") },
+        { href: "/app/prospects", label: "Prospects", icon: "prospects" },
+        { href: "/app/meetings", label: "Meetings", icon: "meetings" },
       ],
     },
     /*
-     * Visited while setting up, and then roughly never.
-     *
-     * These were in the daily path and they are not daily work: a strategy is
-     * approved once, an agent is written once, a destination is named once.
-     * Sitting beside the Inbox they made twelve links of equal weight, which is
-     * a list to read rather than a nav to use — and the next-step mark had to
-     * compete with all of them.
+     * Visited while setting up, and then roughly never: who to go after, and
+     * who writes and answers. Two links rather than five. The library pages
+     * that used to sit here each live where they are used, so a small
+     * business owner reads two words instead of five and still reaches all of
+     * them: Calls to action from a campaign's Goal & link, the opener and
+     * offer lines from Agents and from a campaign's Opener & offer, and Do not
+     * contact from Prospects → Excluded. Their addresses are unchanged.
      */
     {
       label: "Setup",
       items: [
         { href: "/app/strategy", label: "Strategies", icon: "strategies", ...next("/app/strategy", "Strategies") },
         { href: "/app/agents", label: "Agents", icon: "agents", ...next("/app/agents", "Agents") },
-        { href: "/app/cta", label: "Calls to action", icon: "cta" },
-        // The workspace's own opener and offer lines, which every agent
-        // without lines of its own falls back to. Beside Calls to action
-        // because it is the same kind of thing: named once, approved once,
-        // read by every campaign. No mark of its own (rule 32): a held
-        // follow-up already surfaces on the overview's list.
-        { href: "/app/pitch", label: "Opener and pitch", icon: "pitch" },
-        { href: "/app/exclusions", label: "Do not contact", icon: "exclusions" },
       ],
     },
     /*
@@ -93,29 +88,24 @@ function navGroups(waiting: number, marks: NavMarks): NavGroup[] {
     {
       label: "More",
       items: [
-        { href: "/app/prospects", label: "Prospects", icon: "prospects" },
-        { href: "/app/meetings", label: "Meetings", icon: "meetings" },
-        // Off the daily path deliberately. It is the one thing this product
-        // publishes that nobody is waiting for, and a post that waits a day
-        // has lost nothing — which is the whole argument for its approval gate.
-        { href: "/app/posts", label: "Profile posts", icon: "posts" },
-        // What Nora liked and commented on in the rep's name, and its switch.
-        { href: "/app/engagement", label: "Likes and comments", icon: "inbox" },
+        // Likes, comments, posts and profile views are one page of switches
+        // under Profile → LinkedIn activity, not a link each.
+        { href: "/app/profile/activity", label: "LinkedIn activity", icon: "posts" },
         { href: "/app/tutorial", label: "How it works", icon: "tutorial" },
         { href: "/app/system", label: "System check", icon: "system" },
       ],
     },
     /*
      * The account and the way to ask for help, at the foot of the rail where
-     * every application a rep already uses keeps them. Same links, same mark
-     * rule: Profile & team still carries the next-step dot when the workspace
-     * is on that step.
+     * every application a rep already uses keeps them. Same mark rule:
+     * Profile & settings still carries the next-step dot when the workspace is
+     * on that step.
      */
     {
       label: "Account",
       footer: true,
       items: [
-        { href: "/app/profile", label: "Profile & team", icon: "profile", ...next("/app/profile", "Profile & team") },
+        { href: "/app/profile", label: "Profile & settings", icon: "profile", ...next("/app/profile", "Profile & settings") },
         { href: "/app/support", label: "Support", icon: "support" },
       ],
     },
@@ -374,14 +364,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             {billingMessage ? (
               <div className={`notice ${entitlement.canSend ? "warning" : "danger"}`}>
                 <p>
-                  {billingMessage} <Link href="/app/profile#billing">Choose a plan</Link>
+                  {billingMessage} <Link href="/app/profile/billing">Choose a plan</Link>
                 </p>
               </div>
             ) : trialLeft !== null ? (
               <div className="notice">
                 <p>
                   {trialLeft === 0 ? "Your free trial ends today." : `${trialLeft} day${trialLeft === 1 ? "" : "s"} left in your free trial of Nora Autopilot.`}{" "}
-                  <Link href="/app/profile#billing">Choose a plan</Link>
+                  <Link href="/app/profile/billing">Choose a plan</Link>
                 </p>
               </div>
             ) : null}

@@ -73,6 +73,8 @@ interface World {
   accounts?: Row[];
   availability?: Row[];
   profiles?: Row[];
+  /** Invitations this month per account, and how many went without a note. */
+  invited?: Record<string, { all: number; noNote: number }>;
 }
 
 function world(w: World) {
@@ -93,14 +95,22 @@ function world(w: World) {
       case "campaigns":
         if (eq(call, "status") === "draft") return { data: w.drafts ?? [] };
         if (eq(call, "status") === "running") return { data: w.running ?? [] };
+        if (eq(call, "linkedin_account_id")) {
+          return { data: (w.campaigns ?? []).filter((c) => c.linkedin_account_id === eq(call, "linkedin_account_id")) };
+        }
         if (call.columns.includes("linkedin_account_id")) return { data: w.campaigns ?? [] };
         return { count: 1 };
       case "ctas":
         return { data: w.ctas ?? [] };
       case "campaign_steps":
         return { data: w.steps ?? [] };
-      case "campaign_prospects":
-        return { data: w.thin ?? [] };
+      case "campaign_prospects": {
+        if (!call.filters.some(([n, c]) => n === "gte" && c === "invited_at")) return { data: w.thin ?? [] };
+        const ids = (call.filters.find(([n, c]) => n === "in" && c === "campaign_id")?.[2] ?? []) as string[];
+        const account = (w.campaigns ?? []).find((c) => ids.includes(c.id as string))?.linkedin_account_id as string;
+        const sent = w.invited?.[account] ?? { all: 0, noNote: 0 };
+        return { count: eq(call, "invite_note_sent") === false ? sent.noNote : sent.all };
+      }
       case "availability":
         return { data: w.availability ?? [] };
       case "profiles":
@@ -196,6 +206,18 @@ describe("notes that are not personalised", () => {
     const row = items.find((i) => i.kind === "thin_notes");
     expect(row?.title).toBe("2 campaigns have notes that are not personalised, 1 of them already sending.");
   });
+
+  it("leaves out a free account that has already sent this month's notes", async () => {
+    const { client } = world({
+      thin: [{ campaign_id: "run1" }],
+      campaigns: [{ id: "run1", status: "running", linkedin_account_id: "a1" }],
+      accounts: [{ id: "a1", user_id: "u1", has_premium: false, has_sales_navigator: false, notes_exhausted_month: null }],
+      profiles: [{ id: "u1", timezone: "America/New_York" }],
+      invited: { a1: { all: 5, noNote: 2 } },
+    });
+    const { facts } = await loadNeedsYou(client, "w1", NOW);
+    expect(facts.campaignsWithThinNotes).toBe(0);
+  });
 });
 
 describe("campaignCtas", () => {
@@ -239,10 +261,16 @@ const src = (...parts: string[]) => readFileSync(join(__dirname, "..", "src", ..
 
 describe("every screen reads the goal a campaign actually has", () => {
   it("picking a saved call to action writes its goal onto the campaign too", () => {
-    const page = src("app", "app", "campaigns", "[id]", "page.tsx");
+    const page = src("app", "app", "campaigns", "[id]", "actions.ts");
     const action = page.slice(page.indexOf("async function setCampaignCta"), page.indexOf("async function setStatus"));
-    expect(action).toMatch(/patch = \{ cta_id: picked\.id, cta_kind: picked\.kind, cta_label: picked\.label, cta_url: picked\.url \}/);
-    expect(action).not.toMatch(/update\(\{ cta_id: ctaId \|\| null \}\)/);
+    // What a picked card means is one helper, shared with the builder's goal
+    // step, and the action writes the patch it returns.
+    const choice = src("app", "app", "campaigns", "[id]", "cta-choice.ts");
+    expect(action).toMatch(/await ctaPatchFor\(supabase, session, formData\)/);
+    expect(action).toMatch(/\.update\(patch\)/);
+    expect(choice).toMatch(/patch = \{ cta_id: picked\.id, cta_kind: picked\.kind, cta_label: picked\.label, cta_url: picked\.url \}/);
+    expect(action + choice).not.toMatch(/update\(\{ cta_id: ctaId \|\| null \}\)/);
+    expect(src("app", "app", "campaigns", "new", "actions.ts")).toMatch(/await ctaPatchFor\(supabase, session, formData\)/);
   });
 
   it("the funnel, the inbox's meeting tab and the campaign page resolve through campaignCtas", () => {
@@ -250,6 +278,6 @@ describe("every screen reads the goal a campaign actually has", () => {
     expect(src("app", "app", "inbox", "page.tsx")).toMatch(/campaignCtas\(supabase, session\.workspaceId, goals \?\? \[\]\)/);
     expect(src("app", "app", "inbox", "page.tsx")).not.toMatch(/\.eq\("cta_kind", "meeting"\)/);
     expect(src("lib", "needs-you-data.ts")).not.toMatch(/\.eq\("cta_kind", "meeting"\)/);
-    expect(src("app", "app", "campaigns", "[id]", "page.tsx")).toMatch(/campaignCtas\(supabase, session\.workspaceId, \[campaign\]\)/);
+    expect(src("app", "app", "campaigns", "[id]", "data.ts")).toMatch(/campaignCtas\(supabase, session\.workspaceId, \[campaign\]\)/);
   });
 });

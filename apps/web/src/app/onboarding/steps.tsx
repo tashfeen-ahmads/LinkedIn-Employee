@@ -12,6 +12,7 @@ import { TimezoneGuess } from "@/components/timezone-guess";
 import { PostButton } from "@/components/post-button";
 import { FormKeeper } from "@/components/form-keeper";
 import { NORA } from "@/lib/team";
+import { CopyPreview } from "@/components/copy-preview";
 import type { OnboardingStash } from "@/lib/onboarding-stash";
 import type { WizardAccount } from "@/lib/wizard-state";
 import type { ReplyHandling } from "@/lib/autonomy";
@@ -538,6 +539,10 @@ export interface LaunchReview {
   samples: Array<{ who: string; note: string | null }>;
   /** The sequence of the angle most of the list holds (rule 28). */
   steps: Array<{ n: number; delayDays: number; message: string }>;
+  /** Who the messages are previewed for, and what fills them (`CopyPreview`). */
+  sample: { first_name: string | null; last_name: string | null; company: string | null; title: string | null } | null;
+  pitch: string | null;
+  linkLabel: string;
   /** That angle, how many queued people hold it, and how many angles the list has; null when nobody holds one. */
   angle: { name: string | null; holders: number; angles: number } | null;
   /** A free account's invitation notes left this month (rule 62); null on a paid plan or when unknown. */
@@ -641,6 +646,9 @@ export function LaunchPanel({
                 : "It is the only angle on this list."}
             </p>
           ) : null}
+          {review.sample?.first_name ? (
+            <p className="tiny subtle">Shown as {review.sample.first_name} would read them.</p>
+          ) : null}
           <ol className="wz-sequence">
             {review.steps.map((step) => (
               <li key={step.n}>
@@ -655,7 +663,9 @@ export function LaunchPanel({
                     and the note they accepted. This is what goes if one cannot be written.
                   </p>
                 ) : null}
-                <p className="small">{step.message}</p>
+                <p className="small">
+                  <CopyPreview message={step.message} person={review.sample} pitch={review.pitch} linkLabel={review.linkLabel} />
+                </p>
               </li>
             ))}
           </ol>

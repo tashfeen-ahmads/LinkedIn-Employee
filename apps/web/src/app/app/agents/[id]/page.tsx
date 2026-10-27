@@ -502,7 +502,9 @@ export default async function AgentPage({
       {gaps.length > 0 ? (
         <div className="notice warning" role="status">
           <p>
-            <strong>Not ready for a campaign yet.</strong> This agent still needs {gaps.join(", ")}.
+            <strong>Not ready for a campaign yet.</strong> This agent still needs{" "}
+            {/* The shared reading names the model in operator terms (rule 54). */}
+            {gaps.map((gap) => (gap === "a model this deployment can price" ? "a model chosen from the list" : gap)).join(", ")}.
           </p>
         </div>
       ) : null}
@@ -513,12 +515,12 @@ export default async function AgentPage({
           <label className="field">
             <span>Agent name</span>
             <input name="name" defaultValue={agent.name} maxLength={80} required autoComplete="off" />
-            <span className="small muted">Yours, not the prospect&rsquo;s. It never appears in a message.</span>
+            <span className="hint">Yours, not the prospect&rsquo;s. It never appears in a message.</span>
           </label>
           <label className="field">
             <span>Writes as</span>
             <input name="from_name" defaultValue={agent.from_name ?? ""} maxLength={80} autoComplete="off" />
-            <span className="small muted">
+            <span className="hint">
               The name in the message. &ldquo;Tashfeen&rdquo; reads like a person; a full legal name reads
               like a signature block.
             </span>
@@ -533,14 +535,14 @@ export default async function AgentPage({
                 </option>
               ))}
             </select>
-            <span className="small muted">
+            <span className="hint">
               The model that writes this agent&rsquo;s messages.
             </span>
           </label>
           <label className="field">
             <span>How it writes</span>
             <textarea name="system_prompt" rows={6} defaultValue={agent.system_prompt ?? ""} maxLength={4000} />
-            <span className="small muted">
+            <span className="hint">
               Voice, audience, and what to avoid, in your words. This is the difference between copy
               that sounds like you and copy that sounds like software.
             </span>
@@ -670,8 +672,8 @@ export default async function AgentPage({
             <label className="field">
               <span>New opener</span>
               <input name="body" maxLength={HOOK_MAX_CHARS} defaultValue="" placeholder={DEFAULT_OPENER_TEMPLATE} />
-              <span className="small muted">
-                Merge fields available: {allFields.map((f) => `{{${f}}}`).join(", ")}
+              <span className="hint">
+                Filled in for each person: {allFields.map((f) => `{{${f}}}`).join(", ")}
               </span>
             </label>
             <SubmitButton className="btn secondary" pendingLabel="Adding…">
@@ -764,7 +766,7 @@ export default async function AgentPage({
             <label className="field">
               <span>New offer line</span>
               <input name="body" maxLength={PITCH_MAX_CHARS} defaultValue="" />
-              <span className="small muted">
+              <span className="hint">
                 Spoken into a chat window on a phone, two seconds after somebody asked what this is.
                 A paragraph there is skimmed and then ignored.
               </span>
@@ -802,7 +804,7 @@ export default async function AgentPage({
           <label className="field">
             <span>Hand over to a human when</span>
             <textarea name="hand_over" rows={3} defaultValue={playbook.handOver} maxLength={500} />
-            <span className="small muted">
+            <span className="hint">
               Never the only thing that stops it. A message it is unsure of, and a prospect who asks
               for a person, are always held: the first because it does not know what was said, the
               second because they asked.
@@ -879,7 +881,7 @@ export default async function AgentPage({
             <label className="field">
               <span>When a prospect has no value</span>
               <input name="fallback" maxLength={120} />
-              <span className="small muted">
+              <span className="hint">
                 Leave blank to keep the placeholder visible, so it is caught on the review screen
                 rather than by the prospect.
               </span>

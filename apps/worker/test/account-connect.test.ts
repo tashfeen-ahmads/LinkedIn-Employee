@@ -925,6 +925,9 @@ describe("the connect return trip", () => {
 
     expect(res.status).toBe(302);
     expect(res.headers.get("location")).toContain("/app/profile");
+    // No anchor: the profile is a set of sections now, and an old "#team"
+    // moved the rep off the LinkedIn section before its check could run.
+    expect(res.headers.get("location")).not.toContain("#");
     const account = db.find("linkedin_accounts", { id: ACCOUNT })!;
     expect(account.provider_account_id).toBe("acct_new");
     expect(account.status).toBe("active");

@@ -139,6 +139,180 @@ export interface VoiceOptions {
    * placeholders are allowed. A note written for one named person has none.
    */
   template?: boolean;
+  /**
+   * What actually exists to hand over: knowledge document titles, the call
+   * to action's label and address. An offer of an example, a checklist, a
+   * guide, a template or an audit is allowed only when one of these names it
+   * (`offeredAsset`). Campaign copy is always checked, with nothing given
+   * meaning nothing exists; a reply only when this is passed.
+   */
+  assets?: readonly string[];
+  /**
+   * The call to action's own label ("Book a Free Consultation"), so a message
+   * that pastes it into a sentence in title case is caught (`titleCaseCta`).
+   */
+  ctaLabel?: string | null;
+  /**
+   * The approved openers this note could have leaned on (`openerProblems`).
+   * `own` were written for this strategy or attached to this angle; `foreign`
+   * were approved for somebody else and are optional shapes at most.
+   */
+  openers?: { own?: readonly string[]; foreign?: readonly string[] };
+}
+
+/*
+ * Offering something nobody can hand over.
+ *
+ * "Want a two sentence example you can try this week?" and "can I send a quick
+ * checklist?" went out in live campaigns with nothing behind them: no document
+ * in the knowledge base, no link, nothing the agent could send when the
+ * prospect said yes. A yes is the outcome the whole campaign exists for, and
+ * answering it with nothing (or with something the model then invents) is the
+ * worst way to spend one. So an offer of an artefact is allowed only when the
+ * artefact exists, checked in code because `callStructured` casts.
+ */
+const ASSET_NOUN =
+  "(case stud(?:y|ies)|cheat ?sheets?|white ?papers?|swipe files?|one-pagers?|e-?books?|examples?|checklists?|guides?|templates?|audits?|playbooks?|samples?|frameworks?|scripts?|breakdowns?|teardowns?|worksheets?|pdfs?)";
+const OFFER_PATTERNS = [
+  // "want a two sentence example", "can I send a quick checklist",
+  // "want me to send over a guide", "interested in a free audit".
+  new RegExp(
+    String.raw`\b(?:want|send|sending|share|sharing|forward|pass along|put together|show you|give you|drop you|email you|grab you|interested in|would you like|like me to|mind if i)\b(?:\s+(?:you|me|i|over|along|across|to|send|share|see|it))*\s+(?:a|an|the|my|our|one|some|this|that)\s+(?:[\w'-]+\s+){0,4}?${ASSET_NOUN}\b`,
+    "gi",
+  ),
+  // "would a quick checklist help?"
+  new RegExp(
+    String.raw`\b(?:would|could|can|does|is)\s+(?:a|an|the|one)\s+(?:[\w'-]+\s+){0,4}?${ASSET_NOUN}\b[^.?!]*\b(?:help|useful|worth|interest|handy)`,
+    "gi",
+  ),
+];
+
+/** A verb the prospect does when "you" is its subject: asking, not offering. */
+const THEIR_ACT = /^(?:send|sending|share|sharing|forward|pass along|put together)\b/i;
+
+/** Letters and digits only, so "e-book" matches "ebook" and "cheat sheet" "cheatsheet". */
+function squash(text: string): string {
+  return text.toLowerCase().replace(/[^a-z0-9]+/g, "");
+}
+
+/**
+ * The artefact a message offers that nothing given to the writer names, or
+ * null. Pure; `assets` are the titles and labels of what really exists.
+ */
+export function offeredAsset(text: string, assets: readonly string[] = []): string | null {
+  // An address names its asset in its path ("acme.com/checklist"), never in
+  // its host: "cal.example.com" is not an example anybody can send.
+  const have = assets
+    .map((asset) => {
+      const trimmed = asset.trim();
+      return squash(/^https?:\/\//i.test(trimmed) ? trimmed.replace(/^https?:\/\/[^/?#]*/i, "") : trimmed);
+    })
+    .filter(Boolean);
+  for (const pattern of OFFER_PATTERNS) {
+    pattern.lastIndex = 0;
+    for (const match of text.matchAll(pattern)) {
+      // "could you share the playbook" asks for theirs; it offers nothing.
+      if (THEIR_ACT.test(match[0]) && /\byou\s+$/i.test(text.slice(0, match.index))) continue;
+      const noun = match[1]!.toLowerCase();
+      const stem = squash(noun.replace(/ies$/, "y").replace(/s$/, ""));
+      if (!have.some((asset) => asset.includes(stem))) return noun;
+    }
+  }
+  return null;
+}
+
+/*
+ * A call to action pasted as its label.
+ *
+ * "If yes, Book a Free Consultation and pick a time" is a button's name typed
+ * into a sentence, and it reads as exactly what it is: software filling a
+ * slot. A person writes "happy to grab 20 minutes?".
+ */
+const MINOR = "(?:a|an|the|your|my|our|up|for|to|of|in|on|with|and)";
+const GENERIC_CTA = new RegExp(
+  String.raw`(?<=[a-z0-9,:] )(?:Book|Get|Schedule|Claim|Grab|Start|Request|Download|Try|Join|Reserve|Apply|Watch|See|Sign)(?: ${MINOR})* [A-Z][a-z]+(?:(?: ${MINOR})* [A-Z][a-z]+)+`,
+);
+
+/**
+ * The title-case call to action a message carries, or null.
+ *
+ * `generic: false` checks the known label only. The send path uses that: a
+ * rendered message carries the prospect's own company name, and "how Get
+ * Smart Plumbing handles…" is a name, not a button.
+ */
+export function titleCaseCta(
+  text: string,
+  label?: string | null,
+  options: { generic?: boolean } = {},
+): string | null {
+  const own = label?.trim();
+  if (own) {
+    const words = own.split(/\s+/);
+    const capitalised = words.filter((word) => /^[A-Z][a-z]/.test(word));
+    if (words.length >= 2 && capitalised.length >= 2 && text.includes(own)) return own;
+  }
+  if (options.generic === false) return null;
+  return GENERIC_CTA.exec(text)?.[0] ?? null;
+}
+
+/** The longest run of words two texts share, in order, ignoring case and punctuation. */
+export function sharedWordRun(a: string, b: string): number {
+  const left = words(a);
+  const right = words(b);
+  let best = 0;
+  // Small inputs (a note and an opener): the quadratic table is a few hundred cells.
+  let previous = new Array<number>(right.length + 1).fill(0);
+  for (let i = 1; i <= left.length; i++) {
+    const current = new Array<number>(right.length + 1).fill(0);
+    for (let j = 1; j <= right.length; j++) {
+      if (left[i - 1] === right[j - 1]) {
+        current[j] = previous[j - 1]! + 1;
+        if (current[j]! > best) best = current[j]!;
+      }
+    }
+    previous = current;
+  }
+  return best;
+}
+
+/** Five words in a row from an opener written for other people is its words, not its shape. */
+export const FOREIGN_OPENER_RUN = 5;
+/** Eight in a row, or three quarters of it, from the note's own opener is pasting it. */
+export const OWN_OPENER_RUN = 8;
+
+/**
+ * Whether a note reuses an approved opener's words (rule 40: shapes, never
+ * text). An opener written for this strategy may lend its shape and the odd
+ * phrase; pasted near verbatim it is a template again, and everybody in the
+ * batch receives the same sentence. An opener approved for somebody else may
+ * lend its shape at most: "Quick yes or no Maria: do founders still run
+ * outbound where you hire" went to recruiters because a line written for
+ * founders was the only opener the writer was handed.
+ */
+export function openerProblems(
+  text: string,
+  openers: { own?: readonly string[]; foreign?: readonly string[] },
+): string[] {
+  const own = (openers.own ?? []).map((line) => line.trim()).filter(Boolean);
+  const foreign = (openers.foreign ?? []).map((line) => line.trim()).filter((line) => line && !own.includes(line));
+  const problems: string[] = [];
+  for (const line of foreign) {
+    if (sharedWordRun(text, line) >= FOREIGN_OPENER_RUN) {
+      problems.push(
+        `It borrows the words of an opener written for a different audience ("${line.split(/\s+/).slice(0, 6).join(" ")}…"). Write from this person's own role and company instead.`,
+      );
+      return problems;
+    }
+  }
+  for (const line of own) {
+    const length = words(line).length;
+    const run = sharedWordRun(text, line);
+    if (run >= OWN_OPENER_RUN || (length >= 5 && run >= Math.ceil(length * 0.75))) {
+      problems.push("It pastes an approved opener word for word. Use its shape, not its words, and make it about this person.");
+      return problems;
+    }
+  }
+  return problems;
 }
 
 /**
@@ -231,6 +405,32 @@ export function voiceProblems(text: string, kind: MessageKind, options: VoiceOpt
   if (options.theirMessage && mirrors(body, options.theirMessage)) {
     problems.push("It repeats their own words back to them. Respond instead of summarising.");
   }
+
+  // Campaign copy always: nothing given means nothing exists to send. A reply
+  // only when its writer says what exists, because a reply is handed the
+  // knowledge base and an offer from it is the answer somebody asked for.
+  const campaignCopy = kind === "invite_note" || kind === "first_message" || kind === "follow_up";
+  if (campaignCopy || (kind === "reply" && options.assets)) {
+    const asset = offeredAsset(body, options.assets);
+    if (asset) {
+      problems.push(
+        `It offers ${/^[aeiou]/.test(asset) ? "an" : "a"} ${asset} that does not exist, so a yes cannot be answered. Offer only what you were told exists, or ask a question instead.`,
+      );
+    }
+  }
+  if (kind !== "comment") {
+    // The broad title-case pattern only on a campaign's templates. Copy
+    // written for one person names their company, and "Get Set Fitness" or
+    // "Join Forces Media" reads to that pattern exactly like a pasted button;
+    // there the known label is the only thing checked.
+    const pasted = titleCaseCta(body, options.ctaLabel, { generic: options.template === true });
+    if (pasted) {
+      problems.push(
+        `It pastes "${pasted}" into a sentence in title case, like a button. Ask in plain words, like "happy to grab 20 minutes?".`,
+      );
+    }
+  }
+  if (options.openers) problems.push(...openerProblems(body, options.openers));
   return problems;
 }
 

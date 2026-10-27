@@ -794,8 +794,20 @@ async function launchReview(workspaceId: string, preferredId: string | null = nu
   const notesLeft = account ? await notesLeftThisMonth(supabase, account, owner?.timezone ?? "UTC") : null;
 
   const kind = (campaign.cta_kind ?? "meeting") as keyof typeof CTA_DEFINITIONS;
+  const lines = await linesAwaitingApproval(workspaceId);
+  // The offer the follow-ups will carry: the one this launch approves, or the
+  // workspace's approved default.
+  const { data: approvedPitch } = await supabase
+    .from("pitches")
+    .select("body")
+    .eq("workspace_id", workspaceId)
+    .not("approved_at", "is", null)
+    .order("is_default", { ascending: false })
+    .limit(1)
+    .maybeSingle();
   return {
-    lines: await linesAwaitingApproval(workspaceId),
+    lines,
+    pitch: lines.find((line) => line.table === "pitches")?.body ?? approvedPitch?.body ?? null,
     campaignId: campaign.id,
     name: campaign.name,
     people: state?.prospectCount ?? 0,
@@ -808,6 +820,13 @@ async function launchReview(workspaceId: string, preferredId: string | null = nu
       return { who: role ? `${name} · ${role}` : name, note: row.invite_note?.trim() || null };
     }),
     steps: sequence.map((s) => ({ n: s.step_number, delayDays: s.delay_days, message: s.message })),
+    // The first person on the list, so the messages above read as they will
+    // for somebody real rather than as templates.
+    sample: (() => {
+      const p = byId.get((queued ?? [])[0]?.prospect_id ?? "");
+      return p ? { first_name: p.first_name, last_name: p.last_name, company: p.company, title: p.title } : null;
+    })(),
+    linkLabel: kind === "meeting" ? "the link to book a call" : kind === "link" ? "your link" : "the link",
     angle: angle.variantId ? { name: angleName, holders: angle.holders, angles: angle.angles } : null,
     notesLeft,
     blockers: state ? launchBlockers(state) : ["That campaign could not be read."],
@@ -857,7 +876,13 @@ async function linesAwaitingApproval(workspaceId: string): Promise<LaunchReview[
       .maybeSingle(),
   ]);
   const lines: LaunchReview["lines"] = [];
-  if (hook?.body?.trim()) lines.push({ table: "hooks", id: hook.id, body: hook.body, title: "How the invitations open" });
+  // Approved here, the opener is the agent's, used by every strategy it runs,
+  // so it is offered to the note writer as a shape to use only where its
+  // question fits the person, never as the line every invitation opens with:
+  // one written for founders went to recruiters that way. The title says so.
+  if (hook?.body?.trim()) {
+    lines.push({ table: "hooks", id: hook.id, body: hook.body, title: "An opening line, used where it fits the person" });
+  }
   if (pitch?.body?.trim()) {
     lines.push({ table: "pitches", id: pitch.id, body: pitch.body, title: "What it says when somebody asks what this is" });
   }

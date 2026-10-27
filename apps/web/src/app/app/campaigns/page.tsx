@@ -4,8 +4,11 @@ import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { fetchAllRows } from "@/lib/rows";
 import { PageNotice, type NoticeParams } from "@/components/page-notice";
-import { label } from "@/lib/labels";
 import { actionableQueue, type QueuedRow } from "@/lib/campaign";
+import { countFunnel, type FunnelRow } from "@le/shared";
+import { campaignCtas } from "@/lib/campaign-cta";
+import { CampaignCard, type CampaignCardData } from "@/components/campaign-card";
+import { setStatus } from "./[id]/actions";
 
 export default async function CampaignsPage({
   searchParams,
@@ -16,11 +19,11 @@ export default async function CampaignsPage({
   const session = await requireSession();
   const supabase = await createClient();
 
-  const [{ data: campaigns }, counts, { data: strategies }, { data: businesses }, { data: exclusionRows }] = await Promise.all([
+  const [{ data: campaigns }, counts, { data: strategies }, { data: businesses }, { data: exclusionRows }, { data: held }, { data: viewer }] = await Promise.all([
     supabase
       .from("campaigns")
       .select(
-        "id, name, status, connection_note, daily_invite_cap, reply_mode, launched_at, created_at, customer_profile_id",
+        "id, name, status, connection_note, daily_invite_cap, reply_mode, launched_at, created_at, customer_profile_id, cta_id, cta_kind, cta_label, cta_url",
       )
       .eq("workspace_id", session.workspaceId)
       .order("created_at", { ascending: false }),
@@ -32,15 +35,17 @@ export default async function CampaignsPage({
     // out the people it will close rather than invite (see `actionableQueue`).
     // The embed is cast, as on the campaign page: the generated types carry no
     // relationships, so the join reads as an error type it is not.
-    fetchAllRows<{ campaign_id: string; status: string } & QueuedRow>(
+    // With when each person accepted and replied, so each card's tiles are
+    // the same funnel the campaign's own overview draws (`countFunnel`).
+    fetchAllRows<{ campaign_id: string } & FunnelRow & QueuedRow>(
       (from, to) =>
         supabase
           .from("campaign_prospects")
-          .select("campaign_id, status, invited_at, prospect:prospects (do_not_contact, last_contacted_at, company, linkedin_url)")
+          .select("campaign_id, status, invited_at, accepted_at, replied_at, prospect:prospects (do_not_contact, last_contacted_at, company, linkedin_url)")
           .eq("workspace_id", session.workspaceId)
           .order("id", { ascending: true })
           .range(from, to) as unknown as PromiseLike<{
-          data: Array<{ campaign_id: string; status: string } & QueuedRow> | null;
+          data: Array<{ campaign_id: string } & FunnelRow & QueuedRow> | null;
           error: { message: string } | null;
         }>,
     ),
@@ -59,6 +64,14 @@ export default async function CampaignsPage({
       .eq("workspace_id", session.workspaceId)
       .order("created_at", { ascending: true }),
     supabase.from("exclusions").select("kind, value, raw_value, reason").eq("workspace_id", session.workspaceId),
+    // Conversations held for a person, per campaign: the card's "needs you"
+    // line counts the same holds the inbox lists (rule 10), never drafts.
+    supabase
+      .from("conversations")
+      .select("campaign_id, needs_human_kind")
+      .eq("workspace_id", session.workspaceId)
+      .eq("needs_human", true),
+    supabase.from("profiles").select("timezone").eq("id", session.userId).maybeSingle(),
   ]);
 
   const exclusions = (exclusionRows ?? []).map((row) => ({
@@ -68,19 +81,25 @@ export default async function CampaignsPage({
     reason: row.reason,
   }));
 
-  const byCampaign = new Map<string, { queued: number; total: number }>();
+  const byCampaign = new Map<string, { queued: number; total: number; failed: number; rows: FunnelRow[] }>();
   for (const row of counts.rows) {
-    const entry = byCampaign.get(row.campaign_id) ?? { queued: 0, total: 0 };
+    const entry = byCampaign.get(row.campaign_id) ?? { queued: 0, total: 0, failed: 0, rows: [] };
     entry.total += 1;
+    entry.rows.push(row);
     if (row.status === "queued") entry.queued += actionableQueue([row], exclusions).actionable;
+    if (row.status === "failed") entry.failed += 1;
     byCampaign.set(row.campaign_id, entry);
+  }
+  const heldBy = new Map<string, number>();
+  for (const row of held ?? []) {
+    if (row.campaign_id) heldBy.set(row.campaign_id, (heldBy.get(row.campaign_id) ?? 0) + 1);
   }
 
   if (!campaigns?.length) {
     return (
       <>
         <PageHeader
-          eyebrow="Pipeline"
+          eyebrow="Work"
           title="Campaigns"
           lede="Built as drafts. You read every name and every message before anything sends."
           actions={
@@ -148,17 +167,37 @@ export default async function CampaignsPage({
     grouped.push({ id: null, name: "No strategy", business: null, campaigns: orphaned });
   }
 
+  // The goal each campaign actually sends, through the same resolver the send
+  // path uses: a card reading the columns would offer a Booked tile on a
+  // campaign whose pointer now sends a link.
+  const goals = await campaignCtas(supabase, session.workspaceId, campaigns);
+  const strategyName = new Map(strategyOrder.map((s) => [s.id as string, s.name as string]));
+  const cardFor = (campaign: (typeof campaigns)[number]): CampaignCardData => {
+    const stats = byCampaign.get(campaign.id) ?? { queued: 0, total: 0, failed: 0, rows: [] };
+    return {
+      id: campaign.id,
+      name: campaign.name,
+      status: campaign.status,
+      createdAt: campaign.created_at,
+      strategy: campaign.customer_profile_id ? (strategyName.get(campaign.customer_profile_id) ?? null) : null,
+      goal: goals.get(campaign.id)?.kind ?? campaign.cta_kind,
+      people: stats.total,
+      waiting: stats.queued,
+      counts: countFunnel(stats.rows),
+      needs: needsLine(campaign.status, stats, heldBy.get(campaign.id) ?? 0),
+    };
+  };
+
   return (
     <>
       <PageHeader
-        eyebrow="Pipeline"
+        eyebrow="Work"
         title="Campaigns"
-        lede="Grouped by the strategy each came from, in the strategies' own priority order."
+        lede="Each campaign invites one list of people and follows up for you. They are grouped by the strategy they came from."
         actions={
           <>
-            {/* Results is a section of the overview; /app/analytics only
-                redirects there, so the link goes straight to it. */}
-            <Link className="btn ghost small" href="/app#results">
+            {/* Every chart and table lives on the Results page. */}
+            <Link className="btn ghost small" href="/app/analytics">
               Results
             </Link>
             {/* The way to start another one, once there is one already. It
@@ -201,79 +240,49 @@ export default async function CampaignsPage({
             </p>
           }
         >
-          <div className="grid">{renderCampaigns(group.campaigns, byCampaign)}</div>
+          <div className="campaign-cards">
+            {group.campaigns.map((campaign) => (
+              <CampaignCard
+                key={campaign.id}
+                campaign={cardFor(campaign)}
+                timezone={viewer?.timezone ?? null}
+                statusAction={setStatus}
+              />
+            ))}
+          </div>
         </Section>
       ))}
     </>
   );
 }
 
-function renderCampaigns(
-  campaigns: Array<{
-    id: string;
-    name: string;
-    status: string;
-    daily_invite_cap: number;
-    reply_mode: string;
-    launched_at: string | null;
-    connection_note: string;
-  }>,
-  byCampaign: Map<string, { queued: number; total: number }>,
-) {
-  return (
-    <>
-      {campaigns.map((campaign) => {
-          const stats = byCampaign.get(campaign.id) ?? { queued: 0, total: 0 };
-          return (
-            <article key={campaign.id} className="card">
-              <header className="between">
-                <div>
-                  <h3>{campaign.name}</h3>
-                  <p className="small muted">
-                    {stats.total} {stats.total === 1 ? "prospect" : "prospects"}, {stats.queued} still
-                    queued · {campaign.daily_invite_cap} {campaign.daily_invite_cap === 1 ? "invite" : "invites"}{" "}
-                    a day ·{" "}
-                    {campaign.reply_mode === "autopilot" ? "replies on autopilot" : "replies need approval"}
-                  </p>
-                </div>
-                <div className="cluster top">
-                  <span className={`pill ${campaign.status === "running" ? "positive" : campaign.status === "paused" ? "warning" : ""}`}>
-                    {label(campaign.status)}
-                  </span>
-                  {/* Launching happens on the review page and nowhere else: it
-                      is the one action that reaches strangers, and it should
-                      not be possible without having seen the list and the
-                      four messages. */}
-                  <Link
-                    className="btn secondary small"
-                    href={`/app/campaigns/${campaign.id}`}
-                    aria-label={`${campaign.status === "draft" ? "Review" : "Open"} ${campaign.name}`}
-                  >
-                    {campaign.status === "draft" ? "Review" : "Open"}
-                  </Link>
-                </div>
-              </header>
-              {/*
-                A panel is a box drawn around something. With no note there is
-                nothing to draw it around, and every campaign on this screen
-                carried an empty sunken rectangle where its opening line should
-                be — which reads as a card that failed to load rather than as a
-                campaign whose copy has not been written.
-
-                A campaign without one is also worth saying out loud: the note
-                is what the stranger actually reads, so "not written yet" is a
-                fact about the campaign, not an empty space.
-              */}
-              {campaign.connection_note ? (
-                <p className="small panel">{campaign.connection_note}</p>
-              ) : (
-                <p className="small subtle">
-                  No opening line yet. It is written for each person when the list is built.
-                </p>
-              )}
-            </article>
-        );
-      })}
-    </>
-  );
+/**
+ * What one campaign needs from the person, in a line, most urgent first.
+ *
+ * A reply held for them outranks everything: somebody is waiting for an
+ * answer. Then work that cannot finish on its own (failed sends, a draft
+ * nobody has launched, a running list with nobody left), and only then the
+ * quiet line, which says so rather than leaving a blank where the line was.
+ */
+function needsLine(
+  status: string,
+  stats: { queued: number; total: number; failed: number },
+  held: number,
+): CampaignCardData["needs"] {
+  if (held > 0) {
+    return { tone: "attention", text: `${held} ${held === 1 ? "conversation is" : "conversations are"} waiting for you in the inbox` };
+  }
+  if (stats.failed > 0) {
+    return { tone: "attention", text: `${stats.failed} ${stats.failed === 1 ? "send" : "sends"} failed and can be retried` };
+  }
+  if (status === "draft") {
+    return stats.total > 0
+      ? { tone: "attention", text: "Waiting for you to read the list and launch" }
+      : { tone: "attention", text: "Nobody on the list yet" };
+  }
+  if (status === "running" && stats.queued === 0) {
+    return { tone: "attention", text: "Nobody left to invite. Find more on its People section" };
+  }
+  if (status === "paused") return { tone: "quiet", text: "Paused. Nothing goes out until you resume it" };
+  return { tone: "quiet", text: "Nothing needs you" };
 }

@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { readBusinessForm } from "../src/lib/profile-business";
+import { profileSources } from "./profile-sources";
 
 /**
  * Everything asked during setup can be changed afterwards, on Profile.
@@ -13,8 +14,13 @@ import { readBusinessForm } from "../src/lib/profile-business";
 const SRC = join(__dirname, "..", "src", "app");
 // The onboarding page and its step screens, read together.
 const onboarding = ["page.tsx", "steps.tsx"].map((f) => readFileSync(join(SRC, "onboarding", f), "utf8")).join("\n");
-const profile = readFileSync(join(SRC, "app", "profile", "page.tsx"), "utf8");
-const strategy = readFileSync(join(SRC, "app", "strategy", "page.tsx"), "utf8");
+// Every section of the profile, read as the one screen it is.
+const profile = profileSources();
+// The strategy screens: the business profile, each strategy's own page (where
+// its search and its ask are edited) and Ask Sage for more.
+const strategy = [["page.tsx"], ["[id]", "page.tsx"], ["more", "page.tsx"]]
+  .map((parts) => readFileSync(join(SRC, "app", "strategy", ...parts), "utf8"))
+  .join("\n");
 
 const form = (fields: Record<string, string>) => ({ get: (name: string) => fields[name] ?? null });
 

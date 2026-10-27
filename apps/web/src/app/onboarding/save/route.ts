@@ -381,6 +381,20 @@ export async function POST(request: NextRequest) {
           .maybeSingle();
         if (!line?.approved_at) return again("copy-changed");
       }
+      // The opener approved here was approved for this campaign's people, so
+      // it is attached to this campaign's angles that carry none. Attached, it
+      // is this audience's line: a campaign for another strategy is not given
+      // it to borrow (rule 40), which is how a founders question once reached
+      // recruiters. Failing to attach changes nothing about this launch.
+      const opener = ids.find((_, i) => tables[i] === "hooks");
+      if (opener) {
+        await supabase
+          .from("campaign_variants")
+          .update({ hook_id: opener })
+          .eq("campaign_id", campaignId)
+          .eq("workspace_id", workspaceId)
+          .is("hook_id", null);
+      }
       const outcome = await launch(campaignId, { workspaceId, userId: user.id });
       switch (outcome.status) {
         case "launched":

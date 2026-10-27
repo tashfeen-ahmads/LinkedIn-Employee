@@ -37,9 +37,9 @@ describe("the holds autopilot never overrides", () => {
   });
 
   it.each([
-    ["the profile's edit and read views", "app/app/profile/page.tsx", 2],
+    ["the profile's reply setting and its read-only view", "app/app/profile/replies/page.tsx", 2],
     ["onboarding", "app/onboarding/steps.tsx", 1],
-    ["the campaign's reply setting", "app/app/campaigns/[id]/page.tsx", 1],
+    ["the campaign's reply setting", "app/app/campaigns/[id]/replies/page.tsx", 1],
     ["the marketing FAQ", "components/marketing.tsx", 1],
   ])("%s renders the shared sentence", (_where, path, times) => {
     const file = src(path);
@@ -86,7 +86,8 @@ describe("meetings booked through a rep's own scheduling link", () => {
   });
 
   it("a meeting campaign's funnel says so", () => {
-    const page = src("app/app/campaigns/[id]/page.tsx");
+    // Read in the campaign's loader, said under the funnel on its overview.
+    const page = src("app/app/campaigns/[id]/data.ts") + src("app/app/campaigns/[id]/page.tsx");
     expect(page).toMatch(/cta\.kind === "meeting" \? await campaignBookingUrl\(/);
     expect(page).toMatch(/\{ownBookingLink \? <p className="tiny subtle">\{EXTERNAL_BOOKINGS_UNCOUNTED\}<\/p> : null\}/);
   });

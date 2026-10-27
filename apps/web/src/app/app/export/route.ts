@@ -24,7 +24,7 @@ import { seeOther } from "@/lib/see-other";
 export async function GET() {
   const session = await requireSession();
   if (!["owner", "admin"].includes(session.role)) {
-    return seeOther(`${errorQuery("/app/profile", "Only an owner or admin can export a workspace.")}`);
+    return seeOther(`${errorQuery("/app/profile/billing", "Only an owner or admin can export a workspace.")}`);
   }
 
   const result = await callWorker<{ exportedAt: string; complete: boolean }>("/jobs/export", {
@@ -38,7 +38,7 @@ export async function GET() {
   // was a download, so that body was saved to disk as the "export" or shown as
   // raw braces in a tab, and either way nothing on screen said it failed.
   if (!result.ok) {
-    return seeOther(`${errorQuery("/app/profile", `The export did not finish: ${result.error}`)}`);
+    return seeOther(`${errorQuery("/app/profile/billing", `The export did not finish: ${result.error}`)}`);
   }
 
   const stamp = new Date().toISOString().slice(0, 10);

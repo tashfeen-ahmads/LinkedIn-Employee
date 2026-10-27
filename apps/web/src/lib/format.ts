@@ -38,6 +38,34 @@ export function formatDateTime(iso: string | Date | null | undefined, timezone?:
     : "—";
 }
 
+/**
+ * "2:05 PM", "Yesterday", "Mon", "Oct 7" or "Oct 7, 2025": a moment said as
+ * briefly as a person would say it, for lists where the exact minute is noise.
+ * The full time stays in the `<time dateTime>` beside it and in its title.
+ */
+export function formatWhen(
+  iso: string | Date | null | undefined,
+  timezone?: string | null,
+  now: Date = new Date(),
+): string {
+  const date = at(iso);
+  if (!date) return "—";
+  const tz = zone(timezone);
+  const today = dayKey(now, tz);
+  const day = dayKey(date, tz);
+  if (day === today) return new Intl.DateTimeFormat(LOCALE, { timeStyle: "short", timeZone: tz }).format(date);
+  const days = Math.round((Date.parse(today) - Date.parse(day)) / 86_400_000);
+  if (days === 1) return "Yesterday";
+  if (days > 1 && days < 7) return new Intl.DateTimeFormat(LOCALE, { weekday: "short", timeZone: tz }).format(date);
+  const sameYear = day.slice(0, 4) === today.slice(0, 4);
+  return new Intl.DateTimeFormat(LOCALE, {
+    month: "short",
+    day: "numeric",
+    ...(sameYear ? {} : { year: "numeric" }),
+    timeZone: tz,
+  }).format(date);
+}
+
 /** "14:05" */
 export function formatTime(iso: string | Date | null | undefined, timezone?: string | null): string {
   const date = at(iso);

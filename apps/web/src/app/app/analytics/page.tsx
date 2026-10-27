@@ -1,14 +1,29 @@
-import { redirect } from "next/navigation";
+import { PageHeader } from "@/components/page";
+import { LimitsSection } from "../limits-section";
+import { ResultsSection } from "../analytics-section";
+
+export const dynamic = "force-dynamic";
 
 /**
- * The old route, kept working.
+ * Results: every chart and table, on a page of their own.
  *
- * Results and agent spend are sections of the overview now. They were two more
- * tabs holding two more readings of numbers the overview already had, and a
- * person asking "is this working" should not have to know which of three
- * screens to open. The section lives in `analytics-section.tsx`, because Next
- * refuses any export from a `page.tsx` other than the page.
+ * They used to sit under the overview, which made the screen somebody opens
+ * every morning five screens long: a to-do list, four figures, two panels of
+ * limits, the day's story, the team, a trend, a funnel, two ranked lists and a
+ * table. A business owner asking "is it working" read the first two and
+ * scrolled past the rest. The overview keeps the four figures and a link here;
+ * the numbers themselves are computed once, in the same functions, so the two
+ * pages cannot disagree.
  */
-export default async function AnalyticsPage() {
-  redirect("/app#results");
+export default async function ResultsPage() {
+  return (
+    <>
+      <PageHeader
+        title="Results"
+        lede="How your campaigns are doing, and how close your LinkedIn account is to its safe limits."
+      />
+      <LimitsSection />
+      <ResultsSection />
+    </>
+  );
 }

@@ -106,9 +106,9 @@ export default async function KnowledgePage({
   return (
     <>
       <PageHeader
-        eyebrow="Pipeline"
+        eyebrow="Setup"
         title="Knowledge base"
-        lede="The only things the agent may state. Anything a prospect asks that is not answered here is handed to you rather than guessed at, so this page is the difference between the agent answering a question and forwarding it to you."
+        lede="Facts Nora may use when it answers. If a prospect asks something that is not covered here, Nora hands the question to you instead of guessing."
       />
       <PageNotice error={params.error} notice={params.notice} />
 

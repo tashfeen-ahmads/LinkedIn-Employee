@@ -99,10 +99,8 @@ export default async function SystemPage() {
         title={TITLE}
         lede={
           <>
-          What is standing in the way. Every step between signing up and a booked meeting, checked against what is true right now.
-          Two of these ask LinkedIn itself rather than trusting what is stored here, which is the
-          difference between an account that says it is connected and one that is. Anything on this
-          list that is ours to fix says so.
+          Every step from signing up to a booked meeting, checked right now. Anything that is ours to
+          fix says so.
           </>
         }
       />

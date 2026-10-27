@@ -149,7 +149,8 @@ describe("account answers saved before an account exists", () => {
   });
 
   it("writes them to the stash when no account row was updated", () => {
-    const profile = read("app", "app", "profile", "page.tsx");
+    // The sending hours are saved on their own section now.
+    const profile = read("app", "app", "profile", "hours", "page.tsx");
     expect(profile).toMatch(/\.from\("linkedin_accounts"\)\s*\.update\(accountPatch as never\)[\s\S]{0,200}?\.select\("id"\)/);
     expect(profile).toMatch(
       /if \(!updatedAccounts\?\.length\) \{[\s\S]{0,600}?onboarding: mergeStash\(wsStash\?\.onboarding, stashedAccountAnswers\(accountPatch\)\)/,
@@ -159,15 +160,18 @@ describe("account answers saved before an account exists", () => {
   it("does not say Saved over a stash write the database refused", () => {
     // Only an owner or admin may update the workspace row, and a refused
     // update matches nothing rather than failing.
-    const profile = read("app", "app", "profile", "page.tsx");
+    const profile = read("app", "app", "profile", "hours", "page.tsx");
     expect(profile).toMatch(/accountAnswersKept = Boolean\(stashed\?\.length\)/);
     expect(profile).toMatch(/accountAnswersKept\s*\?\s*"Saved\."/);
   });
 
   it("shows the stash's values on the form until the row exists", () => {
-    const profile = read("app", "app", "profile", "page.tsx");
-    expect(profile).toMatch(/readWorkingHours\(stash\.workingHours\)/);
-    expect(profile).toMatch(/planOf\(\{ has_sales_navigator: stash\.hasSalesNavigator, has_premium: stash\.hasPremium \}\)/);
-    expect(profile).toMatch(/defaultValue=\{plan\}/);
+    // The hours on their section, the plan on the LinkedIn account section,
+    // whose plan choices are the radio buttons of `SalesNavigatorSection`.
+    expect(read("app", "app", "profile", "hours", "page.tsx")).toMatch(/readWorkingHours\(stash\.workingHours\)/);
+    const linkedin = read("app", "app", "profile", "linkedin", "page.tsx");
+    expect(linkedin).toMatch(/planOf\(\{ has_sales_navigator: stash\.hasSalesNavigator, has_premium: stash\.hasPremium \}\)/);
+    expect(linkedin).toMatch(/<SalesNavigatorSection plan=\{plan\}/);
+    expect(read("app", "app", "profile", "sales-navigator-section.tsx")).toMatch(/defaultChecked=\{option\.value === plan\}/);
   });
 });

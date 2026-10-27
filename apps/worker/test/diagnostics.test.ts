@@ -139,7 +139,7 @@ describe("system check", () => {
     // rather than by quoting the provider at them (rule 54).
     expect(check(report, "account-live").detail).toMatch(/stale/i);
     expect(check(report, "account-live").detail).not.toMatch(/unipile/i);
-    expect(check(report, "account-live").href).toBe("/app/team");
+    expect(check(report, "account-live").href).toBe("/app/profile/linkedin");
   });
 
   it("does not claim the search works when it never ran it", async () => {
@@ -224,14 +224,21 @@ describe("system check", () => {
     // "Last ran two minutes ago" is reassuring and can be true of a loop that
     // has been declining for a week.
     const { db, ctx } = harness();
+    db.seed("campaigns", [{ id: "c1", workspace_id: WORKSPACE }, { id: "c-elsewhere", workspace_id: "99999999-9999-4999-8999-999999999999" }]);
     db.seed("worker_heartbeats", [
       {
         name: "campaign-tick",
         beat_at: new Date().toISOString(),
+        detail: { enqueued: 0, queue: { waiting: 0, delayed: 0, failed: 2, active: 0 } },
+      },
+      {
+        name: "campaign-tick:detail",
+        beat_at: new Date().toISOString(),
         detail: {
-          enqueued: 0,
-          decisions: [{ campaign: "c1", reason: "limiter: outside_working_hours" }],
-          queue: { waiting: 0, delayed: 0, failed: 2, active: 0 },
+          decisions: [
+            { campaign: "c1", reason: "limiter: outside_working_hours" },
+            { campaign: "c-elsewhere", reason: "another workspace's reason" },
+          ],
         },
       },
     ]);
@@ -240,6 +247,8 @@ describe("system check", () => {
 
     expect(check1.state).toBe("ok");
     expect(check1.detail).toContain("outside_working_hours");
+    // Only the caller's own campaigns: the row names every workspace's.
+    expect(check1.detail).not.toContain("another workspace");
     // The trap worth naming: BullMQ accepts an add whose id is already taken
     // and never replaces the job, so a failed action stops that person being
     // re-queued at all while every screen reports a healthy loop.

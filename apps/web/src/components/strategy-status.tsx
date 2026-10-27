@@ -16,8 +16,8 @@ export function StrategyStatus({ state, from }: { state: StrategyState; from?: "
     return (
       <div className="notice danger" role="status">
         <p>
-          <strong>Sage could not finish.</strong> Nothing else can start until it
-          does — your customer profiles are what everything downstream is built from.
+          <strong>Sage could not finish.</strong> Nothing else can start until it does,
+          because every list and every message is built from your strategies.
         </p>
         <p className="small">{state.reason}</p>
         {/* A retry, not a link to onboarding: onboarding sends anybody who
@@ -32,7 +32,7 @@ export function StrategyStatus({ state, from }: { state: StrategyState; from?: "
     <div className="notice accent" role="status">
       <p>
         <strong>Sage is working.</strong> Sage is reading your site and writing your business
-        profile and three to five customer profiles. This usually takes a few minutes.
+        profile and three to five strategies. This usually takes a few minutes.
       </p>
       <p className="small muted">
         {minutes < 1 ? "Started just now." : `Started ${minutes} minute${minutes === 1 ? "" : "s"} ago.`}{" "}

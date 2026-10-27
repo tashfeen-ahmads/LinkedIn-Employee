@@ -206,9 +206,10 @@ describe("describePacing", () => {
   it("says when the loop that sends the messages is not running", () => {
     const state = describePacing({ ...live, lastBeatAt: "2026-09-17T15:00:00Z" });
     expect(state?.tone).toBe("danger");
-    // Named as a deployment problem, because nothing the rep does to the
-    // campaign will fix it and everything they try will look like it failed.
-    expect(state?.body).toMatch(/deployment/);
+    // Named as our problem rather than the campaign's, because nothing the
+    // rep does to the campaign will fix it and everything they try will look
+    // like it failed. In words a business owner reads (rule 54).
+    expect(state?.body).toMatch(/our system, not with your campaign/);
   });
 
   it("treats a loop that has never reported in as not running", () => {
@@ -223,7 +224,7 @@ describe("describePacing", () => {
       lastBeatAt: null,
       now: new Date("2026-09-17T23:00:00Z"),
     });
-    expect(state?.title).toMatch(/not running/);
+    expect(state?.title).toMatch(/not running|stopped|not started|stuck/);
   });
 
   /**
@@ -243,7 +244,9 @@ describe("describePacing", () => {
     });
 
     expect(state?.tone).toBe("danger");
-    expect(state?.title).toMatch(/cannot reach its job queue/);
+    // The queue is named to whoever can fix it, never to the business owner.
+    expect(state?.operator).toMatch(/cannot reach its job queue/);
+    expect(state?.body).not.toMatch(/queue|worker/i);
     // The address, so somebody can check the one they configured against the
     // one it actually tried. On the operator's half only (rule 54): the
     // business owner reading this page can do nothing with a host name.
@@ -258,7 +261,8 @@ describe("describePacing", () => {
       boot: { beat_at: "2026-09-17T16:20:00Z", detail: { queueReachable: true, commit: "abc1234def" } },
     });
 
-    expect(state?.title).toMatch(/sending loop has not run/);
+    expect(state?.operator).toMatch(/sending loop has not run/);
+    expect(state?.title).toMatch(/has not started/);
     // Which build is actually running, from the process rather than from a
     // dashboard reporting on it — those disagreed for most of an afternoon.
     expect(state?.operator).toContain("abc1234");
@@ -276,7 +280,8 @@ describe("describePacing", () => {
     // carrying the stamp has shipped, and sending somebody to restart a
     // healthy worker is its own wasted hour.
     const state = describePacing({ ...live, lastBeatAt: null, boot: null });
-    expect(state?.body).toMatch(/has not deployed yet/);
+    expect(state?.operator).toMatch(/has not deployed yet/);
+    expect(state?.body).not.toMatch(/process is down|restart/i);
   });
 
   it("names the working hours when the clock is outside them", () => {
@@ -337,7 +342,8 @@ describe("describePacing and the operator's kill switch", () => {
   });
 
   it("is fed from the loop's own stamp on the campaign page", () => {
-    const page = readFileSync(join(__dirname, "../src/app/app/campaigns/[id]/page.tsx"), "utf8");
+    // Read once for every section, in the campaign's loader.
+    const page = readFileSync(join(__dirname, "../src/app/app/campaigns/[id]/data.ts"), "utf8");
     expect(page).toMatch(/outreachPaused: Boolean\(\(heartbeat\?\.detail/);
   });
 });

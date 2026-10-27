@@ -170,8 +170,11 @@ describe("the connection note cap", () => {
   });
 
   it("is what the campaign screen's fields and save actions use", () => {
-    const page = readFileSync(join(SRC, "app", "app", "campaigns", "[id]", "page.tsx"), "utf8");
-    // The template field, each per-prospect textarea, and both save actions.
+    // The template field (Settings), each per-prospect textarea (People), and
+    // both save actions, now that the campaign is a set of sections.
+    const page = ["actions.ts", join("settings", "page.tsx"), join("people", "page.tsx")]
+      .map((file) => readFileSync(join(SRC, "app", "app", "campaigns", "[id]", file), "utf8"))
+      .join("\n");
     expect(page.match(/maxLength=\{INVITE_NOTE_MAX_CHARS\}/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
     expect(page.match(/note\.length > INVITE_NOTE_MAX_CHARS/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
   });

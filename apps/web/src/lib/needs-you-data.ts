@@ -13,7 +13,7 @@ import {
 } from "@le/shared";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@le/db";
-import { localMonth, noteAllowance, planOf } from "@le/linkedin";
+import { localMonth, localMonthStart, noteAllowance, planOf } from "@le/linkedin";
 import { CAMPAIGN_CTA_COLUMNS, campaignCtas, type CampaignCtaColumns } from "./campaign-cta";
 
 /**
@@ -284,20 +284,58 @@ async function thinNoteCampaigns(
     ? await supabase.from("profiles").select("id, timezone").in("id", userIds)
     : { data: [] as Array<{ id: string; timezone: string | null }> };
   const zone = new Map((owners ?? []).map((o) => [o.id, o.timezone || "UTC"]));
-  const spent = new Set(
-    (accounts ?? [])
-      .filter((a) => {
-        let month: string;
-        try {
-          month = localMonth(now, zone.get(a.user_id) ?? "UTC");
-        } catch {
-          month = localMonth(now, "UTC");
-        }
-        return !noteAllowance({ plan: planOf(a), notesSentThisMonth: 0, exhaustedMonth: a.notes_exhausted_month, month })
-          .allowed;
-      })
-      .map((a) => a.id),
+  const zoneOf = (userId: string) => {
+    const tz = zone.get(userId) ?? "UTC";
+    try {
+      localMonth(now, tz);
+      return tz;
+    } catch {
+      return "UTC";
+    }
+  };
+  const verdicts = await Promise.all(
+    (accounts ?? []).map(async (a) => {
+      const tz = zoneOf(a.user_id);
+      const plan = planOf(a);
+      // The send path's own count: invitations this month that carried a note.
+      const sent = plan === "basic" ? await notesSentThisMonth(supabase, a.id, tz, now) : 0;
+      const allowance = noteAllowance({
+        plan,
+        notesSentThisMonth: sent,
+        exhaustedMonth: a.notes_exhausted_month,
+        month: localMonth(now, tz),
+      });
+      return allowance.allowed ? null : a.id;
+    }),
   );
+  const spent = new Set(verdicts.filter((id): id is string => Boolean(id)));
   const raised = live.filter((c) => !c.linkedin_account_id || !spent.has(c.linkedin_account_id));
   return { total: raised.length, drafts: raised.filter((c) => c.status === "draft").length };
+}
+
+/**
+ * Invitations an account sent this month with a note, in its owner's month.
+ * The same reading as the send path's (`notesSentThisMonth` in the worker's
+ * `linkedin-action.ts`): invited this month, less those that went without one.
+ */
+async function notesSentThisMonth(
+  supabase: SupabaseClient<Database>,
+  accountId: string,
+  timezone: string,
+  now: Date,
+): Promise<number> {
+  const { data: campaigns } = await supabase.from("campaigns").select("id").eq("linkedin_account_id", accountId);
+  const ids = (campaigns ?? []).map((c) => c.id);
+  if (!ids.length) return 0;
+  const since = localMonthStart(now, timezone).toISOString();
+  const [{ count: invited }, { count: withoutNote }] = await Promise.all([
+    supabase.from("campaign_prospects").select("id", { count: "exact", head: true }).in("campaign_id", ids).gte("invited_at", since),
+    supabase
+      .from("campaign_prospects")
+      .select("id", { count: "exact", head: true })
+      .in("campaign_id", ids)
+      .gte("invited_at", since)
+      .eq("invite_note_sent", false),
+  ]);
+  return Math.max(0, (invited ?? 0) - (withoutNote ?? 0));
 }

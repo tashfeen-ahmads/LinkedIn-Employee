@@ -64,13 +64,21 @@ export async function planEngagement(
   // Nothing is read or written while the operator has outreach paused, and an
   // unreadable setting counts as paused (rule 59).
   if (await outreachPause(db)) return { planned: 0 };
-  const { data: workspaces, error } = await db.from("workspaces").select("id").eq("engage_posts", true);
-  if (error || !workspaces?.length) return { planned: 0 };
+  // Likes and comments are separate switches (migration 0058): a workspace
+  // with either on is planned, and each kind only while its own is on.
+  const { data: rows, error } = await db.from("workspaces").select("id, engage_posts, engage_comments");
+  if (error) return { planned: 0 };
+  // A row from before the comment switch existed follows the old shared one.
+  const commentsOn = (w: { engage_posts: boolean; engage_comments?: boolean | null }) =>
+    typeof w.engage_comments === "boolean" ? w.engage_comments : w.engage_posts === true;
+  const workspaces = (rows ?? []).filter((w) => w.engage_posts === true || commentsOn(w));
+  if (!workspaces.length) return { planned: 0 };
 
   let planned = 0;
   for (const workspace of workspaces) {
     try {
-      planned += await planForWorkspace(ctx, queues, workspace.id, now);
+      const switches = { likes: workspace.engage_posts === true, comments: commentsOn(workspace) };
+      planned += await planForWorkspace(ctx, queues, workspace.id, now, switches);
     } catch (err) {
       console.error("engagement planning failed", { workspaceId: workspace.id, reason: String(err) });
     }
@@ -84,6 +92,7 @@ async function planForWorkspace(
   queues: Pick<Queues, "linkedinAction">,
   workspaceId: string,
   now: Date,
+  switches: { likes: boolean; comments: boolean } = { likes: true, comments: true },
 ): Promise<number> {
   const { db } = ctx;
   await sweepStale(ctx, workspaceId, now);
@@ -127,18 +136,19 @@ async function planForWorkspace(
       .gte("created_at", since);
     const queuedLikes = (queuedToday ?? []).filter((r) => r.kind === "reaction").length;
     const queuedComments = (queuedToday ?? []).filter((r) => r.kind === "comment").length;
-    let likesLeft = Math.min(REACTIONS_PER_RUN, LINKEDIN_LIMITS.reactionsPerDay - usage.reactionsToday - queuedLikes);
-    let commentsLeft = Math.min(
-      COMMENTS_PER_RUN,
-      dailyCommentCap(usage.firstActionAt, now) - usage.commentsToday - queuedComments,
-    );
-    if (likesLeft <= 0) continue;
+    let likesLeft = switches.likes
+      ? Math.min(REACTIONS_PER_RUN, LINKEDIN_LIMITS.reactionsPerDay - usage.reactionsToday - queuedLikes)
+      : 0;
+    let commentsLeft = switches.comments
+      ? Math.min(COMMENTS_PER_RUN, dailyCommentCap(usage.firstActionAt, now) - usage.commentsToday - queuedComments)
+      : 0;
+    if (likesLeft <= 0 && commentsLeft <= 0) continue;
 
     const people = await candidates(ctx, workspaceId, campaignIds, now);
     let lookups = 0;
     let offsetMs = 0;
     for (const person of people) {
-      if (likesLeft <= 0 || lookups >= LOOKUPS_PER_RUN) break;
+      if ((likesLeft <= 0 && commentsLeft <= 0) || lookups >= LOOKUPS_PER_RUN) break;
       lookups += 1;
       let posts;
       try {
@@ -169,11 +179,16 @@ async function planForWorkspace(
       // Minutes apart, jittered: a handful an hour, never in a burst.
       offsetMs += (4 + Math.random() * 11) * 60_000;
       if (offsetMs >= msLeft) break;
-      const like = await insertAction(ctx, { ...base, kind: "reaction", reaction_type: "like" }, now, offsetMs);
-      if (!like) continue;
-      if (!(await enqueue(ctx, queues, workspaceId, like, offsetMs))) continue;
-      likesLeft -= 1;
-      planned += 1;
+      // A like when likes are on and today has room for one; a comment may
+      // stand on its own when likes are off or today's are spent, so a day
+      // whose likes ran out still writes the comments it has room for.
+      if (switches.likes && likesLeft > 0) {
+        const like = await insertAction(ctx, { ...base, kind: "reaction", reaction_type: "like" }, now, offsetMs);
+        if (!like) continue;
+        if (!(await enqueue(ctx, queues, workspaceId, like, offsetMs))) continue;
+        likesLeft -= 1;
+        planned += 1;
+      }
 
       if (commentsLeft > 0 && worthCommentingOn(post) && offsetMs + 28 * 60_000 < msLeft) {
         const written = await commentFor(ctx, workspaceId, person.campaignId, post.text, person.firstName, owner?.full_name ?? null);

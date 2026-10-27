@@ -6,9 +6,15 @@ import { describe, expect, it } from "vitest";
 const here = dirname(fileURLToPath(import.meta.url));
 const read = (p: string) => readFileSync(join(here, p), "utf8");
 
-const strategyPage = read("../src/app/app/strategy/page.tsx");
+// The strategy screens' actions, shared by the business profile and every
+// strategy's own page.
+const strategyPage = read("../src/app/app/strategy/actions.ts");
 const strategyJob = read("../../worker/src/jobs/strategy.ts");
-const campaignPage = read("../src/app/app/campaigns/[id]/page.tsx");
+// The campaign screen is a set of sections now: the count is made once in its
+// loader and said on Opener & offer, above the notes it counts.
+const campaignPage = ["data.ts", "opener/page.tsx"]
+  .map((file) => read(`../src/app/app/campaigns/[id]/${file}`))
+  .join("\n");
 const signupPage = read("../src/app/signup/page.tsx");
 const searchLib = read("../src/lib/search.ts");
 const onboardingSave = read("../src/app/onboarding/save/route.ts");
@@ -28,7 +34,7 @@ describe("approving a strategy starts the search", () => {
     const marker = "async function approveProfile(";
     expect(strategyPage.includes(marker), "approveProfile moved or was renamed").toBe(true);
     const body = strategyPage.slice(strategyPage.indexOf(marker));
-    const end = body.indexOf("\nasync function ", 1);
+    const end = body.indexOf("\nexport async function ", 1);
     const action = end === -1 ? body : body.slice(0, end);
 
     // The approval itself is the shared definition both approval screens use.
@@ -54,7 +60,12 @@ describe("approving a strategy starts the search", () => {
     // Rule 24 means the second list finds nobody, so it would be a search that
     // can only ever report zero — and it spends a seat somebody pays for.
     const body = strategyPage.slice(strategyPage.indexOf("async function approveProfile("));
-    expect(body).toMatch(/\.from\("campaigns"\)[\s\S]{0,300}?customer_profile_id/);
+    // The shared approval asks whether a campaign already came from it...
+    expect(read("../src/lib/approve.ts")).toMatch(/\.from\("campaigns"\)[\s\S]{0,300}?customer_profile_id/);
+    // ...and the action stops before searching when one did.
+    const action = body.slice(0, body.indexOf("\nexport async function ", 1));
+    expect(action.indexOf("if (approved.hasCampaign)")).toBeGreaterThan(-1);
+    expect(action.indexOf("if (approved.hasCampaign)")).toBeLessThan(action.indexOf("await queueSearch("));
   });
 
   it("approving still succeeds when the search cannot start", () => {

@@ -187,20 +187,46 @@ describe("rewriting a campaign's notes", () => {
     expect(row?.invite_note_prompt_version).toBe("invite/test");
   });
 
-  it("hands the agent's approved openers to the writer", async () => {
-    // The whole point. Written without them the notes come back generic, which
-    // is the copy this exists to replace.
+  it("hands the agent's approved openers to the writer as optional shapes, behind the strategy's own", async () => {
+    // Written without them the notes come back generic. But the agent's line
+    // is tied to no strategy, so it no longer replaces the strategy's own
+    // openers: one written for founders went to recruiters that way.
     notesMock.mockResolvedValue(new Map());
     const { ctx } = harness();
 
     await rewriteCampaignNotes(ctx, input);
 
     expect(notesMock).toHaveBeenCalledTimes(1);
-    const passed = notesMock.mock.calls[0][1] as { hooks: string[]; repName: string };
-    expect(passed.hooks).toEqual(["Who was the last person to send you a client?"]);
+    const passed = notesMock.mock.calls[0][1] as { hooks: string[]; sharedOpeners: string[]; repName: string };
+    // Attached to no angle: the business's own line, a shape for anybody.
+    expect(passed.sharedOpeners).toEqual(["Who was the last person to send you a client?"]);
+    expect(passed.hooks).toEqual([
+      "The strategy's own first line.",
+      "The strategy's own second line.",
+      "The strategy's own third line.",
+    ]);
     // The agent's from-name, not the account holder's: that is the difference
     // between a note and a signature block.
     expect(passed.repName).toBe("Tashfeen");
+  });
+
+  it("leads with the opener attached to the person's own angle", async () => {
+    // An angle's attached opener was chosen for that angle by a person, so it
+    // is the one line that leads; the agent's set is otherwise optional.
+    notesMock.mockResolvedValue(new Map());
+    const { db, ctx } = harness();
+    db.seed("campaign_variants", [
+      { id: "v1", workspace_id: WORKSPACE, campaign_id: CAMPAIGN, angle: "Referral leakage", hook_id: "hook-1" },
+    ]);
+    db.find("campaign_prospects", { id: "cp-queued" })!.variant_id = "v1";
+
+    await rewriteCampaignNotes(ctx, input);
+
+    const passed = notesMock.mock.calls[0][1] as { hooks: string[]; otherOpeners: string[]; campaignAngle: string };
+    expect(passed.campaignAngle).toBe("Referral leakage");
+    expect(passed.hooks[0]).toBe("Who was the last person to send you a client?");
+    expect(passed.hooks).toContain("The strategy's own first line.");
+    expect(passed.otherOpeners).not.toContain("Who was the last person to send you a client?");
   });
 
   it("never touches somebody already invited", async () => {
@@ -325,6 +351,39 @@ describe("filling the notes the writer missed", () => {
     const { db, ctx } = gapHarness("2026-10-04T00:00:00Z");
     expect(await fillMissingNotes(ctx)).toBe(0);
     expect(db.rows("campaign_prospects").find((r) => r.id === "cp-gap")?.invite_note).toBeNull();
+    expect(notesMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("a campaign built from people already in the workspace", () => {
+  /*
+   * It has no strategy of its own, and the writer used to refuse it outright:
+   * every invitation then went out with the agent's one opener pasted for
+   * everybody. Each person was found by a strategy of their own (rule 26),
+   * and their note is written against that.
+   */
+  it("writes each person's note against the strategy that found them", async () => {
+    notesMock.mockResolvedValue(
+      new Map([["pv-queued", { note: "Dana, who sent you your last client?", promptVersion: "invite/test", grounding: ["Owner"], tooThin: false }]]),
+    );
+    const { db, ctx } = harness();
+    db.find("campaigns", { id: CAMPAIGN })!.customer_profile_id = null;
+    db.find("prospects", { id: "p-queued" })!.customer_profile_id = PROFILE;
+
+    const result = await rewriteCampaignNotes(ctx, input);
+
+    expect(result).toEqual({ ok: true, rewritten: 1, unanswered: 0 });
+    expect((notesMock.mock.calls[0][1] as { profile: { name: string } }).profile.name).toBe("Business owners");
+    expect(db.find("campaign_prospects", { id: "cp-queued" })?.invite_note).toBe("Dana, who sent you your last client?");
+  });
+
+  it("leaves alone somebody no strategy found, and says so", async () => {
+    const { db, ctx } = harness();
+    db.find("campaigns", { id: CAMPAIGN })!.customer_profile_id = null;
+
+    const result = await rewriteCampaignNotes(ctx, input);
+
+    expect(result.ok).toBe(false);
     expect(notesMock).not.toHaveBeenCalled();
   });
 });

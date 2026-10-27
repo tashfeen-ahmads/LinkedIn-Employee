@@ -115,7 +115,8 @@ describe("Results: a rep's page is about a rep's campaigns, all of it", () => {
 });
 
 describe("Profile posts: a refused post can be sent again, and history is not rewritten", () => {
-  const page = read("app/posts/page.tsx");
+  // Posts are one of the LinkedIn activities, on the profile now.
+  const page = read("app/profile/activity/posts/page.tsx");
 
   it("lets Hold reach a failed post, which keeps its approval when LinkedIn refuses it", () => {
     expect(action(page, "unapprove")).toMatch(/\.in\("status", \[[^\]]*"failed"[^\]]*\]\)/);
@@ -177,7 +178,8 @@ describe("Calls to action: a goal in use does not change underneath its campaign
 
 describe("Profile and team: the allowance is today's, against today's cap", () => {
   it("draws invitations against the ramp, not the end of it", () => {
-    const page = read("app/profile/page.tsx");
+    // The allowance is drawn on the LinkedIn account section.
+    const page = read("app/profile/linkedin/page.tsx");
     expect(page).not.toMatch(/cap=\{LINKEDIN_LIMITS\.invitesPerDayMax\}/);
     expect(page).toContain("dailyInviteCap(");
     expect(page).toContain("countersForToday(");
@@ -265,8 +267,13 @@ describe("Every screen in the app can be reached from inside it", () => {
     }
   });
 
-  it("puts Opener and pitch in the nav beside Calls to action, with no mark of its own", () => {
-    const layout = read("app/layout.tsx");
-    expect(layout).toMatch(/\{ href: "\/app\/cta"[^}]*\},\s*(?:\/\/[^\n]*\n\s*)*\{ href: "\/app\/pitch", label: "Opener and pitch", icon: "pitch" \}/);
+  it("reaches Opener and pitch from where it is used, with no mark of its own", () => {
+    // The rail was cut to what a small-business owner uses; the opener and
+    // offer library is reached from Agents and from a campaign's Opener &
+    // offer instead. Never with a nav mark (rule 32): a held follow-up already
+    // surfaces on the overview's list.
+    expect(read("app/agents/page.tsx")).toMatch(/href="\/app\/pitch"/);
+    expect(read("app/campaigns/[id]/opener/page.tsx")).toMatch(/href="\/app\/pitch"/);
+    expect(read("app/layout.tsx")).not.toMatch(/href: "\/app\/pitch"[^}]*next\(/);
   });
 });

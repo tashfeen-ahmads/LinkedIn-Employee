@@ -4,7 +4,10 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const here = dirname(fileURLToPath(import.meta.url));
-const profile = readFileSync(join(here, "../src/app/app/profile/page.tsx"), "utf8");
+// The Replies section writes it; one reading of it is shared by the section
+// and the profile menu's hint.
+const profile = readFileSync(join(here, "../src/app/app/profile/replies/page.tsx"), "utf8");
+const reading = readFileSync(join(here, "../src/app/app/profile/autonomy-state.ts"), "utf8");
 // The write itself, shared by the profile screen and onboarding (rule 65).
 const autonomy = readFileSync(join(here, "../src/lib/autonomy.ts"), "utf8");
 const targeting = readFileSync(join(here, "../../worker/src/jobs/targeting.ts"), "utf8");
@@ -70,7 +73,8 @@ describe("autonomy is stored in one place", () => {
     // A brand new workspace that chose "autonomous" during onboarding has no
     // campaigns yet, so reading only the campaigns reported "supervised" — the
     // opposite of what the rep had just said.
-    expect(profile).toMatch(/const stated = \(wsRow\?\.onboarding as \{ autonomy\?: string \} \| null\)\?\.autonomy;/);
-    expect(profile).toMatch(/stated === "autonomous" \|\| stated === "supervised"\s*\?\s*stated/);
+    expect(profile).toMatch(/const autonomy = readAutonomy\(wsRow\?\.onboarding, ruleRows\);/);
+    expect(reading).toMatch(/const stated = \(onboarding as \{ autonomy\?: string \} \| null\)\?\.autonomy;/);
+    expect(reading).toMatch(/stated === "autonomous" \|\| stated === "supervised"\s*\?\s*stated/);
   });
 });

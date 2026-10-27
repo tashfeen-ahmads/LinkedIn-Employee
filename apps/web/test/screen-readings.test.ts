@@ -65,7 +65,8 @@ describe("meeting timezone", () => {
   });
 
   it("a profile timezone change is carried onto the meeting hours", () => {
-    const profile = src("app", "app", "profile", "page.tsx");
+    // The timezone is set beside the sending hours it is read with.
+    const profile = src("app", "app", "profile", "hours", "page.tsx");
     expect(profile).toMatch(/timezone !== before\?\.timezone\) \{\s*await carryTimezoneToAvailability\(/);
     expect(src("lib", "availability.ts")).toMatch(/\.from\("availability"\)\s*\.update\(\{ timezone: timezone\.trim\(\)/);
   });
@@ -91,7 +92,8 @@ describe("the pitch warning", () => {
 
 describe("approving on /app/strategy", () => {
   it("applies the call to action chosen in setup to a strategy that has none", () => {
-    const page = src("app", "app", "strategy", "page.tsx");
+    // Shared by the business profile and every strategy's own page.
+    const page = src("app", "app", "strategy", "actions.ts");
     const action = page.slice(page.indexOf("async function approveProfile"), page.indexOf("async function dropProfile"));
     expect(action).toMatch(/current && !current\.cta_id \? await chosenCtaColumns\(supabase, session\.workspaceId, session\.userId\) : \{\}/);
     // Onboarding's own reading of the choice: this person's first, then the workspace's.
@@ -99,7 +101,7 @@ describe("approving on /app/strategy", () => {
   });
 
   it("saving a strategy's ask points it at the matching library entry", () => {
-    const page = src("app", "app", "strategy", "page.tsx");
+    const page = src("app", "app", "strategy", "actions.ts");
     expect(page).toMatch(/cta_url: ctaUrl,\s*cta_id: ctaId,/);
   });
 });

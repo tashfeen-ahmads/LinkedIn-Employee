@@ -220,7 +220,7 @@ export function needsYou(facts: NeedsYouFacts): NeedsYouItem[] {
     items.push({
       kind: "loop_stalled",
       title: "Nothing is being sent: the sending loop is not running.",
-      why: "This is the deployment rather than your campaigns. Nothing queued goes out until it is back, and everything else on this list is waiting behind it.",
+      why: "This is on our side, not your campaigns. Nothing goes out until it is running again.",
       href: "/app/system",
       action: "Open the system check",
       tone: "blocker",
@@ -236,8 +236,8 @@ export function needsYou(facts: NeedsYouFacts): NeedsYouItem[] {
         : "Your LinkedIn account is not connected.",
       why: facts.linkedInReleasedIdle
         ? IDLE_RELEASE_TAGLINE
-        : "Every invitation, message and reply goes through it, so nothing reaches anybody until it is reconnected.",
-      href: "/app/profile#team",
+        : "Nora sends everything through it, so nothing goes out until you reconnect.",
+      href: "/app/profile/linkedin",
       action: "Reconnect LinkedIn",
       tone: "blocker",
       count: 1,
@@ -275,7 +275,7 @@ export function needsYou(facts: NeedsYouFacts): NeedsYouItem[] {
     items.push({
       kind: "held_reply",
       title: `${plural(facts.heldReplies, "reply", "replies")} ${isare(facts.heldReplies)} waiting for you.`,
-      why: "Each one has a draft ready to read and send. A prospect who asked a question on Friday and hears nothing is a warm lead going cold, not a conversation being handled carefully.",
+      why: "Each has a reply ready. Read it and press Send before the lead goes cold.",
       href: "/app/inbox",
       action: "Open the inbox",
       tone: "warning",
@@ -287,7 +287,7 @@ export function needsYou(facts: NeedsYouFacts): NeedsYouItem[] {
     items.push({
       kind: "held_booking",
       title: `${plural(facts.heldBookings, "meeting")} ${isare(facts.heldBookings)} waiting to be put in a diary.`,
-      why: "Somebody agreed to a time and the booking has to be made by hand. Sending a reply does not clear this one.",
+      why: "Somebody agreed to a time. Put it in your calendar to confirm it. Replying does not clear this.",
       href: "/app/inbox?stage=waiting",
       action: "Open the inbox",
       tone: "warning",
@@ -312,8 +312,8 @@ export function needsYou(facts: NeedsYouFacts): NeedsYouItem[] {
   if (facts.heldForCopy > 0) {
     items.push({
       kind: "pitch_unapproved",
-      title: `${plural(facts.heldForCopy, "conversation")} ${isare(facts.heldForCopy)} held: the copy they need has not been approved.`,
-      why: "The message body is the offer, so it is held rather than sent half-written. Its schedule is untouched, so approving one line sends it.",
+      title: `${plural(facts.heldForCopy, "conversation")} ${isare(facts.heldForCopy)} waiting for you to approve your offer.`,
+      why: "Their follow-up is your offer, and it has not been approved yet. Approve it and they go out on time.",
       href: "/app/agents",
       action: "Read and approve the offer",
       tone: "blocker",
@@ -323,7 +323,7 @@ export function needsYou(facts: NeedsYouFacts): NeedsYouItem[] {
     items.push({
       kind: "pitch_unapproved",
       title: `${plural(facts.pitchesUnapproved, "offer")} ${isare(facts.pitchesUnapproved)} written and waiting for you.`,
-      why: "An agent wrote them and cannot approve them. Until one is approved, replies to anybody who asks what this is are written from your business profile in the agent's own words, not from an offer you have read.",
+      why: "Nora wrote them but only you can approve them. Until then, Nora explains what you do from your business profile instead.",
       href: "/app/agents",
       action: "Review the offers",
       tone: "warning",
@@ -335,7 +335,7 @@ export function needsYou(facts: NeedsYouFacts): NeedsYouItem[] {
     items.push({
       kind: "hook_unapproved",
       title: `${plural(facts.hooksUnapproved, "opener")} ${isare(facts.hooksUnapproved)} written and waiting for you.`,
-      why: "The invitation writer leans on the approved ones. Until one is approved it falls back to the campaign's generic line.",
+      why: "Nora uses approved openers in invitations. Until you approve one, invitations use the campaign's standard line.",
       href: "/app/agents",
       action: "Review the openers",
       tone: "warning",
@@ -364,7 +364,7 @@ export function needsYou(facts: NeedsYouFacts): NeedsYouItem[] {
           : sending === 0
             ? `${plural(total, "campaign")} ${have} notes ready that are not personalised.`
             : `${plural(total, "campaign")} ${have} notes that are not personalised, ${sending} of them already sending.`,
-      why: "Those people get the campaign's generic line, or a note that says nothing about them, so it reads as a template on arrival. The agent can rewrite them before anybody is invited.",
+      why: "Those people would get a standard line, not a note written for them. Nora can rewrite them before they are invited.",
       href: "/app/campaigns",
       action: "Review the notes",
       tone: "warning",
@@ -376,9 +376,9 @@ export function needsYou(facts: NeedsYouFacts): NeedsYouItem[] {
     items.push({
       kind: "cta_missing",
       title: `${plural(facts.campaignsMissingCta, "campaign")} ${isare(facts.campaignsMissingCta)} asking people to click a link that is not set.`,
-      why: "The copy carries a placeholder with no destination behind it, so the last message arrives with the placeholder visible.",
+      why: "Their messages ask people to click a link that is not set, so those messages wait until you add it.",
       href: "/app/cta",
-      action: "Set the destination",
+      action: "Add the link",
       tone: "warning",
       count: facts.campaignsMissingCta,
     });
@@ -417,7 +417,7 @@ export function needsYou(facts: NeedsYouFacts): NeedsYouItem[] {
     items.push({
       kind: "strategy_unapproved",
       title: `${plural(facts.strategiesUnapproved, "strategy", "strategies")} ${isare(facts.strategiesUnapproved)} written and waiting for you.`,
-      why: "Nothing is searched for until one is approved. Check each is somebody who would buy from you rather than somebody who does what you do.",
+      why: "Nora finds nobody until you approve one. Pick people who would buy from you, not people who do what you do.",
       href: "/app/strategy",
       action: "Read and approve",
       tone: "warning",

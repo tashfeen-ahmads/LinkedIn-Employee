@@ -29,10 +29,17 @@ const post = (overrides: Partial<ProviderPost> = {}): ProviderPost => ({
   ...overrides,
 });
 
-function harness(options: { status?: string; doNotContact?: boolean; engage?: boolean } = {}) {
+function harness(options: { status?: string; doNotContact?: boolean; engage?: boolean; comments?: boolean } = {}) {
   const db = new FakeDb();
   const linkedin = new MockLinkedInProvider();
-  db.seed("workspaces", [{ id: WORKSPACE, plan: "free", engage_posts: options.engage ?? true }]);
+  db.seed("workspaces", [
+    {
+      id: WORKSPACE,
+      plan: "free",
+      engage_posts: options.engage ?? true,
+      ...(options.comments === undefined ? {} : { engage_comments: options.comments }),
+    },
+  ]);
   db.seed("profiles", [{ id: USER, full_name: "Sam Patel", timezone: "UTC" }]);
   db.seed("linkedin_accounts", [
     {
@@ -142,6 +149,29 @@ describe("planning", () => {
     expect((await planEngagement(ctx, queues, NOW)).planned).toBe(0);
   });
 
+  it("keeps an old 'off' off for comments too, before the comment switch existed", async () => {
+    // A row with no engage_comments follows the shared switch it replaced.
+    const { db, ctx, linkedin, queues } = harness({ engage: false });
+    linkedin.posts["prov-1"] = [post()];
+    await planEngagement(ctx, queues, NOW);
+    expect(db.rows("engagement_actions")).toHaveLength(0);
+  });
+
+  it("plans no like when likes are off and comments are on", async () => {
+    const { db, ctx, linkedin, queues } = harness({ engage: false, comments: true });
+    linkedin.posts["prov-1"] = [post()];
+    await planEngagement(ctx, queues, NOW);
+    expect(db.rows("engagement_actions").filter((r) => r.kind === "reaction")).toHaveLength(0);
+  });
+
+  it("plans no comment when comments are off", async () => {
+    const { db, ctx, linkedin, queues } = harness({ engage: true, comments: false });
+    linkedin.posts["prov-1"] = [post({ text: "We rebuilt our onboarding around one checklist and cut ramp time from six weeks to three. The hardest part was deciding what to leave out." })];
+    await planEngagement(ctx, queues, NOW);
+    expect(db.rows("engagement_actions").filter((r) => r.kind === "comment")).toHaveLength(0);
+    expect(db.rows("engagement_actions").filter((r) => r.kind === "reaction")).toHaveLength(1);
+  });
+
   it("reads somebody's posts at most once in three days, so the planner moves down the list", async () => {
     const { db, ctx, linkedin, queues } = harness();
     // Nothing worth liking: a repost only.
@@ -206,6 +236,19 @@ describe("sending", () => {
     expect(account.invites_today).toBe(0);
     expect(db.find("engagement_actions", { id })?.status).toBe("sent");
     expect(db.find("prospects", { id: PROSPECT })?.last_engaged_at).toBeTruthy();
+  });
+
+  it("skips a planned comment once comments are switched off, and still sends likes", async () => {
+    const { db, ctx, linkedin, id } = await planned();
+    const like = db.find("engagement_actions", { id })!;
+    db.seed("engagement_actions", [{ ...like, id: "comment-1", kind: "comment", body: "Fair point about onboarding.", status: "queued" }]);
+    db.find("workspaces", { id: WORKSPACE })!.engage_comments = false;
+
+    await runLinkedInAction(ctx, { kind: "engage", workspaceId: WORKSPACE, engagementId: "comment-1" });
+    expect(db.find("engagement_actions", { id: "comment-1" })?.status).toBe("skipped");
+
+    await runLinkedInAction(ctx, { kind: "engage", workspaceId: WORKSPACE, engagementId: id });
+    expect(linkedin.reactions).toHaveLength(1);
   });
 
   it("skips rather than sends once somebody is marked do not contact after planning", async () => {

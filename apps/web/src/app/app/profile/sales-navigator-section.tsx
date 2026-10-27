@@ -54,7 +54,7 @@ export function SalesNavigatorSection({
       title="LinkedIn plan"
       description="What the account can do decides how precisely it searches and whether invitations carry a note."
     >
-      <Panel className={salesNav ? "sn-panel is-on" : "sn-panel"}>
+      <Panel className={salesNav ? "sn-panel profile-card is-on" : "sn-panel profile-card"}>
         <div className="sn-head">
           <span className={plan === "basic" ? "pill" : "pill positive"}>{planLabel(plan)}</span>
           <p>
@@ -115,28 +115,26 @@ export function SalesNavigatorSection({
           })}
         </ul>
 
-        <form action={action} className="sn-action">
-          <fieldset className="sn-choices">
-            <legend className="sr-only">LinkedIn plan</legend>
+        <form action={action} className="profile-plan-form">
+          <fieldset className="profile-choices">
+            <legend>Which plan does this LinkedIn account have?</legend>
             {PLANS.map((option) => (
-              <label key={option.value} className="small check">
+              <label key={option.value} className="profile-choice">
                 <input type="radio" name="linkedinPlan" value={option.value} defaultChecked={option.value === plan} />
-                <span>
+                <span className="profile-choice-text">
                   <strong>{planLabel(option.value)}</strong>
-                  <span className="tiny subtle hint">{option.hint}</span>
+                  <span className="small muted">{option.hint}</span>
                 </span>
               </label>
             ))}
           </fieldset>
-          <div className="sn-save">
-            <p className="tiny muted">
+          <div className="profile-form-foot">
+            <p className="small muted">
               {connected
-                ? "Choose the plan this LinkedIn account really has: a search on Sales Navigator from an account without it finds nobody. Premium and Sales Navigator are sold by LinkedIn, not by us."
+                ? "Choose the plan this account really has: a search on Sales Navigator from an account without it finds nobody. Premium and Sales Navigator are sold by LinkedIn, not by us."
                 : "Kept until you connect your LinkedIn account, then checked with LinkedIn."}
             </p>
-            <SubmitButton className="btn small" pendingLabel="Saving…">
-              Save plan
-            </SubmitButton>
+            <SubmitButton pendingLabel="Saving…">Save plan</SubmitButton>
           </div>
         </form>
       </Panel>

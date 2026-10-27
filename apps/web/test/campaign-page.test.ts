@@ -2,7 +2,11 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
-const page = readFileSync(join(__dirname, "../src/app/app/campaigns/[id]/page.tsx"), "utf8");
+// The campaign screen is a set of sections: its loader, the overview, Replies
+// and Opener & offer carry what these assertions are about.
+const page = ["data.ts", "page.tsx", "replies/page.tsx", "opener/page.tsx"]
+  .map((file) => readFileSync(join(__dirname, "../src/app/app/campaigns/[id]", file), "utf8"))
+  .join("\n");
 
 describe("campaign page", () => {
   it("does not promise holds that autonomy turned off (rule 41)", () => {

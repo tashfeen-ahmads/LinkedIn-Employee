@@ -143,6 +143,24 @@ describe("every launch-step refusal reloads onto the same campaign", () => {
     expect(db.calls.some((c) => c.table === "campaigns")).toBe(false);
   });
 
+  it("attaches the opener approved here to this campaign's angles that carry none", async () => {
+    // Attached, it is this audience's line, and a campaign for another
+    // strategy is not given it to borrow (rule 40).
+    const db = useDb(draftDb);
+    await post({
+      action: "launch",
+      campaignId: CAMPAIGN,
+      handling: "check",
+      lineTable: "hooks",
+      lineId: "hook-1",
+      lineBody: "Who sent you your last client?",
+    });
+    const attach = db.calls.find((c) => c.table === "campaign_variants" && c.op === "update");
+    expect(attach?.payload).toEqual({ hook_id: "hook-1" });
+    expect(attach?.filters).toContainEqual(["eq", "campaign_id", CAMPAIGN]);
+    expect(attach?.filters).toContainEqual(["is", "hook_id", null]);
+  });
+
   it("a launch that goes through still opens the app", async () => {
     useDb(draftDb);
     const res = await post({ action: "launch", campaignId: CAMPAIGN, handling: "check" });

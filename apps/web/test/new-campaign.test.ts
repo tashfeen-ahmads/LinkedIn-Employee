@@ -10,8 +10,10 @@ import { describe, expect, it } from "vitest";
  * inserted as given, so a stale page added somebody contacted since it loaded,
  * and an edited one could name an account this workspace does not own.
  */
-const page = readFileSync(join(__dirname, "../src/app/app/campaigns/new/page.tsx"), "utf8");
-const action = page.slice(page.indexOf("async function createCampaign"), page.indexOf("export default"));
+// The builder's step 1, in its actions file.
+const page = readFileSync(join(__dirname, "../src/app/app/campaigns/new/actions.ts"), "utf8");
+const start = page.indexOf("async function createCampaign");
+const action = page.slice(start, page.indexOf("\nexport async function", start));
 
 describe("createCampaign", () => {
   it("checks the sending account belongs to this workspace and is connected", () => {

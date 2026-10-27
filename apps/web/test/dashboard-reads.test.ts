@@ -18,13 +18,16 @@ describe("per-strategy counts", () => {
   });
 
   it("pages the strategy page's yield", () => {
-    expect(read("strategy/page.tsx")).toMatch(/fetchAllRows<\{ customer_profile_id: string \| null; last_contacted_at/);
+    // Read once for the strategy menu and every strategy page (`strategy/data.ts`).
+    expect(read("strategy/data.ts")).toMatch(/fetchAllRows<\{ customer_profile_id: string \| null; last_contacted_at/);
+    expect(read("strategy/page.tsx")).toMatch(/loadStrategyMenu\(supabase, session\.workspaceId\)/);
   });
 });
 
 describe("approving a strategy", () => {
   it("checks the approval landed before it says so or starts a search", () => {
-    const page = read("strategy/page.tsx");
+    // The strategy screens' actions are shared by every strategy page.
+    const page = read("strategy/actions.ts");
     const action = page.slice(page.indexOf("async function approveProfile"), page.indexOf("async function dropProfile"));
     // The shared approval checks the rows it changed...
     const shared = readFileSync(join(__dirname, "..", "src", "lib", "approve.ts"), "utf8");

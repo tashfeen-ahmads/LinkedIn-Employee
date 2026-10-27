@@ -1,706 +1,32 @@
-import { revalidatePath } from "next/cache";
-import { Empty, PageHeader, Section } from "@/components/page";
-import { FunnelChart } from "@/components/charts";
-import { NavIcon } from "@/components/icons";
-import { sequenceFor } from "@/components/sequence";
-import { SequencePath } from "@/components/sequence-path";
-import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import {
-  BOOT_BEAT,
-  CLICKS_ARE_INVISIBLE,
   CTA_DEFINITIONS,
-  CTA_PLACEHOLDER,
-  ctaLinkMissing,
-  effectiveCta,
-  type CtaKind,
-  FIRST_STEP_TIMING_LABEL,
+  EXTERNAL_BOOKINGS_UNCOUNTED,
+  FREE_NOTES_PER_MONTH,
   LINKEDIN_LIMITS,
-  PACING_LOOP,
-  countFunnel,
-  fitCutoffSentence,
   stagesFor,
 } from "@le/shared";
-import { ACCOUNT_USAGE_COLUMNS, dailyInviteCap, localDayStart, parseWorkingHours, plainReason, planOf } from "@le/linkedin";
-import { notesLeftThisMonth } from "@/lib/invite-notes";
-import { restoreFromFailure } from "@/lib/retry-failed";
-import { requireSession } from "@/lib/workspace";
-import { launch } from "@/lib/launch";
-import { readWizard } from "@/lib/wizard-state";
-import { createClient } from "@/lib/supabase-server";
-import { callWorker, errorQuery, noticeQuery, startedNotice } from "@/lib/worker";
-import { SubmitButton } from "@/components/submit-button";
-import { describeSearch } from "./search-state";
-import { describePacing } from "@/lib/pacing";
-import { campaignCtas } from "@/lib/campaign-cta";
-import { campaignBookingUrl } from "@/lib/booking-link";
-import { queuedFromLoop, EXTERNAL_BOOKINGS_UNCOUNTED, FREE_NOTES_PER_MONTH, IDLE_RELEASE_TAGLINE, isIdleReleased, INVITE_NOTE_MAX_CHARS, MIN_SENDS_TO_COMPARE, alwaysHoldsSentence, comparisonReady, standings, profileHref } from "@le/shared";
+import { Section } from "@/components/page";
+import { FunnelChart } from "@/components/charts";
+import { NavIcon } from "@/components/icons";
 import { PageNotice, type NoticeParams } from "@/components/page-notice";
-import { ConfirmButton } from "@/components/confirm-button";
-import { formatDate, isoAttr } from "@/lib/format";
+import { formatDate, isoAttr, formatWhen } from "@/lib/format";
 import { label } from "@/lib/labels";
-import { SKIPPED_AT_SEND_REASONS, actionableQueue, launchBlockers, sendEstimate } from "@/lib/campaign";
-import { isPlatformAdmin } from "@/lib/admin";
-import { readWorkspaceEntitlement, replyPlanNote } from "@/lib/entitlement";
+import { SKIPPED_AT_SEND_REASONS } from "@/lib/campaign";
+import { loadCampaign, nameOf, personOf } from "./data";
+import { sectionHref } from "./sections";
 
 /**
- * How many people one press of "Find more" reads.
+ * A campaign's overview: is it sending, how is it doing, and what happens
+ * next. The rest of the campaign is a section each, one click away in the
+ * menu beside this.
  *
- * The same size as the first search, deliberately. A list grows in pages a
- * person can actually review — a button that added a thousand names at once
- * would produce a list nobody reads, which is the review step this product is
- * built around quietly becoming a rubber stamp.
+ * The review screen's central claim is that a person reads the list and the
+ * copy before a single message reaches a stranger. The list is on People and
+ * the copy on Opener & offer and Follow-ups; this page says whether anything
+ * stands between the campaign and its launch, and where to go to fix it.
  */
-const FIND_MORE_BATCH = 50;
-
-/**
- * The review screen. The product's central claim is that a person reads the
- * list and the copy before a single message reaches a stranger, and until this
- * page existed that claim was made by a Launch button on a card showing one of
- * the four messages a campaign sends.
- */
-
-/**
- * Writes the copy form to the campaign: the note, the settings and every step.
- *
- * Shared by Save and by Launch, because Launch used to be its own form with
- * none of these fields in it — so somebody who edited the copy and pressed
- * Launch launched the version from before their edits, and the edits were
- * silently thrown away. Launching now saves first.
- */
-async function applyCampaignEdits(formData: FormData, workspaceId: string): Promise<string> {
-  const campaignId = String(formData.get("campaignId"));
-  const supabase = await createClient();
-
-  const note = String(formData.get("connectionNote") ?? "").trim();
-  const cap = Number(formData.get("dailyInviteCap"));
-  const replyMode = String(formData.get("replyMode"));
-  // Absent is not the same as cleared: a form that does not carry the field at
-  // all (no agents in this workspace) must leave the column alone rather than
-  // detaching the agent a campaign is already running on.
-  const agentField = formData.get("agentId");
-  const warmUp = formData.get("warm_up") === "on";
-
-  // The template is what a prospect with no personalised note receives, so it
-  // is held to the same cap as the send path. The textarea's maxLength stops
-  // typing past it; this stops a form that never had one, and a template
-  // stored under the old 300 being saved again unchanged.
-  if (note.length > INVITE_NOTE_MAX_CHARS) {
-    redirect(
-      errorQuery(
-        `/app/campaigns/${campaignId}`,
-        `The connection note is ${note.length} characters. LinkedIn refuses anything over ${INVITE_NOTE_MAX_CHARS}.`,
-      ),
-    );
-  }
-
-  const { error } = await supabase
-    .from("campaigns")
-    .update({
-      connection_note: note,
-      warm_up: warmUp,
-      ...(agentField === null ? {} : { agent_id: String(agentField) || null }),
-      // Clamped rather than rejected: the caps are product rules, and a typo in
-      // this box must not be able to raise them. Rule 2 in CLAUDE.md.
-      daily_invite_cap: Math.max(1, Math.min(LINKEDIN_LIMITS.invitesPerDayMax, Math.round(cap) || 1)),
-      ...(replyMode === "autopilot" || replyMode === "approval"
-        ? { reply_mode: replyMode as "autopilot" | "approval" }
-        : {}),
-    })
-    .eq("id", campaignId)
-    .eq("workspace_id", workspaceId);
-  if (error) {
-    console.error(`[campaign] save: ${error.message}`);
-    redirect(errorQuery(`/app/campaigns/${campaignId}`, "Your changes could not be saved. Nothing was sent. Try again."));
-  }
-
-  // Step messages come back as step-<id> fields so one save covers the whole
-  // sequence: editing four messages in four round trips invites a half-edited
-  // campaign going live.
-  for (const [key, value] of formData.entries()) {
-    if (!key.startsWith("step-")) continue;
-    const { error: stepError } = await supabase
-      .from("campaign_steps")
-      .update({ message: String(value) })
-      .eq("id", key.slice("step-".length))
-      .eq("workspace_id", workspaceId);
-    if (stepError) {
-      console.error(`[campaign] save step: ${stepError.message}`);
-      redirect(
-        errorQuery(
-          `/app/campaigns/${campaignId}`,
-          "Some of the messages could not be saved. Nothing was sent. Check them and save again.",
-        ),
-      );
-    }
-  }
-
-  revalidatePath(`/app/campaigns/${campaignId}`);
-  return campaignId;
-}
-
-async function saveCampaign(formData: FormData) {
-  "use server";
-  const session = await requireSession();
-  const campaignId = await applyCampaignEdits(formData, session.workspaceId);
-  redirect(noticeQuery(`/app/campaigns/${campaignId}`, "Saved."));
-}
-
-/** The copy form's Launch: save what is on screen, then launch exactly that. */
-async function saveAndLaunch(formData: FormData) {
-  "use server";
-  const session = await requireSession();
-  const campaignId = await applyCampaignEdits(formData, session.workspaceId);
-  await launchCampaign(campaignId, session);
-}
-
-async function removeFromCampaign(formData: FormData) {
-  "use server";
-  const campaignProspectId = String(formData.get("campaignProspectId"));
-  const campaignId = String(formData.get("campaignId"));
-  const who = String(formData.get("prospectName") ?? "").trim().slice(0, 120) || "That person";
-  const session = await requireSession();
-  const supabase = await createClient();
-
-  // Closed, not deleted. The row is how we know not to target this person
-  // again, and the reason is what a rep reads later.
-  const { data: removed, error } = await supabase
-    .from("campaign_prospects")
-    .update({
-      status: "closed",
-      status_reason: "removed during review",
-      closed_at: new Date().toISOString(),
-      next_action_at: null,
-    })
-    .eq("id", campaignProspectId)
-    .eq("workspace_id", session.workspaceId)
-    .eq("status", "queued")
-    .select("id");
-
-  revalidatePath(`/app/campaigns/${campaignId}`);
-  if (error) {
-    console.error(`[campaign] remove prospect: ${error.message}`);
-    redirect(errorQuery(`/app/campaigns/${campaignId}`, `${who} could not be removed. Try again.`));
-  }
-  // A row that had already been invited is not removed — the update matches
-  // queued rows only — and saying "Removed" over it would be untrue.
-  redirect(
-    removed?.length
-      ? noticeQuery(`/app/campaigns/${campaignId}`, `Removed ${who} from this campaign. They will not be invited.`)
-      : errorQuery(`/app/campaigns/${campaignId}`, `${who} has already been invited, so they stay on the list.`),
-  );
-}
-
-/**
- * A rep rewriting the note the agent wrote for one person.
- *
- * `invite_note_edited` is what stops the agent overwriting it later. A rep who
- * rewrote a note and watched it revert would stop trusting the screen, and then
- * stop reading the notes at all — which is the failure this review step exists
- * to prevent.
- *
- * Only while queued. After the invitation is sent the note is a record of what
- * was said, not a draft.
- */
-async function saveInviteNote(formData: FormData) {
-  "use server";
-  const campaignProspectId = String(formData.get("campaignProspectId"));
-  const campaignId = String(formData.get("campaignId"));
-  const note = String(formData.get("note") ?? "").trim();
-  const who = String(formData.get("prospectName") ?? "").trim().slice(0, 120) || "this person";
-  const session = await requireSession();
-  const supabase = await createClient();
-
-  // LinkedIn refuses a longer note outright rather than truncating it, so a
-  // silent save here would produce an invitation that never sends.
-  if (note.length > INVITE_NOTE_MAX_CHARS) {
-    redirect(
-      errorQuery(
-        `/app/campaigns/${campaignId}`,
-        `That note is ${note.length} characters. LinkedIn refuses anything over ${INVITE_NOTE_MAX_CHARS}.`,
-      ),
-    );
-  }
-
-  const { error } = await supabase
-    .from("campaign_prospects")
-    .update({
-      invite_note: note || null,
-      invite_note_edited: true,
-      // It is the rep's sentence now, so the agent's account of where it came
-      // from no longer describes it.
-      invite_note_grounding: [],
-      invite_note_thin: false,
-    })
-    .eq("id", campaignProspectId)
-    .eq("workspace_id", session.workspaceId)
-    .eq("status", "queued");
-
-  revalidatePath(`/app/campaigns/${campaignId}`);
-  if (error) {
-    console.error(`[campaign] save note: ${error.message}`);
-    redirect(errorQuery(`/app/campaigns/${campaignId}`, `The note for ${who} could not be saved. Try again.`));
-  }
-  redirect(
-    noticeQuery(
-      `/app/campaigns/${campaignId}`,
-      note ? `Saved the note for ${who}.` : `Cleared the note for ${who}. They get the campaign template.`,
-    ),
-  );
-}
-
-/**
- * Points a campaign at one of the workspace's calls to action.
- *
- * The CTA library was shipped without this and was therefore a page that did
- * nothing: destinations could be named and no campaign could use one. The
- * pointer is read at send time, so changing it here changes where every
- * message in this campaign points — including the ones already reviewed,
- * which is the point. The copy says "{{cta_link}}"; only the destination
- * moves.
- */
-async function setCampaignCta(formData: FormData) {
-  "use server";
-  const campaignId = String(formData.get("campaignId"));
-  const ctaId = String(formData.get("ctaId") ?? "");
-
-  const session = await requireSession();
-  const supabase = await createClient();
-
-  /*
-   * The picked entry's goal is written onto the campaign's own columns as
-   * well as the pointer. Writing only `cta_id` left `cta_kind` saying
-   * "meeting" on a campaign whose every message now sent a link, and every
-   * screen that read the column (the funnel's goal, the results label, the
-   * inbox's meeting tab, the meeting-hours row) described a campaign that no
-   * longer existed. Readers resolve through the pointer anyway
-   * (`campaignCtas`); the columns are kept in step so they are never the odd
-   * one out, and so "this campaign's own destination" is the last one picked.
-   *
-   * Empty means "use this campaign's own destination", which is what a
-   * campaign built before the library has. Never a lookup for "".
-   */
-  let patch: { cta_id: string | null; cta_kind?: CtaKind; cta_label?: string | null; cta_url?: string | null } = {
-    cta_id: null,
-  };
-  if (ctaId) {
-    const { data: picked } = await supabase
-      .from("ctas")
-      .select("id, kind, label, url")
-      .eq("id", ctaId)
-      .eq("workspace_id", session.workspaceId)
-      .is("archived_at", null)
-      .maybeSingle();
-    if (!picked) {
-      redirect(errorQuery(`/app/campaigns/${campaignId}`, "That call to action is not available any more. Nothing changed."));
-    }
-    patch = { cta_id: picked.id, cta_kind: picked.kind, cta_label: picked.label, cta_url: picked.url };
-  }
-  const { error } = await supabase
-    .from("campaigns")
-    .update(patch)
-    .eq("id", campaignId)
-    .eq("workspace_id", session.workspaceId);
-
-  if (error) {
-    console.error(`[campaign] set cta: ${error.message}`);
-    redirect(errorQuery(`/app/campaigns/${campaignId}`, "That did not save. Nothing changed. Try again."));
-  }
-
-  revalidatePath(`/app/campaigns/${campaignId}`);
-  redirect(
-    noticeQuery(
-      `/app/campaigns/${campaignId}`,
-      ctaId
-        ? "Pointed at that call to action. Every message in this campaign now sends its destination."
-        : "Back to this campaign's own destination.",
-    ),
-  );
-}
-
-async function setStatus(formData: FormData) {
-  "use server";
-  const campaignId = String(formData.get("campaignId"));
-  const status = String(formData.get("status"));
-  if (status !== "running" && status !== "paused") {
-    redirect(errorQuery(`/app/campaigns/${campaignId}`, "That did not change anything. Reload the page and try again."));
-  }
-
-  const session = await requireSession();
-  if (status === "running") {
-    await launchCampaign(campaignId, session);
-    return;
-  }
-
-  const supabase = await createClient();
-  const { error } = await supabase
-    .from("campaigns")
-    .update({ status })
-    .eq("id", campaignId)
-    .eq("workspace_id", session.workspaceId);
-  revalidatePath(`/app/campaigns/${campaignId}`);
-  if (error) {
-    console.error(`[campaign] pause: ${error.message}`);
-    redirect(errorQuery(`/app/campaigns/${campaignId}`, "The campaign could not be paused. Try again."));
-  }
-  // Said, because a paused campaign and a running one that is waiting out its
-  // gap look the same from everywhere else on this page.
-  redirect(
-    noticeQuery(
-      `/app/campaigns/${campaignId}`,
-      "Paused. Nothing more goes out from this campaign until you launch it again.",
-    ),
-  );
-}
-
-/**
- * Launches a campaign, or says exactly why it did not.
- *
- * The blockers are re-checked here and not only rendered as a disabled
- * button: a form can be submitted by anyone who can reach the route, and
- * launching is the action that reaches strangers. A refusal used to return
- * without a word, which from the other side of the glass is a Launch button
- * that does nothing.
- */
-async function launchCampaign(
-  campaignId: string,
-  session: Awaited<ReturnType<typeof requireSession>>,
-): Promise<never> {
-  /*
-   * The first launch belongs to the last step of setup (rule 65). This page is
-   * open during setup so the person can read every name before launching, and
-   * without this its own button was a way to finish setup with the hours,
-   * voice and call to action never confirmed.
-   */
-  const supabase = await createClient();
-  const wizard = await readWizard(supabase, session.userId);
-  // A read that failed is not permission: onboarding says it could not load,
-  // which is better than a first campaign going live past unconfirmed steps.
-  if (wizard.unreadable) redirect("/onboarding");
-  // The first launch, however this page was reached, is made on the launch
-  // step, including by somebody who opened the app before launching. That
-  // step asks who answers the replies and approves the opener and offer the
-  // campaign sends; launching from here went live with neither, so a
-  // follow-up built from {{pitch}} would wait on an approval nobody had been
-  // asked for. A step still not done is where the launch step sends them
-  // instead (`stepToShow`).
-  if (!wizard.facts.hasLaunchedCampaign) {
-    redirect(`/onboarding?step=launch&campaign=${encodeURIComponent(campaignId)}`);
-  }
-
-  const outcome = await launch(campaignId, session);
-  revalidatePath(`/app/campaigns/${campaignId}`);
-  switch (outcome.status) {
-    case "missing":
-      redirect(errorQuery("/app/campaigns", "That campaign could not be found."));
-    case "blocked":
-      redirect(errorQuery(`/app/campaigns/${campaignId}`, `Not launched yet. ${outcome.blockers.join(" ")}`));
-    case "failed":
-      redirect(errorQuery(`/app/campaigns/${campaignId}`, "The campaign could not be launched. Nothing was sent. Try again."));
-    case "launched":
-      // Launched, and said so either way: the campaign really is running and
-      // the loop picks it up when it is back. What must not happen is silence.
-      redirect(
-        outcome.kicked
-          ? noticeQuery(
-              `/app/campaigns/${campaignId}`,
-              "Launched. Invitations are paced a few minutes apart, so the first one takes a little while to appear on LinkedIn. This page says where it is up to.",
-            )
-          : errorQuery(
-              `/app/campaigns/${campaignId}`,
-              "Launched, but sending has not started: the part of the product that sends did not answer. It picks this campaign up on its own when it is back. System check shows where it is up to.",
-            ),
-      );
-  }
-}
-
-/**
- * Reads the next page of the same search and adds whoever is new to this list.
- *
- * A campaign used to be one search: about fifty people, and no way to reach the
- * fifty-first. Pressing "find prospects" again ran the identical query, got the
- * identical page, and reported every person on it as already known — so the
- * honest answer to "we need a thousand prospects" was that the product could
- * not do it.
- *
- * The campaign is what remembers the position, so continuing is a matter of
- * naming it. Everything else — which profile, which account, where the search
- * stopped — comes off its own row in the worker, which is also what stops this
- * form being a way to point one campaign's search at another profile.
- */
-async function findMore(formData: FormData) {
-  "use server";
-  const campaignId = String(formData.get("campaignId"));
-  const session = await requireSession();
-  const supabase = await createClient();
-
-  const { data: campaign } = await supabase
-    .from("campaigns")
-    .select("customer_profile_id, linkedin_account_id, search_exhausted")
-    .eq("id", campaignId)
-    .eq("workspace_id", session.workspaceId)
-    .maybeSingle();
-  if (!campaign?.customer_profile_id) {
-    redirect(
-      errorQuery(
-        `/app/campaigns/${campaignId}`,
-        "This campaign's customer profile has been deleted, so there is nothing left to search for.",
-      ),
-    );
-  }
-  if (campaign.search_exhausted) {
-    redirect(
-      errorQuery(
-        `/app/campaigns/${campaignId}`,
-        "This search has already reached the end of what LinkedIn returns for this profile.",
-      ),
-    );
-  }
-
-  const { data: account } = await supabase
-    .from("linkedin_accounts")
-    .select("status, status_detail")
-    .eq("id", campaign.linkedin_account_id)
-    .maybeSingle();
-  if (account?.status !== "active") {
-    redirect(
-      errorQuery(
-        `/app/campaigns/${campaignId}`,
-        isIdleReleased(account)
-          ? IDLE_RELEASE_TAGLINE
-          : "Reconnect your LinkedIn account on your profile first. Nothing can be searched until it is connected.",
-      ),
-    );
-  }
-
-  const queued = await callWorker("/jobs/targeting", {
-    workspaceId: session.workspaceId,
-    userId: session.userId,
-    customerProfileId: campaign.customer_profile_id,
-    linkedinAccountId: campaign.linkedin_account_id,
-    campaignId,
-    limit: FIND_MORE_BATCH,
-  });
-  if (!queued.ok) {
-    redirect(errorQuery(`/app/campaigns/${campaignId}`, `The search has not started. ${queued.error}`));
-  }
-
-  revalidatePath(`/app/campaigns/${campaignId}`);
-  redirect(
-    noticeQuery(
-      `/app/campaigns/${campaignId}`,
-      startedNotice(
-        queued.data,
-        "Reading the next page of the same search. It takes about a minute. Reload this page and the new names appear at the bottom of the list.",
-      ),
-    ),
-  );
-}
-
-/**
- * Write the notes again, with whatever the agent says now.
- *
- * The notes are written once, when the campaign is built, and there was no way
- * back to them — so a rep who fixed their agent's openers watched this page go
- * on showing the copy written before the fix. That is the agent as a settings
- * page that changes nothing, and the only alternative on offer was editing
- * every note by hand, which is the work the agent exists to do.
- *
- * Queued people only, and the worker checks that again at the write: a note on
- * somebody already invited is the record of what they were sent, not a draft.
- */
-async function rewriteNotes(formData: FormData) {
-  "use server";
-  const campaignId = String(formData.get("campaignId"));
-  const session = await requireSession();
-  const here = `/app/campaigns/${campaignId}`;
-
-  // Ninety seconds, as the other writer routes take: the model runs on this
-  // request so the person who clicked sees the new notes, and a working agent
-  // cut off at ten seconds reads as a broken one.
-  const result = await callWorker<{ ok: boolean; reason?: string; rewritten?: number; unanswered?: number }>(
-    "/jobs/rewrite-notes",
-    { workspaceId: session.workspaceId, userId: session.userId, campaignId },
-    90_000,
-  );
-  if (!result.ok) redirect(errorQuery(here, result.error));
-  if (result.data && result.data.ok === false) {
-    redirect(errorQuery(here, result.data.reason ?? "The notes could not be rewritten."));
-  }
-
-  revalidatePath(here);
-  const unanswered = result.data?.unanswered ?? 0;
-  redirect(
-    noticeQuery(
-      here,
-      `Rewrote ${result.data?.rewritten ?? 0} notes.` +
-        (unanswered > 0
-          ? ` ${unanswered} kept the note they had, because the writer did not answer for them.`
-          : "") +
-        " Read them before you launch.",
-    ),
-  );
-}
-
-/**
- * Puts failed prospects back in the queue.
- *
- * `failProspect` writes `status: "failed"` and `next_action_at: null`, and the
- * pacing loop reads `status = "queued"` and nothing else — so a failed row is
- * not waiting for anything. It is finished, for ever, and nothing in this
- * product moved one back. An expired Unipile subscription answered `401` to
- * five invitations one morning and stranded five real people permanently: a
- * campaign somebody had reviewed, with a list they had approved, that could
- * never send to them again whatever was fixed afterwards.
- *
- * Retrying is safe because a failure is not a contact. `runLinkedInAction`
- * returns on a provider error *before* `recordAction` and before stamping
- * `last_contacted_at`, so no daily allowance was spent and the message that
- * failed was never written down as sent. Everything that refuses — the
- * limiter, the exclusion list, do-not-contact, the never-twice rule — is
- * re-checked on the way out, so this queues an attempt rather than forcing a
- * send.
- *
- * Each row goes back to the state it failed *from* (`restoreFromFailure`),
- * never to the queue wholesale. A failed follow-up belongs to somebody who
- * already accepted; requeued for an invitation, the never-twice check closed
- * them as "already contacted", and the button meant to rescue the campaign's
- * one acceptance wrote it off instead.
- *
- * It is a button and not a retry loop on purpose. "Cannot send invitation to
- * this member" is LinkedIn refusing that person and will fail identically for
- * ever; a lapsed key is a deployment problem that a human has just fixed.
- * Nothing here can reliably tell those apart, and the one that must not be
- * automatic is hammering a provider that is refusing us.
- */
-async function retryFailed(formData: FormData) {
-  "use server";
-  const campaignId = String(formData.get("campaignId"));
-  const session = await requireSession();
-  const supabase = await createClient();
-
-  const { data: failedRows, error: readError } = await supabase
-    .from("campaign_prospects")
-    .select("id, invited_at, accepted_at, last_step_sent")
-    .eq("campaign_id", campaignId)
-    .eq("workspace_id", session.workspaceId)
-    .eq("status", "failed");
-  if (readError) {
-    console.error(`[campaign] retry read: ${readError.message}`);
-    redirect(errorQuery(`/app/campaigns/${campaignId}`, "Could not requeue those. Nothing changed. Try again."));
-  }
-
-  // One write per destination state rather than per row: a campaign's failures
-  // land in two or three states at most.
-  const now = new Date();
-  const groups = new Map<string, { restored: ReturnType<typeof restoreFromFailure>; ids: string[] }>();
-  for (const row of failedRows ?? []) {
-    const restored = restoreFromFailure(row, now);
-    const key = `${restored.status}|${restored.next_action_at ?? ""}`;
-    const group = groups.get(key) ?? { restored, ids: [] };
-    group.ids.push(row.id);
-    groups.set(key, group);
-  }
-
-  let invitations = 0;
-  let followUps = 0;
-  for (const { restored, ids } of groups.values()) {
-    const { data, error } = await supabase
-      .from("campaign_prospects")
-      .update({ status: restored.status, status_reason: null, next_action_at: restored.next_action_at })
-      .in("id", ids)
-      .eq("workspace_id", session.workspaceId)
-      // Only rows still failed: anything that moved since the read is left.
-      .eq("status", "failed")
-      .select("id");
-    if (error) {
-      console.error(`[campaign] retry write: ${error.message}`);
-      revalidatePath(`/app/campaigns/${campaignId}`);
-      redirect(errorQuery(`/app/campaigns/${campaignId}`, "Could not requeue all of those. Reload the page to see which went back, then try again."));
-    }
-    if (restored.status === "queued") invitations += data?.length ?? 0;
-    else followUps += data?.length ?? 0;
-  }
-
-  revalidatePath(`/app/campaigns/${campaignId}`);
-  const count = invitations + followUps;
-  const parts: string[] = [];
-  if (invitations) parts.push(`${invitations} back in the invitation queue`);
-  if (followUps) parts.push(`${followUps} back where their sequence stopped`);
-  redirect(
-    noticeQuery(
-      `/app/campaigns/${campaignId}`,
-      count === 0
-        ? "Nothing to retry: no prospect on this campaign is in a failed state."
-        : `${parts.join(", ")}. ${
-            count === 1 ? "It goes" : "They go"
-          } out at the campaign's normal pace${invitations ? "; press Send one now to watch the first invitation" : ""}.`,
-    ),
-  );
-}
-
-/**
- * Sends the next queued invitation now, and puts the answer on the screen.
- *
- * Every other way of finding out whether a real invitation can leave this
- * deployment costs a quarter of an hour — five minutes for a tick, two to
- * eleven for the jittered gap — and answers with an unchanged page if anything
- * went wrong in between. Eight days went by that way without a single live
- * send, and none of the waiting was ever a safety rule: the limiter, the
- * exclusion list, the do-not-contact flag and the never-twice rule all still
- * apply, and all of them still refuse out loud.
- */
-async function sendOneNow(formData: FormData) {
-  "use server";
-  const campaignId = String(formData.get("campaignId"));
-  const session = await requireSession();
-
-  const result = await callWorker<{ ok: boolean; detail: string }>("/jobs/send-one", {
-    workspaceId: session.workspaceId,
-    userId: session.userId,
-    campaignId,
-  });
-
-  revalidatePath(`/app/campaigns/${campaignId}`);
-  if (!result.ok) {
-    redirect(errorQuery(`/app/campaigns/${campaignId}`, `Nothing was sent. ${result.error}`));
-  }
-  // The worker's own sentence, verbatim. A paraphrase here is a second reading
-  // of what happened, and this is the one screen where the exact words matter.
-  const answer = result.data;
-  if (!answer) {
-    // A 200 with no body is not "it worked". Saying nothing here is how a
-    // failed send became a page that looked exactly like a successful one.
-    redirect(
-      errorQuery(`/app/campaigns/${campaignId}`, "The sender answered without saying what happened."),
-    );
-  }
-  redirect(
-    answer.ok
-      ? noticeQuery(`/app/campaigns/${campaignId}`, answer.detail)
-      : errorQuery(`/app/campaigns/${campaignId}`, answer.detail),
-  );
-}
-
-/**
- * What the search could not filter on, as the targeting job recorded it.
- *
- * Read defensively: `rules` is jsonb written by the worker, and a campaign
- * created before this existed has none. A crash on the campaign page would be a
- * worse outcome than a missing notice.
- */
-function ruleStrings(rules: unknown, key: "droppedFilters" | "filterNotes"): string[] {
-  if (!rules || typeof rules !== "object") return [];
-  const value = (rules as Record<string, unknown>)[key];
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
-}
-
-function listInWords(items: string[]): string {
-  if (items.length <= 1) return items[0] ?? "";
-  return `${items.slice(0, -1).join(", ")} and ${items[items.length - 1]}`;
-}
-
-export default async function CampaignPage({
+export default async function CampaignOverviewPage({
   params,
   searchParams,
 }: {
@@ -709,262 +35,24 @@ export default async function CampaignPage({
 }) {
   const notice = await searchParams;
   const { id } = await params;
-  const session = await requireSession();
-  const supabase = await createClient();
-
-  const { data: campaign } = await supabase
-    .from("campaigns")
-    .select(
-      "id, name, status, connection_note, daily_invite_cap, reply_mode, launched_at, linkedin_account_id, rules, customer_profile_id, search_exhausted, searched_at, owner_user_id, agent_id, warm_up, cta_id, cta_kind, cta_label, cta_url",
-    )
-    .eq("id", id)
-    .eq("workspace_id", session.workspaceId)
-    .maybeSingle();
-  if (!campaign) notFound();
-
-  const [{ data: steps }, { data: members }, { data: account }, { data: lastSearch }, { data: heartbeat }, { data: boot }, { data: owner }, { data: variantRows }, { data: agents }, { data: viewer }, { data: exclusionRows }, { data: siblings }] =
-    await Promise.all([
-    supabase
-      .from("campaign_steps")
-      .select("id, step_number, delay_days, message")
-      .eq("campaign_id", id)
-      .order("step_number"),
-    supabase
-      .from("campaign_prospects")
-      .select("id, status, status_reason, invited_at, accepted_at, replied_at, variant_id, invite_note, invite_note_grounding, invite_note_thin, invite_note_edited, prospects (id, first_name, last_name, headline, title, company, location, linkedin_url, fit_score, fit_reasons, do_not_contact, last_contacted_at)")
-      .eq("campaign_id", id)
-      .order("created_at"),
-    // Every column the rate limiter reads, not only the two the header shows:
-    // this page now answers "when does the next invitation go out", and it
-    // answers it by asking the same limiter the sending loop asks.
-    supabase
-      .from("linkedin_accounts")
-      .select(`${ACCOUNT_USAGE_COLUMNS}, display_name, status_detail`)
-      .eq("id", campaign.linkedin_account_id)
-      .maybeSingle(),
-    // How the last press of Find more went. The work happens in the worker, so
-    // this page never learns the outcome of the job it started — and a search
-    // that stopped early looks exactly like one that is still running, which is
-    // the ambiguity that had somebody pressing a button over and over.
-    supabase
-      .from("events")
-      .select("name, payload, created_at")
-      .eq("workspace_id", session.workspaceId)
-      .in("name", ["targeting.queued", "targeting.stopped", "campaign.extended"])
-      .eq("payload->>campaignId", id)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-    // Whether the thing that sends the messages is running at all. Without it
-    // a dead worker and a paced one are the same unchanged page.
-    supabase.from("worker_heartbeats").select("beat_at, detail").eq("name", PACING_LOOP).maybeSingle(),
-    // The worker's own account of itself, written as it started and without
-    // going through the queue — which is what makes it readable in exactly the
-    // failures that erase everything else.
-    supabase.from("worker_heartbeats").select("beat_at, detail").eq("name", BOOT_BEAT).maybeSingle(),
-    // Working hours are evaluated in the rep's zone, so the same clock time is
-    // inside them for one person and outside for another.
-    supabase.from("profiles").select("timezone").eq("id", campaign.owner_user_id).maybeSingle(),
-    supabase
-      .from("campaign_variants")
-      .select("id, name, angle, pain_point, enabled")
-      .eq("campaign_id", id)
-      .order("created_at", { ascending: true }),
-    // Who writes this campaign's copy. A campaign built before agents existed
-    // carries none, and it kept behaving exactly as it did — which is what
-    // made the whole feature additive, and also what left those campaigns with
-    // no way ever to reach an agent.
-    supabase
-      .from("agents")
-      .select("id, name, is_default")
-      .eq("workspace_id", session.workspaceId)
-      .is("archived_at", null)
-      .order("is_default", { ascending: false }),
-    // Dates shown to whoever is reading, in their own timezone.
-    supabase.from("profiles").select("timezone").eq("id", session.userId).maybeSingle(),
-    // The exclusion list, so "still to invite" leaves out the people the send
-    // path will close instead of inviting (rule 14).
-    supabase.from("exclusions").select("kind, value, raw_value, reason").eq("workspace_id", session.workspaceId),
-    // Other running campaigns on the same account share its daily and weekly
-    // allowance, which the days estimate has to say.
-    supabase
-      .from("campaigns")
-      .select("id")
-      .eq("workspace_id", session.workspaceId)
-      .eq("linkedin_account_id", campaign.linkedin_account_id)
-      .eq("status", "running")
-      .neq("id", campaign.id),
-  ]);
-  const viewerTimezone = viewer?.timezone ?? null;
-  // Whether this reader may see the deployment's half of a fault (rule 54).
-  // False on error, because the privilege is the thing being asked about.
-  const operator = await isPlatformAdmin();
-  // What survives on this campaign's replies. Under autonomy pricing, legal
-  // and negative replies are answered rather than held (rule 41), so the
-  // sentence under the reply setting has to say which rules are in force.
-  const autonomous = (campaign.rules as { autonomy?: string } | null)?.autonomy === "autonomous";
-  // Pro holds every reply whatever this campaign says (`rulesForPlan`), so
-  // "Send clean replies for me" on Pro is said to do nothing, not left to look
-  // like it took.
-  const planNote = replyPlanNote(await readWorkspaceEntitlement(supabase, session.workspaceId));
-
-  const rows = members ?? [];
-  /*
-   * How many of these are getting the campaign's generic template.
-   *
-   * Every card already says so on its own — "campaign template" — and that is
-   * ten cards to scroll to learn a number somebody needs *before* pressing
-   * Launch. A live campaign here was built with ten people on it and three
-   * personalised notes; nothing above the list said so, so it read as a
-   * personalised campaign, which is precisely what rule 27 says must not
-   * happen.
-   *
-   * Counted from the rows rather than from the event the worker records: the
-   * rows are the thing being sent, a human may have written a note by hand
-   * since, and a count taken from anywhere else can disagree with the list
-   * underneath it.
-   */
-  const onTemplate = rows.filter((row) => !row.invite_note).length;
-  const queued = rows.filter((row) => row.status === "queued");
-  // A failed row is finished as far as the pacing loop is concerned — it reads
-  // `queued` and nothing else — so these need a way back or they are stranded.
-  const failed = rows.filter((row) => row.status === "failed");
-  const counts = countFunnel(rows);
-  const blockers = launchBlockers({
-    connectionNote: campaign.connection_note,
-    steps: (steps ?? []).map((s) => ({ message: s.message, delayDays: s.delay_days })),
-    dailyInviteCap: campaign.daily_invite_cap,
-    prospectCount: queued.length,
-    accountStatus: account?.status ?? null,
-    accountReleasedIdle: isIdleReleased(account),
-    inviteNotes: queued.map((row) => row.invite_note),
-  });
-  // The rate the loop will actually keep: the campaign's cap, or the account's
-  // ramp if that is lower — a new account starts at ten whatever the campaign
-  // asks for (rule 3), and "4 days at 35 a day" on an account allowed ten is a
-  // promise the loop will not keep. Today's ramp, so the estimate only ever
-  // errs long as the ramp climbs.
-  const perDay = Math.min(
-    campaign.daily_invite_cap,
-    account ? dailyInviteCap(account.first_action_at ? new Date(account.first_action_at) : null) : campaign.daily_invite_cap,
-  );
-  /*
-   * Who on the queue will actually be invited. The send path closes somebody
-   * marked do not contact, somebody already contacted, and somebody on the
-   * exclusion list rather than inviting them, so counting them promised
-   * invitations that were never going out.
-   */
-  const exclusions = (exclusionRows ?? []).map((row) => ({
-    kind: row.kind,
-    value: row.value,
-    rawValue: row.raw_value,
-    reason: row.reason,
-  }));
-  const { actionable, skipped } = actionableQueue(
-    queued.map((row) => ({
-      invited_at: row.invited_at,
-      prospect: row.prospects as unknown as {
-        do_not_contact: boolean | null;
-        last_contacted_at: string | null;
-        company: string | null;
-        linkedin_url: string | null;
-      } | null,
-    })),
-    exclusions,
-  );
-  const sharedWith = siblings?.length ?? 0;
-  const estimate = sendEstimate({
-    remaining: actionable,
-    perDay,
-    workingDaysPerWeek: parseWorkingHours(account?.working_hours).days.length,
-    otherRunningOnAccount: sharedWith,
-  });
-  const dropped = ruleStrings(campaign.rules, "droppedFilters");
-  // What the words in the customer profile actually became. LinkedIn searches
-  // places and industries by id, so every one of them was translated first.
-  const filterNotes = ruleStrings(campaign.rules, "filterNotes");
-  const running = campaign.status === "running";
-  // The account's plan, said before launch: a free account's notes run out
-  // after a few invitations a month (migration 0045), and finding that out
-  // from a campaign that goes quiet is the failure this replaces.
-  const sendingPlan = account ? planOf(account) : null;
-  const notesLeft = account ? await notesLeftThisMonth(supabase, account, owner?.timezone ?? "UTC") : null;
-  // Judged on what this campaign was asking for. A link campaign has no
-  // meetings and never will; ending its funnel in a permanent zero reports a
-  // working campaign as a failed one.
-  // The library, and what this campaign is actually sending. One resolver, the
-  // same one the worker uses at send time — a screen that read the columns
-  // directly would show a destination the send path does not use.
-  const [{ data: ctaLibrary }, resolved] = await Promise.all([
-    supabase
-      .from("ctas")
-      .select("id, name, kind, label, url")
-      .eq("workspace_id", session.workspaceId)
-      .is("archived_at", null)
-      .order("name", { ascending: true }),
-    // Resolved like the send path, archived entries included: the list above
-    // is what may be picked, not what this campaign points at.
-    campaignCtas(supabase, session.workspaceId, [campaign]),
-  ]);
-  const cta = resolved.get(campaign.id) ?? effectiveCta(null, { kind: campaign.cta_kind, label: campaign.cta_label, url: campaign.cta_url });
-  // `{{cta_link}}` in the copy with nothing to fill it: the same reading as
-  // the overview's "link that is not set" row.
-  const ctaMissing =
-    ctaLinkMissing(cta) && (steps ?? []).some((step) => (step.message ?? "").includes(CTA_PLACEHOLDER));
-  // Rule 31: a meeting campaign whose replies offer the rep's own scheduling
-  // link books some meetings where this page cannot see them.
-  const bookingUrl = cta.kind === "meeting" ? await campaignBookingUrl(supabase, session.workspaceId, campaign) : null;
-  const ownBookingLink = Boolean(bookingUrl);
-
-  const searchNotice = describeSearch(lastSearch);
-  // How each angle is doing, and whether anything can yet be said about it.
-  //
-  // Counted from the rows rather than stored, so the table cannot drift from
-  // the campaign it describes. `sent` is invitations that actually went out —
-  // the denominator has to be sends, not assignments, or an angle looks weak
-  // purely because its half of the list has not been reached yet.
-  const outcomes = (variantRows ?? []).map((v) => {
-    const mine = rows.filter((r) => r.variant_id === v.id);
-    return {
-      id: v.id,
-      name: v.name,
-      enabled: v.enabled,
-      sent: mine.filter((r) => r.invited_at).length,
-      accepted: mine.filter((r) => r.accepted_at).length,
-      replied: mine.filter((r) => r.replied_at).length,
-      meetings: 0,
-    };
-  });
-  const variantStandings = standings(outcomes);
-  const readyToCompare = comparisonReady(outcomes);
-
-  // What this campaign has already sent since the rep's own midnight, so the
-  // pace on screen is the one the loop keeps once part of today's cap is spent.
-  const dayStart = localDayStart(new Date(), owner?.timezone ?? "UTC").getTime();
-  const sentToday = rows.filter((r) => r.invited_at && Date.parse(r.invited_at) >= dayStart).length;
-  // What the loop's last run says is already queued on this account, so "more
-  // today" is net of it exactly as the loop's own budget is (`inviteRoom`).
-  const queuedNow = queuedFromLoop(
-    heartbeat?.detail ?? null,
-    campaign.id,
-    campaign.linkedin_account_id,
-    (siblings ?? []).map((c) => c.id),
-  );
-  const pacing = describePacing({
-    status: campaign.status,
-    queued: actionable,
-    sentToday,
-    queuedOnAccount: queuedNow?.account,
-    queuedOnCampaign: queuedNow?.campaign,
-    account: account ?? null,
-    timezone: owner?.timezone ?? "UTC",
-    lastBeatAt: heartbeat?.beat_at ?? null,
-    // The loop says in its own stamp when the operator's kill switch is
-    // holding every send; a fresh beat alone would read as "Sending".
-    outreachPaused: Boolean((heartbeat?.detail as { paused?: unknown } | null)?.paused),
-    boot: boot ?? null,
-    dailyCap: campaign.daily_invite_cap,
-  });
+  const {
+    campaign,
+    rows,
+    counts,
+    blockers,
+    actionable,
+    skipped,
+    estimate,
+    running,
+    sendingPlan,
+    notesLeft,
+    operator,
+    pacing,
+    cta,
+    ownBookingLink,
+    steps,
+    viewerTimezone,
+  } = await loadCampaign(id);
 
   /*
    * The ten people touched most recently, for the glance table. Last touch is
@@ -973,11 +61,7 @@ export default async function CampaignPage({
    */
   const recent = rows
     .map((row) => {
-      const prospect = row.prospects as unknown as {
-        first_name: string | null;
-        last_name: string | null;
-        company: string | null;
-      } | null;
+      const prospect = personOf(row);
       const touched =
         [row.replied_at, row.accepted_at, row.invited_at]
           .filter((at): at is string => Boolean(at))
@@ -985,102 +69,18 @@ export default async function CampaignPage({
           .pop() ?? null;
       return { row, prospect, touched };
     })
-    .filter((entry): entry is typeof entry & { prospect: NonNullable<typeof entry.prospect> } =>
-      Boolean(entry.prospect),
+    .filter(
+      (
+        entry,
+      ): entry is typeof entry & {
+        prospect: NonNullable<typeof entry.prospect>;
+      } => Boolean(entry.prospect),
     )
     .sort((a, b) => (b.touched ?? "").localeCompare(a.touched ?? ""))
     .slice(0, 10);
 
   return (
     <>
-      <PageHeader
-        crumbs={[{ href: "/app/campaigns", label: "Campaigns" }]}
-        title={campaign.name}
-        status={
-          <span className={`pill ${running ? "positive" : campaign.status === "paused" ? "warning" : ""}`}>
-            {label(campaign.status)}
-          </span>
-        }
-        lede={
-          <>
-            {actionable} still to invite of {rows.length}
-            {estimate
-              ? ` · about ${estimate.days} working ${estimate.days === 1 ? "day" : "days"} at ${estimate.perDay} a day${
-                  estimate.weeklyLimited ? `, held to ${LINKEDIN_LIMITS.invitesPerWeek} a week` : ""
-                }${
-                  estimate.shared > 0
-                    ? `, longer while ${estimate.shared} other running ${estimate.shared === 1 ? "campaign shares" : "campaigns share"} this account`
-                    : ""
-                }`
-              : ""}
-            {account?.display_name ? ` · sending as ${account.display_name}` : ""}
-            {skipped > 0 ? (
-              <span className="block tiny muted">
-                {skipped} will be skipped at send: {SKIPPED_AT_SEND_REASONS}.
-              </span>
-            ) : null}
-          </>
-        }
-        actions={
-          <>
-          {/*
-            A failed row is not waiting for anything — the loop reads `queued`
-            and nothing else — so without this the only way back is rebuilding
-            the campaign, which spends the invitation allowance again on people
-            who were never actually reached.
-          */}
-          {failed.length > 0 ? (
-            <form action={retryFailed}>
-              <input type="hidden" name="campaignId" value={campaign.id} />
-              <SubmitButton className="btn secondary" pendingLabel="Requeueing…">
-                Retry {failed.length} failed
-              </SubmitButton>
-            </form>
-          ) : null}
-          {running ? (
-            <form action={setStatus}>
-              <input type="hidden" name="campaignId" value={campaign.id} />
-              <input type="hidden" name="status" value="paused" />
-              <SubmitButton className="btn secondary" pendingLabel="Pausing…">
-                Pause
-              </SubmitButton>
-            </form>
-          ) : (
-            /*
-              Launch submits the copy form below (`form="campaign-copy"`), so
-              what launches is what is on screen. It used to be a form of its
-              own with none of those fields in it, and edits made before
-              pressing it were silently discarded. `saveAndLaunch` saves them
-              first, then launches.
-            */
-            <button
-              className="btn"
-              type="submit"
-              form="campaign-copy"
-              formAction={saveAndLaunch}
-              disabled={blockers.length > 0}
-              title={blockers.length > 0 ? "Fix what is listed under Not ready to launch first" : undefined}
-            >
-              Launch campaign
-            </button>
-          )}
-          {/*
-            Proof, on demand. A campaign that has sent nothing is otherwise
-            indistinguishable from one that cannot, and the difference took
-            eight days to establish once.
-          */}
-          {running && queued.length > 0 ? (
-            <form action={sendOneNow}>
-              <input type="hidden" name="campaignId" value={campaign.id} />
-              <SubmitButton className="btn" pendingLabel="Sending…">
-                <NavIcon name="campaigns" className="btn-icon" />
-                Send one now
-              </SubmitButton>
-            </form>
-          ) : null}
-          </>
-        }
-      />
       <PageNotice error={notice.error} notice={notice.notice} />
 
       {/*
@@ -1089,8 +89,7 @@ export default async function CampaignPage({
         whether it is pacing itself, waiting for working hours, or running
         against a worker that is not there — and a rep watching a launch reads
         the top of this page, not the bottom.
-      */}
-      {/*
+
         The pacing strip: the limits colour, because what it reports is the
         guardrails at work. A danger reading keeps the danger notice, since a
         loop that is not sending is not the guardrails, it is a fault.
@@ -1116,66 +115,6 @@ export default async function CampaignPage({
         )
       ) : null}
 
-      {sendingPlan === "basic" && campaign.status !== "archived" ? (
-        <div className="notice" role="note">
-          <strong>Sending from a free LinkedIn account</strong>
-          <p className="small">
-            {notesLeft
-              ? `Invitations carry their note for ${notesLeft} more this month. `
-              : "This month's invitation notes are used, so invitations go out without a note until the month turns. "}
-            LinkedIn lets a free account add a note to only {FREE_NOTES_PER_MONTH} invitations a month, and
-            invitations without one are still sent. Regular LinkedIn search applies job title, location and
-            industry only. <Link href="/app/profile#sales-navigator">Check the LinkedIn plan</Link>
-          </p>
-        </div>
-      ) : null}
-
-      {dropped.length > 0 && sendingPlan === "sales_navigator" ? (
-        // A seat that refused part of the search, or a word with no Sales
-        // Navigator level. Neither is "built without Sales Navigator", and
-        // telling somebody who has it to turn it on is advice they cannot take.
-        <div className="notice">
-          <strong>Some of your customer profile was not applied</strong>
-          <p className="small">
-            This search did not filter on {listInWords(dropped)}. Each person was still scored
-            against the full profile, and the notes below say what changed. Read the names before
-            launching.
-          </p>
-        </div>
-      ) : dropped.length > 0 ? (
-        <div className="notice">
-          <strong>This list was built without Sales Navigator</strong>
-          <p className="small">
-            Classic LinkedIn search cannot filter on {listInWords(dropped)}, so{" "}
-            {dropped.length === 1 ? "that part" : "those parts"} of your customer profile
-            {dropped.length === 1 ? " was" : " were"} not applied. The list was searched by job
-            title, industry and location as far as LinkedIn allowed, and each person was scored
-            against the full profile. The notes below say what else changed. Read the names before
-            launching, and expect more of them to be wrong than usual.
-          </p>
-          <p className="small">
-            <Link href="/app/profile#sales-navigator">Have Sales Navigator? Turn it on</Link> and
-            the next search applies every filter.
-          </p>
-        </div>
-      ) : null}
-
-      {filterNotes.length > 0 ? (
-        <div className="notice">
-          <strong>How your customer profile was searched</strong>
-          <p className="small">
-            LinkedIn searches locations and industries by its own identifiers, not by name, so each
-            one had to be looked up first. Read these before the names below: a term that was left
-            out is a filter this list does not have.
-          </p>
-          <ul className="bullets">
-            {filterNotes.map((note) => (
-              <li key={note}>{note}</li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
-
       {blockers.length > 0 && !running ? (
         <div className="notice danger">
           <strong>Not ready to launch</strong>
@@ -1187,623 +126,183 @@ export default async function CampaignPage({
         </div>
       ) : null}
 
-      {/*
-        The campaign at a glance: where people have got to and the path they
-        are on, beside who is on it. The detail for each of these is further
-        down the page, where it is edited.
-      */}
-      <div className="campaign-grid">
-        <div className="campaign-grid-main">
-          <Section framed id="funnel" title="Campaign funnel">
-            {counts.invited === 0 ? (
-              <p className="small muted">
-                Nothing has been sent yet. Each stage fills in once invitations go out, and only the
-                stages this campaign can reach are shown.
-              </p>
-            ) : (
-              <FunnelChart
-                steps={stagesFor(cta.kind).map((stage) => ({
-                  label: stage.label,
-                  value: counts[stage.key],
-                  hint: stage.label,
-                }))}
-              />
-            )}
-            {ownBookingLink ? <p className="tiny subtle">{EXTERNAL_BOOKINGS_UNCOUNTED}</p> : null}
-          </Section>
-
-          {/*
-            What a prospect actually receives, in order. Drawn rather than
-            dragged: most arrangements a canvas offers are ones this product
-            refuses to send, and a refusal that arrives after the work is worse
-            than never offering it (rule 52). The words are edited in the copy
-            form below; the timings the product owns say so.
-          */}
-          <Section
-            framed
-            id="sequence"
-            title="Sequence"
-            description="Edit the words under What gets sent. The locked timings are product rules."
-          >
-            <SequencePath
-              steps={sequenceFor({
-                warmUp: Boolean(campaign.warm_up),
-                connectionNote: campaign.connection_note,
-                steps: (steps ?? []).map((step) => ({
-                  step_number: step.step_number,
-                  delay_days: step.delay_days,
-                  message: step.message,
-                })),
-              })}
-            />
-          </Section>
+      {sendingPlan === "basic" && campaign.status !== "archived" ? (
+        <div className="notice" role="note">
+          <strong>Sending from a free LinkedIn account</strong>
+          <p className="small">
+            {notesLeft
+              ? `Invitations carry their note for ${notesLeft} more this month. `
+              : "This month's invitation notes are used, so invitations go out without a note until the month turns. "}
+            LinkedIn lets a free account add a note to only{" "}
+            {FREE_NOTES_PER_MONTH} invitations a month, and invitations without
+            one are still sent. Regular LinkedIn search applies job title,
+            location and industry only.{" "}
+            <Link href="/app/profile#sales-navigator">
+              Check the LinkedIn plan
+            </Link>
+          </p>
         </div>
+      ) : null}
 
-        <Section
-          framed
-          id="people"
-          title="Prospects"
-          action={
-            rows.length > 0 ? (
-              <a className="btn ghost small" href="#list">
-                Review all {rows.length}
-              </a>
-            ) : null
-          }
-        >
-          {recent.length === 0 ? (
-            <p className="small muted">Nobody is on this list yet. Nothing is sent until you launch.</p>
+      {/*
+        The campaign at a glance: what happens next beside where people have
+        got to, then who was touched most recently. The detail for each is its
+        own section in the menu, where it is edited.
+      */}
+      <div className="campaign-overview-pair">
+        <Section framed id="next" title="What happens next">
+          <ul className="campaign-facts">
+            <li>
+              <strong className="nums">
+                {actionable} still to invite of {rows.length}
+              </strong>
+              {estimate ? (
+                <span className="small muted">
+                  {" "}
+                  About {estimate.days} working{" "}
+                  {estimate.days === 1 ? "day" : "days"} at {estimate.perDay} a
+                  day
+                  {estimate.weeklyLimited
+                    ? `, held to ${LINKEDIN_LIMITS.invitesPerWeek} a week`
+                    : ""}
+                  {estimate.shared > 0
+                    ? `, longer while ${estimate.shared} other running ${estimate.shared === 1 ? "campaign shares" : "campaigns share"} this account`
+                    : ""}
+                  .
+                </span>
+              ) : null}
+              {skipped > 0 ? (
+                <span className="block tiny muted">
+                  {skipped} will be skipped at send: {SKIPPED_AT_SEND_REASONS}.
+                </span>
+              ) : null}
+            </li>
+            <li>
+              <span className="small">
+                Each invitation carries a note written for that person, then{" "}
+                {steps.length}{" "}
+                {steps.length === 1 ? "message follows" : "messages follow"}{" "}
+                once they accept.
+              </span>{" "}
+              <Link href={sectionHref(campaign.id, "follow-ups")}>
+                <span className="small">See the messages</span>
+              </Link>
+            </li>
+            <li>
+              <span className="small">
+                It asks for: <strong>{cta.label || CTA_DEFINITIONS[cta.kind].label}</strong>.
+              </span>{" "}
+              <Link href={sectionHref(campaign.id, "goal")}>
+                <span className="small">Change it</span>
+              </Link>
+            </li>
+            {campaign.status === "draft" ? (
+              <li>
+                <span className="small">
+                  Nothing is sent until you press Launch. Read every name and
+                  note on People first.
+                </span>{" "}
+                <Link href={sectionHref(campaign.id, "people")}>
+                  <span className="small">Review the list</span>
+                </Link>
+              </li>
+            ) : null}
+          </ul>
+        </Section>
+
+        <Section framed id="funnel" title="Campaign funnel">
+          {counts.invited === 0 ? (
+            <p className="small muted">
+              Nothing has been sent yet. Each stage fills in once invitations go
+              out, and only the stages this campaign can reach are shown.
+            </p>
           ) : (
-            <div className="table-scroll table-flush">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Prospect</th>
-                    <th>Company</th>
-                    <th>Stage</th>
-                    <th>Last touch</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recent.map(({ row, prospect, touched }) => {
-                    const name =
-                      [prospect.first_name, prospect.last_name].filter(Boolean).join(" ") || "Unnamed";
-                    return (
-                      <tr key={row.id}>
-                        <td data-label="Prospect">
-                          <span className="prospect-who">
-                            <span className="prospect-initials" aria-hidden="true">
-                              {initialsOf(name)}
-                            </span>
-                            <span className="strongish">{name}</span>
-                          </span>
-                        </td>
-                        <td data-label="Company" className="muted prospect-company">{prospect.company ?? ""}</td>
-                        <td data-label="Stage">
-                          <span className={`pill plain tiny ${stageTone(row.status)}`}>{label(row.status)}</span>
-                        </td>
-                        <td data-label="Last touch" className="muted nums">
-                          {touched ? (
-                            <time dateTime={isoAttr(touched)}>{formatDate(touched, viewerTimezone)}</time>
-                          ) : (
-                            "Not yet"
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <FunnelChart
+              steps={stagesFor(cta.kind).map((stage) => ({
+                label: stage.label,
+                value: counts[stage.key],
+                hint: stage.label,
+              }))}
+            />
           )}
+          {ownBookingLink ? <p className="tiny subtle">{EXTERNAL_BOOKINGS_UNCOUNTED}</p> : null}
         </Section>
       </div>
 
-      <section className="card">
-        <p className="small">
-          <strong>This campaign asks for: {CTA_DEFINITIONS[cta.kind].label}</strong>
-          {cta.label ? `: “${cta.label}”` : ""}
-        </p>
-        <p className="tiny subtle">
-          Judged on {CTA_DEFINITIONS[cta.kind].conversion}.
-          {cta.kind === "link" ? ` ${CLICKS_ARE_INVISIBLE}` : ""}
-        </p>
-        {cta.url ? (
-          <p className="tiny subtle">
-            Sends to{" "}
-            <a href={cta.url} target="_blank" rel="noreferrer noopener">
-              {cta.url}
-            </a>
-            {cta.fromLibrary
-              ? ". Changing it on the Calls to action page changes it here."
-              : ". Carried on this campaign, set when it was built."}
+      <Section
+        framed
+        id="recent"
+        title="Latest activity"
+        action={
+          rows.length > 0 ? (
+            <Link
+              className="btn ghost small"
+              href={sectionHref(campaign.id, "people")}
+            >
+              Review all {rows.length}
+            </Link>
+          ) : null
+        }
+      >
+        {recent.length === 0 ? (
+          <p className="small muted">
+            Nobody is on this list yet. Nothing is sent until you launch.
           </p>
-        ) : cta.kind === "meeting" ? (
-          // The same choice the worker makes when it fills {{cta_link}}.
-          <p className="tiny subtle">
-            {bookingUrl ? (
-              <>
-                Sends your scheduling link,{" "}
-                <a href={bookingUrl} target="_blank" rel="noreferrer noopener">
-                  {bookingUrl}
-                </a>
-                . Change it on your profile.
-              </>
-            ) : (
-              "Sends each person their own link to your Nora booking page. Add your own scheduling link on your profile to send that instead."
-            )}
-          </p>
-        ) : ctaMissing ? (
-          <p className="tiny subtle">
-            The copy carries {CTA_PLACEHOLDER} and this campaign has no destination to put there, so
-            those messages are held until it has one. Pick a saved call to action below, or{" "}
-            <Link href="/app/cta">save one</Link>.
-          </p>
-        ) : null}
-
-        {/* The picker. Without it the library was a page that did nothing:
-            destinations could be named and no campaign could use one. */}
-        {ctaLibrary?.length ? (
-          <form action={setCampaignCta} className="form-row">
-            <input type="hidden" name="campaignId" value={campaign.id} />
-            <label className="field grow">
-              <span className="tiny">Use a saved call to action</span>
-              <select name="ctaId" defaultValue={campaign.cta_id ?? ""}>
-                <option value="">This campaign&rsquo;s own destination</option>
-                {ctaLibrary.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.name} ({CTA_DEFINITIONS[option.kind].label})
-                  </option>
-                ))}
-              </select>
-            </label>
-            <SubmitButton className="btn secondary small" pendingLabel="Saving…">
-              Use this
-            </SubmitButton>
-          </form>
         ) : (
-          <p className="tiny subtle">
-            <Link href="/app/cta">Save a call to action</Link> and every campaign can point at it,
-            so correcting a URL once corrects it everywhere.
-          </p>
-        )}
-      </section>
-
-      <Section id="copy" title="What gets sent">
-      <form action={saveCampaign} id="campaign-copy">
-        <input type="hidden" name="campaignId" value={campaign.id} />
-
-        <div className="card">
-          <p className="small muted">
-            {"Read all of it. {{first_name}}, {{company}}, {{title}} and {{rep_name}} are filled in per person; anything else stays literal."}
-            {running ? " Edits apply to everyone who has not been reached yet." : ""}
-          </p>
-
-          <label className="inline-check">
-            <input type="checkbox" name="warm_up" defaultChecked={campaign.warm_up} />
-            <span>Look at each profile a few hours before inviting</span>
-          </label>
-          <p className="tiny subtle">
-            LinkedIn tells them who viewed their profile, so the request reaches a name they have
-            already seen. Its own daily allowance, never taken from your invitations, and it keeps
-            running while LinkedIn is holding invitations back.
-          </p>
-
-          {(agents ?? []).length > 0 ? (
-            <label className="field">
-              <span>Written by</span>
-              <select name="agentId" defaultValue={campaign.agent_id ?? ""}>
-                <option value="">No agent, the workspace&rsquo;s own copy</option>
-                {(agents ?? []).map((agent) => (
-                  <option key={agent.id} value={agent.id}>
-                    {agent.name}
-                    {agent.is_default ? " (default)" : ""}
-                  </option>
-                ))}
-              </select>
-              <span className="small muted">
-                The agent carries the openers, the offer and the voice. Changing it here does not
-                rewrite the notes below. Press Rewrite notes for that.
-              </span>
-            </label>
-          ) : null}
-
-          <label className="field">
-            <span>
-              Connection request · at most {INVITE_NOTE_MAX_CHARS} characters
-            </span>
-            <textarea
-              name="connectionNote"
-              rows={3}
-              defaultValue={campaign.connection_note}
-              maxLength={INVITE_NOTE_MAX_CHARS}
-            />
-          </label>
-
-          {(steps ?? []).map((step) => (
-            <label className="field" key={step.id}>
-              <span>
-                Follow-up {step.step_number} ·{" "}
-                {/* Step 1 has no previous message — what precedes it is the
-                    acceptance, and it is sent inside the hour (rule 43). Saying
-                    "0 days after the previous message" described neither. */}
-                {step.step_number === 1
-                  ? FIRST_STEP_TIMING_LABEL
-                  : `${step.delay_days} ${step.delay_days === 1 ? "day" : "days"} after the previous message`}
-              </span>
-              <textarea name={`step-${step.id}`} rows={3} defaultValue={step.message} />
-            </label>
-          ))}
-
-          <div className="form-row">
-            <label className="field compact-wide">
-              <span>Invites a day</span>
-              <input
-                type="number"
-                name="dailyInviteCap"
-                min={1}
-                max={LINKEDIN_LIMITS.invitesPerDayMax}
-                defaultValue={campaign.daily_invite_cap}
-              />
-              <span className="hint">
-                Campaigns on one LinkedIn account share its daily and weekly limits.
-              </span>
-            </label>
-            <label className="field compact-wide">
-              <span>Replies</span>
-              <select name="replyMode" defaultValue={campaign.reply_mode}>
-                <option value="approval">Hold for my approval</option>
-                <option value="autopilot">Send clean replies for me</option>
-              </select>
-            </label>
-            <SubmitButton className="btn secondary" pendingLabel="Saving…">
-              Save
-            </SubmitButton>
-          </div>
-          <p className="small muted">
-            {campaign.reply_mode === "approval"
-              ? "Every reply waits for you before it is sent."
-              : autonomous
-                ? "Your rules let the agent answer pricing, legal and negative replies itself."
-                : "Pricing, legal and anything negative always wait for a person."}{" "}
-            {alwaysHoldsSentence()}{" "}
-            The ceiling of {LINKEDIN_LIMITS.invitesPerDayMax} a day is a safety limit, not a preference.
-            {running ? "" : " Launch campaign saves anything changed here first."}
-          </p>
-          {planNote ? <p className="small muted">{planNote}</p> : null}
-        </div>
-      </form>
-      </Section>
-
-      {variantStandings.length > 0 ? (
-        <Section
-          title="Angles being tested"
-          action={
-            <p className="tiny subtle">
-              {readyToCompare
-                ? "Enough sent to compare."
-                : `Too early to compare. Each angle needs ${MIN_SENDS_TO_COMPARE} invitations.`}
-            </p>
-          }
-        >
-
-          {/*
-            The variable under test is the angle, not the words. Every prospect
-            already receives a note written from their own headline and company,
-            so a test of literal text would be comparing one-off sentences.
-          */}
-          <div className="table-scroll card-rows">
+          <div className="table-scroll table-flush card-rows">
             <table>
               <thead>
                 <tr>
-                  <th>Angle</th>
-                  <th>Pain it names</th>
-                  <th className="num">Sent</th>
-                  <th className="num">Accepted</th>
-                  <th className="num">Replied</th>
+                  <th>Prospect</th>
+                  <th>Company</th>
+                  <th>Stage</th>
+                  <th>Last touch</th>
                 </tr>
               </thead>
               <tbody>
-                {variantStandings.map((standing) => {
-                  const variant = (variantRows ?? []).find((v) => v.id === standing.id);
+                {recent.map(({ row, prospect, touched }) => {
+                  const name = nameOf(prospect);
                   return (
-                    <tr key={standing.id}>
-                      <td data-label="Angle">
-                        <strong>{standing.name}</strong>
-                        {!variant?.enabled ? (
-                          <>
-                            {" "}
-                            <span className="pill">retired</span>
-                          </>
-                        ) : null}
-                        <span className="tiny subtle block">{variant?.angle}</span>
+                    <tr key={row.id}>
+                      <td data-label="Prospect">
+                        <span className="prospect-who">
+                          <span
+                            className="prospect-initials"
+                            aria-hidden="true"
+                          >
+                            {initialsOf(name)}
+                          </span>
+                          <span className="strongish">{name}</span>
+                        </span>
                       </td>
-                      <td data-label="Pain it names" className="small muted">{variant?.pain_point ?? "Not named"}</td>
-                      <td data-label="Sent" className="num">{standing.sent}</td>
-                      <td data-label="Accepted" className="num">
-                        {standing.accepted}
-                        {/*
-                          The rate is only shown once there is enough behind it
-                          to mean anything. Three acceptances from four
-                          invitations reads as 75% and is worth almost nothing —
-                          and a rep who kills the better angle on that has lost
-                          more than the test could ever have won.
-                        */}
-                        {standing.sent >= MIN_SENDS_TO_COMPARE && standing.acceptanceRate !== null ? (
-                          <span className="tiny subtle block">
-                            {Math.round(standing.acceptanceRate * 100)}% ({Math.round(standing.low * 100)}
-                            {" to "}
-                            {Math.round(standing.high * 100)}%)
-                          </span>
+                      <td
+                        data-label="Company"
+                        className="muted prospect-company"
+                      >
+                        {prospect.company ?? ""}
+                      </td>
+                      <td data-label="Stage">
+                        <span
+                          className={`pill plain tiny ${stageTone(row.status)}`}
+                        >
+                          {label(row.status)}
+                        </span>
+                      </td>
+                      <td data-label="Last touch" className="muted nums">
+                        {touched ? (
+                          <time dateTime={isoAttr(touched)} title={formatDate(touched, viewerTimezone)}>
+                            {formatWhen(touched, viewerTimezone)}
+                          </time>
                         ) : (
-                          <span className="tiny subtle block">
-                            {standing.sent === 0 ? "not sent yet" : "too few to rate"}
-                          </span>
+                          "Not yet"
                         )}
                       </td>
-                      <td data-label="Replied" className="num">{standing.replied}</td>
                     </tr>
                   );
                 })}
               </tbody>
             </table>
           </div>
-
-          <p className="tiny subtle">
-            {readyToCompare && variantStandings.some((standing) => !standing.leading)
-              ? "The ranges are the spread the true rate plausibly sits in. An angle is only called behind when its whole range sits below another's."
-              : "Every angle here is still level: none of their ranges separate yet, which is the correct reading of a test this young."}
-          </p>
-        </Section>
-      ) : null}
-
-      <Section
-        id="list"
-        title="Who is on the list"
-        description={fitCutoffSentence()}
-        action={
-          <p className="tiny subtle">
-            {rows.length} {rows.length === 1 ? "person" : "people"}
-          </p>
-        }
-      >
-        {onTemplate > 0 ? (
-          <div className="notice">
-            <strong>
-              {onTemplate} of {rows.length} {onTemplate === 1 ? "person is" : "people are"} getting
-              the campaign&rsquo;s generic note.
-            </strong>
-            <p className="small">
-              The writer came back without a note for{" "}
-              {onTemplate === 1 ? "this person" : "these people"}, so they fall back to the template with their first name filled in, which works and reads
-              like everyone else&rsquo;s. Each one is marked below. You can write{" "}
-              {onTemplate === 1 ? "it" : "them"} yourself before launching, or launch as it is.
-            </p>
-          </div>
-        ) : null}
-
-        {searchNotice ? (
-          <div className={searchNotice.tone === "danger" ? "notice danger" : "notice"}>
-            <strong>{searchNotice.title}</strong>
-            <p className="small">{searchNotice.body}</p>
-          </div>
-        ) : null}
-
-        {/*
-          One list grown a page at a time, rather than a new campaign per page.
-          Everyone already on it is excluded from the next read, so the list
-          only ever gets longer and nobody appears on it twice.
-        */}
-        {/*
-          `className="between card"` here was the invitation form's bug again.
-          `.card` declares `flex-direction: column` and `.between` declares
-          `row`; both are one class, so source order decides and `.card` is
-          written later — the row never happened and the button sat under the
-          text instead of opposite it. A card is the surface and `between` is
-          the arrangement inside it, so they go on different elements.
-        */}
-        <form action={findMore} className="card">
-          <div className="between">
-            <div>
-            <p className="small">
-              <strong>Need more people?</strong>
-              {campaign.searched_at && !searchNotice ? (
-                <span className="muted">
-                  {" "}Last read{" "}
-                  <time dateTime={isoAttr(campaign.searched_at)}>
-                    {formatDate(campaign.searched_at, viewerTimezone)}
-                  </time>
-                  .
-                </span>
-              ) : null}
-            </p>
-            <p className="tiny subtle">
-              {campaign.search_exhausted
-                ? "LinkedIn has no more profiles matching this customer profile. Widen the profile on the Strategy page to reach more people."
-                : !campaign.customer_profile_id
-                  ? "The customer profile this list was built from has been deleted, so there is nothing left to search for."
-                  : `Reads the next ${FIND_MORE_BATCH} profiles from where this search stopped and adds whoever is new. Everyone already on your prospect list is skipped, so nobody is contacted twice.`}
-            </p>
-            </div>
-            <input type="hidden" name="campaignId" value={campaign.id} />
-            <SubmitButton
-              className="btn ghost"
-              pendingLabel="Searching…"
-              disabled={campaign.search_exhausted || !campaign.customer_profile_id}
-            >
-              Find {FIND_MORE_BATCH} more
-            </SubmitButton>
-          </div>
-        </form>
-
-        {/*
-          The way back to the copy. Without it the agent is a settings page
-          that changes nothing for anybody who already has a campaign: the
-          openers are fixed, the notes on this page stay as they were written,
-          and the only other route is editing every one of them by hand.
-        */}
-        <form action={rewriteNotes} className="card">
-          <div className="between">
-            <div>
-              <p className="small">
-                <strong>Rewrite the notes with your agent</strong>
-              </p>
-              <p className="tiny subtle">
-                Writes a new note for everybody still waiting to be invited, using whatever your
-                agent&rsquo;s openers say now. People already invited keep the note they were
-                actually sent.
-              </p>
-            </div>
-            <input type="hidden" name="campaignId" value={campaign.id} />
-            <SubmitButton className="btn ghost" pendingLabel="Writing…">
-              Rewrite notes
-            </SubmitButton>
-          </div>
-        </form>
-
-        {rows.length === 0 ? (
-          <Empty title="Nobody is on this list yet.">
-            {campaign.customer_profile_id && !campaign.search_exhausted
-              ? `Press Find ${FIND_MORE_BATCH} more above to read the next page of the search.`
-              : "People appear here when a search finds them. Nothing is sent until you launch."}
-          </Empty>
-        ) : (
-          <ul className="prospect-list">
-            {rows.map((row) => {
-              const prospect = row.prospects as unknown as {
-                id: string;
-                first_name: string | null;
-                last_name: string | null;
-                headline: string | null;
-                title: string | null;
-                company: string | null;
-                location: string | null;
-                linkedin_url: string;
-                fit_score: number | null;
-                fit_reasons: string[] | null;
-              } | null;
-              if (!prospect) return null;
-
-              const name = [prospect.first_name, prospect.last_name].filter(Boolean).join(" ") || "Unnamed";
-              const grounding = (row.invite_note_grounding ?? []) as string[];
-              const queued = row.status === "queued";
-
-              return (
-                <li key={row.id} className="card prospect-card">
-                  <div className="between">
-                    <div className="stack-1 grow">
-                      <div className="cluster">
-                        <a
-                          href={profileHref(prospect.linkedin_url) ?? undefined}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          <strong>{name}</strong>
-                        </a>
-                        {prospect.fit_score !== null ? (
-                          <span className="pill plain tiny nums">fit {prospect.fit_score}</span>
-                        ) : null}
-                        <span className={`pill tiny ${row.status === "meeting_booked" ? "positive" : "plain"}`}>
-                          {label(row.status)}
-                        </span>
-                      </div>
-                      <p className="small muted">
-                        {prospect.title ?? prospect.headline ?? "No title given"}
-                        {prospect.company ? ` · ${prospect.company}` : ""}
-                        {prospect.location ? ` · ${prospect.location}` : ""}
-                      </p>
-                    </div>
-                    {queued ? (
-                      <form action={removeFromCampaign}>
-                        <input type="hidden" name="campaignProspectId" value={row.id} />
-                        <input type="hidden" name="campaignId" value={campaign.id} />
-                        <input type="hidden" name="prospectName" value={name} />
-                        {/* Two presses: a removed person is closed on this
-                            campaign and is never put back on it. */}
-                        <ConfirmButton
-                          className="btn ghost small"
-                          confirmLabel="Remove for good"
-                          pendingLabel="Removing…"
-                        >
-                          Remove<span className="sr-only"> {name}</span>
-                        </ConfirmButton>
-                      </form>
-                    ) : null}
-                  </div>
-
-                  {prospect.fit_reasons?.length ? (
-                    <div className="stack-1">
-                      <p className="tiny subtle">Why this person</p>
-                      <ul className="bullets small muted">
-                        {prospect.fit_reasons.map((reason) => (
-                          <li key={reason}>{reason}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  ) : null}
-
-                  {/* What this person actually receives. Until notes existed
-                      everyone in a campaign got identical words, and this is
-                      the screen where that is now visible before it is sent. */}
-                  <div className="stack-2">
-                    <div className="cluster">
-                      <p className="tiny subtle">Their connection note</p>
-                      {row.invite_note_edited ? (
-                        <span className="pill plain tiny">edited by you</span>
-                      ) : row.invite_note_thin ? (
-                        <span className="pill warning tiny">too little to go on</span>
-                      ) : !row.invite_note ? (
-                        <span className="pill warning tiny">campaign template</span>
-                      ) : null}
-                    </div>
-
-                    {queued ? (
-                      <form action={saveInviteNote} className="stack-2">
-                        <input type="hidden" name="campaignProspectId" value={row.id} />
-                        <input type="hidden" name="campaignId" value={campaign.id} />
-                        <input type="hidden" name="prospectName" value={name} />
-                        <label className="field">
-                          <span className="sr-only">Connection note for {name}</span>
-                          <textarea
-                            name="note"
-                            rows={3}
-                            maxLength={INVITE_NOTE_MAX_CHARS}
-                            defaultValue={row.invite_note ?? ""}
-                            placeholder={campaign.connection_note}
-                          />
-                        </label>
-                        <div className="between">
-                          {/* A static "120/200" read like a live counter and
-                              never moved as somebody typed; the limit is what
-                              matters, and the field enforces it. */}
-                          <p className="tiny subtle">
-                            Up to {INVITE_NOTE_MAX_CHARS} characters. Empty sends the campaign template.
-                          </p>
-                          <SubmitButton className="btn secondary small" pendingLabel="Saving…">
-                            Save note
-                          </SubmitButton>
-                        </div>
-                      </form>
-                    ) : (
-                      <blockquote className="quote small">{row.invite_note ?? campaign.connection_note}</blockquote>
-                    )}
-
-                    {grounding.length ? (
-                      <p className="tiny subtle">
-                        Grounded in: {grounding.join(" · ")}
-                      </p>
-                    ) : row.invite_note && !row.invite_note_edited ? (
-                      <p className="tiny warning-text">
-                        Nothing specific to this person. This note could have gone to anybody.
-                      </p>
-                    ) : null}
-                  </div>
-
-                  {row.status_reason ? <p className="tiny muted">{plainReason(row.status_reason)}</p> : null}
-                </li>
-              );
-            })}
-          </ul>
         )}
       </Section>
     </>
@@ -1813,7 +312,12 @@ export default async function CampaignPage({
 /** Two letters for a prospect's mark, never an empty circle. */
 function initialsOf(name: string): string {
   const parts = name.split(/\s+/).filter(Boolean);
-  return (parts.slice(0, 2).map((part) => part[0]!).join("") || "?").toUpperCase();
+  return (
+    parts
+      .slice(0, 2)
+      .map((part) => part[0]!)
+      .join("") || "?"
+  ).toUpperCase();
 }
 
 /**
@@ -1821,7 +325,12 @@ function initialsOf(name: string): string {
  * the stage's own word, so it never rests on colour alone.
  */
 function stageTone(status: string): string {
-  if (status === "accepted" || status === "positive" || status === "meeting_booked") return "positive";
+  if (
+    status === "accepted" ||
+    status === "positive" ||
+    status === "meeting_booked"
+  )
+    return "positive";
   if (status === "replied" || status.startsWith("messaged")) return "accent";
   if (status === "failed" || status === "opted_out") return "danger";
   return "";

@@ -122,9 +122,9 @@ export default async function ExclusionsPage({
   return (
     <>
       <PageHeader
-        eyebrow="Settings"
+        eyebrow="Setup"
         title="Do not contact"
-        lede="Accounts and people nobody in this workspace contacts. Checked when a campaign is built and again immediately before every send, so adding a company here stops the invitations already queued against it."
+        lede="Companies and people Nora will never contact. It checks this list right before every message, so adding someone here also stops invitations already waiting to go."
       />
       <PageNotice error={params.error} notice={params.notice} />
 
@@ -147,8 +147,10 @@ export default async function ExclusionsPage({
               </label>
               <label className="field">
                 <span>Company name, or a person&rsquo;s profile address</span>
-                <input name="value" required placeholder="Acme Corp." autoComplete="off" spellCheck={false} />
-                <span className="hint">A person needs their LinkedIn address, like linkedin.com/in/jane-doe.</span>
+                {/* The person's-address hint lives under the row: a hint under
+                    one field of an inline row pushed its label above the
+                    others. */}
+                <input name="value" required placeholder="Acme Corp. or linkedin.com/in/jane-doe…" autoComplete="off" spellCheck={false} />
               </label>
               <label className="field">
                 <span>Why (optional)</span>
@@ -156,6 +158,7 @@ export default async function ExclusionsPage({
               </label>
               <SubmitButton pendingLabel="Adding…">Add</SubmitButton>
             </form>
+            <p className="tiny subtle">For a person, paste their LinkedIn address, like linkedin.com/in/jane-doe.</p>
           </div>
         </Section>
       ) : null}
