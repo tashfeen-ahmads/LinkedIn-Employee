@@ -21,6 +21,7 @@ const ICON: Record<NeedsYouKind, string> = {
   thin_notes: "posts",
   cta_missing: "cta",
   setup_unfinished: "campaigns",
+  posts_unapproved: "posts",
 };
 
 /**

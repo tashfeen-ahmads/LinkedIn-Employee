@@ -104,7 +104,8 @@ export type NeedsYouKind =
   | "campaign_unlaunched"
   | "thin_notes"
   | "cta_missing"
-  | "setup_unfinished";
+  | "setup_unfinished"
+  | "posts_unapproved";
 
 export interface NeedsYouItem {
   kind: NeedsYouKind;
@@ -191,6 +192,12 @@ export interface NeedsYouFacts {
   campaignsMissingCta: number;
   /** Nothing in the workspace has launched yet (rule 65). */
   setupUnfinished?: boolean;
+  /**
+   * Posts written for the reader's own profile that nobody has read yet
+   * (rule 69). The weekly writer adds them unasked, so without a row here a
+   * week's posts would wait on a page nobody had a reason to open.
+   */
+  postsWaiting?: number;
 }
 
 function plural(n: number, one: string, many = `${one}s`): string {
@@ -452,6 +459,21 @@ export function needsYou(facts: NeedsYouFacts): NeedsYouItem[] {
       action: "Review and launch",
       tone: "warning",
       count: facts.campaignsUnlaunched,
+    });
+  }
+
+  // Last: a post waiting stops no conversation, and nothing goes on the
+  // profile until it is approved.
+  if ((facts.postsWaiting ?? 0) > 0) {
+    const n = facts.postsWaiting!;
+    items.push({
+      kind: "posts_unapproved",
+      title: `${plural(n, "post")} for your profile ${isare(n)} written and waiting for you.`,
+      why: "Useful posts for the people you reach, with a picture each. Nothing goes on your profile until you approve it.",
+      href: "/app/profile/activity/posts",
+      action: "Read the posts",
+      tone: "warning",
+      count: n,
     });
   }
 

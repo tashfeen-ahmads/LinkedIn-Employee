@@ -168,3 +168,29 @@ export function fallbackGraphicHeadline(body: string): string | null {
   const sentence = /^(.+?[.!?])(\s|$)/.exec(first)?.[1] ?? first;
   return sentence && graphicHeadlineProblems(sentence).length === 0 ? sentence : null;
 }
+
+/*
+ * A post that sells, or reads as software.
+ *
+ * Posts are organic content for the audience's industry (rule 69). The prompt
+ * says so, and `callStructured` casts rather than parses, so the lines that
+ * turn a helpful post into an advert are checked here: talking about what we
+ * do, a call to action, engagement bait, emoji and dashes.
+ */
+const POST_PITCH = [
+  /\b(we|i) (help|work with|partner with|specialise in|specialize in)\b/i,
+  /\bour (clients?|customers?|platform|product|service|services|solution|tool|team|agency|firm)\b/i,
+  /\b(book|schedule|grab|hop on) (a|an|your) (call|demo|meeting|consultation)\b/i,
+  /\b(dm|message) me\b|\blink in (the )?(comments|bio)\b|\breach out\b|\bsign up\b|\bfree trial\b/i,
+  /\bcomment (yes|below|["'])|\blet me know (below|in the comments)\b|\b(thoughts|agree)\?\s*$/im,
+];
+
+export function postProblems(body: string): string[] {
+  const problems: string[] = [];
+  if (POST_PITCH.some((pattern) => pattern.test(body))) {
+    problems.push("It pitches or asks for something. A post is useful content for the reader's industry, never an advert.");
+  }
+  if (/\p{Extended_Pictographic}/u.test(body)) problems.push("It has an emoji.");
+  if (/[–—]/.test(body)) problems.push("It has a dash.");
+  return problems;
+}

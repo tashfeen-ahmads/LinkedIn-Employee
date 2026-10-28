@@ -2,14 +2,20 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { parseWorkingHours } from "@le/linkedin";
 import {
-  GRAPHIC_HEADLINE_MAX_CHARS,
   POST_MAX_CHARS,
+  VISUAL_KINDS,
+  VISUAL_KIND_LABEL,
   describeWorkingHours,
   extractLinks,
-  graphicHeadlineProblems,
   isGraphicStyle,
   mayPublish,
+  readVisual,
+  visualFromLines,
+  visualProblems,
+  visualSpec,
+  visualToLines,
   type GraphicStyle,
+  type VisualKind,
 } from "@le/shared";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
@@ -61,22 +67,55 @@ const STYLE_LABEL: Record<GraphicStyle, string> = {
   dark: "Dark, with your colour as the accent",
 };
 
+/** What kind of post each one is, said on its card. */
+const FORMAT_LABEL: Record<string, string> = {
+  industry_update: "This week in your industry",
+  how_to: "How to",
+  myth_vs_fact: "Myth vs fact",
+  checklist: "Checklist",
+  insight: "Insight",
+  story: "From the field",
+};
+
+/** What the lines box takes, for each kind of picture. */
+const LINES_HINT: Record<VisualKind, string> = {
+  steps: "One step per line, 3 to 5. Add a short detail after a colon: “Reply the same day: before they call someone else”.",
+  checklist: "One item per line, 3 to 5. Add a short detail after a colon.",
+  flow: "One link in the chain per line, 3 or 4, in order. The last one is the result.",
+  compare: "First line the two headings, split by |, like “Myth | Fact”. Then one line per row: “point on the left | point on the right”.",
+  stat: "One line: the number, then | and what it measures, like “41% | of calls come in after five”. The number must be in the post.",
+  quote: "No lines needed. The title is the line that is framed.",
+};
+
 /**
- * The graphic's settings as the form posted them, or null for a form that
- * does not carry them. A headline is checked here as well as by the writer,
- * because this box is typed into by a person.
+ * The picture's settings as the form posted them, or null for a form that
+ * does not carry them. Checked against the post here as well as by the
+ * writer, because these boxes are typed into by a person: every number on the
+ * picture has to be one the post states (`visualProblems`).
  */
-function graphicFromForm(formData: FormData) {
+function graphicFromForm(formData: FormData, body: string) {
   if (!formData.has("graphic_fields")) return null;
   const enabled = formData.get("graphic_enabled") === "on";
-  const headline = String(formData.get("graphic_headline") ?? "").trim() || null;
+  const kindField = String(formData.get("graphic_kind") ?? "");
+  const kind: VisualKind = (VISUAL_KINDS as readonly string[]).includes(kindField) ? (kindField as VisualKind) : "quote";
+  const visual = visualFromLines(
+    kind,
+    String(formData.get("graphic_headline") ?? ""),
+    String(formData.get("graphic_lines") ?? ""),
+  );
   const styleField = formData.get("graphic_style");
   const style: GraphicStyle = isGraphicStyle(styleField) ? styleField : "brand";
-  if (enabled && headline) {
-    const problems = graphicHeadlineProblems(headline);
+  if (enabled) {
+    if (!visual.title) redirect(errorQuery(HERE, "Give the picture a title, or untick “Post with a graphic”."));
+    const problems = visualProblems(visual, body);
     if (problems.length) redirect(errorQuery(HERE, problems[0]!));
   }
-  return { graphic_enabled: enabled, graphic_headline: headline, graphic_style: style };
+  return {
+    graphic_enabled: enabled,
+    graphic_headline: visual.title || null,
+    graphic_spec: visualSpec(visual) as never,
+    graphic_style: style,
+  };
 }
 
 /** Ask the agent for a set of drafts, or for a revision of the ones on screen. */
@@ -138,7 +177,7 @@ async function saveEdit(formData: FormData) {
     // `facts_used` is cleared on purpose: the grounding named what the *agent*
     // wrote, and it is no longer a description of these words. Left in place it
     // would be a set of citations for a paragraph nobody checked them against.
-    .update({ body, facts_used: [] as never, ...(graphicFromForm(formData) ?? {}) })
+    .update({ body, facts_used: [] as never, ...(graphicFromForm(formData, body) ?? {}) })
     .eq("id", id)
     .eq("workspace_id", session.workspaceId)
     // Only the rep's own posts, which is all this screen lists: a post goes out
@@ -219,12 +258,13 @@ async function approve(formData: FormData) {
   if (saveError) redirect(errorQuery(HERE, "That did not save. Please try again."));
 
   /*
-   * The graphic: saved as the form has it, then drawn and stored exactly as
+   * The picture: saved as the form has it, then drawn and stored exactly as
    * it will go out. An approval is a statement about what will appear, the
    * picture included, so what is stored here is what the sweep attaches, and
-   * the approval below is conditional on the settings it was drawn from.
+   * the approval below is conditional on the row being the one it was drawn
+   * from.
    */
-  const graphic = graphicFromForm(formData);
+  const graphic = graphicFromForm(formData, body);
   if (graphic) {
     const { error: graphicError } = await supabase
       .from("linkedin_posts")
@@ -237,24 +277,25 @@ async function approve(formData: FormData) {
   }
   const { data: current } = await supabase
     .from("linkedin_posts")
-    .select("graphic_enabled, graphic_headline, graphic_style")
+    .select("body, updated_at, format, graphic_enabled, graphic_headline, graphic_spec, graphic_style")
     .eq("id", id)
     .eq("workspace_id", session.workspaceId)
     .eq("user_id", session.userId)
     .maybeSingle();
   if (!current) redirect(errorQuery(HERE, "That post could not be read. Reload the page and try again."));
   if (current.graphic_enabled) {
-    const headline = current.graphic_headline?.trim() ?? "";
-    if (!headline) {
-      redirect(errorQuery(HERE, "Write a headline for the graphic, or untick “Post with a graphic”."));
+    const visual = readVisual(current.graphic_headline, current.graphic_spec);
+    if (!visual) {
+      redirect(errorQuery(HERE, "Give the picture a title, or untick “Post with a graphic”."));
     }
-    const problems = graphicHeadlineProblems(headline);
+    const problems = visualProblems(visual, current.body);
     if (problems.length) redirect(errorQuery(HERE, problems[0]!));
     const context = await loadGraphicContext(supabase, session);
     const png = await (
       await drawPostGraphic({
-        headline,
+        visual,
         style: isGraphicStyle(current.graphic_style) ? current.graphic_style : "brand",
+        format: current.format,
         ...context,
       })
     ).arrayBuffer();
@@ -264,7 +305,7 @@ async function approve(formData: FormData) {
     if (storeError) redirect(errorQuery(HERE, "The graphic could not be saved. Please try again."));
   }
 
-  let approval = supabase
+  const { error, data } = await supabase
     .from("linkedin_posts")
     .update({
       status: "approved",
@@ -281,13 +322,10 @@ async function approve(formData: FormData) {
     // re-approving it would queue a second copy of the same post.
     .in("status", ["draft", "failed"])
     .eq("body", body)
-    // And the picture as it was drawn a moment ago.
-    .eq("graphic_enabled", current.graphic_enabled)
-    .eq("graphic_style", current.graphic_style);
-  approval = current.graphic_headline === null
-    ? approval.is("graphic_headline", null)
-    : approval.eq("graphic_headline", current.graphic_headline);
-  const { error, data } = await approval.select("id");
+    // And the row exactly as the picture was drawn from it a moment ago: any
+    // write since moves `updated_at` (the touch trigger), whatever it changed.
+    .eq("updated_at", current.updated_at)
+    .select("id");
 
   if (error) redirect(errorQuery(HERE, "That did not save. Please try again."));
   if (!data?.length) {
@@ -394,7 +432,9 @@ type PostRow = {
   updated_at: string;
   graphic_enabled: boolean;
   graphic_headline: string | null;
+  graphic_spec: unknown;
   graphic_style: string;
+  format: string | null;
 };
 
 /**
@@ -430,8 +470,8 @@ function GraphicPreview({ row, stored }: { row: PostRow; stored: boolean }) {
   if (!row.graphic_enabled) return null;
   if (row.approved_at || row.status === "published") {
     if (!stored) return null;
-  } else if (!row.graphic_headline?.trim()) {
-    return <div className="post-graphic-empty small muted">No headline yet, so no graphic. Write one below.</div>;
+  } else if (!readVisual(row.graphic_headline, row.graphic_spec)) {
+    return <div className="post-graphic-empty small muted">No title yet, so no picture. Write one beside this.</div>;
   }
   return (
     // The route answers with the stored picture once approved, so this is
@@ -440,9 +480,9 @@ function GraphicPreview({ row, stored }: { row: PostRow; stored: boolean }) {
     <img
       className="post-graphic-image"
       src={`${HERE}/${row.id}/graphic?v=${encodeURIComponent(row.updated_at)}`}
-      alt={row.graphic_headline ? `Graphic: ${row.graphic_headline}` : "The post's graphic"}
+      alt={row.graphic_headline ? `Picture: ${row.graphic_headline}` : "The post's picture"}
       width={320}
-      height={320}
+      height={400}
       loading="lazy"
     />
   );
@@ -469,6 +509,8 @@ function PostCard({
 }) {
   const facts = Array.isArray(row.facts_used) ? (row.facts_used as string[]) : [];
   const links = extractLinks(row.body);
+  const visual = readVisual(row.graphic_headline, row.graphic_spec);
+  const format = row.format ? FORMAT_LABEL[row.format] : null;
   const published = row.status === "published";
   const failed = row.status === "failed";
   const editable = manage && !published;
@@ -479,6 +521,7 @@ function PostCard({
 
   const details = (
     <>
+      {format ? <p className="tiny muted">{format}</p> : null}
       <p className="tiny subtle">
         {/*
           One sentence about where this row is, and one timestamp in it.
@@ -599,14 +642,25 @@ function PostCard({
                 <span>Post with a graphic</span>
               </label>
               <label className="field">
-                <span>Headline on the graphic</span>
-                <input
-                  name="graphic_headline"
-                  defaultValue={row.graphic_headline ?? ""}
-                  maxLength={GRAPHIC_HEADLINE_MAX_CHARS}
-                />
+                <span>What it shows</span>
+                <select name="graphic_kind" defaultValue={visual?.kind ?? "steps"}>
+                  {VISUAL_KINDS.map((kind) => (
+                    <option key={kind} value={kind}>
+                      {VISUAL_KIND_LABEL[kind]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field">
+                <span>Title</span>
+                <input name="graphic_headline" defaultValue={row.graphic_headline ?? ""} maxLength={90} />
+              </label>
+              <label className="field">
+                <span>Lines</span>
+                <textarea name="graphic_lines" rows={5} defaultValue={visual ? visualToLines(visual) : ""} />
                 <span className="hint">
-                  Up to {GRAPHIC_HEADLINE_MAX_CHARS} characters. Press Save to see it on the graphic.
+                  {LINES_HINT[visual?.kind ?? "steps"]} Every line comes from the post. Press Save to
+                  see it drawn.
                 </span>
               </label>
               <label className="field">
@@ -685,7 +739,7 @@ export default async function ProfilePostsPage({ searchParams }: { searchParams:
     supabase
       .from("linkedin_posts")
       .select(
-        "id, body, status, facts_used, approved_at, scheduled_for, published_at, provider_post_id, error, created_at, updated_at, graphic_enabled, graphic_headline, graphic_style",
+        "id, body, status, facts_used, approved_at, scheduled_for, published_at, provider_post_id, error, created_at, updated_at, graphic_enabled, graphic_headline, graphic_spec, graphic_style, format",
       )
       .eq("workspace_id", session.workspaceId)
       .eq("user_id", session.userId)
@@ -740,8 +794,9 @@ export default async function ProfilePostsPage({ searchParams }: { searchParams:
           <Link href="/app/profile/activity">← LinkedIn activity</Link>
         </p>
         <p className="muted prose">
-          What a prospect reads when your connection request arrives and they go and look you up. The agent writes
-          them from your business profile and knowledge base; nothing reaches LinkedIn until you have read it.
+          Useful posts for the people you reach: how-tos, myths corrected, checklists and this week&apos;s news in
+          their industry, each with a picture of what it says. Never an advert. A new set is written each week, and
+          nothing reaches LinkedIn until you have read it.
         </p>
       </div>
 

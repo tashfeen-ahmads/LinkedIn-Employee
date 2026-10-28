@@ -282,6 +282,10 @@ export type LinkedInPostRow = {
   graphic_enabled: boolean;
   graphic_headline: string | null;
   graphic_style: "brand" | "light" | "dark";
+  /** The picture as structure drawn from the post (migration 0061). */
+  graphic_spec: Json | null;
+  /** How-to, industry update, myth vs fact and so on. */
+  format: string | null;
   created_at: string;
   updated_at: string;
 };

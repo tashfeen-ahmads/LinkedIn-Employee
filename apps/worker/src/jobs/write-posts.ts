@@ -1,6 +1,14 @@
 import { writePosts, POST_PROMPT_VERSION } from "@le/agents";
 import { loadBusinessProfile } from "@le/db";
-import { BusinessProfileSchema, fallbackGraphicHeadline, graphicHeadlineProblems } from "@le/shared";
+import {
+  BusinessProfileSchema,
+  fallbackGraphicHeadline,
+  readVisual,
+  visualProblems,
+  visualSpec,
+  type PostVisual,
+} from "@le/shared";
+import { industryNews, type NewsItem } from "../news.js";
 import type { WorkerContext } from "../context.js";
 import { recordEvent } from "../context.js";
 import { knowledgeQuery } from "../knowledge.js";
@@ -19,6 +27,8 @@ export interface WritePostsInput {
    * workspace that has only ever had one.
    */
   businessProfileId?: string | null;
+  /** Reads this week's headlines; replaced in tests so nothing touches the network. */
+  readNews?: (terms: readonly string[]) => Promise<NewsItem[]>;
 }
 
 export type WritePostsResult =
@@ -82,6 +92,20 @@ export async function writeWorkspacePosts(
         .limit(5),
     ]);
 
+  // The audience's own world, which is what the posts are about: their
+  // industries and what they struggle with, from the strategies somebody
+  // approved, de-duplicated across them.
+  const specs = (audiences ?? []).map((row) => row.spec as { industries?: unknown; pains?: unknown } | null);
+  const strings = (value: unknown) => (Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : []);
+  const industries = [...new Set(specs.flatMap((spec) => strings(spec?.industries)).map((i) => i.trim()).filter(Boolean))].slice(0, 6);
+  const pains = [...new Set(specs.flatMap((spec) => strings(spec?.pains)).map((p) => p.trim()).filter(Boolean))].slice(0, 8);
+
+  // This week's real headlines in those industries. A failed read means no
+  // update post this week, never an invented one.
+  const news = industries.length
+    ? await (input.readNews ?? ((terms) => industryNews(terms)))(industries).catch(() => [] as NewsItem[])
+    : [];
+
   const segments = (audiences ?? [])
     .map((row) => {
       const spec = row.spec as { name?: unknown; summary?: unknown } | null;
@@ -97,6 +121,9 @@ export async function writeWorkspacePosts(
     knowledge: knowledge ?? [],
     repName: rep?.full_name ?? undefined,
     audiences: segments,
+    industries,
+    pains,
+    news: news.map(({ title, source, date }) => ({ title, source, date })),
     instruction: input.instruction?.trim() || undefined,
     // Only when they are asking for a change. A blank instruction with the old
     // drafts attached invites a light edit of them, and "write me new ones"
@@ -129,13 +156,8 @@ export async function writeWorkspacePosts(
     business_profile_id: profileRow?.id ?? null,
     body: draft.body,
     facts_used: draft.factsUsed as never,
-    // The line on the post's graphic, held to its rules in code: a model's
-    // headline that fails them falls back to the post's own first sentence
-    // when that fits, and otherwise waits for the rep to write one.
-    graphic_headline:
-      draft.graphicHeadline && graphicHeadlineProblems(draft.graphicHeadline).length === 0
-        ? draft.graphicHeadline.trim()
-        : fallbackGraphicHeadline(draft.body),
+    format: draft.format ?? null,
+    ...pictureFor(draft.body, draft.visual),
     status: "draft" as const,
     // Explicit, never merely absent: these are words nobody has read yet.
     approved_at: null,
@@ -157,6 +179,11 @@ export async function writeWorkspacePosts(
       longest: rows.reduce((max, row) => Math.max(max, row.body.length), 0),
       rewrite: Boolean(input.instruction?.trim()),
       audiencesUsed: segments.length,
+      // How many real headlines the week's update could draw on. Zero means
+      // no update post, by design.
+      newsItems: news.length,
+      formats: set.drafts.map((draft) => draft.format),
+      droppedForPitch: set.droppedForPitch,
       // A writer that keeps producing links is a prompt that needs changing,
       // and a silent filter is how that goes unnoticed for a month.
       droppedForLinks: set.droppedForLinks,
@@ -170,4 +197,23 @@ export async function writeWorkspacePosts(
   }).catch((err) => console.error("could not record post.written", err));
 
   return { ok: true, written: rows.length, replaced, droppedForLinks: set.droppedForLinks };
+}
+
+/**
+ * The picture for one post, held to `visualProblems` in code: the writer's
+ * visual when every line of it comes from the post, otherwise the post's own
+ * first sentence framed, and otherwise none until somebody writes one.
+ */
+function pictureFor(body: string, raw: unknown): { graphic_headline: string | null; graphic_spec: unknown } {
+  const candidate = raw && typeof raw === "object" ? readVisual((raw as { title?: string }).title, raw) : null;
+  const visual: PostVisual | null =
+    candidate && visualProblems(candidate, body).length === 0
+      ? candidate
+      : (() => {
+          const line = fallbackGraphicHeadline(body);
+          return line ? { kind: "quote" as const, title: line, items: [], stat: null, columns: null } : null;
+        })();
+  return visual
+    ? { graphic_headline: visual.title, graphic_spec: visualSpec(visual) as never }
+    : { graphic_headline: null, graphic_spec: null };
 }

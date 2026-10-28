@@ -1,4 +1,4 @@
-import { isGraphicStyle } from "@le/shared";
+import { isGraphicStyle, readVisual } from "@le/shared";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
 import { drawPostGraphic, loadGraphicContext } from "@/lib/post-graphic";
@@ -10,7 +10,7 @@ export const dynamic = "force-dynamic";
  *
  * An approved or published post shows the picture stored at approval, which
  * is the one that goes out or went out. A draft is drawn from its current
- * headline and style, in the company's colours. Only the rep's own posts, as
+ * picture and style, in the company's colours. Only the rep's own posts, as
  * the page lists them.
  */
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -19,7 +19,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   const supabase = await createClient();
   const { data: post } = await supabase
     .from("linkedin_posts")
-    .select("id, status, approved_at, graphic_enabled, graphic_headline, graphic_style")
+    .select("id, status, approved_at, graphic_enabled, graphic_headline, graphic_spec, graphic_style, format")
     .eq("id", id)
     .eq("workspace_id", session.workspaceId)
     .eq("user_id", session.userId)
@@ -40,11 +40,13 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     }
   }
 
-  if (!post.graphic_headline?.trim()) return new Response("Not found", { status: 404 });
+  const visual = readVisual(post.graphic_headline, post.graphic_spec);
+  if (!visual) return new Response("Not found", { status: 404 });
   const context = await loadGraphicContext(supabase, session);
   const image = await drawPostGraphic({
-    headline: post.graphic_headline,
+    visual,
     style: isGraphicStyle(post.graphic_style) ? post.graphic_style : "brand",
+    format: post.format,
     ...context,
   });
   const png = await image.arrayBuffer();

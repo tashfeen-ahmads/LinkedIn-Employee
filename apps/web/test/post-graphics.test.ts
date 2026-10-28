@@ -16,20 +16,24 @@ describe("approving a post with a graphic", () => {
   const page = read("app", "app", "profile", "activity", "posts", "page.tsx");
   const approve = page.slice(page.indexOf("async function approve("), page.indexOf("async function unapprove("));
 
-  it("draws and stores the picture before the approval, and refuses without a headline", () => {
+  it("draws and stores the picture before the approval, and refuses without a title", () => {
     const drawn = approve.indexOf("drawPostGraphic(");
     const stored = approve.indexOf('.from("linkedin_post_graphics")');
     const approved = approve.indexOf('status: "approved"');
     expect(drawn).toBeGreaterThan(-1);
     expect(stored).toBeGreaterThan(drawn);
     expect(approved).toBeGreaterThan(stored);
-    expect(approve).toMatch(/Write a headline for the graphic/);
+    expect(approve).toMatch(/Give the picture a title/);
   });
 
-  it("approves only the settings the picture was drawn from", () => {
-    expect(approve).toMatch(/\.eq\("graphic_enabled", current\.graphic_enabled\)/);
-    expect(approve).toMatch(/\.eq\("graphic_style", current\.graphic_style\)/);
-    expect(approve).toMatch(/approval\.eq\("graphic_headline", current\.graphic_headline\)/);
+  it("checks the picture against the post's own words before drawing it", () => {
+    expect(approve).toMatch(/visualProblems\(visual, current\.body\)/);
+    expect(approve.indexOf("visualProblems(")).toBeLessThan(approve.indexOf("drawPostGraphic("));
+  });
+
+  it("approves only the row the picture was drawn from", () => {
+    expect(approve).toMatch(/\.eq\("updated_at", current\.updated_at\)/);
+    expect(approve).toMatch(/\.select\("body, updated_at, format, graphic_enabled, graphic_headline, graphic_spec, graphic_style"\)/);
   });
 
   it("shows the stored picture once approved, so the preview is what goes out", () => {
@@ -41,6 +45,7 @@ describe("approving a post with a graphic", () => {
   it("draws in the workspace's own colours", () => {
     const lib = read("lib", "post-graphic.tsx");
     expect(lib).toMatch(/select\("name, brand_primary, brand_accent"\)/);
-    expect(lib).toMatch(/graphicPalette\(input\.colors, input\.style\)/);
+    expect(lib).toMatch(/paint\(input\.colors, input\.style\)/);
+    expect(lib).toMatch(/graphicPalette\(colors, style\)/);
   });
 });

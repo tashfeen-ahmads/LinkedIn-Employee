@@ -185,7 +185,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
    * draft left pending on a conversation whose hold had been cleared was counted
    * and appeared nowhere.
    */
-  const { facts: needs } = await loadNeedsYou(supabase, session.workspaceId);
+  const { facts: needs } = await loadNeedsYou(supabase, session.workspaceId, new Date(), session.userId);
   const waiting = needs.heldReplies + needs.heldBookings + needs.heldForCopy;
 
   const { data: workspace } = await supabase

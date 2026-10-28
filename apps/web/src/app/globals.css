@@ -3246,7 +3246,7 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
   width: 100%;
   max-width: 320px;
   height: auto;
-  aspect-ratio: 1 / 1;
+  aspect-ratio: 4 / 5;
   border-radius: var(--radius);
   border: 1px solid var(--border);
 }
@@ -3254,7 +3254,7 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
   display: flex;
   align-items: center;
   justify-content: center;
-  aspect-ratio: 1 / 1;
+  aspect-ratio: 4 / 5;
   max-width: 320px;
   padding: var(--space-4);
   text-align: center;

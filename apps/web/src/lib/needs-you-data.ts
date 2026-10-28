@@ -39,6 +39,8 @@ export async function loadNeedsYou(
   supabase: SupabaseClient<Database>,
   workspaceId: string,
   now: Date = new Date(),
+  /** The reader, whose own profile's posts are counted. */
+  userId?: string,
 ): Promise<NeedsYouResult> {
   const head = { count: "exact" as const, head: true };
 
@@ -55,6 +57,7 @@ export async function loadNeedsYou(
     { data: thin },
     released,
     launched,
+    posts,
   ] = await Promise.all([
     supabase.from("worker_heartbeats").select("beat_at").eq("name", PACING_LOOP).maybeSingle(),
     // What the webhook endpoint itself recorded, not whether a secret is set
@@ -134,6 +137,16 @@ export async function loadNeedsYou(
     // Nothing launched yet: somebody who opened the app before launching
     // (rule 65) still has setup to finish, and the list says so.
     supabase.from("campaigns").select("id", head).eq("workspace_id", workspaceId).not("launched_at", "is", null),
+    // The reader's own unread posts: a post goes on one person's profile.
+    userId
+      ? supabase
+          .from("linkedin_posts")
+          .select("id", head)
+          .eq("workspace_id", workspaceId)
+          .eq("user_id", userId)
+          .eq("status", "draft")
+          .is("approved_at", null)
+      : Promise.resolve({ count: 0, error: null }),
   ]);
 
   const stamped = beat?.beat_at ? Date.parse(beat.beat_at) : null;
@@ -243,6 +256,7 @@ export async function loadNeedsYou(
     // A read that failed is not "never launched": that would put a setup row
     // on a workspace with live campaigns.
     setupUnfinished: !launched.error && (launched.count ?? 0) === 0,
+    postsWaiting: posts.error ? 0 : (posts.count ?? 0),
   };
 
   return { items: needsYou(facts), facts };

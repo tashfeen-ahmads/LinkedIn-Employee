@@ -2,6 +2,8 @@ import {
   POST_MAX_CHARS,
   PostDraftSetSchema,
   extractLinks,
+  postProblems,
+  tidyVoice,
   type BusinessProfile,
   type PostDraftSet,
 } from "@le/shared";
@@ -24,6 +26,19 @@ export interface PostInput {
    * writes to LinkedIn in general, which is nobody.
    */
   audiences?: string[];
+  /**
+   * The industries those segments work in, which is what the posts are about.
+   * A post is organic content for the audience's own world, never an advert
+   * for the business that wrote it.
+   */
+  industries?: string[];
+  /** What those segments struggle with, in their words. Material, not a script. */
+  pains?: string[];
+  /**
+   * This week's real headlines in those industries (`industryNews`), the only
+   * source an industry update may draw on. Absent, no update is written.
+   */
+  news?: Array<{ title: string; source: string; date: string }>;
   /** What the person editing the last set asked for. */
   instruction?: string;
   /** The posts being rewritten, when there are any. */
@@ -40,6 +55,8 @@ export interface PostResult extends PostDraftSet {
    */
   droppedForLinks: number;
   droppedForLength: number;
+  /** Drafts that pitched, carried an emoji, or invented a week's news. */
+  droppedForPitch: number;
 }
 
 /**
@@ -70,7 +87,14 @@ export async function writePosts(ctx: AgentContext, input: PostInput): Promise<P
             .map((audience) => `- ${audience}`)
             .join("\n")}`
         : "",
-      `\nKnowledge base (the only product facts you may state):\n${renderKnowledge(input.knowledge)}`,
+      input.industries?.length ? `\nTheir industries:\n${input.industries.map((i) => `- ${i}`).join("\n")}` : "",
+      input.pains?.length ? `\nWhat they struggle with:\n${input.pains.map((p) => `- ${p}`).join("\n")}` : "",
+      input.news?.length
+        ? `\nThis week's news in their industries (the only news you may use; name each source by publication):\n${input.news
+            .map((item) => `- ${item.title} (${item.source}, ${item.date})`)
+            .join("\n")}`
+        : "\nNo news was supplied this week, so do not write an industry_update.",
+      `\nBackground on the professional's own field (for context and facts only, never to pitch):\n${renderKnowledge(input.knowledge)}`,
       // A rewrite is shown what it is rewriting. Without it, "make it shorter"
       // produces a different post that happens to be short, and the one the
       // person actually liked is gone.
@@ -106,21 +130,30 @@ export async function writePosts(ctx: AgentContext, input: PostInput): Promise<P
    * excised reads as a broken promise — "there's a link below" with nothing
    * below it — which is rule 30's argument for holding rather than stripping.
    */
-  const short = set.drafts.filter((draft) => draft.body.trim().length <= POST_MAX_CHARS);
-  const clean = short.filter((draft) => extractLinks(draft.body).length === 0);
+  // Meaning-preserving tidying first (a dash becomes a comma), then the
+  // checks: what still pitches, carries an emoji, or claims this week's news
+  // when none was supplied is dropped rather than offered for approval.
+  const tidied = set.drafts.map((draft) => ({ ...draft, body: tidyVoice(draft.body) }));
+  const short = tidied.filter((draft) => draft.body.trim().length <= POST_MAX_CHARS);
+  const linkless = short.filter((draft) => extractLinks(draft.body).length === 0);
+  const clean = linkless.filter(
+    (draft) =>
+      postProblems(draft.body).length === 0 && (draft.format !== "industry_update" || Boolean(input.news?.length)),
+  );
 
   if (clean.length === 0) {
     // Thrown, not returned empty: a run that produced nothing usable has to be
     // recorded and retried, and an empty set handed back looks on screen like
     // a writer that had nothing to say.
     throw new Error(
-      `post: every draft came back unusable — ${set.drafts.length - short.length} over ${POST_MAX_CHARS} characters, ${short.length - clean.length} carrying a link`,
+      `post: every draft came back unusable: ${set.drafts.length - short.length} over ${POST_MAX_CHARS} characters, ${short.length - linkless.length} carrying a link, ${linkless.length - clean.length} pitching or off format`,
     );
   }
 
   return {
     drafts: clean,
-    droppedForLinks: short.length - clean.length,
+    droppedForLinks: short.length - linkless.length,
     droppedForLength: set.drafts.length - short.length,
+    droppedForPitch: linkless.length - clean.length,
   };
 }

@@ -1960,37 +1960,51 @@ tests that were verified by deliberately breaking the code.
     chain so it never delays account repair. Erasing a prospect deletes their
     rows here too.
 
-69. **A post carries a graphic in the company's own colours, approved with
-    the words.** A post with a picture takes several times the room in a feed,
-    and on this product it is what a prospect sees when they look the sender
-    up. Each post has a headline for its graphic (`graphicHeadline` from the
-    writer, held to `graphicHeadlineProblems`, falling back to a short first
-    sentence and never a cut one), a style (`brand`, `light`, `dark`) and a
-    switch (migration 0060).
+69. **A post is useful to its reader, never an advert, and its picture shows
+    what it says.** Posts are organic content for the industries the approved
+    strategies reach: a how-to, a myth corrected, a checklist, an insight, a
+    story, and this week's news in that industry (`format`, migration 0061). A
+    profile full of posts about the business is what a prospect checking the
+    sender after an invitation reads as a sales account. `postProblems`
+    (`packages/shared/src/posts.ts`) drops a draft that pitches ("we help", "our
+    clients", book a call, DM me, link in the comments), carries an emoji or a
+    dash, because `callStructured` casts and the prompt is not what makes it
+    true.
 
-    **Drawn, never generated.** An image model puts invented text, a made-up
-    logo or a stranger's face on a real professional's profile under their own
-    name, and only some providers make pictures at all. `drawPostGraphic`
-    (`apps/web/src/lib/post-graphic.tsx`) is the one drawing, used by the
-    preview and by approval.
+    **The week's news is real or absent.** `industryNews`
+    (`apps/worker/src/news.ts`) reads headlines from the last seven days for
+    the audience's industries; the writer gets the headline, the publication
+    and the date, and an `industry_update` written with none supplied is
+    dropped. A failed read means no update post that week, never an invented
+    one. `writeWeeklyPosts` (nightly) writes each rep with an active account a
+    fresh set once their newest post is six days old, never over a draft
+    somebody edited, only for a workspace that can send and publishes posts.
+    Nothing is published by it: the drafts wait for approval, and Needs you
+    says they are there.
 
-    **In their brand, read by contrast.** `workspaces.brand_primary` and
-    `brand_accent` are hex codes, read from the website when Sage reads it
-    (`detectBrandColors`, which only fills colours nobody set) and editable on
-    Profile → Company, where "Find them on my website" replaces them because a
-    person asked. Greys never count as a brand (`isNeutral`). `graphicPalette`
-    picks every text colour by contrast against its own ground, deepens a
-    mid-tone brand colour just until white reads on it, and gives a light one
-    ink.
+    **The picture is the post's content, drawn.** The writer describes it as
+    structure (`PostVisual`, `packages/shared/src/post-visual.ts`): numbered
+    steps, two sides compared, one number, a checklist, a chain of cause and
+    effect, or the key line framed. `visualProblems` holds every line to the
+    post: no number the post does not state, no dash, emoji, hashtag, link or
+    placeholder, and the shape each kind needs. A visual that fails becomes the
+    post's own short first sentence framed, or no picture. Drawn, never
+    generated (`drawPostGraphic`, `apps/web/src/lib/post-graphic.tsx`): an image
+    model invents text and faces on a real professional's profile. Portrait 4:5,
+    in the company's colours (`graphicPalette`, every text colour picked by
+    contrast), with no name of the rep's on it. `graphic_headline` is the
+    picture's title and `graphic_spec` the rest; a row from before structure is
+    drawn as its headline framed (`readVisual`).
 
-    **What is approved is what goes out.** Approval draws the picture from the
-    row's settings and stores the PNG (`linkedin_post_graphics`) before the
-    approval, which is conditional on those settings; changing the headline,
-    style or switch clears the approval in the trigger, as changing the words
-    does (rule 40). The publish sweep attaches the stored picture, scoped to
-    the workspace, and holds the post rather than sending it bare when the
-    picture cannot be read. The provider takes a post as a form with the image
-    under `attachments`, and no JSON content-type is ever set over a form.
+    **What is approved is what goes out.** Approval checks the picture against
+    the post, draws it, stores the PNG (`linkedin_post_graphics`), then approves
+    only if the row's `updated_at` is still the one it was drawn from; changing
+    the words, the picture or its style clears the approval in the trigger, as
+    rule 40. The publish sweep attaches the stored picture, scoped to the
+    workspace, and holds the post rather than sending it bare when the picture
+    cannot be read. Brand colours are read from the website when Sage reads it
+    (`detectBrandColors`, only filling colours nobody set) and editable on
+    Profile → Company.
 
 ## Conventions
 

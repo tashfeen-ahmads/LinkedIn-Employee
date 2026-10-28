@@ -13,6 +13,7 @@ import { fillMissingNotes } from "./rewrite-notes.js";
 import { repairCopy, repairSeededLines } from "./repair-copy.js";
 import { fillFirstMessages } from "./first-message.js";
 import { releaseIdleAccounts } from "./idle-accounts.js";
+import { writeWeeklyPosts } from "./weekly-posts.js";
 import { releaseDuplicateAccounts } from "./duplicate-accounts.js";
 import { enqueueOnce, jobId } from "../queues.js";
 import type { Queues } from "../queues.js";
@@ -136,6 +137,8 @@ export async function runMaintenance(
   });
   await step("repair-copy", async () => (await repairCopy(ctx)).repaired);
   await step("first-messages", () => fillFirstMessages(ctx));
+  // This week's posts for each rep's own profile, drafts only (rule 69).
+  await step("weekly-posts", () => writeWeeklyPosts(ctx, now));
   // Failed jobs older than a week. `removeOnFail: { age }` only runs when
   // another job in the same queue fails, so a queue that stopped failing kept
   // its old failures indefinitely and they read as current faults.

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PostVisualSchema } from "./post-visual.js";
 import {
   HOOK_MAX_CHARS,
   HOOK_VARIANTS_MAX,
@@ -239,6 +240,14 @@ export type HookSet = z.infer<typeof HookSetSchema>;
  * useful one. `containsLink` checks the text, exactly as it does for a
  * connection note (rule 29) — the prompt saying so is not what makes it true.
  */
+/*
+ * The kinds of post a business's profile is made of. Helpful first: how-tos,
+ * myths corrected, checklists, an insight from the work, a short story, and
+ * the week's news in the audience's industry. None of them is a pitch.
+ */
+export const POST_FORMATS = ["industry_update", "how_to", "myth_vs_fact", "checklist", "insight", "story"] as const;
+export type PostFormat = (typeof POST_FORMATS)[number];
+
 export const PostDraftSchema = z.object({
   /** How the rep tells one draft from another in a list. "Referral leakage". */
   name: z.string().max(60),
@@ -250,13 +259,11 @@ export const PostDraftSchema = z.object({
     ),
   /** Which bet it places, written to the rep and never to the reader. */
   angle: z.string().max(200),
-  graphicHeadline: z
-    .string()
-    .max(90)
-    .nullable()
-    .describe(
-      "One short line, 90 characters at most, set large on a graphic published with the post: the post's sharpest point in plain words. No hashtag, emoji, link or quote marks. Null if nothing fits.",
-    ),
+  /** What kind of post it is, so a week of posts is a mix rather than one shape. */
+  format: z.enum(POST_FORMATS),
+  visual: PostVisualSchema.nullable().describe(
+    "The picture published with the post, drawn from what the post says: its steps, its two sides, its one number, its checklist, its chain of cause and effect, or its key line. Null only if nothing in the post can be shown.",
+  ),
   factsUsed: z
     .array(z.string())
     .describe(

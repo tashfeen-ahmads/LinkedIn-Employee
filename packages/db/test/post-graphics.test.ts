@@ -29,3 +29,22 @@ describe("post graphics", () => {
     expect(sql).toMatch(/brand_accent is null or brand_accent ~ '\^#\[0-9A-Fa-f\]\{6\}\$'/);
   });
 });
+
+describe("post visuals (migration 0061)", () => {
+  const visuals = readFileSync(join(here, "../supabase/migrations/0061_post_visuals.sql"), "utf8");
+
+  it("clear the approval when the drawn content changes too", () => {
+    const fn = /create or replace function clear_post_approval[\s\S]*?\$\$;/i.exec(visuals)?.[0] ?? "";
+    for (const column of ["body", "graphic_enabled", "graphic_headline", "graphic_style", "graphic_spec"]) {
+      expect(fn, column).toMatch(new RegExp(`new\\.${column} is distinct from old\\.${column}`));
+    }
+    expect(fn).toMatch(/old\.status <> 'published'/);
+    // 0060 dropped the pinned search_path that 0039 set; this restores it.
+    expect(fn).toMatch(/set search_path = le, pg_temp/);
+  });
+
+  it("keep the picture's structure and the post's format beside it", () => {
+    expect(visuals).toMatch(/add column if not exists graphic_spec jsonb/);
+    expect(visuals).toMatch(/add column if not exists format text/);
+  });
+});

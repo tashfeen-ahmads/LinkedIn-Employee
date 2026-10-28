@@ -104,24 +104,96 @@ describe("writeWorkspacePosts", () => {
     }
   });
 
-  it("gives each draft a headline for its graphic, held to the graphic's rules", async () => {
+  it("keeps a picture only when every line of it comes from the post", async () => {
     postsMock.mockReset();
+    const steps = {
+      kind: "steps",
+      title: "Answer a lead before lunch",
+      items: [
+        { label: "Reply inside ten minutes", detail: null },
+        { label: "Ask one question", detail: null },
+        { label: "Offer two times", detail: null },
+      ],
+      stat: null,
+      columns: null,
+    };
     postsMock.mockResolvedValue({
       drafts: [
-        { name: "A", body: "Referrals die in the inbox. More below.", angle: "a", factsUsed: [], graphicHeadline: "Referrals die in the inbox" },
-        // A headline with a hashtag is refused, and the post's short first
-        // sentence is used instead.
-        { name: "B", body: "Spreadsheets lose leads. Here is how.", angle: "b", factsUsed: [], graphicHeadline: "Leads #sales" },
-        // No usable headline and a long opening: no graphic line until the rep writes one.
-        { name: "C", body: `${"word ".repeat(40)}end.`, angle: "c", factsUsed: [], graphicHeadline: null },
+        { name: "A", body: "Reply inside ten minutes. Ask one question. Offer two times.", angle: "a", factsUsed: [], format: "how_to", visual: steps },
+        // A number the post never states: the picture is refused and the
+        // post's short first sentence is framed instead.
+        {
+          name: "B",
+          body: "Most calls come in after five. Few leave a message.",
+          angle: "b",
+          factsUsed: [],
+          format: "insight",
+          visual: { kind: "stat", title: "After five", items: [], stat: { value: "41%", caption: "of calls" }, columns: null },
+        },
+        // No picture and a long opening: none until somebody writes one.
+        { name: "C", body: `${"word ".repeat(40)}end.`, angle: "c", factsUsed: [], format: "story", visual: null },
       ],
       droppedForLinks: 0,
       droppedForLength: 0,
+      droppedForPitch: 0,
     });
     const { ctx, db } = harness();
-    await writeWorkspacePosts(ctx, { workspaceId: WORKSPACE, userId: USER });
-    const headlines = db.rows("linkedin_posts").map((row) => row.graphic_headline);
-    expect(headlines).toEqual(["Referrals die in the inbox", "Spreadsheets lose leads.", null]);
+    await writeWorkspacePosts(ctx, { workspaceId: WORKSPACE, userId: USER, readNews: async () => [] });
+    const rows = db.rows("linkedin_posts");
+    expect(rows.map((row) => row.format)).toEqual(["how_to", "insight", "story"]);
+    expect(rows[0]!.graphic_headline).toBe("Answer a lead before lunch");
+    expect((rows[0]!.graphic_spec as { kind: string }).kind).toBe("steps");
+    expect(rows[1]!.graphic_headline).toBe("Most calls come in after five.");
+    expect((rows[1]!.graphic_spec as { kind: string }).kind).toBe("quote");
+    expect(rows[2]!.graphic_headline).toBeNull();
+    expect(rows[2]!.graphic_spec).toBeNull();
+  });
+
+  it("hands the writer the audience's industries, pains and this week's real headlines", async () => {
+    agentReturns(["A post."]);
+    const { ctx, db } = harness();
+    db.seed("customer_profiles", [
+      {
+        id: "cp2",
+        workspace_id: WORKSPACE,
+        spec: { name: "Plumbers", industries: ["Plumbing", "Construction"], pains: ["Missed calls after hours"] },
+        approved_at: "2026-09-01T00:00:00Z",
+      },
+      // Not approved: nobody said this audience is the one.
+      { id: "cp3", workspace_id: WORKSPACE, spec: { name: "Dentists", industries: ["Dental"] }, approved_at: null },
+    ]);
+    const asked: string[][] = [];
+    await writeWorkspacePosts(ctx, {
+      workspaceId: WORKSPACE,
+      userId: USER,
+      readNews: async (terms) => {
+        asked.push([...terms]);
+        return [{ title: "Plumbers face new licence rules", source: "Trade Weekly", date: "2026-10-27", url: "https://example.com/a" }];
+      },
+    });
+    expect(asked).toEqual([["Plumbing", "Construction"]]);
+    const input = postsMock.mock.calls[0]![1] as { industries: string[]; pains: string[]; news: unknown[] };
+    expect(input.industries).toEqual(["Plumbing", "Construction"]);
+    expect(input.pains).toEqual(["Missed calls after hours"]);
+    // The writer gets the headline and its publication, never the link.
+    expect(input.news).toEqual([{ title: "Plumbers face new licence rules", source: "Trade Weekly", date: "2026-10-27" }]);
+  });
+
+  it("writes the week's posts without news when the headlines cannot be read", async () => {
+    agentReturns(["A post."]);
+    const { ctx, db } = harness();
+    db.seed("customer_profiles", [
+      { id: "cp2", workspace_id: WORKSPACE, spec: { name: "Plumbers", industries: ["Plumbing"] }, approved_at: "2026-09-01T00:00:00Z" },
+    ]);
+    const result = await writeWorkspacePosts(ctx, {
+      workspaceId: WORKSPACE,
+      userId: USER,
+      readNews: async () => {
+        throw new Error("feed down");
+      },
+    });
+    expect(result).toMatchObject({ ok: true, written: 1 });
+    expect((postsMock.mock.calls[0]![1] as { news: unknown[] }).news).toEqual([]);
   });
 
   it("replaces this person's drafts and leaves approved and published rows alone", async () => {

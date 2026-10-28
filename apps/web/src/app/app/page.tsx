@@ -88,7 +88,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Not
    * badge. Two readings of one question, and the one somebody believes is
    * whichever they looked at.
    */
-  const { items: needs, facts: needsFacts } = await loadNeedsYou(supabase, session.workspaceId);
+  const { items: needs, facts: needsFacts } = await loadNeedsYou(supabase, session.workspaceId, new Date(), session.userId);
   const waiting = needsFacts.heldReplies + needsFacts.heldBookings + needsFacts.heldForCopy;
 
   /*

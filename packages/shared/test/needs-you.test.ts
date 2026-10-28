@@ -313,3 +313,14 @@ describe("setup put off (rule 65)", () => {
     expect(kinds({ ...CALM, setupUnfinished: true, campaignsUnlaunched: 1 })).toEqual(["campaign_unlaunched"]);
   });
 });
+
+describe("posts written for the reader's profile", () => {
+  it("are a row, last, so a week's posts never wait on a page nobody opens", () => {
+    const items = needsYou({ ...CALM, campaignsUnlaunched: 1, postsWaiting: 3 });
+    expect(items.map((item) => item.kind)).toEqual(["campaign_unlaunched", "posts_unapproved"]);
+    const row = items[1]!;
+    expect(row.title).toBe("3 posts for your profile are written and waiting for you.");
+    expect(row.href).toBe("/app/profile/activity/posts");
+    expect(kinds({ ...CALM, postsWaiting: 0 })).toEqual([]);
+  });
+});
