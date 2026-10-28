@@ -429,5 +429,12 @@ export async function collectIssues(
   }
 
   const rank: Record<IssueSeverity, number> = { critical: 0, warning: 1, info: 2 };
-  return issues.sort((a, b) => rank[a.severity] - rank[b.severity] || a.area.localeCompare(b.area));
+  // A workspace an owner hid from the console (migration 0062) raises nothing
+  // here either; platform-wide rows carry no workspace and always stay.
+  // Read on its own: unreadable (no migration 0062 yet) hides nothing.
+  const { data: hiddenRows } = await db.from("workspaces").select("id").eq("console_hidden", true);
+  const hidden = new Set((hiddenRows ?? []).map((w) => w.id));
+  return issues
+    .filter((issue) => !(issue.workspaceId && hidden.has(issue.workspaceId)))
+    .sort((a, b) => rank[a.severity] - rank[b.severity] || a.area.localeCompare(b.area));
 }

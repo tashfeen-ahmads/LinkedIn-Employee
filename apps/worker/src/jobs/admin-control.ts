@@ -32,6 +32,8 @@ export const AdminControlSchema = z.discriminatedUnion("op", [
   z.object({ op: z.literal("campaign-pause"), campaignId: z.string().uuid() }),
   z.object({ op: z.literal("campaign-resume"), campaignId: z.string().uuid() }),
   z.object({ op: z.literal("workspace-pause"), workspaceId: z.string().uuid() }),
+  /** `on` hides the workspace from every console list; false shows it again. */
+  z.object({ op: z.literal("workspace-console-hidden"), workspaceId: z.string().uuid(), on: z.boolean() }),
   z.object({ op: z.literal("account-clear-hold"), accountId: z.string().uuid() }),
   z.object({ op: z.literal("accounts-recover") }),
   z.object({ op: z.literal("user-password-reset"), targetUserId: z.string().uuid() }),
@@ -164,6 +166,30 @@ export async function runAdminControl(
         }).catch(() => undefined);
       }
       return { ok: true, detail: `${paused?.length ?? 0} running campaign(s) paused.` };
+    }
+    case "workspace-console-hidden": {
+      const { data: changed, error } = await db
+        .from("workspaces")
+        .update({ console_hidden: control.on })
+        .eq("id", control.workspaceId)
+        .select("id, name");
+      if (error) return { ok: false, error: error.message };
+      const workspace = changed?.[0];
+      if (!workspace) return { ok: false, error: "That workspace no longer exists." };
+      await recordEvent(db, {
+        workspaceId: workspace.id,
+        name: control.on ? "workspace.console_hidden" : "workspace.console_shown",
+        actorUserId: userId,
+        subjectType: "workspace",
+        subjectId: workspace.id,
+        payload: { by: "operator" },
+      }).catch(() => undefined);
+      return {
+        ok: true,
+        detail: control.on
+          ? `"${workspace.name}" is hidden from the console for every admin. Show it again from Settings.`
+          : `"${workspace.name}" is back in the console.`,
+      };
     }
     case "account-clear-hold": {
       const { data: account } = await db

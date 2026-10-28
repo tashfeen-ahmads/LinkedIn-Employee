@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase-server";
-import { requirePlatformAdmin, ago, when } from "@/lib/admin";
+import { requirePlatformAdmin, ago, when, hiddenWorkspaces, shown as notHidden, shownUserIds } from "@/lib/admin";
 import { isoAttr } from "@/lib/format";
 import { label } from "@/lib/labels";
 import { adminAccountPill } from "@/lib/admin-account";
@@ -27,12 +27,18 @@ export default async function AdminUsersPage({
   await requirePlatformAdmin();
   const supabase = await createClient();
 
-  const [{ data: users, error: usersError }, { data: memberships }, { data: workspaces }, { data: accounts }] = await Promise.all([
+  const [{ data: allUsers, error: usersError }, { data: allMemberships }, { data: allWorkspaces }, { data: accounts }, hidden] = await Promise.all([
     supabase.rpc("platform_users"),
     supabase.from("memberships").select("workspace_id, user_id, role"),
     supabase.from("workspaces").select("id, name"),
     supabase.from("linkedin_accounts").select("user_id, status, first_action_at, provider_account_id, created_at"),
+    hiddenWorkspaces(),
   ]);
+  // People whose only workspaces are hidden from the console are left out.
+  const userShown = shownUserIds(allMemberships, hidden);
+  const users = (allUsers ?? []).filter((u) => userShown(u.user_id));
+  const memberships = notHidden(allMemberships, hidden);
+  const workspaces = notHidden(allWorkspaces, hidden, "id");
 
   const workspaceName = new Map((workspaces ?? []).map((w) => [w.id, w.name]));
   const membershipsOf = new Map<string, Array<{ workspace_id: string; role: string }>>();

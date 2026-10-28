@@ -44,6 +44,10 @@ export default async function AdminWorkspacePage({
     .eq("id", id)
     .maybeSingle();
   if (!workspace) notFound();
+  // Read on its own, so the page still opens on a database that has not had
+  // migration 0062 yet; unreadable reads as shown.
+  const { data: visibility } = await supabase.from("workspaces").select("console_hidden").eq("id", id).maybeSingle();
+  const consoleHidden = visibility?.console_hidden === true;
 
   // The fake database throws on embedded joins and PostgREST cannot be relied
   // on to shape them the same way, so memberships and profiles are fetched
@@ -87,9 +91,26 @@ export default async function AdminWorkspacePage({
       <PageHeader
         crumbs={[{ href: "/admin/workspaces", label: "Workspaces" }]}
         title={workspace.name}
-        lede={<span className="mono tiny subtle">{workspace.slug}</span>}
+        lede={
+          <span className="mono tiny subtle">
+            {workspace.slug}
+            {consoleHidden ? " · hidden from console lists" : ""}
+          </span>
+        }
         actions={
           <>
+            {/* Owners only (the worker checks too): for the platform's own test
+                and demo workspaces, which otherwise sit in every list beside
+                paying customers. */}
+            <ControlButton
+              op="workspace-console-hidden"
+              fields={{ workspaceId: id, on: consoleHidden ? "false" : "true" }}
+              back={consoleHidden ? back : "/admin/workspaces"}
+              label={consoleHidden ? "Show in console again" : "Hide from console"}
+              tone="ghost"
+              confirm={consoleHidden ? undefined : `Hide ${workspace.name} from every admin`}
+              pendingLabel="Saving…"
+            />
             {running ? (
               <ControlButton
                 op="workspace-pause"

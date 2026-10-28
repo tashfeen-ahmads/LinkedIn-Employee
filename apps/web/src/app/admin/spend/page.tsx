@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase-server";
-import { requirePlatformAdmin, formatUsd, when } from "@/lib/admin";
+import { requirePlatformAdmin, formatUsd, when, hiddenWorkspaces, shown } from "@/lib/admin";
 import { formatSpend } from "@/lib/spend-display";
 import { PageHeader, Section, Empty, LoadFailed } from "@/components/page";
 import { Kpi, RankedBars, TrendChart } from "@/components/charts";
@@ -19,7 +19,7 @@ export default async function AdminSpendPage() {
   await requirePlatformAdmin();
   const supabase = await createClient();
 
-  const [{ data: rows, error }, { data: byWorkspace }, { data: workspaces }, { data: failures }] = await Promise.all([
+  const [{ data: rows, error }, { data: allByWorkspace }, { data: workspaces }, { data: allFailures }, hidden] = await Promise.all([
     supabase.rpc("platform_spend_breakdown", { p_days: 30 }),
     supabase.rpc("platform_workspace_spend"),
     supabase.from("workspaces").select("id, name"),
@@ -29,7 +29,12 @@ export default async function AdminSpendPage() {
       .not("error", "is", null)
       .order("created_at", { ascending: false })
       .limit(25),
+    hiddenWorkspaces(),
   ]);
+  // The totals stay whole, because they are what was actually spent; a hidden
+  // workspace is only left out of the lists that name workspaces.
+  const byWorkspace = shown(allByWorkspace, hidden);
+  const failures = shown(allFailures, hidden);
 
   const all = rows ?? [];
   const total = all.reduce((sum, r) => sum + Number(r.spend_usd), 0);

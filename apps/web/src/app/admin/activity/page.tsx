@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase-server";
 import { Empty, LoadFailed, PageHeader, Section } from "@/components/page";
-import { requirePlatformAdmin, when } from "@/lib/admin";
+import { requirePlatformAdmin, when, hiddenWorkspaces } from "@/lib/admin";
 import { isoAttr } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -21,12 +21,13 @@ export default async function AdminActivityPage() {
   await requirePlatformAdmin();
   const supabase = await createClient();
 
+  // Left out in the query, not after it: a hidden workspace's events would
+  // otherwise use up the hundred and push customers' off the page.
+  const hidden = [...(await hiddenWorkspaces())];
+  let eventsQuery = supabase.from("events").select("id, workspace_id, name, actor_user_id, subject_type, created_at");
+  if (hidden.length) eventsQuery = eventsQuery.or(`workspace_id.is.null,workspace_id.not.in.(${hidden.join(",")})`);
   const [{ data: events, error }, { data: workspaces }, { data: profiles }] = await Promise.all([
-    supabase
-      .from("events")
-      .select("id, workspace_id, name, actor_user_id, subject_type, created_at")
-      .order("created_at", { ascending: false })
-      .limit(100),
+    eventsQuery.order("created_at", { ascending: false }).limit(100),
     supabase.from("workspaces").select("id, name"),
     supabase.from("profiles").select("id, email, full_name"),
   ]);

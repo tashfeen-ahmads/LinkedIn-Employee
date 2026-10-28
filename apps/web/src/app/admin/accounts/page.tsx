@@ -3,7 +3,7 @@ import { dailyInviteCap, type AccountRecord } from "@le/linkedin";
 import { countersForToday } from "@/lib/account-day";
 import { LINKEDIN_LIMITS } from "@le/shared";
 import { createClient } from "@/lib/supabase-server";
-import { requirePlatformAdmin, ago, when } from "@/lib/admin";
+import { requirePlatformAdmin, ago, when, hiddenWorkspaces, shown } from "@/lib/admin";
 import { PageHeader, Section, Empty, LoadFailed } from "@/components/page";
 import { PageNotice, type NoticeParams } from "@/components/page-notice";
 import { ControlButton } from "@/components/admin-control";
@@ -24,7 +24,7 @@ export default async function AdminAccountsPage({ searchParams }: { searchParams
   await requirePlatformAdmin();
   const supabase = await createClient();
 
-  const [{ data: accounts, error }, { data: workspaces }, { data: users }, { data: zones }] = await Promise.all([
+  const [{ data: allAccounts, error }, { data: workspaces }, { data: users }, { data: zones }, hidden] = await Promise.all([
     supabase
       .from("linkedin_accounts")
       .select(
@@ -34,7 +34,9 @@ export default async function AdminAccountsPage({ searchParams }: { searchParams
     supabase.from("workspaces").select("id, name"),
     supabase.rpc("platform_users"),
     supabase.from("profiles").select("id, timezone"),
+    hiddenWorkspaces(),
   ]);
+  const accounts = shown(allAccounts, hidden);
   // Counters rolled over to each owner's today, as the worker does before its
   // first send; read as stored, an idle account showed yesterday's sends.
   const zoneOf = new Map((zones ?? []).map((p) => [p.id, p.timezone ?? "UTC"]));

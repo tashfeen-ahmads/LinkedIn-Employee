@@ -38,5 +38,8 @@ export function adminCan(role: string | null | undefined, permission: AdminPermi
 
 /** The permission a console control needs. Support ops are support's; everything else is a control. */
 export function permissionForControl(op: string): AdminPermission {
+  // Hiding a workspace from every admin decides what the whole team can see,
+  // so it is an owner's, like deciding who is on the team.
+  if (op === "workspace-console-hidden") return "manage-admins";
   return op === "support-redraft" || op === "support-sweep" || op === "user-password-reset" ? "support" : "controls";
 }

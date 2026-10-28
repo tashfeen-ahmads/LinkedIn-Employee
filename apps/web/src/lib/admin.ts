@@ -83,6 +83,51 @@ export async function requirePlatformAdmin(): Promise<AdminSession> {
   return { userId: user.id, email: user.email ?? "", role: await currentAdminRole() };
 }
 
+/**
+ * The workspaces an owner hid from the console (migration 0062): the
+ * platform's own test and demo accounts, which otherwise sit beside paying
+ * customers in every list, count and total. Every console list filters
+ * through `shown`. A read that failed hides nothing: this is housekeeping,
+ * not access control, and a console that silently dropped customers would be
+ * the worse mistake (rule 17).
+ */
+export const hiddenWorkspaces = cache(async (): Promise<Set<string>> => {
+  const supabase = await createClient();
+  const { data, error } = await supabase.from("workspaces").select("id").eq("console_hidden", true);
+  if (error) return new Set();
+  return new Set((data ?? []).map((row) => row.id));
+});
+
+/** The rows of a console list that are not in a hidden workspace. */
+export function shown<T extends { workspace_id?: string | null; id?: string | number }>(
+  rows: readonly T[] | null | undefined,
+  hidden: Set<string>,
+  key: "workspace_id" | "id" = "workspace_id",
+): T[] {
+  return (rows ?? []).filter((row) => {
+    const id = row[key];
+    return !(typeof id === "string" && hidden.has(id));
+  });
+}
+
+/**
+ * The people a console list may show: anybody with a membership outside the
+ * hidden workspaces, and anybody with none (a sign-up not finished yet is
+ * still somebody an operator may need to find).
+ */
+export function shownUserIds(
+  memberships: ReadonlyArray<{ user_id: string; workspace_id: string }> | null | undefined,
+  hidden: Set<string>,
+): (userId: string) => boolean {
+  const anyVisible = new Set<string>();
+  const anyMembership = new Set<string>();
+  for (const m of memberships ?? []) {
+    anyMembership.add(m.user_id);
+    if (!hidden.has(m.workspace_id)) anyVisible.add(m.user_id);
+  }
+  return (userId) => anyVisible.has(userId) || !anyMembership.has(userId);
+}
+
 /** Per-workspace counts for the tables an operator may not read row by row. */
 export interface WorkspaceStats {
   workspace_id: string;

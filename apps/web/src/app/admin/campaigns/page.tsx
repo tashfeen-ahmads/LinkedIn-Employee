@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase-server";
-import { requirePlatformAdmin, ago } from "@/lib/admin";
+import { requirePlatformAdmin, ago, hiddenWorkspaces, shown as notHidden } from "@/lib/admin";
 import { PageHeader, Section, Empty, LoadFailed } from "@/components/page";
 import { PageNotice } from "@/components/page-notice";
 import { ControlButton } from "@/components/admin-control";
@@ -31,7 +31,7 @@ export default async function AdminCampaignsPage({
   await requirePlatformAdmin();
   const supabase = await createClient();
 
-  const [{ data: campaigns, error }, { data: stats }, { data: workspaces }, { data: accounts }] = await Promise.all([
+  const [{ data: allCampaigns, error }, { data: stats }, { data: workspaces }, { data: accounts }, hidden] = await Promise.all([
     supabase
       .from("campaigns")
       .select("id, workspace_id, name, status, launched_at, created_at, linkedin_account_id, daily_invite_cap")
@@ -39,7 +39,9 @@ export default async function AdminCampaignsPage({
     supabase.rpc("platform_campaign_stats"),
     supabase.from("workspaces").select("id, name"),
     supabase.from("linkedin_accounts").select("id, status"),
+    hiddenWorkspaces(),
   ]);
+  const campaigns = notHidden(allCampaigns, hidden);
 
   const workspaceName = new Map((workspaces ?? []).map((w) => [w.id, w.name]));
   const accountStatus = new Map((accounts ?? []).map((a) => [a.id, a.status]));

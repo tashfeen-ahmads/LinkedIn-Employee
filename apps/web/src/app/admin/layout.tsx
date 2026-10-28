@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { requirePlatformAdmin } from "@/lib/admin";
+import { requirePlatformAdmin, hiddenWorkspaces } from "@/lib/admin";
 import { createClient } from "@/lib/supabase-server";
 import { AppNav } from "@/components/app-nav";
 import { NavIcon } from "@/components/icons";
@@ -18,12 +18,15 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const supabase = await createClient();
   // The two things that are waiting on an operator, counted for the sidebar:
   // tickets the assistant held for a person, and whether outreach is paused.
+  const hidden = [...(await hiddenWorkspaces())];
+  let waitingQuery = supabase
+    .from("support_tickets")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "open")
+    .not("drafted_at", "is", null);
+  if (hidden.length) waitingQuery = waitingQuery.not("workspace_id", "in", `(${hidden.join(",")})`);
   const [{ count: waiting, error: waitingError }, { data: settings, error: settingsError }] = await Promise.all([
-    supabase
-      .from("support_tickets")
-      .select("id", { count: "exact", head: true })
-      .eq("status", "open")
-      .not("drafted_at", "is", null),
+    waitingQuery,
     supabase.from("platform_settings").select("outreach_paused_at").maybeSingle(),
   ]);
 

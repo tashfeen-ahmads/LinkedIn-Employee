@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase-server";
 import { Empty, LoadFailed, PageHeader, Section } from "@/components/page";
-import { requirePlatformAdmin, statsByWorkspace, when, type WorkspaceStats } from "@/lib/admin";
+import { requirePlatformAdmin, statsByWorkspace, when, hiddenWorkspaces, shown, type WorkspaceStats } from "@/lib/admin";
 import { formatSpend } from "@/lib/spend-display";
 import { isoAttr } from "@/lib/format";
 import { MESSAGE_WEBHOOK_BEAT, WEBHOOKS_BEAT, standingWebhookRefusal } from "@le/shared";
@@ -21,7 +21,7 @@ export default async function AdminWorkspacesPage() {
   await requirePlatformAdmin();
   const supabase = await createClient();
 
-  const [{ data: workspaces, error }, { data: members }, { data: accounts }, { data: campaigns }, { data: stats }, { data: spend }, { data: webhookBeat }] =
+  const [{ data: allWorkspaces, error }, { data: members }, { data: accounts }, { data: campaigns }, { data: stats }, { data: spend }, { data: webhookBeat }] =
     await Promise.all([
       supabase.from("workspaces").select("id, name, slug, plan, seats, trial_ends_at, subscription_status, created_at").order("created_at", { ascending: false }),
       supabase.from("memberships").select("workspace_id, user_id"),
@@ -49,6 +49,8 @@ export default async function AdminWorkspacesPage() {
         .select("name, detail, beat_at")
         .in("name", [MESSAGE_WEBHOOK_BEAT, WEBHOOKS_BEAT]),
     ]);
+  // A workspace an owner hid from the console (migration 0062) is left out.
+  const workspaces = shown(allWorkspaces, await hiddenWorkspaces(), "id");
 
   const byWorkspace = statsByWorkspace((stats ?? null) as WorkspaceStats[] | null);
   const memberCount = tally(members, "workspace_id");

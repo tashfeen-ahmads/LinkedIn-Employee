@@ -2,7 +2,7 @@ import Link from "next/link";
 import { NavIcon } from "@/components/icons";
 import { BOOT_BEAT, PACING_LOOP, PACING_STALE_MS, isIdleReleased } from "@le/shared";
 import { createClient } from "@/lib/supabase-server";
-import { requirePlatformAdmin, ago } from "@/lib/admin";
+import { requirePlatformAdmin, ago, hiddenWorkspaces, shown, shownUserIds } from "@/lib/admin";
 import { formatSpend } from "@/lib/spend-display";
 import { countersForToday } from "@/lib/account-day";
 import type { AccountRecord } from "@le/linkedin";
@@ -37,13 +37,17 @@ export default async function AdminOverviewPage({ searchParams }: { searchParams
   const admin = await requirePlatformAdmin();
   const supabase = await createClient();
   const weekAgo = new Date(Date.now() - 7 * 86_400_000).toISOString();
+  // Workspaces an owner hid from the console are left out of every count here.
+  const hidden = await hiddenWorkspaces();
+  const notHiddenEvents = <Q extends { or: (filter: string) => Q }>(query: Q): Q =>
+    hidden.size ? query.or(`workspace_id.is.null,workspace_id.not.in.(${[...hidden].join(",")})`) : query;
 
   const [
-    { data: workspaces },
-    { data: users },
-    { data: accounts },
-    { data: campaigns },
-    { data: tickets },
+    { data: allWorkspaces },
+    { data: allUsers },
+    { data: allAccounts },
+    { data: allCampaigns },
+    { data: allTickets },
     { data: settings },
     { data: zones },
     { data: beats },
@@ -51,22 +55,30 @@ export default async function AdminOverviewPage({ searchParams }: { searchParams
     issues,
     { count: repliesWeek },
     { count: meetingsWeek },
+    { data: memberships },
   ] = await Promise.all([
     supabase.from("workspaces").select("id, created_at"),
     supabase.rpc("platform_users"),
     supabase
       .from("linkedin_accounts")
-      .select("id, user_id, status, status_detail, provider_account_id, invites_today, messages_today, counters_reset_on, invites_paused_until"),
-    supabase.from("campaigns").select("id, status"),
-    supabase.from("support_tickets").select("id, status, answered_by, drafted_at, created_at"),
+      .select("id, workspace_id, user_id, status, status_detail, provider_account_id, invites_today, messages_today, counters_reset_on, invites_paused_until"),
+    supabase.from("campaigns").select("id, workspace_id, status"),
+    supabase.from("support_tickets").select("id, workspace_id, status, answered_by, drafted_at, created_at"),
     supabase.from("platform_settings").select("outreach_paused_at, outreach_paused_reason, support_autopilot").maybeSingle(),
     supabase.from("profiles").select("id, timezone"),
     supabase.from("worker_heartbeats").select("name, beat_at, detail").in("name", [PACING_LOOP, BOOT_BEAT]),
     supabase.rpc("platform_spend_breakdown", { p_days: 7 }),
     callWorker<{ issues: Issue[] }>("/admin/issues", { userId: admin.userId }, ISSUES_TIMEOUT_MS),
-    supabase.from("events").select("id", { count: "exact", head: true }).eq("name", "message.received").gte("created_at", weekAgo),
-    supabase.from("events").select("id", { count: "exact", head: true }).eq("name", "meeting.booked").gte("created_at", weekAgo),
+    notHiddenEvents(supabase.from("events").select("id", { count: "exact", head: true }).eq("name", "message.received").gte("created_at", weekAgo)),
+    notHiddenEvents(supabase.from("events").select("id", { count: "exact", head: true }).eq("name", "meeting.booked").gte("created_at", weekAgo)),
+    supabase.from("memberships").select("workspace_id, user_id"),
   ]);
+  const workspaces = shown(allWorkspaces, hidden, "id");
+  const accounts = shown(allAccounts, hidden);
+  const campaigns = shown(allCampaigns, hidden);
+  const tickets = shown(allTickets, hidden);
+  const userShown = shownUserIds(memberships, hidden);
+  const users = (allUsers ?? []).filter((u) => userShown(u.user_id));
 
   const pacing = (beats ?? []).find((b) => b.name === PACING_LOOP);
   const boot = (beats ?? []).find((b) => b.name === BOOT_BEAT);

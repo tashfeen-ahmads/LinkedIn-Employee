@@ -207,6 +207,15 @@ tests that were verified by deliberately breaking the code.
     control and announcement, and the console only hides what a role cannot
     press.
 
+    An owner can hide a workspace from every console list
+    (`console_hidden`, migration 0062; the `workspace-console-hidden` control,
+    owners only) for the platform's own test and demo accounts. Every list
+    filters through `hiddenWorkspaces`/`shown` (`apps/web/src/lib/admin.ts`)
+    and Issues drops their rows; spend totals stay whole because that money
+    was spent. Only the service role may change the column (a guard trigger),
+    or a customer could hide themselves from their own support. Settings lists
+    what is hidden and shows it again.
+
     Test this with a workspace the admin is *not* a member of. An admin who is
     also a member reads it through the ordinary membership policy, and a test
     set up that way passes without proving anything — which is exactly what

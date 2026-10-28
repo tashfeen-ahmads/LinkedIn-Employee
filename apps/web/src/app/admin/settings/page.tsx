@@ -25,13 +25,14 @@ export default async function AdminSettingsPage({ searchParams }: { searchParams
   await requirePlatformAdmin();
   const supabase = await createClient();
 
-  const [{ data: settings, error: settingsError }, { data: users }, { data: boot }] = await Promise.all([
+  const [{ data: settings, error: settingsError }, { data: users }, { data: boot }, { data: hiddenRows, error: hiddenError }] = await Promise.all([
     supabase
       .from("platform_settings")
       .select("outreach_paused_at, outreach_paused_reason, outreach_paused_by, support_autopilot, updated_at")
       .maybeSingle(),
     supabase.rpc("platform_users"),
     supabase.from("worker_heartbeats").select("beat_at, detail").eq("name", BOOT_BEAT).maybeSingle(),
+    supabase.from("workspaces").select("id, name, created_at").eq("console_hidden", true).order("name"),
   ]);
 
   const admins = (users ?? []).filter((u) => u.is_admin);
@@ -134,6 +135,33 @@ export default async function AdminSettingsPage({ searchParams }: { searchParams
             Manage admins
           </Link>
         </div>
+      </Section>
+
+      <Section
+        title="Hidden from the console"
+        description="Workspaces an owner took out of every list here, such as the team's own test accounts. They keep working as normal."
+      >
+        {hiddenError ? (
+          <p className="small warning-text">This list could not be read.</p>
+        ) : !hiddenRows?.length ? (
+          <p className="small muted">None. An owner can hide one from its page under Workspaces.</p>
+        ) : (
+          <ul className="stack-2">
+            {hiddenRows.map((w) => (
+              <li key={w.id} className="form-row">
+                <Link href={`/admin/workspaces/${w.id}`}>{w.name}</Link>
+                <ControlButton
+                  op="workspace-console-hidden"
+                  fields={{ workspaceId: w.id, on: "false" }}
+                  back="/admin/settings"
+                  label="Show again"
+                  tone="ghost"
+                  pendingLabel="Saving…"
+                />
+              </li>
+            ))}
+          </ul>
+        )}
       </Section>
 
       <Section title="Deployment">

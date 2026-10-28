@@ -89,6 +89,7 @@ export type WorkspaceRow = {
   /** The company's own colours as hex codes (migration 0060), for post graphics. */
   brand_primary: string | null;
   brand_accent: string | null;
+  console_hidden: boolean;
   created_at: string;
 };
 

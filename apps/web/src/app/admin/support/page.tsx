@@ -3,7 +3,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { SUPPORT_CATEGORY_LABEL, type SupportCategory } from "@le/shared";
 import { createClient } from "@/lib/supabase-server";
-import { requirePlatformAdmin, ago, when } from "@/lib/admin";
+import { requirePlatformAdmin, ago, when, hiddenWorkspaces, shown } from "@/lib/admin";
 import { isoAttr } from "@/lib/format";
 import { errorQuery, noticeQuery } from "@/lib/worker";
 import { PageHeader, Section, Empty } from "@/components/page";
@@ -74,14 +74,17 @@ export default async function AdminSupportPage({ searchParams }: { searchParams:
    * precisely how a ticket waits four days. The answered list is history and
    * keeps its limit.
    */
-  const [{ data: workspaces }, { data: openRows }, { data: tickets }, { data: settings }, { data: users }] =
+  const [{ data: workspaces }, { data: allOpen }, { data: allTickets }, { data: settings }, { data: users }, hidden] =
     await Promise.all([
       supabase.from("workspaces").select("id, name"),
       supabase.from("support_tickets").select(columns).eq("status", "open").order("created_at", { ascending: true }),
       supabase.from("support_tickets").select(columns).order("created_at", { ascending: false }).limit(100),
       supabase.from("platform_settings").select("support_autopilot").maybeSingle(),
       supabase.rpc("platform_users"),
+      hiddenWorkspaces(),
     ]);
+  const openRows = shown(allOpen, hidden);
+  const tickets = shown(allTickets, hidden);
   /*
    * The assistant's drafts live in their own table (migration 0044), readable
    * only by a platform admin: on the ticket they were a column every customer
