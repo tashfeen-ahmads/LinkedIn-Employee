@@ -86,6 +86,9 @@ describe("the app waits for setup (rule 65)", () => {
   it("opens only support and a campaign's own review page before the first launch", () => {
     expect(openDuringSetup("/app/support")).toBe(true);
     expect(openDuringSetup("/app/campaigns/7d3c?notice=x")).toBe(true);
+    // The trial runs from the first step, so paying never waits on setup.
+    expect(openDuringSetup("/app/profile/billing")).toBe(true);
+    expect(openDuringSetup("/app/profile")).toBe(false);
     for (const closed of ["/app", "/app/strategy", "/app/agents", "/app/campaigns", "/app/campaigns/new", "/app/campaigns/new/x", "/app/profile"]) {
       expect(openDuringSetup(closed), closed).toBe(false);
     }

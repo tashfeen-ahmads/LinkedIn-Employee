@@ -24,7 +24,7 @@ function harness(
   publishPosts = true,
 ) {
   const db = new FakeDb();
-  db.seed("workspaces", [{ id: WS, publish_posts: publishPosts }]);
+  db.seed("workspaces", [{ id: WS, publish_posts: publishPosts, plan: "free" }]);
   db.seed("linkedin_posts", posts);
   db.seed("linkedin_accounts", [
     {
@@ -56,6 +56,98 @@ const approved = (over: Record<string, unknown> = {}) => ({
 });
 
 describe("publishApprovedPosts", () => {
+  it("publishes nothing for a workspace whose trial has ended", async () => {
+    const { ctx, db, linkedin } = harness([approved()]);
+    const row = db.find("workspaces", { id: WS })!;
+    Object.assign(row, { plan: "trial", trial_ends_at: "2026-10-01T00:00:00Z", subscription_status: null });
+    const keys = ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET", "STRIPE_PRICE_PRO_MONTHLY", "STRIPE_PRICE_PRO_YEARLY", "STRIPE_PRICE_AUTOPILOT_MONTHLY", "STRIPE_PRICE_AUTOPILOT_YEARLY"];
+    const saved = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
+    for (const k of keys) process.env[k] = "x";
+    try {
+      const out = await publishApprovedPosts(ctx, NOW);
+      expect(out.published).toBe(0);
+      expect(linkedin.publishedPosts).toHaveLength(0);
+      expect(db.find("linkedin_posts", { id: "p1" })?.status).toBe("approved");
+    } finally {
+      for (const k of keys) {
+        if (saved[k] === undefined) delete process.env[k];
+        else process.env[k] = saved[k];
+      }
+    }
+  });
+
+  it("never lets posts waiting out their two days starve another workspace's", async () => {
+    // Twenty posts on one profile, all spaced, plus one elsewhere: with a
+    // window the size of the limit, the other workspace's post was never read.
+    const other = "33333333-3333-4333-8333-333333333333";
+    const { ctx, db, linkedin } = harness([
+      approved({ id: "old", status: "published", published_at: "2026-10-05T11:00:00Z" }),
+      ...Array.from({ length: 20 }, (_, i) => approved({ id: `w${i}`, approved_at: `2026-10-04T09:${String(i).padStart(2, "0")}:00Z` })),
+      approved({ id: "theirs", workspace_id: other, user_id: "44444444-4444-4444-8444-444444444444", approved_at: "2026-10-04T10:00:00Z" }),
+    ]);
+    db.seed("workspaces", [{ id: other, publish_posts: true, plan: "free" }]);
+    db.seed("linkedin_accounts", [
+      { id: "acct2", workspace_id: other, user_id: "44444444-4444-4444-8444-444444444444", provider_account_id: "acct_2", status: "active", working_hours: null },
+    ]);
+    await publishApprovedPosts(ctx, NOW, 5);
+    expect(linkedin.publishedPosts).toHaveLength(1);
+    expect(db.find("linkedin_posts", { id: "theirs" })?.status).toBe("published");
+  });
+
+  it("reports a claim a dead run left behind, and never posts it blind", async () => {
+    const { ctx, db, linkedin } = harness([approved({ published_at: "2026-10-05T11:00:00Z" })]);
+    const out = await publishApprovedPosts(ctx, NOW);
+    expect(out.failed).toBe(1);
+    expect(linkedin.publishedPosts).toHaveLength(0);
+    expect(db.find("linkedin_posts", { id: "p1" })).toMatchObject({ status: "failed", published_at: null });
+  });
+
+  it("never posts a row another run has already claimed", async () => {
+    // An Approve press and the sweep reading the same row at once.
+    const { ctx, linkedin } = harness([approved({ published_at: "2026-10-05T11:59:00Z", status: "approved" })]);
+    const out = await publishApprovedPosts(ctx, NOW);
+    expect(out.published).toBe(0);
+    expect(linkedin.publishedPosts).toHaveLength(0);
+  });
+
+  it("posts once when an Approve press and the sweep run at the same moment", async () => {
+    // Both runs read the row before either claims it; only one claim may win.
+    const { ctx, linkedin } = harness([approved()]);
+    const [a, b] = await Promise.all([publishApprovedPosts(ctx, NOW, 25, WS), publishApprovedPosts(ctx, NOW)]);
+    expect(linkedin.publishedPosts).toHaveLength(1);
+    expect(a.published + b.published).toBe(1);
+  });
+
+  it("publishes one post per profile every two days, never three at once", async () => {
+    // What went wrong live: three approved posts went out in the same minute.
+    const { ctx, db, linkedin } = harness([
+      approved({ id: "p1", approved_at: "2026-10-04T09:00:00Z" }),
+      approved({ id: "p2", approved_at: "2026-10-04T09:01:00Z" }),
+      approved({ id: "p3", approved_at: "2026-10-04T09:02:00Z" }),
+    ]);
+    const first = await publishApprovedPosts(ctx, NOW);
+    expect(first.published).toBe(1);
+    expect(linkedin.publishedPosts).toHaveLength(1);
+
+    // A day later, still inside the gap: nothing more.
+    expect((await publishApprovedPosts(ctx, new Date("2026-10-06T12:00:00Z"))).published).toBe(0);
+    // Two days after the first: the next one, and only one.
+    expect((await publishApprovedPosts(ctx, new Date("2026-10-07T12:01:00Z"))).published).toBe(1);
+    expect(linkedin.publishedPosts).toHaveLength(2);
+    expect(db.rows("linkedin_posts").filter((row) => row.status === "approved")).toHaveLength(1);
+  });
+
+  it("holds a scheduled post that falls inside the two days after the last one", async () => {
+    const { ctx, linkedin } = harness([
+      approved({ id: "old", status: "published", published_at: "2026-10-04T12:00:00Z" }),
+      approved({ id: "p2", scheduled_for: "2026-10-05T09:00:00Z" }),
+    ]);
+    const out = await publishApprovedPosts(ctx, NOW);
+    expect(out.published).toBe(0);
+    expect(out.held).toBe(1);
+    expect(linkedin.publishedPosts).toHaveLength(0);
+  });
+
   it("publishes an approved, due post and records what came back", async () => {
     const { ctx, db, linkedin } = harness([approved()]);
     const out = await publishApprovedPosts(ctx, NOW);
@@ -225,6 +317,8 @@ describe("publishApprovedPosts", () => {
       approved({ id: "p1" }),
       approved({ id: "p2", workspace_id: other }),
     ]);
+    // A workspace that could post, so only the scope can be what holds it.
+    db.seed("workspaces", [{ id: other, publish_posts: true, plan: "free" }]);
     await publishApprovedPosts(ctx, NOW, 25, WS);
 
     expect(linkedin.publishedPosts).toHaveLength(1);

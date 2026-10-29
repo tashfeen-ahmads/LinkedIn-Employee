@@ -22,6 +22,7 @@ const ICON: Record<NeedsYouKind, string> = {
   cta_missing: "cta",
   setup_unfinished: "campaigns",
   posts_unapproved: "posts",
+  plan_needed: "billing",
 };
 
 /**

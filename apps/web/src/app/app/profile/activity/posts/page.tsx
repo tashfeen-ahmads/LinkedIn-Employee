@@ -9,6 +9,8 @@ import {
   extractLinks,
   isGraphicStyle,
   mayPublish,
+  POST_SPACING_DAYS,
+  projectPostTimes,
   readVisual,
   visualFromLines,
   visualProblems,
@@ -364,7 +366,7 @@ async function approve(formData: FormData) {
       HERE,
       published.ok && published.data && published.data.published > 0
         ? "Approved and published. It is on your profile now."
-        : "Approved. It goes out in your posting hours, within a quarter of an hour of them starting.",
+        : `Approved. It goes out in your posting hours, and never within ${POST_SPACING_DAYS} days of another post. Its date is on the card below.`,
     ),
   );
 }
@@ -495,6 +497,7 @@ function PostCard({
   stored = false,
   verdict,
   timezone,
+  goesOutAt = null,
 }: {
   row: PostRow;
   manage: boolean;
@@ -504,6 +507,8 @@ function PostCard({
   stored?: boolean;
   /** What `mayPublish` says about this row right now, in the rep's own hours. */
   verdict: ReturnType<typeof mayPublish>;
+  /** When this approved post is due to go out, on the two-day spacing. */
+  goesOutAt?: Date | null;
   /** The rep's zone, so every time on the card is on one clock. */
   timezone: string;
 }) {
@@ -536,7 +541,10 @@ function PostCard({
             ? "Did not go out. Approve it again to retry."
             : !row.approved_at
               ? "Not approved"
-              : row.scheduled_for
+              : goesOutAt && goesOutAt.getTime() > Date.now() + 60_000 &&
+                  (!row.scheduled_for || goesOutAt.getTime() > Date.parse(row.scheduled_for) + 60_000)
+                ? `Approved, goes out from ${when(goesOutAt.toISOString(), timezone)}. One post every ${POST_SPACING_DAYS} days on your profile.`
+                : row.scheduled_for
                 ? `Approved, held until ${when(row.scheduled_for, timezone)}`
                 : verdict.send
                   ? "Approved, going out within a quarter of an hour"
@@ -779,12 +787,23 @@ export default async function ProfilePostsPage({ searchParams }: { searchParams:
   const hours = parseWorkingHours(account?.working_hours);
   // The same window the sweep uses, so this screen and the worker can never
   // disagree about whether a row is about to go out.
-  const window = { hours, timezone };
   const now = new Date();
 
   const drafts = posts.filter((row) => row.status === "draft");
   const queued = posts.filter((row) => row.status === "approved" || row.status === "failed");
   const published = posts.filter((row) => row.status === "published");
+  // One post every two days (rule 69): the gate reads the last one published,
+  // and the approved queue is laid out on the same spacing so each card says
+  // its own date rather than all of them "within a quarter of an hour".
+  const lastPublishedAt =
+    published.map((row) => row.published_at).filter((at): at is string => Boolean(at)).sort().at(-1) ?? null;
+  const window = { hours, timezone, lastPublishedAt };
+  const goesOut = projectPostTimes(
+    queued.filter((row) => row.status === "approved"),
+    lastPublishedAt,
+    now,
+    { hours, timezone },
+  );
 
   return (
     <>
@@ -857,7 +876,7 @@ export default async function ProfilePostsPage({ searchParams }: { searchParams:
 
       <Section
         title={queued.length ? `Approved (${queued.length})` : "Approved"}
-        description={`These go out in your own working hours, because a post appearing on your profile at four in the morning reads as software posting for you. One you gave a time to goes at that time instead. Yours: ${describeWorkingHours(hours, timezone)}.`}
+        description={`These go out one at a time, at most one every ${POST_SPACING_DAYS} days, in your own working hours: several posts at once reads as software posting for you. One you gave a time to goes at that time, unless it is inside the ${POST_SPACING_DAYS} days. Yours: ${describeWorkingHours(hours, timezone)}.`}
       >
         {queued.length ? (
           <div className="stack-3">
@@ -870,6 +889,7 @@ export default async function ProfilePostsPage({ searchParams }: { searchParams:
                 stored={stored.has(row.id)}
                 timezone={timezone}
                 verdict={mayPublish(row, now, window)}
+                goesOutAt={goesOut.get(row.id) ?? null}
               />
             ))}
           </div>

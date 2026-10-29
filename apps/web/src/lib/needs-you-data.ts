@@ -15,6 +15,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@le/db";
 import { localMonth, localMonthStart, noteAllowance, planOf } from "@le/linkedin";
 import { CAMPAIGN_CTA_COLUMNS, campaignCtas, type CampaignCtaColumns } from "./campaign-cta";
+import { readWorkspaceEntitlement } from "./entitlement";
+import { chargesOnChoosing } from "./plans";
 
 /**
  * The facts behind "what needs you", gathered for one workspace.
@@ -58,6 +60,8 @@ export async function loadNeedsYou(
     released,
     launched,
     posts,
+    entitlement,
+    { data: trial },
   ] = await Promise.all([
     supabase.from("worker_heartbeats").select("beat_at").eq("name", PACING_LOOP).maybeSingle(),
     // What the webhook endpoint itself recorded, not whether a secret is set
@@ -147,6 +151,10 @@ export async function loadNeedsYou(
           .eq("status", "draft")
           .is("approved_at", null)
       : Promise.resolve({ count: 0, error: null }),
+    // Read through the worker's own rule, so the list never says paused while
+    // the campaigns are sending, or the reverse.
+    readWorkspaceEntitlement(supabase, workspaceId),
+    supabase.from("workspaces").select("trial_ends_at").eq("id", workspaceId).maybeSingle(),
   ]);
 
   const stamped = beat?.beat_at ? Date.parse(beat.beat_at) : null;
@@ -257,6 +265,13 @@ export async function loadNeedsYou(
     // on a workspace with live campaigns.
     setupUnfinished: !launched.error && (launched.count ?? 0) === 0,
     postsWaiting: posts.error ? 0 : (posts.count ?? 0),
+    plan: entitlement
+      ? {
+          stopped: !entitlement.canSend,
+          trialDaysLeft: entitlement.trialDaysLeft,
+          chargesNow: chargesOnChoosing(trial?.trial_ends_at ?? null, now),
+        }
+      : null,
   };
 
   return { items: needsYou(facts), facts };

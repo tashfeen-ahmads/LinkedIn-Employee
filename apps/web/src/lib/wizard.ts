@@ -172,7 +172,8 @@ export function stepPosition(key: WizardStepKey): { n: number; of: number } {
 /**
  * Which app screens open before setup is finished.
  *
- * Support, because somebody stuck on a step must be able to say so; and a
+ * Support, because somebody stuck on a step must be able to say so; billing,
+ * because the trial runs from the first step and paying must never wait; and a
  * campaign's own page, because the last step links to it to read every name
  * and every message before launching. Nothing else: the rest of the app is
  * built on the steps not finished yet, and opening it early is how somebody
@@ -184,6 +185,9 @@ export function openDuringSetup(path: string): boolean {
   const bare = (path.split(/[?#]/)[0] ?? "").replace(CAMPAIGN_SECTION, "");
   // A campaign's own page, never the screen that makes a new one: "new" fits
   // the same pattern and opened the campaign builder to somebody still setting up.
+  // Billing too: the trial clock runs from the first step, and the day-twelve
+  // reminder links here. Gated, a customer still in setup could not pay.
+  if (bare === "/app/profile/billing" || bare === "/app/billing") return true;
   return bare === "/app/support" || (/^\/app\/campaigns\/[^/]+$/.test(bare) && bare !== "/app/campaigns/new");
 }
 

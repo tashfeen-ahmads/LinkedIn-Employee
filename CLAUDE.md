@@ -1907,6 +1907,21 @@ tests that were verified by deliberately breaking the code.
     whose lookup key is not one of `PRICE_KEYS` leaves the plan alone rather
     than reading as a trial, which would stop a paying workspace.
 
+    A checkout that names a new subscription after a cancelled one clears the
+    stored status, or every event of the new one reads as a late event of a
+    terminal subscription and a resubscribed customer stays paused; a second
+    checkout beside a live subscription never replaces it and is recorded as
+    `billing.second_subscription`. Every status change is recorded as a
+    `billing.*` event. The console's Funnel (`/admin/funnel`,
+    `customerFunnel`) reads where each workspace stands now, and counts one
+    that ever held a subscription as having chosen a plan, so churn never
+    reads as never converting. A workspace that cannot send
+    publishes no posts and gets no automatic search; billing opens during
+    setup, because the trial runs from the first step. `PlanBanner` says the
+    trial's days, a stop, a failed card or a plan ending, on every app page,
+    and Needs you carries the same as `plan_needed`. Inside the last 49 hours
+    checkout charges at once, and every screen says so (`chargesOnChoosing`).
+
 68. **Nora likes and comments on prospects' posts, and every one is earned.**
     `planEngagement` (`apps/worker/src/jobs/engagement.ts`, hourly) picks, for
     each working account inside its owner's hours, people in its running
@@ -2009,7 +2024,12 @@ tests that were verified by deliberately breaking the code.
     the post, draws it, stores the PNG (`linkedin_post_graphics`), then approves
     only if the row's `updated_at` is still the one it was drawn from; changing
     the words, the picture or its style clears the approval in the trigger, as
-    rule 40. The publish sweep attaches the stored picture, scoped to the
+    rule 40. **One post per profile every two days**
+    (`POST_SPACING_DAYS`): `mayPublish` reads the profile's last post, the
+    sweep moves it forward the moment it publishes so a second approved post
+    in the same run waits, and a scheduled time inside the gap waits too.
+    Three approved together went out in the same minute before this.
+    `projectPostTimes` gives each approved card its own date. The publish sweep attaches the stored picture, scoped to the
     workspace, and holds the post rather than sending it bare when the picture
     cannot be read. Brand colours are read from the website when Sage reads it
     (`detectBrandColors`, only filling colours nobody set) and editable on

@@ -44,6 +44,19 @@ export const PLANS: readonly PlanDefinition[] = [
 
 export const TRIAL_DAYS = 14;
 
+/**
+ * Whether choosing a plan now starts billing straight away. Stripe refuses a
+ * trial that ends within two days, so the worker carries the trial into
+ * checkout only with more than 49 hours left (`server.ts`, checkout); inside
+ * that, the first charge is the day they choose. One reading for every screen
+ * that promises "no charge until the trial ends".
+ */
+export const TRIAL_CARRY_MIN_MS = 49 * 60 * 60_000;
+export function chargesOnChoosing(trialEndsAt: string | null, now: Date = new Date()): boolean {
+  if (!trialEndsAt) return true;
+  return Date.parse(trialEndsAt) - now.getTime() <= TRIAL_CARRY_MIN_MS;
+}
+
 /** Two months free on a yearly plan, in dollars. */
 export function yearlySaving(plan: PlanDefinition): number {
   return plan.monthly * 12 - plan.yearly;

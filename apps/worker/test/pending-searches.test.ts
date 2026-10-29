@@ -19,6 +19,7 @@ function harness(seed: (db: FakeDb) => void) {
   const db = new FakeDb();
   for (const t of ["linkedin_accounts", "customer_profiles", "campaigns", "events"]) db.seed(t, []);
   db.seed("linkedin_accounts", [{ id: "acct", workspace_id: WS, user_id: USER, status: "active", provider_account_id: "p1" }]);
+  db.seed("workspaces", [{ id: WS, plan: "free" }]);
   seed(db);
   const added: Array<{ data: { customerProfileId: string }; jobId: string }> = [];
   const queues = {
@@ -83,5 +84,14 @@ describe("startPendingSearches", () => {
     db.find("linkedin_accounts", { id: "acct" })!.status = "reauth_required";
     expect(await run()).toBe(0);
     expect(added).toHaveLength(0);
+  });
+
+  it("searches nothing automatically for a workspace whose plan stopped sending", async () => {
+    const { db, added, run } = harness((db) =>
+      db.seed("customer_profiles", [{ id: "cp1", workspace_id: WS, approved_at: "2026-10-05T00:00:00Z", do_not_pursue: false }]),
+    );
+    Object.assign(db.find("workspaces", { id: WS })!, { plan: "pro", subscription_status: "canceled" });
+    expect(await run()).toBe(0);
+    expect(added).toEqual([]);
   });
 });

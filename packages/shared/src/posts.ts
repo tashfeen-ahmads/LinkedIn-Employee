@@ -36,6 +36,57 @@ export interface PostWindow {
   hours: WorkingHours;
   /** IANA zone. `profiles.timezone`, not the server's. */
   timezone: string;
+  /**
+   * When this rep's profile last had a post published, or null for never.
+   * Absent means the caller did not look, and spacing is not checked.
+   */
+  lastPublishedAt?: string | null;
+}
+
+/**
+ * One post on a profile every two days, at most (rule 69).
+ *
+ * Approving three drafts in an evening published all three the next morning in
+ * the same minute: three posts at once on a real professional's profile reads
+ * as software, and LinkedIn shows each to fewer people when they crowd each
+ * other. A scheduled time is honoured too, but never inside the gap.
+ */
+export const POST_SPACING_DAYS = 2;
+export const POST_SPACING_MS = POST_SPACING_DAYS * 86_400_000;
+
+/**
+ * When each approved post can go out, in the order the sweep sends them:
+ * unscheduled first, then by scheduled time, each at least `POST_SPACING_MS`
+ * after the one before and after the last one published. For the screen, so a
+ * queue of three says three dates instead of "within a quarter of an hour".
+ */
+export function projectPostTimes(
+  rows: ReadonlyArray<{ id: string; scheduled_for: string | null; approved_at: string | null }>,
+  lastPublishedAt: string | null,
+  now: Date = new Date(),
+  /**
+   * The rep's posting hours. An unscheduled post waits for them, so its date
+   * is moved to the next opening; a scheduled one goes at its time (or the
+   * end of the gap) whatever the hours say, exactly as `mayPublish` decides.
+   */
+  window?: Pick<PostWindow, "hours" | "timezone">,
+): Map<string, Date> {
+  const order = [...rows].sort((a, b) => {
+    const sa = a.scheduled_for ? Date.parse(a.scheduled_for) : -Infinity;
+    const sb = b.scheduled_for ? Date.parse(b.scheduled_for) : -Infinity;
+    if (sa !== sb) return sa - sb;
+    return Date.parse(a.approved_at ?? "") - Date.parse(b.approved_at ?? "");
+  });
+  const out = new Map<string, Date>();
+  let previous = lastPublishedAt ? Date.parse(lastPublishedAt) : Number.NEGATIVE_INFINITY;
+  for (const row of order) {
+    const scheduled = row.scheduled_for ? Date.parse(row.scheduled_for) : Number.NEGATIVE_INFINITY;
+    let at = Math.max(now.getTime(), Number.isFinite(scheduled) ? scheduled : -Infinity, previous + POST_SPACING_MS);
+    if (!row.scheduled_for && window) at = nextOpening(at, window);
+    out.set(row.id, new Date(at));
+    previous = at;
+  }
+  return out;
 }
 
 export type PostRow = {
@@ -48,7 +99,7 @@ export type PostRow = {
 
 export type PostVerdict =
   | { send: true }
-  | { send: false; reason: string; retry: boolean };
+  | { send: false; reason: string; retry: boolean; notBefore?: string };
 
 /**
  * `retry` separates "not yet" from "never".
@@ -103,6 +154,20 @@ export function mayPublish(
     };
   }
 
+  // Spacing first, so a scheduled time inside the gap waits for the gap too.
+  if (window?.lastPublishedAt) {
+    const last = Date.parse(window.lastPublishedAt);
+    if (Number.isFinite(last) && now.getTime() - last < POST_SPACING_MS) {
+      const notBefore = new Date(last + POST_SPACING_MS).toISOString();
+      return {
+        send: false,
+        reason: `one post every ${POST_SPACING_DAYS} days on your profile, so this waits until ${notBefore}`,
+        retry: true,
+        notBefore,
+      };
+    }
+  }
+
   if (post.scheduled_for) {
     const due = Date.parse(post.scheduled_for);
     if (Number.isFinite(due) && due > now.getTime()) {
@@ -122,6 +187,15 @@ export function mayPublish(
   }
 
   return { send: true };
+}
+
+/** The first quarter hour at or after `at` inside the rep's posting hours, within a fortnight. */
+function nextOpening(at: number, window: Pick<PostWindow, "hours" | "timezone">): number {
+  const step = 15 * 60_000;
+  for (let t = at, end = at + 14 * 86_400_000; t <= end; t += step) {
+    if (isWithinWorkingHours(new Date(t), window.hours, window.timezone)) return t;
+  }
+  return at;
 }
 
 /*

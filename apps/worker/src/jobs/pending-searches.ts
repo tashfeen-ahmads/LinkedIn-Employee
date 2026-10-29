@@ -1,3 +1,4 @@
+import { workspaceEntitlement } from "../billing.js";
 import type { WorkerContext } from "../context.js";
 import { recordEvent } from "../context.js";
 import { enqueueOnce, jobId, type Queues } from "../queues.js";
@@ -50,6 +51,13 @@ export async function startPendingSearches(
   for (const account of accounts) {
     if (!accountByWorkspace.has(account.workspace_id)) accountByWorkspace.set(account.workspace_id, account);
   }
+  // A workspace whose plan stopped sending gets no automatic search: it would
+  // spend search quota and AI on a list nobody can invite (rule 67). An
+  // unreadable plan is not a yes either.
+  for (const workspaceId of [...accountByWorkspace.keys()]) {
+    if ((await workspaceEntitlement(ctx.db, workspaceId))?.canSend !== true) accountByWorkspace.delete(workspaceId);
+  }
+  if (!accountByWorkspace.size) return 0;
 
   const { data: profiles } = await ctx.db
     .from("customer_profiles")

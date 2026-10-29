@@ -324,3 +324,26 @@ describe("posts written for the reader's profile", () => {
     expect(kinds({ ...CALM, postsWaiting: 0 })).toEqual([]);
   });
 });
+
+describe("the plan", () => {
+  it("is a blocker when it stops sending, and says nothing was deleted", () => {
+    const items = needsYou({ ...CALM, plan: { stopped: true, trialDaysLeft: null } });
+    expect(items[0]).toMatchObject({ kind: "plan_needed", tone: "blocker", href: "/app/profile/billing" });
+    expect(items[0]!.why).toMatch(/Nothing has been deleted/);
+  });
+
+  it("warns in the last three days of a trial, and not before", () => {
+    expect(kinds({ ...CALM, plan: { stopped: false, trialDaysLeft: 3 } })).toEqual(["plan_needed"]);
+    expect(needsYou({ ...CALM, plan: { stopped: false, trialDaysLeft: 0 } })[0]!.title).toBe("Your free trial ends today.");
+    expect(kinds({ ...CALM, plan: { stopped: false, trialDaysLeft: 4 } })).toEqual([]);
+    expect(kinds({ ...CALM, plan: null })).toEqual([]);
+  });
+});
+
+describe("the trial's last 49 hours", () => {
+  it("never promises no charge when choosing now charges at once", () => {
+    const why = needsYou({ ...CALM, plan: { stopped: false, trialDaysLeft: 1, chargesNow: true } })[0]!.why;
+    expect(why).toMatch(/billing starts the day you choose/);
+    expect(why).not.toMatch(/not charged/);
+  });
+});

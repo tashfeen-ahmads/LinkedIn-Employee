@@ -111,25 +111,25 @@ export function verifyStripeWebhook(input: {
   const tolerance = input.toleranceSeconds ?? 300;
   const now = input.now ?? new Date();
 
-  const parts = new Map(
-    input.signatureHeader
-      .split(",")
-      .map((part) => part.trim().split("="))
-      .filter((pair): pair is [string, string] => pair.length === 2)
-      .map(([key, value]) => [key, value] as [string, string]),
-  );
-
-  const timestamp = parts.get("t");
-  const signature = parts.get("v1");
-  if (!timestamp || !signature) throw new Error("Malformed Stripe signature header");
+  const pairs = input.signatureHeader
+    .split(",")
+    .map((part) => part.trim().split("="))
+    .filter((pair): pair is [string, string] => pair.length === 2);
+  const timestamp = pairs.find(([key]) => key === "t")?.[1];
+  // Every `v1`, not the last: while a signing secret is being rolled Stripe
+  // signs with both, and keeping one would refuse half the deliveries.
+  const signatures = pairs.filter(([key]) => key === "v1").map(([, value]) => value);
+  if (!timestamp || !signatures.length) throw new Error("Malformed Stripe signature header");
 
   const age = Math.abs(now.getTime() / 1000 - Number(timestamp));
   if (!Number.isFinite(age) || age > tolerance) throw new Error("Stripe webhook timestamp outside tolerance");
 
-  const expected = createHmac("sha256", input.secret).update(`${timestamp}.${input.body}`).digest("hex");
-  const a = Buffer.from(expected);
-  const b = Buffer.from(signature);
-  if (a.length !== b.length || !timingSafeEqual(a, b)) throw new Error("Invalid Stripe webhook signature");
+  const expected = Buffer.from(createHmac("sha256", input.secret).update(`${timestamp}.${input.body}`).digest("hex"));
+  const matches = signatures.some((signature) => {
+    const given = Buffer.from(signature);
+    return given.length === expected.length && timingSafeEqual(given, expected);
+  });
+  if (!matches) throw new Error("Invalid Stripe webhook signature");
 
   return JSON.parse(input.body) as StripeEvent;
 }
@@ -175,6 +175,11 @@ export function normalizeSubscriptionStatus(
     case "incomplete_expired":
       return "canceled";
     case "incomplete":
+      return "unpaid";
+    // A subscription Stripe paused (a trial that ended with no card on file)
+    // stops sending like an unpaid one, and is resumed from the portal. Read
+    // as null it became "we could not confirm your plan".
+    case "paused":
       return "unpaid";
     default:
       return null;

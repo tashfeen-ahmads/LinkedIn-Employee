@@ -1,9 +1,9 @@
-import { entitlementFor, entitlementMessage, type Entitlement } from "@le/billing";
+import { entitlementFor, type Entitlement } from "@le/billing";
 import { readTrialEnforced } from "@/lib/entitlement";
 import { Panel, Section } from "@/components/page";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
-import { PLANS, PLAN_FEATURES, yearlyPerMonth, yearlySaving } from "@/lib/plans";
+import { PLANS, PLAN_FEATURES, chargesOnChoosing, yearlyPerMonth, yearlySaving } from "@/lib/plans";
 
 /**
  * The workspace's plan, and its data.
@@ -29,7 +29,6 @@ export async function BillingSection({ checkout }: { checkout?: string } = {}) {
     subscriptionStatus: workspace?.subscription_status ?? null,
     seats: workspace?.seats ?? 1,
   }, new Date(), { enforceTrial: await readTrialEnforced(supabase) });
-  const message = entitlementMessage(entitlement);
 
   const isAdmin = ["owner", "admin"].includes(session.role);
   // Back from checkout before Stripe's webhook has reached the worker: the
@@ -50,15 +49,17 @@ export async function BillingSection({ checkout }: { checkout?: string } = {}) {
             <p>Payment details received. Your plan switches on within a minute.</p>
           </div>
         ) : null}
-        {message && !awaitingWebhook ? (
-          <div className={`notice ${entitlement.canSend ? "warning" : "danger"}`}>{message}</div>
-        ) : null}
+        {/* A stop or a failed card is said once, by the banner at the top of
+            every page (PlanBanner); repeating it here put the same sentence
+            on the screen twice. */}
         <PlanState
           entitlement={entitlement}
           plan={workspace?.plan ?? "trial"}
           interval={workspace?.billing_interval ?? null}
           periodEnd={workspace?.current_period_end ?? null}
           ending={Boolean(workspace?.cancel_at_period_end)}
+          trialEndsAt={workspace?.trial_ends_at ?? null}
+          trialing={workspace?.subscription_status === "trialing"}
         />
         {isAdmin && workspace?.stripe_customer_id ? (
           <form action="/app/billing/portal" method="post" className="profile-form-foot">
@@ -67,7 +68,13 @@ export async function BillingSection({ checkout }: { checkout?: string } = {}) {
             </button>
           </form>
         ) : null}
-        {!awaitingWebhook && entitlement.reason !== "free_plan" && entitlement.reason !== "active_subscription" && entitlement.reason !== "payment_failed" ? (
+        {!awaitingWebhook &&
+        entitlement.reason !== "free_plan" &&
+        entitlement.reason !== "active_subscription" &&
+        entitlement.reason !== "payment_failed" &&
+        // An unpaid subscription still exists in Stripe: paying it from the
+        // portal is the fix, and a new checkout beside it would bill twice.
+        !(workspace?.subscription_status === "unpaid" && workspace?.stripe_customer_id) ? (
           isAdmin ? (
             <PlanChooser />
           ) : (
@@ -148,12 +155,17 @@ function PlanState({
   interval,
   periodEnd,
   ending,
+  trialEndsAt,
+  trialing,
 }: {
   entitlement: Entitlement;
   plan: string;
   interval: string | null;
   periodEnd: string | null;
   ending: boolean;
+  trialEndsAt: string | null;
+  /** Chose a plan during the trial: the first charge is still to come. */
+  trialing: boolean;
 }) {
   const name = PLANS.find((p) => p.key === (plan === "autopilot" ? "autopilot" : "pro"))?.name ?? "Nora Pro";
   const date = periodEnd
@@ -179,7 +191,9 @@ function PlanState({
                 ? "You are on a free trial of Nora Autopilot."
                 : `${entitlement.trialDaysLeft === 0 ? "Less than a day" : `${entitlement.trialDaysLeft} day${entitlement.trialDaysLeft === 1 ? "" : "s"}`} left in your free trial of Nora Autopilot.`}
             </strong>{" "}
-            Choose a plan any time. You are not charged until the trial ends.
+            {chargesOnChoosing(trialEndsAt)
+              ? "Choose a plan any time. This close to the end of the trial, billing starts the day you choose."
+              : "Choose a plan any time. You are not charged until the trial ends."}
           </p>
         </div>
       );
@@ -189,7 +203,7 @@ function PlanState({
         <p>
           You are on <strong>{name}</strong>
           {interval ? `, billed ${interval === "year" ? "yearly" : "monthly"}` : ""}.
-          {date ? (ending ? ` It ends on ${date}.` : ` It renews on ${date}.`) : ""}
+          {date ? (ending ? ` It ends on ${date}.` : trialing ? ` Your first charge is on ${date}.` : ` It renews on ${date}.`) : ""}
         </p>
       );
     default:

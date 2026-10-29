@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { POST_MAX_CHARS } from "../src/constants.js";
-import { mayPublish } from "../src/posts.js";
+import { mayPublish, projectPostTimes } from "../src/posts.js";
 
 /**
  * The gate between a draft and a real person's public profile.
@@ -137,5 +137,57 @@ describe("mayPublish", () => {
       // read an account. It must not hold a post for a window it was not told.
       expect(mayPublish(approved, now)).toEqual({ send: true });
     });
+  });
+});
+
+describe("one post every two days", () => {
+  const base = {
+    body: "A real post.",
+    status: "approved",
+    approved_at: "2026-10-04T09:00:00Z",
+    scheduled_for: null,
+    published_at: null,
+  };
+  const hours = { start: 0, end: 24, days: [0, 1, 2, 3, 4, 5, 6] } as never;
+
+  it("waits until two days after the last post, and says until when", () => {
+    const now = new Date("2026-10-05T12:00:00Z");
+    const verdict = mayPublish(base, now, { hours, timezone: "UTC", lastPublishedAt: "2026-10-04T12:00:00Z" });
+    expect(verdict).toMatchObject({ send: false, retry: true, notBefore: "2026-10-06T12:00:00.000Z" });
+    expect(mayPublish(base, now, { hours, timezone: "UTC", lastPublishedAt: "2026-10-03T11:00:00Z" }).send).toBe(true);
+  });
+
+  it("lays an approved queue out two days apart", () => {
+    const now = new Date("2026-10-05T12:00:00Z");
+    const times = projectPostTimes(
+      [
+        { id: "a", scheduled_for: null, approved_at: "2026-10-04T09:00:00Z" },
+        { id: "b", scheduled_for: null, approved_at: "2026-10-04T09:01:00Z" },
+        { id: "c", scheduled_for: "2026-10-20T09:00:00Z", approved_at: "2026-10-04T09:02:00Z" },
+      ],
+      null,
+      now,
+    );
+    expect(times.get("a")!.toISOString()).toBe("2026-10-05T12:00:00.000Z");
+    expect(times.get("b")!.toISOString()).toBe("2026-10-07T12:00:00.000Z");
+    expect(times.get("c")!.toISOString()).toBe("2026-10-20T09:00:00.000Z");
+  });
+});
+
+describe("projected dates and posting hours", () => {
+  it("moves an unscheduled post to the next opening and leaves a scheduled one at its time", () => {
+    const hours = { start: 9, end: 17, days: [1, 2, 3, 4, 5] } as never;
+    const now = new Date("2026-10-05T20:00:00Z"); // Monday 8pm UTC
+    const times = projectPostTimes(
+      [
+        { id: "a", scheduled_for: null, approved_at: "2026-10-05T19:00:00Z" },
+        { id: "s", scheduled_for: "2026-10-20T06:00:00Z", approved_at: "2026-10-05T19:01:00Z" },
+      ],
+      null,
+      now,
+      { hours, timezone: "UTC" },
+    );
+    expect(times.get("a")!.toISOString()).toBe("2026-10-06T09:00:00.000Z");
+    expect(times.get("s")!.toISOString()).toBe("2026-10-20T06:00:00.000Z");
   });
 });

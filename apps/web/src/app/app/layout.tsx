@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { PlanBanner } from "@/components/plan-banner";
 import { Suspense } from "react";
 import { Walkthrough } from "@/components/walkthrough";
 import { redirect } from "next/navigation";
@@ -12,7 +13,7 @@ import { BRAND_QUALIFIER, LogoMark } from "@/components/logo";
 import { readSetupState } from "@/lib/setup-state";
 import { markFor, type NavMarks } from "@/lib/nav-marks";
 import { loadNeedsYou } from "@/lib/needs-you-data";
-import { entitlementFor, entitlementMessage } from "@le/billing";
+import { entitlementFor } from "@le/billing";
 import { readTrialEnforced } from "@/lib/entitlement";
 import { isPlatformAdmin } from "@/lib/admin";
 import { linkedInState, type LinkedInState } from "./profile/linkedin-state";
@@ -190,7 +191,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   const { data: workspace } = await supabase
     .from("workspaces")
-    .select("plan, trial_ends_at, subscription_status, seats")
+    .select("plan, trial_ends_at, subscription_status, seats, current_period_end, cancel_at_period_end")
     .eq("id", session.workspaceId)
     .single();
 
@@ -200,10 +201,18 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     subscriptionStatus: workspace?.subscription_status ?? null,
     seats: workspace?.seats ?? 1,
   }, new Date(), { enforceTrial: await readTrialEnforced(supabase) });
-  const billingMessage = entitlementMessage(entitlement);
-  // A trial says how long it has left on every page, quietly, so day fifteen
-  // is never a surprise.
-  const trialLeft = entitlement.reason === "trial_active" ? entitlement.trialDaysLeft : null;
+  // The plan, said at the top of every page whenever it changes what the
+  // workspace can do or soon will: the trial's days, a stop, a failed card, or
+  // a plan set to end. Nothing for a free or healthy paid workspace.
+  // Nothing when the row could not be read: guessing "trial" there would
+  // show a countdown over a free or paying workspace (rule 17).
+  const planBanner = !workspace ? null : PlanBanner({
+    entitlement,
+    trialEndsAt: workspace?.trial_ends_at ?? null,
+    periodEnd: workspace?.current_period_end ?? null,
+    ending: Boolean(workspace?.cancel_at_period_end),
+    unpaid: workspace?.subscription_status === "unpaid",
+  });
 
   const { data: account } = await supabase
     .from("linkedin_accounts")
@@ -359,22 +368,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </div>
         </header>
 
-        {billingMessage || trialLeft !== null || (account && account.status !== "active") ? (
+        {planBanner || (account && account.status !== "active") ? (
           <div className="app-banners">
-            {billingMessage ? (
-              <div className={`notice ${entitlement.canSend ? "warning" : "danger"}`}>
-                <p>
-                  {billingMessage} <Link href="/app/profile/billing">Choose a plan</Link>
-                </p>
-              </div>
-            ) : trialLeft !== null ? (
-              <div className="notice">
-                <p>
-                  {trialLeft === 0 ? "Your free trial ends today." : `${trialLeft} day${trialLeft === 1 ? "" : "s"} left in your free trial of Nora Autopilot.`}{" "}
-                  <Link href="/app/profile/billing">Choose a plan</Link>
-                </p>
-              </div>
-            ) : null}
+            {planBanner}
             {account && account.status !== "active" ? (
               <div className={`notice ${account.status === "restricted" ? "danger" : "warning"}`}>
                 <p>

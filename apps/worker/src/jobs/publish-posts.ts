@@ -1,6 +1,7 @@
 import { parseWorkingHours } from "@le/linkedin";
 import { mayPublish, type PostRow } from "@le/shared";
 import { recordEvent, type WorkerContext } from "../context.js";
+import { entitlementFor, trialEnforced } from "@le/billing";
 
 /**
  * Posts that a person approved, sent to LinkedIn.
@@ -18,6 +19,11 @@ import { recordEvent, type WorkerContext } from "../context.js";
  * thing: a row the sweep will not send must not sit on the page looking as
  * though it is about to.
  */
+/** How long a claimed post may stay unconfirmed before it is reported. */
+const CLAIM_STALE_MS = 30 * 60_000;
+export const UNCONFIRMED_POST =
+  "We could not confirm this went out. Check your LinkedIn profile, and approve it again if it is not there.";
+
 export async function publishApprovedPosts(
   ctx: WorkerContext,
   now: Date = new Date(),
@@ -36,8 +42,30 @@ export async function publishApprovedPosts(
   // the read itself, not skipped after it: their approved posts would
   // otherwise fill the window every run and nobody else's would go out. An
   // unreadable list publishes nothing, because a post goes to everyone at once.
-  const { data: off, error: offError } = await ctx.db.from("workspaces").select("id").eq("publish_posts", false);
+  //
+  // A workspace whose plan stopped sending (a trial that ended, a plan that
+  // ended) is left out the same way and for the same reason: its approved
+  // posts would otherwise fill the window on every run, and lapsed trials are
+  // the ordinary case. Read through the send path's own rule.
+  const { data: spaces, error: offError } = await ctx.db
+    .from("workspaces")
+    .select("id, publish_posts, plan, trial_ends_at, subscription_status, seats");
   if (offError) return { published: 0, held: 0, failed: 0 };
+  const enforceTrial = trialEnforced(process.env);
+  const off = (spaces ?? []).filter(
+    (w) =>
+      w.publish_posts === false ||
+      !entitlementFor(
+        {
+          plan: (w.plan ?? "trial") as never,
+          trialEndsAt: w.trial_ends_at ?? null,
+          subscriptionStatus: (w.subscription_status ?? null) as never,
+          seats: w.seats ?? 1,
+        },
+        now,
+        { enforceTrial },
+      ).canSend,
+  );
   let query = ctx.db
     .from("linkedin_posts")
     .select("id, workspace_id, user_id, body, status, approved_at, scheduled_for, published_at, graphic_enabled")
@@ -47,11 +75,43 @@ export async function publishApprovedPosts(
   // filter by workspace itself, exactly as every other job here does.
   const { data: rows } = await (workspaceId ? query.eq("workspace_id", workspaceId) : query)
     .order("scheduled_for", { ascending: true, nullsFirst: true })
-    .limit(limit);
+    // The order the screen projects (`projectPostTimes`): among unscheduled
+    // posts, the one approved first goes first.
+    .order("approved_at", { ascending: true })
+    // A wider read than the publishing limit: a post waiting out its two days
+    // stays approved and is read again every run, and a window the size of
+    // the limit would fill with those and starve everybody else's.
+    .limit(Math.max(limit * 8, 200));
 
   let published = 0;
   let held = 0;
   let failed = 0;
+
+  /*
+   * When each rep's profile last had a post, read once per rep and moved
+   * forward the moment this sweep publishes one, so a second approved post in
+   * the same sweep waits its two days (rule 69). Three approved together went
+   * out in the same minute before this. An unreadable history publishes
+   * nothing for that rep: unknown is not "never posted".
+   */
+  const lastPublished = new Map<string, string | null>();
+
+  const lastPublishedFor = async (row: { workspace_id: string; user_id: string }): Promise<string | null | undefined> => {
+    const key = `${row.workspace_id}/${row.user_id}`;
+    if (lastPublished.has(key)) return lastPublished.get(key);
+    const { data, error } = await ctx.db
+      .from("linkedin_posts")
+      .select("published_at")
+      .eq("workspace_id", row.workspace_id)
+      .eq("user_id", row.user_id)
+      .not("published_at", "is", null)
+      .order("published_at", { ascending: false })
+      .limit(1);
+    if (error) return undefined;
+    const value = data?.[0]?.published_at ?? null;
+    lastPublished.set(key, value);
+    return value;
+  };
 
   for (const row of rows ?? []) {
     /*
@@ -88,7 +148,33 @@ export async function publishApprovedPosts(
      * makes — the sweep and the page can never disagree about whether a row is
      * about to go out (rule 21's habit for `describePacing`).
      */
+    if (published >= limit) break;
+    // Claimed by another run that is posting it right now (see the claim
+    // below): theirs to finish, never ours to fail or to post again.
+    if (row.published_at) {
+      // A claim half an hour old belongs to a run that died mid-post: it may
+      // or may not have reached LinkedIn, so it is never posted again blind.
+      // Failed, in words the rep can act on, rather than stuck for ever.
+      if (now.getTime() - Date.parse(row.published_at) > CLAIM_STALE_MS) {
+        failed += 1;
+        await ctx.db
+          .from("linkedin_posts")
+          .update({ status: "failed", published_at: null, error: UNCONFIRMED_POST })
+          .eq("id", row.id)
+          .eq("status", "approved")
+          .eq("published_at", row.published_at);
+      } else {
+        held += 1;
+      }
+      continue;
+    }
+    const lastPublishedAt = await lastPublishedFor(row);
+    if (lastPublishedAt === undefined) {
+      held += 1;
+      continue;
+    }
     const verdict = mayPublish(row as PostRow, now, {
+      lastPublishedAt,
       hours: parseWorkingHours(account?.working_hours),
       // UTC only when the row has never been written. That default is how an
       // eight-to-six working day came to mean four in the morning Eastern for
@@ -109,7 +195,11 @@ export async function publishApprovedPosts(
       await ctx.db
         .from("linkedin_posts")
         .update({ status: "failed", error: verdict.reason })
-        .eq("id", row.id);
+        .eq("id", row.id)
+        // Only a row still waiting: never over one another run has just
+        // claimed or published.
+        .eq("status", "approved")
+        .is("published_at", null);
       continue;
     }
 
@@ -153,6 +243,25 @@ export async function publishApprovedPosts(
       }
     }
 
+    /*
+     * Claimed before the provider call: `published_at` set only while the row
+     * is still approved and unpublished. An Approve press asks the worker to
+     * publish at once, and that run racing the quarter-hourly sweep could
+     * otherwise both read the row and post it twice on a real profile. The
+     * claim also counts as this profile's last post for any other run.
+     */
+    const { data: claimed, error: claimError } = await ctx.db
+      .from("linkedin_posts")
+      .update({ published_at: now.toISOString() })
+      .eq("id", row.id)
+      .eq("status", "approved")
+      .is("published_at", null)
+      .select("id");
+    if (claimError || !claimed?.length) {
+      held += 1;
+      continue;
+    }
+
     const result = await ctx.linkedin.publishPost({
       accountId: account.provider_account_id,
       text: row.body,
@@ -165,7 +274,7 @@ export async function publishApprovedPosts(
         .from("linkedin_posts")
         // The provider's own words, verbatim. "422: ..." is the single most
         // useful sentence in the flow (rule 25).
-        .update({ status: "failed", error: result.error ?? "the provider refused the post" })
+        .update({ status: "failed", published_at: null, error: result.error ?? "the provider refused the post" })
         .eq("id", row.id);
       await recordEvent(ctx.db, {
         workspaceId: row.workspace_id,
@@ -178,6 +287,7 @@ export async function publishApprovedPosts(
     }
 
     published += 1;
+    lastPublished.set(`${row.workspace_id}/${row.user_id}`, now.toISOString());
     await ctx.db
       .from("linkedin_posts")
       .update({

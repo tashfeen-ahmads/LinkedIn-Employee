@@ -1755,8 +1755,11 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
         ...(workspace?.stripe_customer_id
           ? { customerId: workspace.stripe_customer_id }
           : { customerEmail: parsed.data.email }),
-        successUrl: `${ctx.env.APP_URL}/app/profile?checkout=success#billing`,
-        cancelUrl: `${ctx.env.APP_URL}/app/profile?checkout=cancelled#billing`,
+        // The billing page itself, which opens during setup too: the profile
+        // page is closed until something launches, and a customer who paid
+        // mid-setup landed on onboarding with the answer dropped.
+        successUrl: `${ctx.env.APP_URL}/app/profile/billing?checkout=success`,
+        cancelUrl: `${ctx.env.APP_URL}/app/profile/billing?checkout=cancelled`,
       });
       return c.json({ url: session.url });
     } catch (error) {
@@ -1797,7 +1800,7 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
     try {
       const session = await stripe.createPortalSession({
         customerId: workspace.stripe_customer_id,
-        returnUrl: `${ctx.env.APP_URL}/app/profile#billing`,
+        returnUrl: `${ctx.env.APP_URL}/app/profile/billing`,
       });
       return c.json({ url: session.url });
     } catch (error) {
@@ -1847,12 +1850,22 @@ export function createServer(ctx: WorkerContext, queues: Queues, connection?: IO
       return c.json({ error: "could not apply event" }, 500);
     }
 
-    const { error: insertError } = await ctx.db.from("billing_events").insert({
+    let { error: insertError } = await ctx.db.from("billing_events").insert({
       id: event.id,
       type: event.type,
       payload: event as never,
       workspace_id: workspaceIdFrom(event.data.object),
     });
+    if (insertError && /23503|foreign key/i.test(insertError.message)) {
+      // A workspace that has since been deleted: recorded without it, and
+      // answered, rather than refused on every retry until Stripe gives up.
+      ({ error: insertError } = await ctx.db.from("billing_events").insert({
+        id: event.id,
+        type: event.type,
+        payload: event as never,
+        workspace_id: null,
+      }));
+    }
     if (insertError) {
       // A primary-key collision is a concurrent delivery of the same event,
       // which applied the same thing. Anything else asks Stripe to retry,
@@ -1890,15 +1903,51 @@ export async function applyBillingEvent(
 
   if (event.type === "checkout.session.completed") {
     // The event that creates the subscription, so it names the one this
-    // workspace now holds, whatever was stored before.
+    // workspace now holds.
+    const { data: held, error: heldError } = await ctx.db
+      .from("workspaces")
+      .select("stripe_subscription_id, subscription_status")
+      .eq("id", workspaceId)
+      .maybeSingle();
+    if (heldError) throw new Error(`could not read workspace for ${event.type}: ${heldError.message}`);
+    if (!held) return;
+    const incoming = asString(object.subscription);
+    const heldStatus = (held.subscription_status ?? null) as SubscriptionStatus | null;
+    const different = Boolean(incoming && held.stripe_subscription_id && incoming !== held.stripe_subscription_id);
+    if (different && LIVE_STATUSES.includes(heldStatus)) {
+      // A second live subscription (two checkouts finished in two tabs), or a
+      // late retry of an old session. The one held keeps the workspace; the
+      // other is said to an operator rather than silently billed.
+      await recordEvent(ctx.db, {
+        workspaceId,
+        name: "billing.second_subscription",
+        subjectType: "workspace",
+        subjectId: workspaceId,
+        payload: { held: held.stripe_subscription_id, incoming },
+      }).catch(() => undefined);
+      return;
+    }
     const { error } = await ctx.db
       .from("workspaces")
       .update({
         stripe_customer_id: asString(object.customer),
-        stripe_subscription_id: asString(object.subscription),
+        stripe_subscription_id: incoming,
+        // A new subscription after a cancelled one starts clean. Kept, the old
+        // `canceled` made every event of the new one read as a late event of a
+        // terminal subscription, and a resubscribed customer stayed paused.
+        ...(different ? { subscription_status: null, last_billing_event_at: null } : {}),
       })
       .eq("id", workspaceId);
     if (error) throw new Error(`could not apply ${event.type}: ${error.message}`);
+    if (!held.stripe_subscription_id || different) {
+      await recordEvent(ctx.db, {
+        workspaceId,
+        name: "billing.subscribed",
+        subjectType: "workspace",
+        subjectId: workspaceId,
+        payload: { subscription: incoming },
+      }).catch(() => undefined);
+    }
     return;
   }
 
@@ -1906,11 +1955,12 @@ export async function applyBillingEvent(
 
   const { data: current, error: readError } = await ctx.db
     .from("workspaces")
-    .select("last_billing_event_at, subscription_status, stripe_subscription_id")
+    .select("last_billing_event_at, subscription_status, stripe_subscription_id, cancel_at_period_end")
     .eq("id", workspaceId)
     .maybeSingle();
   if (readError) throw new Error(`could not read workspace for ${event.type}: ${readError.message}`);
   if (!current) return;
+  const cancelWasSet = current.cancel_at_period_end === true;
 
   const status = normalizeSubscriptionStatus(asString(object.status));
   const subscriptionId = asString(object.id);
@@ -1967,6 +2017,22 @@ export async function applyBillingEvent(
     })
     .eq("id", workspaceId);
   if (updateError) throw new Error(`could not apply ${event.type}: ${updateError.message}`);
+
+  // What changed, as an event the operator console can read (rule 15): the
+  // row only ever holds the latest state, so a churn date or an upgrade was
+  // otherwise lost the moment the next event arrived.
+  const changes: string[] = [];
+  if (status !== storedStatus && status) changes.push(`billing.${status}`);
+  if (object.cancel_at_period_end === true && !cancelWasSet) changes.push("billing.cancel_scheduled");
+  for (const name of changes) {
+    await recordEvent(ctx.db, {
+      workspaceId,
+      name,
+      subjectType: "workspace",
+      subjectId: workspaceId,
+      payload: { subscription: subscriptionId, plan, interval },
+    }).catch(() => undefined);
+  }
 }
 
 type SubscriptionStatus = "active" | "trialing" | "past_due" | "canceled" | "unpaid";
@@ -2034,7 +2100,10 @@ export function subscriptionEventApplies(input: {
 
 function workspaceIdFrom(object: Record<string, unknown>): string | null {
   const metadata = object.metadata as Record<string, unknown> | undefined;
-  return asString(metadata?.workspace_id) ?? asString(object.client_reference_id);
+  const id = asString(metadata?.workspace_id) ?? asString(object.client_reference_id);
+  // Only a real id: anything else failed the database read on every retry,
+  // and an endpoint answering 500 for ever is one Stripe switches off.
+  return id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id) ? id : null;
 }
 
 function asString(value: unknown): string | null {

@@ -169,6 +169,43 @@ describe("Stripe events that must not land, or must be retried", () => {
   });
 });
 
+describe("resubscribing after a cancellation", () => {
+  const WS2 = "11111111-1111-4111-8111-111111111111";
+  const sub = (type: string, created: number, id: string, status: string) => ({
+    type,
+    created,
+    data: { object: { id, status, metadata: { workspace_id: WS2 }, items: { data: [{ price: { lookup_key: "pro_monthly" }, quantity: 1 }] } } },
+  });
+  const checkout = (subscription: string) => ({
+    type: "checkout.session.completed",
+    created: 1_800_000_050,
+    data: { object: { customer: "cus_1", subscription, client_reference_id: WS2 } },
+  });
+  const fresh = (extra: Record<string, unknown>) => {
+    const db = new FakeDb();
+    db.seed("workspaces", [{ id: WS2, plan: "pro", ...extra }]);
+    db.seed("events", []);
+    return db;
+  };
+
+  it("switches sending back on when the checkout lands before the subscription's events", async () => {
+    // Confirmed live risk: the old `canceled` stayed on the row, so every
+    // event of the new subscription read as a late event of a terminal one.
+    const db = fresh({ stripe_subscription_id: "sub_old", subscription_status: "canceled", last_billing_event_at: new Date(1_800_000_000_000).toISOString() });
+    await applyBillingEvent({ db: db.asDb() }, checkout("sub_new"));
+    await applyBillingEvent({ db: db.asDb() }, sub("customer.subscription.created", 1_800_000_060, "sub_new", "active"));
+    expect(db.find("workspaces", { id: WS2 })).toMatchObject({ stripe_subscription_id: "sub_new", subscription_status: "active" });
+    expect(db.rows("events").map((e) => e.name)).toEqual(["billing.subscribed", "billing.active"]);
+  });
+
+  it("keeps the live subscription when a second checkout completes, and tells an operator", async () => {
+    const db = fresh({ stripe_subscription_id: "sub_live", subscription_status: "active" });
+    await applyBillingEvent({ db: db.asDb() }, checkout("sub_second"));
+    expect(db.find("workspaces", { id: WS2 })).toMatchObject({ stripe_subscription_id: "sub_live", subscription_status: "active" });
+    expect(db.rows("events").map((e) => e.name)).toEqual(["billing.second_subscription"]);
+  });
+});
+
 describe("subscriptionEventApplies", () => {
   const base = {
     type: "customer.subscription.updated",

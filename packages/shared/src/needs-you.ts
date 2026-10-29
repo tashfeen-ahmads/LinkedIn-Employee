@@ -105,7 +105,8 @@ export type NeedsYouKind =
   | "thin_notes"
   | "cta_missing"
   | "setup_unfinished"
-  | "posts_unapproved";
+  | "posts_unapproved"
+  | "plan_needed";
 
 export interface NeedsYouItem {
   kind: NeedsYouKind;
@@ -198,6 +199,17 @@ export interface NeedsYouFacts {
    * week's posts would wait on a page nobody had a reason to open.
    */
   postsWaiting?: number;
+  /**
+   * The plan stops sending (a trial that ended, a plan that ended), or a trial
+   * ends within three days. Null or absent says nothing: the plan could not be
+   * read, or there is nothing to say.
+   */
+  plan?: {
+    stopped: boolean;
+    trialDaysLeft: number | null;
+    /** Choosing a plan now charges at once (inside the trial's last 49 hours). */
+    chargesNow?: boolean;
+  } | null;
 }
 
 function plural(n: number, one: string, many = `${one}s`): string {
@@ -230,6 +242,20 @@ export function needsYou(facts: NeedsYouFacts): NeedsYouItem[] {
       why: "This is on our side, not your campaigns. Nothing goes out until it is running again.",
       href: "/app/system",
       action: "Open the system check",
+      tone: "blocker",
+      count: 1,
+    });
+  }
+
+  // A plan that stops sending is a blocker like a disconnected account: every
+  // row below it is work that cannot go out until it is chosen.
+  if (facts.plan?.stopped) {
+    items.push({
+      kind: "plan_needed",
+      title: "Your campaigns are paused until you choose a plan.",
+      why: "Nothing has been deleted. Choosing a plan starts sending again where it stopped.",
+      href: "/app/profile/billing",
+      action: "Choose a plan",
       tone: "blocker",
       count: 1,
     });
@@ -459,6 +485,21 @@ export function needsYou(facts: NeedsYouFacts): NeedsYouItem[] {
       action: "Review and launch",
       tone: "warning",
       count: facts.campaignsUnlaunched,
+    });
+  }
+
+  if (!facts.plan?.stopped && facts.plan?.trialDaysLeft !== null && facts.plan?.trialDaysLeft !== undefined && facts.plan.trialDaysLeft <= 3) {
+    const left = facts.plan.trialDaysLeft;
+    items.push({
+      kind: "plan_needed",
+      title: left === 0 ? "Your free trial ends today." : `Your free trial ends in ${plural(left, "day")}.`,
+      why: facts.plan.chargesNow
+        ? "Choose a plan now and your campaigns carry on without a gap. This close to the end, billing starts the day you choose."
+        : "Choose a plan now and your campaigns carry on without a gap. You are not charged until the trial ends.",
+      href: "/app/profile/billing",
+      action: "Choose a plan",
+      tone: "warning",
+      count: 1,
     });
   }
 

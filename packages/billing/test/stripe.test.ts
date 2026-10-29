@@ -71,6 +71,24 @@ describe("normalizeSubscriptionStatus", () => {
     expect(normalizeSubscriptionStatus("active")).toBe("active");
     expect(normalizeSubscriptionStatus("incomplete_expired")).toBe("canceled");
     expect(normalizeSubscriptionStatus("incomplete")).toBe("unpaid");
-    expect(normalizeSubscriptionStatus("paused")).toBeNull();
+    expect(normalizeSubscriptionStatus("paused")).toBe("unpaid");
+    expect(normalizeSubscriptionStatus("something_new")).toBeNull();
+  });
+});
+
+describe("rolling a signing secret", () => {
+  it("accepts a delivery signed with either secret while Stripe signs with both", () => {
+    const now = new Date("2026-10-28T12:00:00Z");
+    const t = Math.floor(now.getTime() / 1000);
+    const body = JSON.stringify({ id: "evt_1", type: "customer.subscription.updated", data: { object: {} } });
+    const sig = (secret: string) => createHmac("sha256", secret).update(`${t}.${body}`).digest("hex");
+    const header = `t=${t},v1=${sig("whsec_new")},v1=${sig("whsec_old")}`;
+    expect(verifyStripeWebhook({ body, signatureHeader: header, secret: "whsec_old", now }).id).toBe("evt_1");
+    expect(verifyStripeWebhook({ body, signatureHeader: header, secret: "whsec_new", now }).id).toBe("evt_1");
+    expect(() => verifyStripeWebhook({ body, signatureHeader: header, secret: "whsec_other", now })).toThrow();
+  });
+
+  it("reads a paused subscription as stopped, not as an unknown plan", () => {
+    expect(normalizeSubscriptionStatus("paused")).toBe("unpaid");
   });
 });
