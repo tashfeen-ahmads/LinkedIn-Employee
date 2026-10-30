@@ -4274,19 +4274,11 @@ const MUTATIONS = [
     pkg: "@le/worker",
   },
   {
-    id: "notes/fill-never-touches-a-launched-campaign",
-    rule: "Missing notes are filled only before launch, so nobody is sent copy that was never approved",
-    file: "apps/worker/src/jobs/rewrite-notes.ts",
-    from: '    .in("id", campaignIds)\n    .is("launched_at", null);',
-    to: '    .in("id", campaignIds);',
-    pkg: "@le/worker",
-  },
-  {
     id: "notes/fill-only-the-gaps",
     rule: "Filling a gap never rewrites a note a person already read",
     file: "apps/worker/src/jobs/rewrite-notes.ts",
-    from: '  if (input.onlyMissing) queuedQuery = queuedQuery.is("invite_note", null);',
-    to: "",
+    from: '    queuedQuery = queuedQuery.is("invite_note", null).neq("invite_note_edited", true).is("invite_claimed_at", null);',
+    to: '    queuedQuery = queuedQuery.neq("invite_note_edited", true).is("invite_claimed_at", null);',
     pkg: "@le/worker",
   },
   {
@@ -5791,7 +5783,7 @@ const MUTATIONS = [
   { id: "cta/pick-writes-goal", rule: "Picking a saved CTA writes its goal onto the campaign, not only the pointer", file: "apps/web/src/app/app/campaigns/[id]/cta-choice.ts", from: "    patch = { cta_id: picked.id, cta_kind: picked.kind, cta_label: picked.label, cta_url: picked.url };", to: "    patch = { cta_id: picked.id };", pkg: "@le/web" },
   { id: "needs-you/meeting-hours-effective-cta", rule: "Meeting-hours row counts campaigns whose effective CTA is a meeting", file: "apps/web/src/lib/needs-you-data.ts", from: "filter((c) => runningCtas.get(c.id)?.kind === \"meeting\")", to: "filter((c) => c.cta_kind === \"meeting\")", pkg: "@le/web" },
   { id: "funnel/goal-is-effective-cta", rule: "Funnel goals are the CTA a campaign actually sends toward", file: "apps/web/src/lib/funnel-data.ts", from: "cta_kind: ctas.get(c.id)?.kind ?? c.cta_kind ?? \"meeting\",", to: "cta_kind: c.cta_kind ?? \"meeting\",", pkg: "@le/web" },
-  { id: "needs-you/thin-notes-include-template", rule: "Template-fallback notes count as not personalised", file: "apps/web/src/lib/needs-you-data.ts", from: ".or(\"invite_note_thin.eq.true,and(invite_note.is.null,invite_note_edited.eq.false)\")", to: ".eq(\"invite_note_thin\", true)", pkg: "@le/web" },
+  { id: "needs-you/thin-notes-include-template", rule: "A note a person cleared on purpose is never raised as not personalised", file: "apps/web/src/lib/needs-you-data.ts", from: "      .eq(\"invite_note_edited\", false)\n      .limit(1000),", to: "      .limit(1000),", pkg: "@le/web" },
   { id: "needs-you/thin-notes-skip-spent-month", rule: "Accounts whose free notes are spent this month are not asked to rewrite notes nobody reads", file: "apps/web/src/lib/needs-you-data.ts", from: "const raised = live.filter((c) => !c.linkedin_account_id || !spent.has(c.linkedin_account_id));", to: "const raised = live;", pkg: "@le/web" },
   { id: "pacing/screen-nets-queued", rule: "The campaign page nets invitations already queued off today's room, as the loop does", file: "apps/web/src/lib/pacing.ts", from: "    accountInFlightToday: queuedOnAccount,", to: "    accountInFlightToday: 0,", pkg: "@le/web" },
   { id: "pacing/screen-end-of-day", rule: "With less than one gap left today the page says the rest go tomorrow", file: "apps/web/src/lib/pacing.ts", from: "  if (windowLeft < (pace ?? LINKEDIN_LIMITS.minGapMs)) {", to: "  if (windowLeft < 0) {", pkg: "@le/web" },
@@ -5898,6 +5890,12 @@ const MUTATIONS = [
   { id: "posts/brand-colours-not-overwritten", rule: "Rule 69: a background run never overwrites colours a person chose", file: "apps/worker/src/jobs/brand-colors.ts", from: "  if (!input.replace) update = update.is(\"brand_primary\", null);\n", to: "", pkg: "@le/worker" },
   { id: "posts/brand-colours-no-greys", rule: "Rule 69: a website's greys are never read as its brand", file: "packages/shared/src/brand-colors.ts", from: "    if (!hex || isNeutral(hex)) return;", to: "    if (!hex) return;", pkg: "@le/shared" },
   { id: "posts/provider-form-not-json", rule: "A post goes as a form, never with a JSON content-type over it", file: "packages/linkedin/src/unipile.ts", from: "...(typeof init.body === \"string\" ? { \"content-type\": \"application/json\" } : {}),", to: "...(init.body ? { \"content-type\": \"application/json\" } : {}),", pkg: "@le/linkedin" },
+  { id: "notes/fill-launched-campaigns", rule: "Rule 16: a running campaign's blank notes are written, not sent as the standard line", file: "apps/worker/src/jobs/rewrite-notes.ts", from: "    .in(\"status\", [\"draft\", \"running\", \"paused\"]);", to: "    .in(\"status\", [\"draft\"]);", pkg: "@le/worker" },
+  { id: "notes/fill-respects-edited", rule: "Rule 16: a note a person cleared is never filled", file: "apps/worker/src/jobs/rewrite-notes.ts", from: "    queuedQuery = queuedQuery.is(\"invite_note\", null).neq(\"invite_note_edited\", true).is(\"invite_claimed_at\", null);", to: "    queuedQuery = queuedQuery.is(\"invite_note\", null).is(\"invite_claimed_at\", null);", pkg: "@le/worker" },
+  { id: "notes/fill-skips-mid-send", rule: "Rule 16: a note is never written over an invitation being sent", file: "apps/worker/src/jobs/rewrite-notes.ts", from: "      if (input.onlyMissing) write = write.is(\"invite_note\", null).is(\"invite_claimed_at\", null);", to: "      if (input.onlyMissing) write = write.is(\"invite_note\", null);", pkg: "@le/worker" },
+  { id: "notes/fill-reads-past-mid-send", rule: "Rule 16: a row being sent is not even handed to the writer", file: "apps/worker/src/jobs/rewrite-notes.ts", from: "    queuedQuery = queuedQuery.is(\"invite_note\", null).neq(\"invite_note_edited\", true).is(\"invite_claimed_at\", null);", to: "    queuedQuery = queuedQuery.is(\"invite_note\", null).neq(\"invite_note_edited\", true);", pkg: "@le/worker" },
+  { id: "notes/fill-rests", rule: "A campaign just filled rests before the writer is asked again", file: "apps/worker/src/jobs/rewrite-notes.ts", from: "    if (!campaign.owner_user_id || resting.has(campaign.id)) continue;", to: "    if (!campaign.owner_user_id) continue;", pkg: "@le/worker" },
+  { id: "notes/needs-you-drafts-only", rule: "Rule 50: Needs you never asks for work Nora does itself", file: "apps/web/src/lib/needs-you-data.ts", from: "  const live = (campaigns ?? []).filter((c) => c.status === \"draft\");", to: "  const live = (campaigns ?? []).filter((c) => [\"draft\", \"running\", \"paused\"].includes(c.status));", pkg: "@le/web" },
 ];
 
 /**

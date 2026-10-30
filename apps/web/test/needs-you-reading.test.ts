@@ -175,15 +175,16 @@ describe("meeting hours nobody chose", () => {
 });
 
 describe("notes that are not personalised", () => {
-  it("asks for template fallbacks as well as thin notes, never a note a person cleared", async () => {
+  it("asks for blank notes only, never a thin one or a note a person cleared", async () => {
     const { client, calls } = world({});
     await loadNeedsYou(client, "w1", NOW);
     const query = calls.find((c) => c.table === "campaign_prospects");
-    const or = query?.filters.find(([name]) => name === "or")?.[1];
-    expect(or).toBe("invite_note_thin.eq.true,and(invite_note.is.null,invite_note_edited.eq.false)");
+    expect(query?.filters.some(([name]) => name === "or")).toBe(false);
+    expect(query?.filters).toContainEqual(["is", "invite_note", null]);
+    expect(query?.filters).toContainEqual(["eq", "invite_note_edited", false]);
   });
 
-  it("does not call a draft sending, and leaves out accounts whose free notes are spent", async () => {
+  it("raises drafts only, since Nora fills a launched campaign's notes itself", async () => {
     const { client } = world({
       thin: [{ campaign_id: "draft1" }, { campaign_id: "run1" }, { campaign_id: "spent1" }],
       campaigns: [
@@ -201,16 +202,17 @@ describe("notes that are not personalised", () => {
       ],
     });
     const { facts, items } = await loadNeedsYou(client, "w1", NOW);
-    expect(facts.campaignsWithThinNotes).toBe(2);
+    expect(facts.campaignsWithThinNotes).toBe(1);
     expect(facts.campaignsWithThinNotesDraft).toBe(1);
     const row = items.find((i) => i.kind === "thin_notes");
-    expect(row?.title).toBe("2 campaigns have notes that are not personalised, 1 of them already sending.");
+    expect(row?.title).toBe("1 campaign has notes ready that are not personalised.");
+    expect(row?.why).toContain("before you launch");
   });
 
   it("leaves out a free account that has already sent this month's notes", async () => {
     const { client } = world({
-      thin: [{ campaign_id: "run1" }],
-      campaigns: [{ id: "run1", status: "running", linkedin_account_id: "a1" }],
+      thin: [{ campaign_id: "draft1" }],
+      campaigns: [{ id: "draft1", status: "draft", linkedin_account_id: "a1" }],
       accounts: [{ id: "a1", user_id: "u1", has_premium: false, has_sales_navigator: false, notes_exhausted_month: null }],
       profiles: [{ id: "u1", timezone: "America/New_York" }],
       invited: { a1: { all: 5, noNote: 2 } },

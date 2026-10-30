@@ -114,21 +114,23 @@ export async function loadNeedsYou(
       .eq("status", "draft")
       .limit(200),
     /*
-     * Campaigns about to send a note that is not written for the person: one
-     * the writer marked thin, or none at all, which falls back to the
-     * campaign's template (rule 16). A note a person cleared on purpose
-     * (`invite_note_edited`) is their choice and is not raised.
+     * People about to be invited with no note of their own, who would get
+     * the campaign's standard line (rule 16). A note a person cleared on
+     * purpose (`invite_note_edited`) is their choice and is not raised.
      *
-     * `queued` only: a note already sent cannot be rewritten, and listing it
-     * would put a row on this screen with no action behind it. Distinct in
-     * memory because PostgREST has no `distinct` and the alternative is a view.
+     * Blank only, never `invite_note_thin`: a thin note was written for the
+     * person from all there is to know about them, and rewriting it finds
+     * nothing new, so a row offering to was a promise with no action behind
+     * it. Queued only: a note already sent cannot be rewritten. Distinct in
+     * memory because PostgREST has no `distinct`.
      */
     supabase
       .from("campaign_prospects")
       .select("campaign_id")
       .eq("workspace_id", workspaceId)
       .eq("status", "queued")
-      .or("invite_note_thin.eq.true,and(invite_note.is.null,invite_note_edited.eq.false)")
+      .is("invite_note", null)
+      .eq("invite_note_edited", false)
       .limit(1000),
     // Released after a fortnight unused (rule 63): the row says reconnect to
     // start campaigns rather than reading as a fault.
@@ -278,10 +280,9 @@ export async function loadNeedsYou(
 }
 
 /**
- * Which of the campaigns with generic or thin queued notes are worth raising.
+ * Which of the campaigns with blank queued notes are worth raising.
  *
- * Only campaigns that can still send: a draft, a running or a paused one.
- * And not one whose account's free notes are spent for the month: LinkedIn
+ * Not one whose account's free notes are spent for the month: LinkedIn
  * then takes the invitation without any note (rule 62), so nobody reads the
  * note whatever it says, and rewriting it would be work with no effect. The
  * month is read through `noteAllowance`, the send path's own reading, in the
@@ -299,7 +300,11 @@ async function thinNoteCampaigns(
     .select("id, status, linkedin_account_id")
     .eq("workspace_id", workspaceId)
     .in("id", ids);
-  const live = (campaigns ?? []).filter((c) => ["draft", "running", "paused"].includes(c.status));
+  // Drafts only. On a launched campaign Nora writes the missing notes itself
+  // within the hour (`fillMissingNotes`), so a row there was a chore nobody
+  // had to do, and it sat on the overview every day. Before launch is when a
+  // person reads the list, and a gap the writer could not fill is theirs to see.
+  const live = (campaigns ?? []).filter((c) => c.status === "draft");
   const accountIds = [...new Set(live.map((c) => c.linkedin_account_id).filter(Boolean))] as string[];
   const { data: accounts } = accountIds.length
     ? await supabase

@@ -80,7 +80,11 @@ export async function rewriteCampaignNotes(
     .eq("campaign_id", campaign.id)
     .eq("workspace_id", input.workspaceId)
     .eq("status", "queued");
-  if (input.onlyMissing) queuedQuery = queuedQuery.is("invite_note", null);
+  // A note a person cleared on purpose is their choice, never a gap, and a
+  // row being sent this minute is already going with what it has.
+  if (input.onlyMissing) {
+    queuedQuery = queuedQuery.is("invite_note", null).neq("invite_note_edited", true).is("invite_claimed_at", null);
+  }
   const { data: queued } = await queuedQuery;
 
   if (!queued?.length) {
@@ -320,11 +324,15 @@ export async function rewriteCampaignNotes(
         // somebody in between. Rewriting what they were sent would leave every
         // screen reporting words nobody received.
         .eq("status", "queued");
-      // Filling a gap never overwrites a note somebody wrote in the meantime.
-      if (input.onlyMissing) write = write.is("invite_note", null);
-      const { error } = await write;
+      // Filling a gap never overwrites a note somebody wrote in the meantime,
+      // nor one being sent this minute: the record has to say what went.
+      if (input.onlyMissing) write = write.is("invite_note", null).is("invite_claimed_at", null);
+      const { data: changed, error } = await write.select("id");
       if (error) return { ok: false, reason: error.message };
-      rewritten += 1;
+      // Counted only when the row really changed: one invited or claimed in
+      // the meantime is not a note anybody will receive.
+      if (changed?.length) rewritten += 1;
+      else unanswered += 1;
     }
   }
 
@@ -340,26 +348,40 @@ export async function rewriteCampaignNotes(
   return { ok: true, rewritten, unanswered };
 }
 
+/** How long a campaign rests after a fill before it is asked again. */
+export const FILL_RETRY_MS = 6 * 60 * 60_000;
+
 /**
- * Write the notes the writer missed, on every campaign nobody has launched yet.
+ * Write the notes that are missing, on every campaign still inviting people.
  *
- * A campaign is built with one note per person, and when the writer comes back
- * short the gap is recorded (`campaign.notes_missing`) and those people fall
- * back to the campaign template. Rewriting by hand was the only way out, so a
- * campaign sat in review with one or two people about to receive the generic
- * line under a real rep's name, and the operator's Issues tab said so every day.
+ * A note goes missing three ways: the writer comes back short when a list is
+ * built or refilled (`campaign.notes_missing`), the nightly copy repair clears
+ * one it could not fix (rule 66), or a refill adds people to a campaign that
+ * is already running. Each of those people would otherwise get the
+ * campaign's standard line, and Needs you told the owner so every day.
  *
- * Unlaunched campaigns only. Launching is a person approving the copy they
- * saw, template lines included, and changing it afterwards would send words
- * nobody approved. A failed fill leaves the template in place, exactly as
- * before, and is tried again the next night.
+ * This used to run on unlaunched campaigns only, on the reading that a launch
+ * approves the copy as it stood. But the gap is what was never meant to be
+ * sent: rule 16 makes the template a fallback for a writer outage, and the
+ * people a refill adds were never in front of anybody. On 27 October the
+ * repair cleared 92 notes across five running campaigns, nothing could fill
+ * them, and every one of those people was about to be invited with the
+ * standard line. So every live campaign is filled, by the same writer and
+ * the same checks a new list gets.
+ *
+ * Only a blank note is written: a note somebody wrote or cleared is theirs,
+ * and a row being sent this minute is left alone. Hourly, and a campaign that
+ * was just tried rests `FILL_RETRY_MS`, so a person the writer cannot write
+ * for costs a call a few times a day rather than every hour. A failed fill
+ * leaves the template in place, exactly as before.
  */
-export async function fillMissingNotes(ctx: WorkerContext): Promise<number> {
+export async function fillMissingNotes(ctx: WorkerContext, now: Date = new Date()): Promise<number> {
   const { data: gaps } = await ctx.db
     .from("campaign_prospects")
     .select("campaign_id")
     .eq("status", "queued")
     .is("invite_note", null)
+    .neq("invite_note_edited", true)
     .limit(2000);
   const campaignIds = [...new Set((gaps ?? []).map((row) => row.campaign_id))];
   if (!campaignIds.length) return 0;
@@ -368,18 +390,34 @@ export async function fillMissingNotes(ctx: WorkerContext): Promise<number> {
     .from("campaigns")
     .select("id, workspace_id, owner_user_id")
     .in("id", campaignIds)
-    .is("launched_at", null);
+    .in("status", ["draft", "running", "paused"]);
+  if (!campaigns?.length) return 0;
+
+  // Campaigns written for in the last few hours, by this job or by a person
+  // pressing Rewrite. An unreadable history skips nobody: a fill is a no-op
+  // once there is nothing blank, and waiting would send the standard line.
+  const { data: recent } = await ctx.db
+    .from("events")
+    .select("subject_id")
+    .eq("name", "campaign.notes_rewritten")
+    .in("subject_id", campaigns.map((c) => c.id))
+    .gte("created_at", new Date(now.getTime() - FILL_RETRY_MS).toISOString());
+  const resting = new Set((recent ?? []).map((row) => row.subject_id));
 
   let written = 0;
-  for (const campaign of campaigns ?? []) {
-    if (!campaign.owner_user_id) continue;
+  for (const campaign of campaigns) {
+    if (!campaign.owner_user_id || resting.has(campaign.id)) continue;
     const result = await rewriteCampaignNotes(ctx, {
       workspaceId: campaign.workspace_id,
       userId: campaign.owner_user_id,
       campaignId: campaign.id,
       onlyMissing: true,
+    }).catch((err) => {
+      // One campaign's failure never costs another its notes.
+      console.error("could not fill missing notes", { campaignId: campaign.id, err });
+      return null;
     });
-    if (result.ok) written += result.rewritten;
+    if (result?.ok) written += result.rewritten;
   }
   return written;
 }

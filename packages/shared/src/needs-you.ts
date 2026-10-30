@@ -397,7 +397,10 @@ export function needsYou(facts: NeedsYouFacts): NeedsYouItem[] {
           : sending === 0
             ? `${plural(total, "campaign")} ${have} notes ready that are not personalised.`
             : `${plural(total, "campaign")} ${have} notes that are not personalised, ${sending} of them already sending.`,
-      why: "Those people would get a standard line, not a note written for them. Nora can rewrite them before they are invited.",
+      why:
+        sending === 0
+          ? "Nora writes these within the hour. Any it cannot write get the campaign's standard line, so look them over before you launch."
+          : "Those people would get a standard line, not a note written for them. Nora can rewrite them before they are invited.",
       href: "/app/campaigns",
       action: "Review the notes",
       tone: "warning",

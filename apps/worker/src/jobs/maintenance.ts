@@ -128,14 +128,15 @@ export async function runMaintenance(
   // monthly and used by nothing. After recovery, so a re-pointed row counts.
   await step("release-duplicate-accounts", async () => (await releaseDuplicateAccounts(ctx)).released);
   await step("lifecycle-emails", () => runLifecycleEmails(ctx, now));
-  // Notes the writer missed when a campaign was built, before anybody launches it.
-  await step("fill-missing-notes", () => fillMissingNotes(ctx));
-  // After the notes are filled, so a freshly written one is checked too (rule 66).
   await step("repair-seeded-lines", async () => {
     const tally = await repairSeededLines(ctx);
     return tally.offers + tally.openers;
   });
   await step("repair-copy", async () => (await repairCopy(ctx)).repaired);
+  // After the repair, so a note it could not fix and cleared is written again
+  // tonight rather than sent as the campaign's standard line. A fresh note
+  // passes the same checks on its way in (rule 66).
+  await step("fill-missing-notes", () => fillMissingNotes(ctx, now));
   await step("first-messages", () => fillFirstMessages(ctx));
   // This week's posts for each rep's own profile, drafts only (rule 69).
   await step("weekly-posts", () => writeWeeklyPosts(ctx, now));

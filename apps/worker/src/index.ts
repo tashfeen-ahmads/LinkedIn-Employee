@@ -182,9 +182,6 @@ if (queueOk) {
     .then((removed) => console.log("removed old failed jobs at boot", { removed }))
     .catch((err) => console.error("could not clean failed jobs at boot", err));
 }
-void fillMissingNotes(ctx)
-  .then((written) => console.log("filled missing invitation notes at boot", { written }))
-  .catch((err) => console.error("could not fill missing notes at boot", err));
 // Copy written before the voice check existed is rewritten now rather than
 // sent as stored for another day (rule 66).
 // A duplicate provider account is a bill every month; the first check is now.
@@ -197,6 +194,10 @@ void repairSeededLines(ctx)
   .then(() => repairCopy(ctx))
   .then((tally) => console.log("repaired stored copy at boot", tally))
   .catch((err) => console.error("could not repair stored copy at boot", err))
+  // After the repair, so a note it cleared is written again now.
+  .then(() => fillMissingNotes(ctx))
+  .then((written) => console.log("filled missing invitation notes at boot", { written }))
+  .catch((err) => console.error("could not fill missing notes at boot", err))
   .then(() => fillFirstMessages(ctx))
   .then((written) => console.log("wrote first messages at boot", { written }))
   .catch((err) => console.error("could not write first messages at boot", err));
@@ -282,6 +283,10 @@ const workers = [
             // Caught here, so a refill that throws never costs the repairs
             // below their hour (rule 8).
             .then(() => refillCampaigns(ctx, queues).catch((err) => console.error("refill failed", err)))
+            // Hourly, so people a refill added without a note, or whose note
+            // the nightly repair cleared, get one within the hour rather than
+            // the campaign's standard line.
+            .then(() => fillMissingNotes(ctx).catch((err) => console.error("filling notes failed", err)))
             // A throttle lifts on its own schedule, so the rows it wrote off
             // are checked on the same hourly beat rather than waiting for the
             // night.

@@ -321,15 +321,15 @@ describe("filling the notes the writer missed", () => {
     // Replace, not add to, the base fixture's rows for these three tables.
     for (const table of ["campaigns", "prospects", "campaign_prospects"]) db.rows(table).length = 0;
     db.seed("campaigns", [
-      { id: CAMPAIGN, workspace_id: WORKSPACE, name: "Owners — referral partners", agent_id: AGENT, customer_profile_id: PROFILE, owner_user_id: USER, rules: {}, launched_at: launchedAt },
+      { id: CAMPAIGN, workspace_id: WORKSPACE, name: "Owners — referral partners", agent_id: AGENT, customer_profile_id: PROFILE, owner_user_id: USER, rules: {}, launched_at: launchedAt, status: launchedAt ? "running" : "draft" },
     ]);
     db.seed("prospects", [
       { id: "p-queued", workspace_id: WORKSPACE, provider_id: "pv-queued", first_name: "Dana", last_name: "Rizzo", company: "Rizzo Events", title: "Owner", headline: null, location: null, linkedin_url: "https://linkedin.com/in/dana" },
       { id: "p-gap", workspace_id: WORKSPACE, provider_id: "pv-gap", first_name: "Omar", last_name: "Diaz", company: "Diaz Law", title: "Owner", headline: null, location: null, linkedin_url: "https://linkedin.com/in/omar" },
     ]);
     db.seed("campaign_prospects", [
-      { id: "cp-queued", workspace_id: WORKSPACE, campaign_id: CAMPAIGN, prospect_id: "p-queued", variant_id: null, status: "queued", invite_note: "A note a human already read." },
-      { id: "cp-gap", workspace_id: WORKSPACE, campaign_id: CAMPAIGN, prospect_id: "p-gap", variant_id: null, status: "queued", invite_note: null },
+      { id: "cp-queued", workspace_id: WORKSPACE, campaign_id: CAMPAIGN, prospect_id: "p-queued", variant_id: null, status: "queued", invite_note: "A note a human already read.", invite_note_edited: false },
+      { id: "cp-gap", workspace_id: WORKSPACE, campaign_id: CAMPAIGN, prospect_id: "p-gap", variant_id: null, status: "queued", invite_note: null, invite_note_edited: false },
     ]);
     notesMock.mockImplementation(async (_ctx: unknown, args: { prospects: Array<{ providerId: string }> }) =>
       new Map(args.prospects.map((p) => [p.providerId, { note: `Written for ${p.providerId}`, promptVersion: "invite/test", grounding: ["Owner"], tooThin: false }])),
@@ -347,11 +347,72 @@ describe("filling the notes the writer missed", () => {
     expect(notesMock.mock.calls[0]?.[1].prospects.map((p: { providerId: string }) => p.providerId)).toEqual(["pv-gap"]);
   });
 
-  it("never changes the copy of a launched campaign", async () => {
+  it("fills a running campaign's blank note and never touches a written one", async () => {
+    // 27 October: the nightly repair cleared 92 notes across five running
+    // campaigns and nothing wrote them again, so every one of those people
+    // was about to get the campaign's standard line.
     const { db, ctx } = gapHarness("2026-10-04T00:00:00Z");
+    db.find("campaigns", { id: CAMPAIGN })!.status = "running";
+    expect(await fillMissingNotes(ctx)).toBe(1);
+    const rows = db.rows("campaign_prospects");
+    expect(rows.find((r) => r.id === "cp-gap")?.invite_note).toBe("Written for pv-gap");
+    expect(rows.find((r) => r.id === "cp-queued")?.invite_note).toBe("A note a human already read.");
+  });
+
+  it("leaves a finished campaign alone", async () => {
+    const { db, ctx } = gapHarness("2026-10-04T00:00:00Z");
+    db.find("campaigns", { id: CAMPAIGN })!.status = "completed";
     expect(await fillMissingNotes(ctx)).toBe(0);
-    expect(db.rows("campaign_prospects").find((r) => r.id === "cp-gap")?.invite_note).toBeNull();
     expect(notesMock).not.toHaveBeenCalled();
+  });
+
+  it("never fills a note a person cleared on purpose", async () => {
+    const { db, ctx } = gapHarness(null);
+    db.find("campaign_prospects", { id: "cp-gap" })!.invite_note_edited = true;
+    expect(await fillMissingNotes(ctx)).toBe(0);
+    expect(db.find("campaign_prospects", { id: "cp-gap" })?.invite_note).toBeNull();
+    expect(notesMock).not.toHaveBeenCalled();
+  });
+
+  it("never writes over an invitation being sent this minute", async () => {
+    const { db, ctx } = gapHarness(null);
+    db.find("campaign_prospects", { id: "cp-gap" })!.invite_claimed_at = "2026-10-30T12:00:00Z";
+    expect(await fillMissingNotes(ctx)).toBe(0);
+    expect(db.find("campaign_prospects", { id: "cp-gap" })?.invite_note).toBeNull();
+    expect(notesMock).not.toHaveBeenCalled();
+  });
+
+  it("leaves the note alone when the send claims the row while the writer is thinking", async () => {
+    const { db, ctx } = gapHarness(null);
+    notesMock.mockImplementation(async (_ctx: unknown, args: { prospects: Array<{ providerId: string }> }) => {
+      // The pacing loop claims the row between the read and the write.
+      db.find("campaign_prospects", { id: "cp-gap" })!.invite_claimed_at = "2026-10-30T12:00:00Z";
+      return new Map(args.prospects.map((p) => [p.providerId, { note: "Too late", promptVersion: "invite/test", grounding: ["Owner"], tooThin: false }]));
+    });
+    expect(await fillMissingNotes(ctx)).toBe(0);
+    expect(db.find("campaign_prospects", { id: "cp-gap" })?.invite_note).toBeNull();
+  });
+
+  it("asks the writer only about real gaps, never a note a person cleared", async () => {
+    const { db, ctx } = gapHarness(null);
+    // One cleared by hand beside one real gap, so the campaign is picked up.
+    db.find("campaign_prospects", { id: "cp-queued" })!.invite_note = null;
+    db.find("campaign_prospects", { id: "cp-queued" })!.invite_note_edited = true;
+    expect(await fillMissingNotes(ctx)).toBe(1);
+    expect(db.find("campaign_prospects", { id: "cp-queued" })?.invite_note).toBeNull();
+    expect(notesMock.mock.calls[0]?.[1].prospects.map((p: { providerId: string }) => p.providerId)).toEqual(["pv-gap"]);
+  });
+
+  it("rests a campaign it just tried, so a note it cannot write is not asked for every hour", async () => {
+    const { db, ctx } = gapHarness(null);
+    const now = new Date("2026-10-30T12:00:00Z");
+    db.seed("events", [
+      { id: "e1", workspace_id: WORKSPACE, name: "campaign.notes_rewritten", subject_id: CAMPAIGN, created_at: "2026-10-30T09:00:00Z" },
+    ]);
+    expect(await fillMissingNotes(ctx, now)).toBe(0);
+    expect(notesMock).not.toHaveBeenCalled();
+    // Once the rest is over it is asked again.
+    expect(await fillMissingNotes(ctx, new Date("2026-10-30T15:30:00Z"))).toBe(1);
   });
 });
 

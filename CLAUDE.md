@@ -236,6 +236,17 @@ tests that were verified by deliberately breaking the code.
     makes "personalised" checkable rather than a matter of opinion — empty
     grounding is reported on the review screen, not hidden.
 
+    **A blank note is written again, on every live campaign.**
+    `fillMissingNotes` (hourly, at boot, and nightly after the copy repair)
+    writes a note for everybody still queued with none: the writer came back
+    short, a refill added them, or the repair cleared a note it could not fix.
+    It ran on unlaunched campaigns only, and on 27 October the repair cleared
+    92 notes across five running campaigns that nothing then wrote again. A
+    note somebody wrote or cleared is never touched, nor a row being sent, and
+    a campaign just tried rests six hours. Because Nora does this itself, Needs
+    you raises blank notes on drafts only, and never a thin note: rewriting it
+    finds nothing new about the person.
+
 17. **The system check never reports a stage as working because it could not
     look.** `apps/worker/src/jobs/diagnostics.ts` walks every precondition from
     onboarding to replies and renders on `/app/system`. Two of its checks call

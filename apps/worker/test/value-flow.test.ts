@@ -153,6 +153,10 @@ function inviteJobs(w: World) {
 
 /* ====================================================================== */
 
+// Each walk runs the whole journey through the real jobs, a few seconds
+// alone and past vitest's five under a loaded full-suite run.
+vi.setConfig({ testTimeout: 30_000 });
+
 describe("A: a meeting campaign, the rep's own scheduling link, Nora answers", () => {
   let f: Flow;
   let first: string;

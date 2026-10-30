@@ -351,8 +351,8 @@ export async function collectIssues(
       since: event.created_at,
     });
   }
-  // Read from the campaign as it is now, not from the event. Nightly
-  // maintenance fills the missing notes (`fillMissingNotes`), and a row that
+  // Read from the campaign as it is now, not from the event. The hourly
+  // fill writes the missing notes (`fillMissingNotes`), and a row that
   // kept saying "1 of 40 not personalised" after the note was written would be
   // reporting a fault that no longer exists.
   const notesEvents = (events ?? []).filter((e) => e.name === "campaign.notes_missing" && e.subject_id);
@@ -372,7 +372,7 @@ export async function collectIssues(
     const missing = stillMissing.get(campaignId) ?? 0;
     if (!missing || reportedNotes.has(campaignId)) continue;
     reportedNotes.add(campaignId);
-    add({ id: `campaigns:notes:${campaignId}`, severity: "info", area: "Campaigns", title: "Some invitation notes fell back to the template", detail: `${missing} ${missing === 1 ? "person is" : "people are"} still queued without a personalised note. Maintenance retries this nightly until the campaign launches.`, ...at(event.workspace_id), since: event.created_at });
+    add({ id: `campaigns:notes:${campaignId}`, severity: "info", area: "Campaigns", title: "Some invitation notes fell back to the template", detail: `${missing} ${missing === 1 ? "person is" : "people are"} still queued without a personalised note. Nora retries every few hours until each is written or invited.`, ...at(event.workspace_id), since: event.created_at });
   }
 
   // ── Jobs ────────────────────────────────────────────────────────────────
