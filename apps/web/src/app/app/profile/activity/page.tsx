@@ -52,6 +52,20 @@ export default async function LinkedInActivityPage({ searchParams }: { searchPar
       .limit(200),
   ]);
 
+  // Read apart from the rest, so a database without migration 0063 still
+  // renders every other card; an unreadable switch shows as off.
+  const [{ data: cleanupRow }, { data: backlogRow }] = await Promise.all([
+    supabase.from("workspaces").select("withdraw_old_invites").eq("id", session.workspaceId).maybeSingle(),
+    supabase
+      .from("linkedin_accounts")
+      .select("pending_invites")
+      .eq("workspace_id", session.workspaceId)
+      .eq("user_id", session.userId)
+      .maybeSingle(),
+  ]);
+  const cleanup = cleanupRow?.withdraw_old_invites === true;
+  const pending = typeof backlogRow?.pending_invites === "number" ? backlogRow.pending_invites : null;
+
   const canChange = ["owner", "admin"].includes(session.role);
   const likes = ws?.engage_posts !== false;
   // Before the comment switch existed, comments followed the likes switch.
@@ -141,6 +155,18 @@ export default async function LinkedInActivityPage({ searchParams }: { searchPar
           />
 
           <ActivityCard
+            id="cleanup"
+            title="Clean up old invitations"
+            line={`Nora withdraws invitations nobody answered once they are ${LINKEDIN_LIMITS.withdrawOutsideAfterDays} days old, including ones you sent yourself, a few each night.`}
+            on={cleanup}
+            setting="withdraw_old_invites"
+            canChange={canChange}
+            stats={[]}
+            facts={pending === null ? [] : [{ label: "Waiting on LinkedIn now", value: pending }]}
+            detail={`LinkedIn stops taking new invitations from an account with a large pile of unanswered ones, and it counts every invitation you ever sent. Nora always withdraws its own after ${LINKEDIN_LIMITS.withdrawAfterDays} days. This switch lets it clear the rest.`}
+          />
+
+          <ActivityCard
             title="Invitations and messages"
             line="Connection requests and follow-up messages. Your campaigns send these, and you start or pause them there."
             state="Run by your campaigns"
@@ -170,6 +196,7 @@ interface Stat {
  * numbers are a row of the card, not a card of their own.
  */
 function ActivityCard({
+  id,
   title,
   line,
   on,
@@ -181,11 +208,13 @@ function ActivityCard({
   detail,
   links,
 }: {
+  /** An anchor another screen links to. */
+  id?: string;
   title: string;
   line: string;
   /** For an activity with a switch. */
   on?: boolean;
-  setting?: "engage_posts" | "engage_comments" | "publish_posts" | "warm_up";
+  setting?: "engage_posts" | "engage_comments" | "publish_posts" | "warm_up" | "withdraw_old_invites";
   canChange?: boolean;
   /** For an activity with no switch here: what decides it, in a few words. */
   state?: string;
@@ -196,7 +225,7 @@ function ActivityCard({
 }) {
   const hasSwitch = typeof on === "boolean" && setting;
   return (
-    <article className="card activity-card">
+    <article className="card activity-card" id={id}>
       <div className="activity-card-head">
         <div className="activity-card-text">
           <h3>{title}</h3>

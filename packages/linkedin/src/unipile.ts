@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { invitationSentAt } from "./invitations.js";
 import type { ProspectCandidate } from "@le/shared";
 import type {
   AccountPlan,
@@ -665,11 +666,17 @@ export class UnipileProvider implements LinkedInProvider {
         }
         return null;
       };
+      // A timestamp when there is one, LinkedIn's own words ("Sent 3 weeks
+      // ago") when there is not (`invitationSentAt`).
+      const now = new Date();
+      const sentAt =
+        invitationSentAt(str("parsed_datetime", "sent_at", "created_at", "invited_at"), now) ??
+        invitationSentAt(str("date", "sent_date", "time_ago"), now);
       return {
         invitationId: str("invitation_id", "id"),
-        providerId: str("provider_id", "member_id", "user_id", "recipient_id"),
-        name: str("name", "full_name", "display_name"),
-        sentAt: str("sent_at", "created_at", "date", "invited_at"),
+        providerId: str("invited_user_id", "provider_id", "member_id", "user_id", "recipient_id"),
+        name: str("invited_user", "name", "full_name", "display_name"),
+        sentAt,
       };
     });
 

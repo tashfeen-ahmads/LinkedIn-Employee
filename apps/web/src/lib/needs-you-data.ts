@@ -236,6 +236,8 @@ export async function loadNeedsYou(
     }
   }
 
+  const inviteBacklog = await readInviteBacklog(supabase, workspaceId, now);
+
   const thinNotes = await thinNoteCampaigns(
     supabase,
     workspaceId,
@@ -274,9 +276,43 @@ export async function loadNeedsYou(
           chargesNow: chargesOnChoosing(trial?.trial_ends_at ?? null, now),
         }
       : null,
+    inviteBacklog,
   };
 
   return { items: needsYou(facts), facts };
+}
+
+/**
+ * The largest pile of unanswered invitations on any of the workspace's
+ * accounts, and whether its owner has let Nora clear the old ones.
+ *
+ * Read on its own, from columns migration 0063 added, so a database without
+ * them answers null here and every other row on the list still renders. A
+ * read that failed says nothing rather than "no backlog" (rule 17).
+ */
+async function readInviteBacklog(
+  supabase: SupabaseClient<Database>,
+  workspaceId: string,
+  now: Date,
+): Promise<NeedsYouFacts["inviteBacklog"]> {
+  const [{ data: accounts, error: accountError }, { data: ws, error: wsError }] = await Promise.all([
+    supabase
+      .from("linkedin_accounts")
+      .select("pending_invites, invites_paused_until")
+      .eq("workspace_id", workspaceId)
+      .eq("status", "active"),
+    supabase.from("workspaces").select("withdraw_old_invites").eq("id", workspaceId).maybeSingle(),
+  ]);
+  if (accountError || wsError || !ws) return null;
+  const largest = (accounts ?? [])
+    .filter((a) => typeof a.pending_invites === "number")
+    .sort((a, b) => (b.pending_invites ?? 0) - (a.pending_invites ?? 0))[0];
+  if (!largest) return null;
+  return {
+    pending: largest.pending_invites ?? 0,
+    held: Boolean(largest.invites_paused_until && Date.parse(largest.invites_paused_until) > now.getTime()),
+    cleanupOn: ws.withdraw_old_invites === true,
+  };
 }
 
 /**

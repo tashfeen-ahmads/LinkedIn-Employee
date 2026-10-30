@@ -347,3 +347,25 @@ describe("the trial's last 49 hours", () => {
     expect(why).not.toMatch(/not charged/);
   });
 });
+
+describe("a pile of unanswered invitations", () => {
+  /*
+   * 30 October: four of five sending accounts were refused all day under
+   * piles of 150 to 258. The only fix is withdrawing old invitations, and for
+   * the ones sent outside Nora that is the owner's choice to make.
+   */
+  it("asks the owner to turn on cleanup, and says when LinkedIn has paused invitations", () => {
+    const held = needsYou({ ...CALM, inviteBacklog: { pending: 258, held: true, cleanupOn: false } });
+    const row = held.find((i) => i.kind === "invite_backlog");
+    expect(row?.title).toContain("paused new invitations");
+    expect(row?.title).toContain("258");
+    expect(row?.action).toBe("Turn on cleanup");
+    expect(row?.href).toBe("/app/profile/activity#cleanup");
+  });
+
+  it("says nothing once cleanup is on, for a small pile, or when it could not look", () => {
+    expect(kinds({ ...CALM, inviteBacklog: { pending: 258, held: true, cleanupOn: true } })).not.toContain("invite_backlog");
+    expect(kinds({ ...CALM, inviteBacklog: { pending: 40, held: false, cleanupOn: false } })).not.toContain("invite_backlog");
+    expect(kinds({ ...CALM, inviteBacklog: null })).not.toContain("invite_backlog");
+  });
+});

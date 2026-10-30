@@ -1,4 +1,5 @@
 import { IDLE_RELEASE_TAGLINE } from "./idle-release.js";
+import { LINKEDIN_LIMITS } from "./constants.js";
 /**
  * What needs a person, as one ordered list.
  *
@@ -106,7 +107,8 @@ export type NeedsYouKind =
   | "cta_missing"
   | "setup_unfinished"
   | "posts_unapproved"
-  | "plan_needed";
+  | "plan_needed"
+  | "invite_backlog";
 
 export interface NeedsYouItem {
   kind: NeedsYouKind;
@@ -210,6 +212,13 @@ export interface NeedsYouFacts {
     /** Choosing a plan now charges at once (inside the trial's last 49 hours). */
     chargesNow?: boolean;
   } | null;
+  /**
+   * The largest pile of unanswered invitations LinkedIn holds for an account
+   * here, whether LinkedIn is refusing that account's invitations right now,
+   * and whether the owner has let Nora clear the old ones. Null when it could
+   * not be read.
+   */
+  inviteBacklog?: { pending: number; held: boolean; cleanupOn: boolean } | null;
 }
 
 function plural(n: number, one: string, many = `${one}s`): string {
@@ -274,6 +283,33 @@ export function needsYou(facts: NeedsYouFacts): NeedsYouItem[] {
       action: "Reconnect LinkedIn",
       tone: "blocker",
       count: 1,
+    });
+  }
+
+  /*
+   * A pile of unanswered invitations LinkedIn is holding for the account.
+   *
+   * LinkedIn counts every invitation the rep ever sent, not only Nora's, and
+   * refuses new ones from an account carrying a large backlog. On 30 October
+   * four of five sending accounts were refused all day under piles of 150 to
+   * 258, and the only thing that clears one is withdrawing the old
+   * invitations, which for the ones sent outside Nora is the owner's choice.
+   * So the row appears only while that choice is still open: once cleanup is
+   * on there is nothing left for anybody to do, and a row with nothing to do
+   * does not belong on this list.
+   */
+  const backlog = facts.inviteBacklog;
+  if (backlog && !backlog.cleanupOn && backlog.pending >= LINKEDIN_LIMITS.pendingInvitesWarn) {
+    items.push({
+      kind: "invite_backlog",
+      title: backlog.held
+        ? `LinkedIn has paused new invitations from your account. It is holding ${backlog.pending} that nobody answered.`
+        : `LinkedIn is holding ${backlog.pending} invitations from your account that nobody answered.`,
+      why: `A pile this size is one of the main reasons LinkedIn stops taking new invitations. Turn on cleanup and Nora withdraws the ones over ${LINKEDIN_LIMITS.withdrawOutsideAfterDays} days old, a few each night.`,
+      href: "/app/profile/activity#cleanup",
+      action: "Turn on cleanup",
+      tone: "warning",
+      count: backlog.pending,
     });
   }
 

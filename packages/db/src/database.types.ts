@@ -90,6 +90,8 @@ export type WorkspaceRow = {
   brand_primary: string | null;
   brand_accent: string | null;
   console_hidden: boolean;
+  /** Withdraw invitations over three weeks old sent outside Nora (migration 0063). */
+  withdraw_old_invites: boolean;
   created_at: string;
 };
 
@@ -255,6 +257,9 @@ export type LinkedinAccountRow = {
    * rolling window, not the calendar's.
    */
   invites_by_day: Json;
+  /** How many invitations LinkedIn holds unanswered, sampled hourly (migration 0063). */
+  pending_invites: number | null;
+  pending_invites_at: string | null;
   /** A paid plan (Premium or Sales Navigator): no monthly note limit. Migration 0045. */
   has_premium: boolean;
   /** What the provider reported, kept apart from what the rep said. */

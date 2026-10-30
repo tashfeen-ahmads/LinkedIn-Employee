@@ -81,11 +81,15 @@ export async function POST(request: NextRequest) {
       "Approved posts will go out inside your sending hours.",
       "Nothing will be posted. Approved posts wait until you switch this back on.",
     ],
+    withdraw_old_invites: [
+      "Nora will withdraw unanswered invitations once they are three weeks old, a few each night.",
+      "Nora will withdraw only the invitations it sent itself.",
+    ],
   } as const;
-  if (setting === "engage_comments" || setting === "publish_posts") {
+  if (setting === "engage_comments" || setting === "publish_posts" || setting === "withdraw_old_invites") {
     const { data } = await supabase
       .from("workspaces")
-      .update(setting === "engage_comments" ? { engage_comments: on } : { publish_posts: on })
+      .update({ [setting]: on } as { engage_comments?: boolean; publish_posts?: boolean; withdraw_old_invites?: boolean })
       .eq("id", session.workspaceId)
       .select("id");
     if (!data?.length) return seeOther(errorQuery(HERE, "That could not be saved just now. Try again."));

@@ -353,9 +353,19 @@ async function sampleInviteCapacity(
         // The provider's own field names when the list is empty, so a mapping
         // that is wrong cannot report a confident zero.
         shape: invitations.length === 0 ? describePayload(raw) : undefined,
+        // How many carried an age, so a mapping that reads none is visible.
+        dated: dates.length,
       },
       now,
     );
+    // On the account's own row as well, where its owner can read it: the
+    // heartbeat is operators' only (rule 17), and the pile is the owner's to
+    // clear. Best effort, before migration 0063 the columns are not there.
+    const { error: rowError } = await ctx.db
+      .from("linkedin_accounts")
+      .update({ pending_invites: invitations.length, pending_invites_at: now.toISOString() })
+      .eq("id", account.id);
+    if (rowError) console.error("could not record the pending invitations on the account", rowError.message);
   } catch (err) {
     await recordBeat(
       ctx.db,

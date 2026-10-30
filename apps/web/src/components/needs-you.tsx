@@ -23,6 +23,7 @@ const ICON: Record<NeedsYouKind, string> = {
   setup_unfinished: "campaigns",
   posts_unapproved: "posts",
   plan_needed: "billing",
+  invite_backlog: "campaigns",
 };
 
 /**

@@ -2046,6 +2046,27 @@ tests that were verified by deliberately breaking the code.
     (`detectBrandColors`, only filling colours nobody set) and editable on
     Profile → Company.
 
+70. **An account's pile of unanswered invitations is kept small, and it is
+    the whole pile, not only Nora's.** LinkedIn counts every invitation the rep
+    ever sent and stops taking new ones from an account carrying a large
+    backlog. On 30 October four of five sending accounts were refused all day:
+    one held 258 pending of which Nora had sent nine. The sweep withdrew only
+    Nora's own, only after 21 days, fifty a night across the whole deployment,
+    and the provider's "Sent 3 weeks ago" was read as no date at all, so no
+    invitation anywhere had an age.
+
+    `withdrawStaleInvites` (`apps/worker/src/jobs/withdraw.ts`, nightly)
+    withdraws Nora's own at `withdrawAfterDays` (14), and, only when an owner
+    has turned on `withdraw_old_invites` (migration 0063, Profile → LinkedIn
+    activity), the rep's other invitations once LinkedIn says they are
+    `withdrawOutsideAfterDays` (21) old. Never one whose age is unknown, never
+    more than `withdrawPerAccountPerNight` per account, so one pile never costs
+    another account its turn. `invitationSentAt` reads LinkedIn's own words.
+    The hourly sample is written to `linkedin_accounts.pending_invites` where
+    the owner can read it, and Needs you raises `invite_backlog` past
+    `pendingInvitesWarn` until cleanup is on, and never after: then there is
+    nothing left for anybody to do.
+
 ## Conventions
 
 - Agent output is validated against a zod schema before it touches the

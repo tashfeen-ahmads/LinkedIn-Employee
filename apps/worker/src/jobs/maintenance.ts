@@ -1,5 +1,6 @@
 import { LINKEDIN_LIMITS, MAINTENANCE_BEAT, countFunnel } from "@le/shared";
 import { backfillProspectFields } from "./backfill-fields.js";
+import { withdrawStaleInvites } from "./withdraw.js";
 import type { WorkerContext } from "../context.js";
 import { pollHealth, recoverAccounts } from "../accounts.js";
 import { recordEvent } from "../context.js";
@@ -118,7 +119,10 @@ export async function runMaintenance(
   await step("seed-agents", () => seedMissingAgents(ctx.db));
   await step("approved-drafts", () => sweepApprovedDrafts(ctx, queues, now));
   await step("acceptance-rates", () => flagPoorAcceptanceRates(ctx));
-  await step("withdraw-stale", () => withdrawStaleInvites(ctx, now));
+  await step("withdraw-stale", async () => {
+    const tally = await withdrawStaleInvites(ctx, now);
+    return tally.withdrawn + tally.outside;
+  });
   await step("close-exhausted", () => closeExhaustedSequences(ctx, now));
   // After acceptance and withdrawals, which still need the account. An account
   // with no running campaign and nothing done for a fortnight is billed for
@@ -167,44 +171,6 @@ export async function runMaintenance(
 
   if (failed.length) {
     console.error(`maintenance finished with ${failed.length} failed step(s): ${failed.join(", ")}`);
-  }
-}
-
-async function withdrawStaleInvites(ctx: WorkerContext, now: Date): Promise<void> {
-  const cutoff = new Date(now.getTime() - LINKEDIN_LIMITS.withdrawAfterDays * 86_400_000).toISOString();
-  const { data: stale } = await ctx.db
-    .from("campaign_prospects")
-    .select("id, workspace_id, invitation_id, campaign_id")
-    .eq("status", "invited")
-    .not("invitation_id", "is", null)
-    .lt("invited_at", cutoff)
-    // LinkedIn permits one withdrawal pass per week; keep the batch small.
-    .limit(50);
-
-  for (const row of stale ?? []) {
-    const { data: campaign } = await ctx.db
-      .from("campaigns")
-      .select("linkedin_account_id")
-      .eq("id", row.campaign_id)
-      .single();
-    if (!campaign) continue;
-    const { data: account } = await ctx.db
-      .from("linkedin_accounts")
-      .select("provider_account_id, status")
-      .eq("id", campaign.linkedin_account_id)
-      .single();
-    if (!account?.provider_account_id || account.status !== "active") continue;
-
-    const result = await ctx.linkedin.withdrawInvitation({
-      accountId: account.provider_account_id,
-      invitationId: row.invitation_id!,
-    });
-    if (result.ok) {
-      await ctx.db
-        .from("campaign_prospects")
-        .update({ status: "closed", status_reason: "invitation expired", closed_at: now.toISOString() })
-        .eq("id", row.id);
-    }
   }
 }
 

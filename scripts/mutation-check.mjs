@@ -3686,7 +3686,7 @@ const MUTATIONS = [
     id: "maintenance/one-failure-does-not-cancel-the-night",
     rule: "A step that throws never skips the retention sweep below it",
     file: "apps/worker/src/jobs/maintenance.ts",
-    from: '  await step("withdraw-stale", () => withdrawStaleInvites(ctx, now));',
+    from: '  await step("withdraw-stale", async () => {\n    const tally = await withdrawStaleInvites(ctx, now);\n    return tally.withdrawn + tally.outside;\n  });',
     to: "  await withdrawStaleInvites(ctx, now);",
     pkg: "@le/worker",
   },
@@ -5896,6 +5896,12 @@ const MUTATIONS = [
   { id: "notes/fill-reads-past-mid-send", rule: "Rule 16: a row being sent is not even handed to the writer", file: "apps/worker/src/jobs/rewrite-notes.ts", from: "    queuedQuery = queuedQuery.is(\"invite_note\", null).neq(\"invite_note_edited\", true).is(\"invite_claimed_at\", null);", to: "    queuedQuery = queuedQuery.is(\"invite_note\", null).neq(\"invite_note_edited\", true);", pkg: "@le/worker" },
   { id: "notes/fill-rests", rule: "A campaign just filled rests before the writer is asked again", file: "apps/worker/src/jobs/rewrite-notes.ts", from: "    if (!campaign.owner_user_id || resting.has(campaign.id)) continue;", to: "    if (!campaign.owner_user_id) continue;", pkg: "@le/worker" },
   { id: "notes/needs-you-drafts-only", rule: "Rule 50: Needs you never asks for work Nora does itself", file: "apps/web/src/lib/needs-you-data.ts", from: "  const live = (campaigns ?? []).filter((c) => c.status === \"draft\");", to: "  const live = (campaigns ?? []).filter((c) => [\"draft\", \"running\", \"paused\"].includes(c.status));", pkg: "@le/web" },
+  { id: "withdraw/per-account-budget", rule: "One account's pile never spends another account's withdrawals", file: "apps/worker/src/jobs/withdraw.ts", from: "    .limit(budget);", to: "    .limit(500);", pkg: "@le/worker" },
+  { id: "withdraw/outside-needs-switch", rule: "Invitations sent outside Nora are withdrawn only when an owner turned it on", file: "apps/worker/src/jobs/withdraw.ts", from: "    if (budget > 0 && cleanup.has(account.workspace_id)) {", to: "    if (budget > 0) {", pkg: "@le/worker" },
+  { id: "withdraw/unknown-age-is-not-old", rule: "An invitation of unknown age is never withdrawn as old", file: "apps/worker/src/jobs/withdraw.ts", from: "    .filter((row) => row.invitationId && row.sentAt && Date.parse(row.sentAt) <= cutoff)", to: "    .filter((row) => row.invitationId && (!row.sentAt || Date.parse(row.sentAt) <= cutoff))", pkg: "@le/worker" },
+  { id: "withdraw/own-at-cutoff", rule: "Nora's own invitations are withdrawn only once they are old enough", file: "apps/worker/src/jobs/withdraw.ts", from: "    .lt(\"invited_at\", cutoff)", to: "", pkg: "@le/worker" },
+  { id: "withdraw/reads-linkedin-words", rule: "An invitation's age is read from LinkedIn's own words", file: "packages/linkedin/src/invitations.ts", from: "  const match = words.match(", to: "  const match = null && words.match(", pkg: "@le/linkedin" },
+  { id: "needs-you/backlog-quiet-when-cleaning", rule: "Rule 50: no row once cleanup is on, because nothing is left to do", file: "packages/shared/src/needs-you.ts", from: "  if (backlog && !backlog.cleanupOn && backlog.pending >= LINKEDIN_LIMITS.pendingInvitesWarn) {", to: "  if (backlog && backlog.pending >= LINKEDIN_LIMITS.pendingInvitesWarn) {", pkg: "@le/shared" },
 ];
 
 /**

@@ -94,11 +94,32 @@ export const LINKEDIN_LIMITS = {
   warmUpToInviteMinMs: 45 * 60_000,
   warmUpToInviteMaxMs: 4 * 60 * 60_000,
   /**
-   * Withdraw pending invites older than this many days. LinkedIn permits one
-   * withdrawal pass per week and only on invites at least 14 days old, so the
-   * sweep runs weekly and this threshold stays above that floor.
+   * Withdraw pending invites Nora sent once they are this many days old, the
+   * earliest LinkedIn lets an invitation be withdrawn. It was 21, and on 30
+   * October four of five sending accounts were refused all day under a pile of
+   * unanswered invitations: three weeks is a week longer than the pile needs
+   * to stand, and almost every acceptance arrives inside the first one.
    */
-  withdrawAfterDays: 21,
+  withdrawAfterDays: 14,
+  /**
+   * Invitations sent outside Nora are withdrawn only when an owner turns that
+   * on (`withdraw_old_invites`), and only once LinkedIn says they are at least
+   * this old. Longer than Nora's own: these are the rep's, sent for reasons
+   * this product never saw.
+   */
+  withdrawOutsideAfterDays: 21,
+  /**
+   * Most invitations one account withdraws in a night. Per account, so one
+   * account's pile never spends the night's work for everybody else's, and
+   * small, because a burst of withdrawals is a pattern LinkedIn notices too.
+   */
+  withdrawPerAccountPerNight: 20,
+  /**
+   * Pending invitations past which an account is told about its pile. LinkedIn
+   * publishes no number; vendors watch for accounts in the low hundreds, and
+   * every account refused on 30 October held 150 or more.
+   */
+  pendingInvitesWarn: 150,
   /**
    * Acceptance rate below which an account is flagged for review by the
    * nightly sweep. Low acceptance is the signal LinkedIn itself watches.
