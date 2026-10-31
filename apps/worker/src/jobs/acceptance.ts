@@ -65,14 +65,24 @@ async function detectForAccount(
     .in("campaign_id", campaignIds)
     .eq("status", "invited")
     .gte("invited_at", oldest.toISOString())
-    .limit(500);
+    // Newest first: a yes almost always comes in the first days, so if an
+    // account ever holds more than this, the ones left unread are the oldest.
+    .order("invited_at", { ascending: false })
+    .limit(1000);
   if (!outstanding?.length) return 0;
 
-  const { data: prospects } = await db
-    .from("prospects")
-    .select("id, provider_id")
-    .in("id", outstanding.map((row) => row.prospect_id));
-  const providerIdByProspect = new Map((prospects ?? []).map((p) => [p.id, p.provider_id]));
+  // In slices: hundreds of ids in one `in` filter is a URL the server refuses,
+  // and a refused read here is every acceptance on the account missed.
+  const providerIdByProspect = new Map<string, string | null>();
+  const prospectIds = [...new Set(outstanding.map((row) => row.prospect_id))];
+  for (let i = 0; i < prospectIds.length; i += 200) {
+    const { data: prospects, error } = await db
+      .from("prospects")
+      .select("id, provider_id")
+      .in("id", prospectIds.slice(i, i + 200));
+    if (error) throw new Error(`could not read prospects: ${error.message}`);
+    for (const p of prospects ?? []) providerIdByProspect.set(p.id, p.provider_id);
+  }
 
   const relations = await ctx.linkedin.listRelations({
     accountId: account.provider_account_id!,

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { FakeDb } from "./fake-db.js";
 import { MockLinkedInProvider, type PendingInvitation } from "@le/linkedin";
 import { LINKEDIN_LIMITS } from "@le/shared";
@@ -193,6 +193,103 @@ describe("when LinkedIn refuses", () => {
     calls.length = 0;
     await withdrawStaleInvites(ctx, new Date("2026-10-30T15:00:00Z"));
     expect(calls).toHaveLength(0);
+  });
+});
+
+describe("an invitation LinkedIn will not withdraw", () => {
+  it("is not asked about again, so the rest of the pile keeps moving", async () => {
+    const pending = [
+      { id: "inv-o1", days: 30 },
+      { id: "inv-o2", days: 29 },
+      { id: "inv-o3", days: 28 },
+    ];
+    const { db, ctx, linkedin } = harness({ pending: { pa1: pending } });
+    own(db, "o1", "c1", 30);
+    own(db, "o2", "c1", 29);
+    own(db, "o3", "c1", 28);
+    const calls: string[] = [];
+    linkedin.withdrawInvitation = async (input) => {
+      calls.push(input.invitationId);
+      return input.invitationId === "inv-o1"
+        ? { ok: false, error: "400: Invalid invitation id — errors/invalid_invitation_id" }
+        : { ok: true };
+    };
+
+    await withdrawStaleInvites(ctx, FRIDAY_2PM);
+    // The refused one does not stop the run: the next oldest go.
+    expect(calls).toEqual(["inv-o1", "inv-o2", "inv-o3"]);
+    expect(db.find("campaign_prospects", { id: "o1" })?.status).toBe("invited");
+    expect(db.find("campaign_prospects", { id: "o2" })?.status).toBe("closed");
+
+    // An hour later it is not asked about again.
+    calls.length = 0;
+    await withdrawStaleInvites(ctx, new Date("2026-10-30T15:00:00Z"));
+    expect(calls).not.toContain("inv-o1");
+  });
+});
+
+describe("what the review found", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("moves on when LinkedIn's list never answers, so the hourly chain is never stuck", async () => {
+    vi.useFakeTimers({ now: FRIDAY_2PM });
+    const { db, ctx, linkedin } = harness();
+    own(db, "old", "c1", 20);
+    linkedin.listPendingInvitations = () => new Promise(() => undefined);
+    const run = withdrawStaleInvites(ctx, FRIDAY_2PM);
+    // Two accounts, each given its own deadline in turn.
+    await vi.advanceTimersByTimeAsync(31_000);
+    await vi.advanceTimersByTimeAsync(31_000);
+    await expect(run).resolves.toMatchObject({ withdrawn: 0 });
+  });
+
+  it("asks again next hour after a network failure: it says nothing about the invitation", async () => {
+    const { db, ctx, linkedin } = harness({ pending: { pa1: [{ id: "inv-old", days: 20 }] } });
+    own(db, "old", "c1", 20);
+    const calls: string[] = [];
+    linkedin.withdrawInvitation = async (input) => {
+      calls.push(input.invitationId);
+      return calls.length === 1 ? { ok: false, error: "fetch failed" } : { ok: true };
+    };
+    await withdrawStaleInvites(ctx, FRIDAY_2PM);
+    await withdrawStaleInvites(ctx, new Date("2026-10-30T15:00:00Z"));
+    expect(calls).toEqual(["inv-old", "inv-old"]);
+    expect(db.find("campaign_prospects", { id: "old" })?.status).toBe("closed");
+  });
+
+  it("never withdraws the rep's invitation to somebody Nora is about to invite", async () => {
+    const { db, ctx, withdrawn } = harness({
+      cleanup: true,
+      pending: { pa1: [{ id: "reps-own", person: "person-q", days: 40 }] },
+    });
+    db.seed("prospects", [{ id: "p-q", workspace_id: "w1", provider_id: "person-q" }]);
+    db.seed("campaign_prospects", [
+      { id: "q", workspace_id: "w1", campaign_id: "c1", prospect_id: "p-q", status: "queued", invitation_id: null, invited_at: null },
+    ]);
+    await withdrawStaleInvites(ctx, FRIDAY_2PM);
+    expect(withdrawn).toHaveLength(0);
+  });
+
+  it("closes every row of one person when their one invitation is withdrawn", async () => {
+    const { db, ctx } = harness({ pending: { pa1: [{ id: "inv-dup", person: "person-dup", days: 20 }] } });
+    db.seed("prospects", [{ id: "p-dup", workspace_id: "w1", provider_id: "person-dup" }]);
+    db.seed("campaign_prospects", [
+      { id: "d1", workspace_id: "w1", campaign_id: "c1", prospect_id: "p-dup", status: "invited", invitation_id: "inv-dup", invited_at: daysAgo(20) },
+      { id: "d2", workspace_id: "w1", campaign_id: "c1", prospect_id: "p-dup", status: "invited", invitation_id: null, invited_at: daysAgo(19) },
+    ]);
+    await withdrawStaleInvites(ctx, FRIDAY_2PM);
+    expect(db.find("campaign_prospects", { id: "d1" })?.status).toBe("closed");
+    expect(db.find("campaign_prospects", { id: "d2" })?.status).toBe("closed");
+  });
+
+  it("tries at most one invitation blind a run when LinkedIn's list was cut short, and keeps the count", async () => {
+    const { db, ctx, withdrawn } = harness({ pending: { pa1: [] }, truncated: true });
+    own(db, "a", "c1", 20);
+    own(db, "b", "c1", 19);
+    db.find("linkedin_accounts", { id: "a1" })!.pending_invites = 500;
+    await withdrawStaleInvites(ctx, FRIDAY_2PM);
+    expect(withdrawn).toHaveLength(1);
+    expect(db.find("linkedin_accounts", { id: "a1" })?.pending_invites).toBe(500);
   });
 });
 
