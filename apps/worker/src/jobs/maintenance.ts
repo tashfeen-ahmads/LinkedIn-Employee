@@ -1,6 +1,5 @@
 import { LINKEDIN_LIMITS, MAINTENANCE_BEAT, countFunnel } from "@le/shared";
 import { backfillProspectFields } from "./backfill-fields.js";
-import { withdrawStaleInvites } from "./withdraw.js";
 import type { WorkerContext } from "../context.js";
 import { pollHealth, recoverAccounts } from "../accounts.js";
 import { recordEvent } from "../context.js";
@@ -27,8 +26,6 @@ import { campaignSteps, ownSequence } from "../sequence.js";
  *    a day even if no action happened to hit it;
  *  - notice which invitations were accepted, which is what starts the
  *    follow-up sequence;
- *  - withdraw stale pending invitations, which keeps the pending-invite count
- *    down and with it the risk of a limit;
  *  - close campaign prospects whose sequence has run out;
  *  - erase prospect data held past the workspace's retention limit;
  *  - re-enqueue approved replies that were never dispatched;
@@ -119,10 +116,8 @@ export async function runMaintenance(
   await step("seed-agents", () => seedMissingAgents(ctx.db));
   await step("approved-drafts", () => sweepApprovedDrafts(ctx, queues, now));
   await step("acceptance-rates", () => flagPoorAcceptanceRates(ctx));
-  await step("withdraw-stale", async () => {
-    const tally = await withdrawStaleInvites(ctx, now);
-    return tally.withdrawn + tally.outside;
-  });
+  // Invitations are withdrawn hourly inside each owner's working hours
+  // (`withdrawStaleInvites`), not here at three in the morning.
   await step("close-exhausted", () => closeExhaustedSequences(ctx, now));
   // After acceptance and withdrawals, which still need the account. An account
   // with no running campaign and nothing done for a fortnight is billed for

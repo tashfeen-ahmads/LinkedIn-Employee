@@ -26,6 +26,7 @@ import { recoverAccounts } from "./accounts.js";
 import { ensureWebhooks } from "./webhooks.js";
 import { cleanFailedJobs, runMaintenance } from "./jobs/maintenance.js";
 import { fillMissingNotes } from "./jobs/rewrite-notes.js";
+import { withdrawStaleInvites } from "./jobs/withdraw.js";
 import { repairCopy, repairSeededLines } from "./jobs/repair-copy.js";
 import { fillFirstMessages } from "./jobs/first-message.js";
 import { releaseDuplicateAccounts } from "./jobs/duplicate-accounts.js";
@@ -274,6 +275,11 @@ const workers = [
         // warm prospect is written to today or never.
         return (
           detectAcceptedInvitations(ctx)
+            // After the acceptance poll, so a yes from this hour is never
+            // withdrawn; and hourly inside each owner's working hours, a few
+            // at a time, so an account's pile of unanswered invitations stays
+            // below the point where LinkedIn stops taking new ones (rule 70).
+            .then(() => withdrawStaleInvites(ctx).catch((err) => console.error("withdrawing invitations failed", err)))
             .then(() => unstickProspects(ctx.db))
             // A strategy approved before LinkedIn was connected, still waiting
             // for the search the connect should have started.

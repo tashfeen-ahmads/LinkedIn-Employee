@@ -40,7 +40,9 @@ const ROUTES = {
   profile: (id: string) => `/api/v1/users/${id}`,
   invite: "/api/v1/users/invite",
   invitationsSent: "/api/v1/users/invite/sent",
-  withdrawInvite: (id: string) => `/api/v1/users/invite/${id}`,
+  // `/sent/` is part of the address. Without it every withdrawal was refused
+  // and nothing was ever withdrawn on any account.
+  withdrawInvite: (id: string) => `/api/v1/users/invite/sent/${encodeURIComponent(id)}`,
   chats: "/api/v1/chats",
   posts: "/api/v1/posts",
   userPosts: (id: string) => `/api/v1/users/${encodeURIComponent(id)}/posts`,

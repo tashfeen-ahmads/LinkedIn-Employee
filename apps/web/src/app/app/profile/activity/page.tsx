@@ -157,7 +157,7 @@ export default async function LinkedInActivityPage({ searchParams }: { searchPar
           <ActivityCard
             id="cleanup"
             title="Clean up old invitations"
-            line={`Nora withdraws invitations nobody answered once they are ${LINKEDIN_LIMITS.withdrawOutsideAfterDays} days old, including ones you sent yourself, a few each night.`}
+            line={`Nora withdraws invitations nobody answered once they are ${LINKEDIN_LIMITS.withdrawOutsideAfterDays} days old, including ones you sent yourself, a few at a time through your working day.`}
             on={cleanup}
             setting="withdraw_old_invites"
             canChange={canChange}

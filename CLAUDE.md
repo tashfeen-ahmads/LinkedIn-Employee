@@ -2055,17 +2055,30 @@ tests that were verified by deliberately breaking the code.
     and the provider's "Sent 3 weeks ago" was read as no date at all, so no
     invitation anywhere had an age.
 
-    `withdrawStaleInvites` (`apps/worker/src/jobs/withdraw.ts`, nightly)
-    withdraws Nora's own at `withdrawAfterDays` (14), and, only when an owner
-    has turned on `withdraw_old_invites` (migration 0063, Profile → LinkedIn
-    activity), the rep's other invitations once LinkedIn says they are
-    `withdrawOutsideAfterDays` (21) old. Never one whose age is unknown, never
-    more than `withdrawPerAccountPerNight` per account, so one pile never costs
-    another account its turn. `invitationSentAt` reads LinkedIn's own words.
-    The hourly sample is written to `linkedin_accounts.pending_invites` where
-    the owner can read it, and Needs you raises `invite_backlog` past
-    `pendingInvitesWarn` until cleanup is on, and never after: then there is
-    nothing left for anybody to do.
+    Nothing had ever been withdrawn on any account: the call went to
+    `/users/invite/{id}` instead of `/users/invite/sent/{id}`, every one was
+    refused, and a refusal was skipped without a word.
+
+    `withdrawStaleInvites` (`apps/worker/src/jobs/withdraw.ts`) runs in the
+    hourly chain **after** the acceptance poll and only inside the owner's
+    working hours: a few an hour (`withdrawPerAccountPerHour`), at most
+    `withdrawPerAccountPerDay`, counted from the account's own events so a
+    restart never resets it. **LinkedIn's pending list is the only thing
+    withdrawn from**, and an account whose list cannot be read is left alone:
+    our row says `invited` until the poll sees a yes, so trusting it would
+    withdraw an acceptance. Nora's own go at `withdrawAfterDays` (14), matched
+    by invitation id or by person; the rep's others go only when an owner
+    turned on `withdraw_old_invites` (migration 0063) and LinkedIn says they
+    are `withdrawOutsideAfterDays` (21) old, never one of unknown age.
+    `invitationSentAt` reads LinkedIn's own words. Every refusal is recorded
+    (`linkedin.withdraw_refused`, an Issues row), and pushback stops the
+    account until tomorrow. The operator's pause stops it too.
+
+    The acceptance poll looks back `acceptanceLookbackDays` (60), never the
+    withdrawal window: a withdrawal that failed leaves a live invitation, and a
+    yes to it is still a yes. The hourly sample is written to
+    `linkedin_accounts.pending_invites`, and Needs you raises `invite_backlog`
+    past `pendingInvitesWarn` until cleanup is on, and never after.
 
 ## Conventions
 

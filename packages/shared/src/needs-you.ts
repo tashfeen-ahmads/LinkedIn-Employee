@@ -305,7 +305,7 @@ export function needsYou(facts: NeedsYouFacts): NeedsYouItem[] {
       title: backlog.held
         ? `LinkedIn has paused new invitations from your account. It is holding ${backlog.pending} that nobody answered.`
         : `LinkedIn is holding ${backlog.pending} invitations from your account that nobody answered.`,
-      why: `A pile this size is one of the main reasons LinkedIn stops taking new invitations. Turn on cleanup and Nora withdraws the ones over ${LINKEDIN_LIMITS.withdrawOutsideAfterDays} days old, a few each night.`,
+      why: `A pile this size is one of the main reasons LinkedIn stops taking new invitations. Turn on cleanup and Nora withdraws the ones over ${LINKEDIN_LIMITS.withdrawOutsideAfterDays} days old, a few at a time through your working day.`,
       href: "/app/profile/activity#cleanup",
       action: "Turn on cleanup",
       tone: "warning",

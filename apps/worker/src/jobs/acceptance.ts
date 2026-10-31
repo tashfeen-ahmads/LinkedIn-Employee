@@ -55,9 +55,10 @@ async function detectForAccount(
   const campaignIds = (campaigns ?? []).map((campaign) => campaign.id);
   if (campaignIds.length === 0) return 0;
 
-  // Only invitations still outstanding. Anything older has been withdrawn by
-  // the maintenance sweep, so a connection made now is not from this campaign.
-  const oldest = new Date(now.getTime() - LINKEDIN_LIMITS.withdrawAfterDays * 86_400_000);
+  // Invitations still outstanding, as far back as one can still be accepted
+  // before it is withdrawn. Never the withdrawal window itself: a withdrawal
+  // that failed leaves a live invitation, and a yes to it must still count.
+  const oldest = new Date(now.getTime() - LINKEDIN_LIMITS.acceptanceLookbackDays * 86_400_000);
   const { data: outstanding } = await db
     .from("campaign_prospects")
     .select("id, campaign_id, prospect_id, status, variant_id")

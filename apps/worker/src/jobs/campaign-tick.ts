@@ -353,8 +353,11 @@ async function sampleInviteCapacity(
         // The provider's own field names when the list is empty, so a mapping
         // that is wrong cannot report a confident zero.
         shape: invitations.length === 0 ? describePayload(raw) : undefined,
-        // How many carried an age, so a mapping that reads none is visible.
+        // How many carried an age, so a mapping that reads none is visible,
+        // and the field names one row arrived with (names only, never values),
+        // so a wrong mapping can be corrected from what LinkedIn really sends.
         dated: dates.length,
+        fields: firstItemKeys(raw),
       },
       now,
     );
@@ -408,6 +411,13 @@ function withDeadline<T>(work: Promise<T>, ms: number): Promise<T> {
       },
     );
   });
+}
+
+/** The keys of the first invitation in a page, or undefined. Names only. */
+function firstItemKeys(raw: unknown): string[] | undefined {
+  const items = Array.isArray(raw) ? raw : (raw as { items?: unknown[] } | null)?.items;
+  const first = Array.isArray(items) ? items[0] : undefined;
+  return first && typeof first === "object" ? Object.keys(first as Record<string, unknown>).slice(0, 20) : undefined;
 }
 
 /** The provider's own keys, so an empty list is never mistaken for a zero. */

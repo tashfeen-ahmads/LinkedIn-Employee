@@ -109,11 +109,21 @@ export const LINKEDIN_LIMITS = {
    */
   withdrawOutsideAfterDays: 21,
   /**
-   * Most invitations one account withdraws in a night. Per account, so one
-   * account's pile never spends the night's work for everybody else's, and
-   * small, because a burst of withdrawals is a pattern LinkedIn notices too.
+   * Most invitations one account withdraws in a day, and in one hourly run.
+   * Per account, so one pile never spends another account's turn, and spread
+   * across the owner's working day in small handfuls, because a burst of
+   * withdrawals is a pattern LinkedIn notices too. Twenty a day clears a
+   * 250-invitation pile in a fortnight of working days.
    */
-  withdrawPerAccountPerNight: 20,
+  withdrawPerAccountPerDay: 20,
+  withdrawPerAccountPerHour: 4,
+  /**
+   * How far back the hourly acceptance poll looks for an invitation that was
+   * accepted. Never tied to `withdrawAfterDays`: an invitation is pending until
+   * it is withdrawn, and one accepted on day fifteen whose withdrawal failed
+   * would otherwise never be noticed, and its person never written to.
+   */
+  acceptanceLookbackDays: 60,
   /**
    * Pending invitations past which an account is told about its pile. LinkedIn
    * publishes no number; vendors watch for accounts in the low hundreds, and

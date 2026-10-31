@@ -11,6 +11,7 @@ import { OBSERVED_ACCOUNTS_BEAT } from "../accounts.js";
 import { WEBHOOKS_BEAT } from "../webhooks.js";
 import { INBOUND_POLL_BEAT } from "./inbound-poll.js";
 import { SALES_NAVIGATOR_PROBE_EVENT } from "./targeting.js";
+import { WITHDRAW_REFUSED_EVENT } from "./withdraw.js";
 
 /**
  * Everything wrong across the deployment, in one list, for the operator.
@@ -130,6 +131,7 @@ export async function collectIssues(
         "campaign.extended",
         "linkedin.account.reauth_required",
         SALES_NAVIGATOR_PROBE_EVENT,
+        WITHDRAW_REFUSED_EVENT,
       ])
       .gte("created_at", weekAgo),
     db
@@ -373,6 +375,32 @@ export async function collectIssues(
     if (!missing || reportedNotes.has(campaignId)) continue;
     reportedNotes.add(campaignId);
     add({ id: `campaigns:notes:${campaignId}`, severity: "info", area: "Campaigns", title: "Some invitation notes fell back to the template", detail: `${missing} ${missing === 1 ? "person is" : "people are"} still queued without a personalised note. Nora retries every few hours until each is written or invited.`, ...at(event.workspace_id), since: event.created_at });
+  }
+
+  // Withdrawals LinkedIn refused in the last day. These used to be skipped
+  // without a word, and every one ever tried was refused: the address was
+  // wrong, nothing was withdrawn on any account, and the piles grew until
+  // LinkedIn stopped taking invitations (rule 70). One row per account, with
+  // the provider's own words.
+  const refusedWithdrawals = new Map<string, { event: (typeof notesEvents)[number]; count: number }>();
+  for (const event of (events ?? []).filter((e) => e.name === WITHDRAW_REFUSED_EVENT && e.subject_id)) {
+    if (Date.parse(event.created_at) < now.getTime() - DAY) continue;
+    const key = event.subject_id as string;
+    const seen = refusedWithdrawals.get(key);
+    if (!seen || event.created_at > seen.event.created_at) refusedWithdrawals.set(key, { event, count: (seen?.count ?? 0) + 1 });
+    else seen.count += 1;
+  }
+  for (const [accountId, { event, count }] of refusedWithdrawals) {
+    const payload = (event.payload ?? {}) as { provider?: string; stop?: boolean };
+    add({
+      id: `accounts:withdraw:${accountId}`,
+      severity: "warning",
+      area: "Unipile",
+      title: count > 1 ? `Invitation withdrawals refused (${count} today)` : "An invitation withdrawal was refused",
+      detail: `${payload.provider || "No reason recorded."}${payload.stop ? " Withdrawals for this account wait until tomorrow." : ""}`,
+      ...at(event.workspace_id),
+      since: event.created_at,
+    });
   }
 
   // ── Jobs ────────────────────────────────────────────────────────────────

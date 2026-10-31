@@ -94,16 +94,29 @@ describe("detectAcceptedInvitations", () => {
     expect(db.find("campaign_prospects", { id: CP })?.status).toBe("invited");
   });
 
-  it("does not claim an acceptance for an invitation already withdrawn", async () => {
-    // Older than the withdrawal window: whatever connected them, it was not
-    // this campaign's invitation.
+  it("does not claim an acceptance for an invitation older than anybody can still accept", async () => {
+    // Older than the lookback: whatever connected them, it was not this
+    // campaign's invitation.
     const { db, ctx, linkedin } = harness();
     db.find("campaign_prospects", { id: CP })!.invited_at = new Date(
-      NOW.getTime() - 40 * 86_400_000,
+      NOW.getTime() - 90 * 86_400_000,
     ).toISOString();
     linkedin.relations = [{ providerId: "prov_jane", connectedAt: NOW.toISOString() }];
 
     expect(await detectAcceptedInvitations(ctx, NOW)).toBe(0);
+  });
+
+  it("still notices a yes to an invitation past the withdrawal window", async () => {
+    // Withdrawn at 14 days only when the withdrawal works. One that is still
+    // pending at 20 days and then accepted is a real yes, and that person is
+    // owed the follow-up.
+    const { db, ctx, linkedin } = harness();
+    db.find("campaign_prospects", { id: CP })!.invited_at = new Date(
+      NOW.getTime() - 20 * 86_400_000,
+    ).toISOString();
+    linkedin.relations = [{ providerId: "prov_jane", connectedAt: NOW.toISOString() }];
+
+    expect(await detectAcceptedInvitations(ctx, NOW)).toBe(1);
   });
 
   it("records the acceptance, so the funnel and the digest can see it", async () => {

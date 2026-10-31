@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
       "Nothing will be posted. Approved posts wait until you switch this back on.",
     ],
     withdraw_old_invites: [
-      "Nora will withdraw unanswered invitations once they are three weeks old, a few each night.",
+      "Nora will withdraw unanswered invitations once they are three weeks old, a few at a time through your working day.",
       "Nora will withdraw only the invitations it sent itself.",
     ],
   } as const;

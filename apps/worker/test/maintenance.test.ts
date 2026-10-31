@@ -81,11 +81,8 @@ function harness() {
       last_step_sent: 0,
       next_action_at: null,
     },
-    // Invited 30 days ago and still pending: past the 21-day mark, so the
-    // withdraw pass will ask the provider to pull it back. That call is the
-    // one in the night that genuinely throws out to the caller — acceptance
-    // detection catches its own provider errors per account, so a test built
-    // on that would demonstrate nothing.
+    // Invited 30 days ago and still pending. Withdrawing it is the hourly
+    // chain's job now (inside working hours); the night leaves it alone.
     {
       id: STALE_CP,
       workspace_id: WORKSPACE,
@@ -123,7 +120,7 @@ describe("runMaintenance", () => {
     // provider returns a 500, and the retention sweep — which is a promise
     // about how long other people's data is kept — never runs.
     const { db, ctx, linkedin, queues } = harness();
-    linkedin.withdrawInvitation = async () => {
+    linkedin.getAccountHealth = async () => {
       throw new Error("502 from the provider");
     };
 
@@ -143,7 +140,7 @@ describe("runMaintenance", () => {
 
   it("names the step that failed rather than reporting a clean night", async () => {
     const { db, ctx, linkedin, queues } = harness();
-    linkedin.withdrawInvitation = async () => {
+    linkedin.getAccountHealth = async () => {
       throw new Error("502 from the provider");
     };
 
@@ -155,10 +152,10 @@ describe("runMaintenance", () => {
       failures: Record<string, string>;
     };
     expect(detail.ok).toBe(false);
-    expect(detail.failed).toContain("withdraw-stale");
+    expect(detail.failed).toContain(`health:${ACCOUNT}`);
     // The provider's own sentence, not a shrug: "502 from the provider" is the
     // useful half of the report.
-    expect(detail.failures["withdraw-stale"]).toContain("502");
+    expect(detail.failures[`health:${ACCOUNT}`]).toContain("502");
   });
 
   it("records a refused account list as a failure, not as a night with nothing to fix", async () => {
