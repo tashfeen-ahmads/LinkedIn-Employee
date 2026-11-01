@@ -1,4 +1,4 @@
-import { LINKEDIN_LIMITS, isWithinWorkingHours } from "@le/shared";
+import { LINKEDIN_LIMITS, cleanupWindow } from "@le/shared";
 import { classifyProviderError, localDayStart, parseWorkingHours, type PendingInvitation } from "@le/linkedin";
 import type { WorkerContext } from "../context.js";
 import { recordEvent } from "../context.js";
@@ -22,8 +22,10 @@ import { outreachPause } from "../platform.js";
  *    the acceptance, so the sweep could pull back an invitation somebody had
  *    just accepted, and close a person who said yes.
  *
- * So, for each active account, hourly and only inside its owner's working
- * hours (a withdrawal at 3am is a robot's hour):
+ * So, for each active account, hourly, and only while it is not sending:
+ * the evening after a sending day and all of a day it does not send, between
+ * 9am and 11pm in its owner's zone (`cleanupWindow`). Never mixed in with the
+ * day's invitations, and never at 3am, which is a robot's hour:
  *
  *  1. LinkedIn's own list of what is still pending is read first, and is the
  *     only thing ever withdrawn from. An account whose list cannot be read is
@@ -34,8 +36,8 @@ import { outreachPause } from "../platform.js";
  *  3. With `withdraw_old_invites` on, the rep's other invitations go once
  *     LinkedIn says they are `withdrawOutsideAfterDays` (21) old. Never one
  *     whose age is unknown.
- *  4. Oldest first, at most `withdrawPerAccountPerHour` a run and
- *     `withdrawPerAccountPerDay` a day, counted from the account's own record
+ *  4. Oldest first, a handful a run and a ceiling a day (more on a day off
+ *     than on an evening), counted from the account's own record
  *     so a restart never resets it.
  *  5. A refusal that says LinkedIn is pushing back stops the account for the
  *     rest of its day. Every refusal is recorded in LinkedIn's words, never
@@ -134,7 +136,10 @@ async function withdrawForAccount(
     ? await ctx.db.from("profiles").select("timezone").eq("id", account.user_id).maybeSingle()
     : { data: null };
   const timezone = validZone(owner?.timezone);
-  if (!isWithinWorkingHours(now, parseWorkingHours(account.working_hours), timezone)) return none;
+  // Outside the account's sending hours and inside waking ones: evenings
+  // after a sending day, and the whole of a day it does not send.
+  const window = cleanupWindow(now, parseWorkingHours(account.working_hours), timezone, LINKEDIN_LIMITS);
+  if (!window) return none;
 
   // Today's record, in the owner's own day. Unreadable is not "nothing yet":
   // the day's ceiling is the promise, so the account waits for the next run.
@@ -162,7 +167,7 @@ async function withdrawForAccount(
       .map((e) => (e.payload as { invitationId?: string } | null)?.invitationId)
       .filter((id): id is string => Boolean(id)),
   );
-  const budget = Math.min(LINKEDIN_LIMITS.withdrawPerAccountPerHour, LINKEDIN_LIMITS.withdrawPerAccountPerDay - doneToday);
+  const budget = Math.min(window.perHour, window.perDay - doneToday);
   if (budget <= 0) return none;
 
   // LinkedIn's own answer to "what is still pending". Never acted on blind.

@@ -2060,10 +2060,12 @@ tests that were verified by deliberately breaking the code.
     refused, and a refusal was skipped without a word.
 
     `withdrawStaleInvites` (`apps/worker/src/jobs/withdraw.ts`) runs in the
-    hourly chain **after** the acceptance poll and only inside the owner's
-    working hours: a few an hour (`withdrawPerAccountPerHour`), at most
-    `withdrawPerAccountPerDay`, counted from the account's own events so a
-    restart never resets it. **LinkedIn's pending list is the only thing
+    hourly chain **after** the acceptance poll and **never while the account
+    is sending** (`cleanupWindow`, `packages/shared/src/time.ts`): the evening
+    after a sending day and the whole of a day it does not send, between 9am
+    and 11pm in the owner's zone, never overnight. A handful an hour, more on a
+    day off than on an evening (`withdrawPerHour*`, `withdrawPerDay*`), counted
+    from the account's own events so a restart never resets it. **LinkedIn's pending list is the only thing
     withdrawn from**, and an account whose list cannot be read is left alone:
     our row says `invited` until the poll sees a yes, so trusting it would
     withdraw an acceptance. Nora's own go at `withdrawAfterDays` (14), matched

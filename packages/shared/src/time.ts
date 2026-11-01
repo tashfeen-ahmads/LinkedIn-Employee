@@ -112,3 +112,34 @@ export function workingMsAhead(now: Date, hours: WorkingHours, timezone: string,
   }
   return total;
 }
+
+/**
+ * Whether stale invitations may be withdrawn now, and how many (rule 70).
+ *
+ * Only outside the account's sending hours and inside waking ones: after the
+ * day's sending ends on a sending day, and through the day on a day it does
+ * not send. Null means not now.
+ */
+export function cleanupWindow(
+  date: Date,
+  hours: WorkingHours,
+  timezone: string,
+  limits: {
+    cleanupEarliestHour: number;
+    cleanupLatestHour: number;
+    withdrawPerHourEvening: number;
+    withdrawPerDayEvening: number;
+    withdrawPerHourDayOff: number;
+    withdrawPerDayDayOff: number;
+  },
+): { kind: "evening" | "day_off"; perHour: number; perDay: number } | null {
+  const { hour, minute, weekday } = zonedParts(date, timezone);
+  const minutesIntoDay = hour * 60 + minute;
+  if (hour < limits.cleanupEarliestHour || hour >= limits.cleanupLatestHour) return null;
+  if (!hours.days.includes(weekday)) {
+    return { kind: "day_off", perHour: limits.withdrawPerHourDayOff, perDay: limits.withdrawPerDayDayOff };
+  }
+  // A sending day: only once its hours are over.
+  if (minutesIntoDay <= hours.end * 60) return null;
+  return { kind: "evening", perHour: limits.withdrawPerHourEvening, perDay: limits.withdrawPerDayEvening };
+}

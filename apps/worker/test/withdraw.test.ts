@@ -11,8 +11,10 @@ import type { WorkerContext } from "../src/context.js";
  * withdrawn on any account: the call went to the wrong address, ran at 3am
  * across the whole deployment, and trusted our rows over LinkedIn's list.
  */
-const FRIDAY_2PM = new Date("2026-10-30T14:00:00Z"); // inside the default 8 to 6, Mon to Fri, UTC
-const daysAgo = (n: number, from = FRIDAY_2PM) => new Date(from.getTime() - n * 86_400_000).toISOString();
+// A Saturday: a day the default account (8 to 6, Monday to Friday, UTC) does
+// not send, so the day belongs to cleanup.
+const SATURDAY_2PM = new Date("2026-10-31T14:00:00Z");
+const daysAgo = (n: number, from = SATURDAY_2PM) => new Date(from.getTime() - n * 86_400_000).toISOString();
 
 type Pending = { id: string; person?: string; days: number | null };
 
@@ -81,7 +83,7 @@ describe("withdrawing Nora's own invitations", () => {
     const { db, ctx, withdrawn } = harness({ pending: { pa1: [{ id: "inv-old", days: 15 }, { id: "inv-young", days: 10 }] } });
     own(db, "old", "c1", 15);
     own(db, "young", "c1", 10);
-    await withdrawStaleInvites(ctx, FRIDAY_2PM);
+    await withdrawStaleInvites(ctx, SATURDAY_2PM);
     expect(withdrawn.map((w) => w.invitationId)).toEqual(["inv-old"]);
     expect(db.find("campaign_prospects", { id: "old" })).toMatchObject({ status: "closed", status_reason: "invitation expired" });
     expect(db.find("campaign_prospects", { id: "young" })?.status).toBe("invited");
@@ -90,7 +92,7 @@ describe("withdrawing Nora's own invitations", () => {
   it("never withdraws an invitation LinkedIn no longer lists: that person may have said yes", async () => {
     const { db, ctx, withdrawn } = harness({ pending: { pa1: [] } });
     own(db, "accepted", "c1", 20);
-    await withdrawStaleInvites(ctx, FRIDAY_2PM);
+    await withdrawStaleInvites(ctx, SATURDAY_2PM);
     expect(withdrawn).toHaveLength(0);
     expect(db.find("campaign_prospects", { id: "accepted" })?.status).toBe("invited");
   });
@@ -98,33 +100,42 @@ describe("withdrawing Nora's own invitations", () => {
   it("finds an invitation by the person when LinkedIn's id differs from the one stored", async () => {
     const { db, ctx, withdrawn } = harness({ pending: { pa1: [{ id: "linkedin-own-id", person: "person-old", days: 16 }] } });
     own(db, "old", "c1", 16);
-    await withdrawStaleInvites(ctx, FRIDAY_2PM);
+    await withdrawStaleInvites(ctx, SATURDAY_2PM);
     expect(withdrawn.map((w) => w.invitationId)).toEqual(["linkedin-own-id"]);
   });
 
   it("tries the stored id when LinkedIn's list was too long to read whole", async () => {
     const { db, ctx, withdrawn } = harness({ pending: { pa1: [] }, truncated: true });
     own(db, "old", "c1", 16);
-    await withdrawStaleInvites(ctx, FRIDAY_2PM);
+    await withdrawStaleInvites(ctx, SATURDAY_2PM);
     expect(withdrawn.map((w) => w.invitationId)).toEqual(["inv-old"]);
   });
 });
 
 describe("when and how many", () => {
-  it("does nothing outside the owner's working hours", async () => {
-    const night = new Date("2026-10-30T03:00:00Z");
+  it("never withdraws while the account is sending, nor overnight", async () => {
     const { db, ctx, withdrawn } = harness({ pending: { pa1: [{ id: "inv-old", days: 15 }] } });
     own(db, "old", "c1", 15);
-    await withdrawStaleInvites(ctx, night);
+    await withdrawStaleInvites(ctx, new Date("2026-10-30T14:00:00Z")); // Friday 2pm: sending
+    await withdrawStaleInvites(ctx, new Date("2026-10-31T03:00:00Z")); // Saturday 3am
+    await withdrawStaleInvites(ctx, new Date("2026-10-30T23:30:00Z")); // Friday 11:30pm
     expect(withdrawn).toHaveLength(0);
+  });
+
+  it("cleans in the evening once a sending day is over, a little more gently than on a day off", async () => {
+    const pending = Array.from({ length: 10 }, (_, i) => ({ id: `inv-e${i}`, days: 20 + i }));
+    const { db, ctx, withdrawn } = harness({ pending: { pa1: pending } });
+    for (let i = 0; i < 10; i++) own(db, `e${i}`, "c1", 20 + i);
+    await withdrawStaleInvites(ctx, new Date("2026-10-30T19:00:00Z")); // Friday 7pm, after 6pm close
+    expect(withdrawn.filter((w) => w.accountId === "pa1")).toHaveLength(LINKEDIN_LIMITS.withdrawPerHourEvening);
   });
 
   it("takes a few an hour, oldest first, never a burst", async () => {
     const pending = Array.from({ length: 10 }, (_, i) => ({ id: `inv-o${i}`, days: 15 + i }));
     const { db, ctx, withdrawn } = harness({ pending: { pa1: pending } });
     for (let i = 0; i < 10; i++) own(db, `o${i}`, "c1", 15 + i);
-    await withdrawStaleInvites(ctx, FRIDAY_2PM);
-    expect(withdrawn).toHaveLength(LINKEDIN_LIMITS.withdrawPerAccountPerHour);
+    await withdrawStaleInvites(ctx, SATURDAY_2PM);
+    expect(withdrawn).toHaveLength(LINKEDIN_LIMITS.withdrawPerHourDayOff);
     expect(withdrawn[0]?.invitationId).toBe("inv-o9");
   });
 
@@ -138,11 +149,11 @@ describe("when and how many", () => {
         workspace_id: "w1",
         name: WITHDRAWN_EVENT,
         subject_id: "a1",
-        payload: { withdrawn: LINKEDIN_LIMITS.withdrawPerAccountPerDay - 1 },
-        created_at: "2026-10-30T10:00:00Z",
+        payload: { withdrawn: LINKEDIN_LIMITS.withdrawPerDayDayOff - 1 },
+        created_at: "2026-10-31T10:00:00Z",
       },
     ]);
-    await withdrawStaleInvites(ctx, FRIDAY_2PM);
+    await withdrawStaleInvites(ctx, SATURDAY_2PM);
     expect(withdrawn).toHaveLength(1);
   });
 
@@ -155,7 +166,7 @@ describe("when and how many", () => {
     });
     for (let i = 0; i < 8; i++) own(db, `a${i}`, "c1", 20);
     own(db, "b", "c2", 20);
-    await withdrawStaleInvites(ctx, FRIDAY_2PM);
+    await withdrawStaleInvites(ctx, SATURDAY_2PM);
     expect(withdrawn.some((w) => w.accountId === "pa2" && w.invitationId === "inv-b")).toBe(true);
   });
 
@@ -163,7 +174,7 @@ describe("when and how many", () => {
     const { db, ctx, withdrawn } = harness({ pending: { pa1: [{ id: "inv-old", days: 15 }] } });
     own(db, "old", "c1", 15);
     db.seed("platform_settings", [{ id: 1, outreach_paused_at: "2026-10-30T09:00:00Z", outreach_paused_reason: "incident" }]);
-    await withdrawStaleInvites(ctx, FRIDAY_2PM);
+    await withdrawStaleInvites(ctx, SATURDAY_2PM);
     expect(withdrawn).toHaveLength(0);
   });
 });
@@ -182,7 +193,7 @@ describe("when LinkedIn refuses", () => {
       calls.push(input.invitationId);
       return { ok: false, error: "429: Too many requests — errors/too_many_requests", health: "warning" };
     };
-    await withdrawStaleInvites(ctx, FRIDAY_2PM);
+    await withdrawStaleInvites(ctx, SATURDAY_2PM);
     expect(calls).toEqual(["inv-o1"]);
     expect(db.find("campaign_prospects", { id: "o1" })?.status).toBe("invited");
     const refusal = db.rows("events").find((e) => e.name === WITHDRAW_REFUSED_EVENT) as { payload: { stop: boolean; provider: string } };
@@ -191,7 +202,7 @@ describe("when LinkedIn refuses", () => {
 
     // An hour later the same day: nothing more is asked of that account.
     calls.length = 0;
-    await withdrawStaleInvites(ctx, new Date("2026-10-30T15:00:00Z"));
+    await withdrawStaleInvites(ctx, new Date("2026-10-31T15:00:00Z"));
     expect(calls).toHaveLength(0);
   });
 });
@@ -215,7 +226,7 @@ describe("an invitation LinkedIn will not withdraw", () => {
         : { ok: true };
     };
 
-    await withdrawStaleInvites(ctx, FRIDAY_2PM);
+    await withdrawStaleInvites(ctx, SATURDAY_2PM);
     // The refused one does not stop the run: the next oldest go.
     expect(calls).toEqual(["inv-o1", "inv-o2", "inv-o3"]);
     expect(db.find("campaign_prospects", { id: "o1" })?.status).toBe("invited");
@@ -223,7 +234,7 @@ describe("an invitation LinkedIn will not withdraw", () => {
 
     // An hour later it is not asked about again.
     calls.length = 0;
-    await withdrawStaleInvites(ctx, new Date("2026-10-30T15:00:00Z"));
+    await withdrawStaleInvites(ctx, new Date("2026-10-31T15:00:00Z"));
     expect(calls).not.toContain("inv-o1");
   });
 });
@@ -232,11 +243,11 @@ describe("what the review found", () => {
   afterEach(() => vi.useRealTimers());
 
   it("moves on when LinkedIn's list never answers, so the hourly chain is never stuck", async () => {
-    vi.useFakeTimers({ now: FRIDAY_2PM });
+    vi.useFakeTimers({ now: SATURDAY_2PM });
     const { db, ctx, linkedin } = harness();
     own(db, "old", "c1", 20);
     linkedin.listPendingInvitations = () => new Promise(() => undefined);
-    const run = withdrawStaleInvites(ctx, FRIDAY_2PM);
+    const run = withdrawStaleInvites(ctx, SATURDAY_2PM);
     // Two accounts, each given its own deadline in turn.
     await vi.advanceTimersByTimeAsync(31_000);
     await vi.advanceTimersByTimeAsync(31_000);
@@ -251,8 +262,8 @@ describe("what the review found", () => {
       calls.push(input.invitationId);
       return calls.length === 1 ? { ok: false, error: "fetch failed" } : { ok: true };
     };
-    await withdrawStaleInvites(ctx, FRIDAY_2PM);
-    await withdrawStaleInvites(ctx, new Date("2026-10-30T15:00:00Z"));
+    await withdrawStaleInvites(ctx, SATURDAY_2PM);
+    await withdrawStaleInvites(ctx, new Date("2026-10-31T15:00:00Z"));
     expect(calls).toEqual(["inv-old", "inv-old"]);
     expect(db.find("campaign_prospects", { id: "old" })?.status).toBe("closed");
   });
@@ -266,7 +277,7 @@ describe("what the review found", () => {
     db.seed("campaign_prospects", [
       { id: "q", workspace_id: "w1", campaign_id: "c1", prospect_id: "p-q", status: "queued", invitation_id: null, invited_at: null },
     ]);
-    await withdrawStaleInvites(ctx, FRIDAY_2PM);
+    await withdrawStaleInvites(ctx, SATURDAY_2PM);
     expect(withdrawn).toHaveLength(0);
   });
 
@@ -277,7 +288,7 @@ describe("what the review found", () => {
       { id: "d1", workspace_id: "w1", campaign_id: "c1", prospect_id: "p-dup", status: "invited", invitation_id: "inv-dup", invited_at: daysAgo(20) },
       { id: "d2", workspace_id: "w1", campaign_id: "c1", prospect_id: "p-dup", status: "invited", invitation_id: null, invited_at: daysAgo(19) },
     ]);
-    await withdrawStaleInvites(ctx, FRIDAY_2PM);
+    await withdrawStaleInvites(ctx, SATURDAY_2PM);
     expect(db.find("campaign_prospects", { id: "d1" })?.status).toBe("closed");
     expect(db.find("campaign_prospects", { id: "d2" })?.status).toBe("closed");
   });
@@ -287,7 +298,7 @@ describe("what the review found", () => {
     own(db, "a", "c1", 20);
     own(db, "b", "c1", 19);
     db.find("linkedin_accounts", { id: "a1" })!.pending_invites = 500;
-    await withdrawStaleInvites(ctx, FRIDAY_2PM);
+    await withdrawStaleInvites(ctx, SATURDAY_2PM);
     expect(withdrawn).toHaveLength(1);
     expect(db.find("linkedin_accounts", { id: "a1" })?.pending_invites).toBe(500);
   });
@@ -296,7 +307,7 @@ describe("what the review found", () => {
 describe("cleaning up invitations sent outside Nora", () => {
   it("does nothing until an owner turns it on", async () => {
     const { ctx, withdrawn } = harness({ cleanup: false, pending: { pa1: [{ id: "x-old", days: 60 }] } });
-    await withdrawStaleInvites(ctx, FRIDAY_2PM);
+    await withdrawStaleInvites(ctx, SATURDAY_2PM);
     expect(withdrawn).toHaveLength(0);
   });
 
@@ -312,7 +323,7 @@ describe("cleaning up invitations sent outside Nora", () => {
         ],
       },
     });
-    await withdrawStaleInvites(ctx, FRIDAY_2PM);
+    await withdrawStaleInvites(ctx, SATURDAY_2PM);
     expect(withdrawn.map((w) => w.invitationId)).toEqual(["x-90", "x-30"]);
   });
 
@@ -322,7 +333,7 @@ describe("cleaning up invitations sent outside Nora", () => {
       pending: { pa1: [{ id: "some-other-id", person: "person-young", days: 40 }] },
     });
     own(db, "young", "c1", 5);
-    await withdrawStaleInvites(ctx, FRIDAY_2PM);
+    await withdrawStaleInvites(ctx, SATURDAY_2PM);
     expect(withdrawn).toHaveLength(0);
   });
 });
