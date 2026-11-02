@@ -51,7 +51,8 @@ export interface NoteAllowance {
  *
  * Free accounts get FREE_NOTES_PER_MONTH, counted from what this product
  * actually sent this month across every campaign on the account. A month in
- * which LinkedIn has already refused a note is spent whatever the count says:
+ * which LinkedIn has already refused a note is spent whatever the count says,
+ * on every plan:
  * the count is ours, the refusal is LinkedIn's, and a note on someone else's
  * invitation sent from LinkedIn directly counts against the same allowance.
  *
@@ -64,14 +65,17 @@ export function noteAllowance(input: {
   exhaustedMonth: string | null | undefined;
   month: string;
 }): NoteAllowance {
-  if (input.plan !== "basic") return { allowed: true, remaining: null };
+  // LinkedIn's own refusal outranks the plan we were told. Accounts the
+  // provider reports as Premium had their notes refused exactly like a free
+  // account's, and reading "paid" as "unlimited" held each of them for days.
   if (input.exhaustedMonth === input.month) {
     return {
       allowed: false,
       remaining: 0,
-      reason: "LinkedIn says this free account has used its invitation notes for the month",
+      reason: "LinkedIn refused a note from this account this month, so invitations go without one until next month",
     };
   }
+  if (input.plan !== "basic") return { allowed: true, remaining: null };
   const used = Number.isFinite(input.notesSentThisMonth) ? Math.max(0, Math.floor(input.notesSentThisMonth)) : FREE_NOTES_PER_MONTH;
   const remaining = Math.max(0, FREE_NOTES_PER_MONTH - used);
   if (remaining === 0) {

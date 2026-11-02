@@ -115,19 +115,68 @@ describe("a free account's monthly notes", () => {
 });
 
 describe("a paid account", () => {
-  it("keeps its notes, and a refusal is not retried without one", async () => {
+  /*
+   * Four accounts the provider reports as Premium had their notes refused in
+   * November in exactly a free account's words, after three each, and were
+   * held for two days at a time because the retry was kept for free accounts.
+   */
+  it("is not counted against the free allowance", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    const { ctx, prospect, linkedin } = harness(NOW, { account: { has_premium: true } });
+    spentNotes(prospect, FREE_NOTES_PER_MONTH + 5);
+    const id = prospect();
+
+    await runLinkedInAction(ctx, { kind: "invite", workspaceId: WORKSPACE, campaignProspectId: id });
+
+    expect(linkedin.sentInvitations.at(-1)?.note).toBeTruthy();
+  });
+
+  it("resends without the note when LinkedIn refuses it, and holds nothing", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(NOW);
     const { ctx, db, prospect, linkedin } = harness(NOW, { account: { has_premium: true } });
-    spentNotes(prospect, FREE_NOTES_PER_MONTH + 5);
     linkedin.noteRefusal = THROTTLED;
     const attempts = vi.spyOn(linkedin, "sendInvitation");
     const id = prospect();
 
     await runLinkedInAction(ctx, { kind: "invite", workspaceId: WORKSPACE, campaignProspectId: id });
 
+    expect(attempts).toHaveBeenCalledTimes(2);
+    expect(attempts.mock.calls[1]?.[0].note).toBeUndefined();
+    const row = db.find("campaign_prospects", { id })!;
+    expect(row.status).toBe("invited");
+    expect(row.invite_note_sent).toBe(false);
+    const account = db.find("linkedin_accounts", { id: ACCOUNT })!;
+    expect(account.invites_paused_until ?? null).toBeNull();
+    expect(account.notes_exhausted_month).toBe("2026-10");
+  });
+
+  it("sends no note for the rest of a month in which LinkedIn refused one", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    const { ctx, prospect, linkedin } = harness(NOW, { account: { has_premium: true, notes_exhausted_month: "2026-10" } });
+    const attempts = vi.spyOn(linkedin, "sendInvitation");
+    const id = prospect();
+
+    await runLinkedInAction(ctx, { kind: "invite", workspaceId: WORKSPACE, campaignProspectId: id });
+
     expect(attempts).toHaveBeenCalledTimes(1);
-    expect(attempts.mock.calls[0]?.[0].note).toBeTruthy();
+    expect(attempts.mock.calls[0]?.[0].note).toBeUndefined();
+  });
+
+  it("still holds the account when the invitation without a note is refused too", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    const { ctx, db, prospect, linkedin } = harness(NOW, { account: { has_premium: true } });
+    linkedin.invitationRefusal = THROTTLED;
+    const attempts = vi.spyOn(linkedin, "sendInvitation");
+    const id = prospect();
+
+    await runLinkedInAction(ctx, { kind: "invite", workspaceId: WORKSPACE, campaignProspectId: id });
+
+    expect(attempts).toHaveBeenCalledTimes(2);
+    expect(db.find("campaign_prospects", { id })?.status).toBe("queued");
     expect(db.find("linkedin_accounts", { id: ACCOUNT })?.invites_paused_until).toBeTruthy();
   });
 });

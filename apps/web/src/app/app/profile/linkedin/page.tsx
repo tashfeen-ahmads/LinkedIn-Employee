@@ -11,7 +11,7 @@ import { AllowanceMeter } from "@/components/charts";
 import { countersForToday } from "@/lib/account-day";
 import { notesLeftThisMonth } from "@/lib/invite-notes";
 import { mergeStash, readOnboardingStash, stashedAccountAnswers } from "@/lib/onboarding-stash";
-import { dailyInviteCap, planLabel, planOf, type AccountRecord, type LinkedInPlan } from "@le/linkedin";
+import { dailyInviteCap, localMonth, planLabel, planOf, type AccountRecord, type LinkedInPlan } from "@le/linkedin";
 import { cannotSend, describeRepair, type RefreshResult, type RepairNotice } from "../../team/repair";
 import { linkedInState } from "../linkedin-state";
 import { SalesNavigatorSection } from "../sales-navigator-section";
@@ -161,6 +161,9 @@ export default async function LinkedInSectionPage({
     : plan === "basic"
       ? FREE_NOTES_PER_MONTH
       : null;
+  // A paid plan's notes stop on LinkedIn's refusal (rule 62), read in the
+  // owner's month exactly as the send path reads it.
+  const notesRefused = Boolean(mine?.notes_exhausted_month && mine.notes_exhausted_month === localMonth(new Date(), timezone));
 
   return (
     <>
@@ -262,7 +265,7 @@ export default async function LinkedInSectionPage({
         </div>
       </Section>
 
-      <SalesNavigatorSection plan={plan} detected={detected} notesLeft={notesLeft} connected={Boolean(mine)} action={setLinkedInPlan} />
+      <SalesNavigatorSection plan={plan} detected={detected} notesLeft={notesLeft} notesRefused={notesRefused} connected={Boolean(mine)} action={setLinkedInPlan} />
     </>
   );
 }

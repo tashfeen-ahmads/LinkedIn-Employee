@@ -33,6 +33,7 @@ export function SalesNavigatorSection({
   plan,
   detected,
   notesLeft,
+  notesRefused = false,
   connected,
   action,
 }: {
@@ -41,6 +42,8 @@ export function SalesNavigatorSection({
   detected: LinkedInPlan | null;
   /** Free account: notes left this month. Null on a paid plan. */
   notesLeft: number | null;
+  /** LinkedIn refused a note from this account this month, whatever its plan. */
+  notesRefused?: boolean;
   /** No account row yet: the answer is kept until Connect. */
   connected: boolean;
   action: (formData: FormData) => Promise<void>;
@@ -68,7 +71,12 @@ export function SalesNavigatorSection({
         </div>
 
         <p className="small">
-          {notesLeft === null ? (
+          {notesLeft === null && notesRefused ? (
+            <>
+              <strong>Invitation notes:</strong> LinkedIn refused a note from this account this month, so
+              invitations go out without one until the month turns. They are still sent.
+            </>
+          ) : notesLeft === null ? (
             <>
               <strong>Invitation notes:</strong> a note on every invitation.
             </>

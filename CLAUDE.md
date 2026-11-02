@@ -1606,6 +1606,13 @@ tests that were verified by deliberately breaking the code.
     account, and the throttle rules above apply unchanged. The note decides
     nothing else, so every cap, hold and check still runs.
 
+    **The retry and the spent month apply on every plan.** In November four
+    accounts the provider reports as Premium sent three notes each, had the
+    fourth refused in exactly these words, and were held for two days at a
+    time, because both were kept for free accounts. A paid plan is never
+    counted against `FREE_NOTES_PER_MONTH`, but LinkedIn's refusal outranks
+    the plan we were told.
+
     What LinkedIn reports is read from the provider (`getAccountPlan`, nightly
     and on the profile) and kept beside what the rep said, never over it, so a
     screen can say when they disagree. It decides `has_premium`, because a free

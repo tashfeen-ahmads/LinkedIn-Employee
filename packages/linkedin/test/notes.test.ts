@@ -16,9 +16,11 @@ describe("noteAllowance", () => {
     expect(noteAllowance({ plan: "basic", notesSentThisMonth: 0, exhaustedMonth: month, month }).allowed).toBe(false);
     expect(noteAllowance({ plan: "basic", notesSentThisMonth: 0, exhaustedMonth: "2026-09", month }).allowed).toBe(true);
   });
-  it("puts no limit on a paid plan", () => {
+  it("puts no count on a paid plan, but believes LinkedIn's refusal on every plan", () => {
     for (const plan of ["premium", "sales_navigator"] as const) {
-      expect(noteAllowance({ plan, notesSentThisMonth: 99, exhaustedMonth: month, month })).toEqual({ allowed: true, remaining: null });
+      expect(noteAllowance({ plan, notesSentThisMonth: 99, exhaustedMonth: null, month })).toEqual({ allowed: true, remaining: null });
+      expect(noteAllowance({ plan, notesSentThisMonth: 99, exhaustedMonth: "2026-09", month })).toEqual({ allowed: true, remaining: null });
+      expect(noteAllowance({ plan, notesSentThisMonth: 0, exhaustedMonth: month, month }).allowed).toBe(false);
     }
   });
   it("reads a count it cannot trust as spent", () => {

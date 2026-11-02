@@ -537,10 +537,12 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
      */
     const plan = planOf(accountRow);
     const month = localMonth(new Date(), timezone);
-    if (note && plan === "basic") {
+    if (note) {
       const allowance = noteAllowance({
         plan,
-        notesSentThisMonth: await notesSentThisMonth(db, accountRow.id, timezone),
+        // Counted only where the count decides anything: a paid plan's notes
+        // stop on LinkedIn's refusal, never on ours.
+        notesSentThisMonth: plan === "basic" ? await notesSentThisMonth(db, accountRow.id, timezone) : 0,
         exhaustedMonth: accountRow.notes_exhausted_month,
         month,
       });
@@ -558,7 +560,12 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
     try {
       result = await send(note);
       /*
-       * Refused with a note on a free account: ask once more without it.
+       * Refused with a note: ask once more without it, on every plan.
+       *
+       * Not only on a free account. Four accounts the provider reports as
+       * Premium had their notes refused in exactly these words, sent fine
+       * without one, and were held for two days at a time because the retry
+       * was reserved for free accounts.
        *
        * LinkedIn's note limit and its invitation throttle arrive as the same
        * sentence, so the text cannot tell them apart and the second request
@@ -566,7 +573,7 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
        * invitation after this one goes without. Refused again, it is the
        * account, and the refusal below is handled exactly as before.
        */
-      if (!result.ok && note && plan === "basic" && mightBeNoteQuota(result.error)) {
+      if (!result.ok && note && mightBeNoteQuota(result.error)) {
         await db.from("linkedin_accounts").update({ notes_exhausted_month: month }).eq("id", accountRow.id);
         await recordEvent(db, {
           workspaceId: cp.workspace_id,
