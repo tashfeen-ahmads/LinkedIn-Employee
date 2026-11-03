@@ -355,6 +355,22 @@ const MUTATIONS = [
     pkg: "@le/worker",
   },
   {
+    id: "withdraw/never-recent-own",
+    rule: "Nora's own invitation is never withdrawn before withdrawAfterDays: nothing sent today or this week (rule 70)",
+    file: "apps/worker/src/jobs/withdraw.ts",
+    from: "  const ownCutoff = now.getTime() - LINKEDIN_LIMITS.withdrawAfterDays * 86_400_000;",
+    to: "  const ownCutoff = now.getTime();",
+    pkg: "@le/worker",
+  },
+  {
+    id: "withdraw/never-recent-outside",
+    rule: "The rep's own invitation is never withdrawn before withdrawOutsideAfterDays (rule 70)",
+    file: "apps/worker/src/jobs/withdraw.ts",
+    from: "  const outsideCutoff = now.getTime() - LINKEDIN_LIMITS.withdrawOutsideAfterDays * 86_400_000;",
+    to: "  const outsideCutoff = now.getTime();",
+    pkg: "@le/worker",
+  },
+  {
     id: "notes/spent-month-sends-without-note",
     rule: "Once a free account's monthly notes are spent, the invitation goes without one",
     file: "apps/worker/src/jobs/linkedin-action.ts",

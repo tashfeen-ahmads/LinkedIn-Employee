@@ -327,6 +327,22 @@ describe("cleaning up invitations sent outside Nora", () => {
     expect(withdrawn.map((w) => w.invitationId)).toEqual(["x-90", "x-30"]);
   });
 
+  it("never touches anything sent today or in the last three days, Nora's own or the rep's", async () => {
+    const { db, ctx, withdrawn } = harness({
+      cleanup: true,
+      pending: {
+        pa1: [0, 1, 2, 3].flatMap((d) => [
+          { id: `x-${d}`, days: d },
+          { id: `inv-own-${d}`, days: d },
+        ]),
+      },
+    });
+    for (const d of [0, 1, 2, 3]) own(db, `own-${d}`, "c1", d);
+    await withdrawStaleInvites(ctx, SATURDAY_2PM);
+    expect(withdrawn).toHaveLength(0);
+    for (const d of [0, 1, 2, 3]) expect(db.find("campaign_prospects", { id: `own-${d}` })?.status).toBe("invited");
+  });
+
   it("leaves a person Nora is still waiting on to Nora's own rule", async () => {
     const { db, ctx, withdrawn } = harness({
       cleanup: true,
