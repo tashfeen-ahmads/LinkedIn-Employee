@@ -195,6 +195,20 @@ export function describeCooldown(summary: string, until: Date, waiting: number):
  * account. Explicit wording about notes or personalised invitations is matched
  * too, in case the provider ever says so plainly.
  */
+/**
+ * The account itself is disconnected at the provider: nothing about this
+ * person, and nothing a retry of this person fixes.
+ *
+ * Read as a refusal of the person, twenty-four invitations on one account were
+ * marked failed in a row, for good, in the three hours before the nightly
+ * health check noticed the account was gone. Those people had never been
+ * contacted; they were waiting for an account, not refused by LinkedIn.
+ */
+export function accountDisconnected(error: string | null | undefined): boolean {
+  if (!error) return false;
+  return /errors\/disconnected_account|disconnected account|appears to be disconnected/i.test(error);
+}
+
 export function mightBeNoteQuota(error: string | null | undefined): boolean {
   if (!error) return false;
   return /errors\/cannot_resend_yet|temporary provider limit|personali[sz]ed (invitation|message|note)|invitation note|custom (message|note)/.test(

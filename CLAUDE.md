@@ -110,6 +110,15 @@ tests that were verified by deliberately breaking the code.
    beside it — so recovery runs *before* polling. A failure to list provider
    accounts is never read as "the provider has none": one bad minute would
    otherwise disconnect every account on the deployment.
+
+   The list's state is read from each account's `sources`, never assumed: it
+   carries no top-level status, `item.status ?? "OK"` made every listed
+   account healthy, and a page load put an account the health check had just
+   failed back to active, hour after hour. A list that says nothing is
+   `unknown`, which wakes nobody. And a send refused with "401 Disconnected
+   account" pauses the account at once (`accountDisconnected`) and leaves the
+   person exactly where they were: read as a refusal of the person, twenty-four
+   people on one account were marked failed for good in an evening.
 9. **Targeting refuses a customer profile nobody has approved**
    (`approved_at` in `apps/worker/src/jobs/targeting.ts`). The Strategy Agent
    writes profiles; it does not approve them. A person approves them, on

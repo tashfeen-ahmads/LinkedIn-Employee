@@ -667,6 +667,20 @@ describe("an account the provider holds but does not label", () => {
     expect(account.provider_account_id).toBe("acct_live");
   });
 
+  it("does not wake an account the health check put to sleep on a list that says nothing of its state", async () => {
+    // The provider's list carried no top-level state and was read as healthy,
+    // so every page load undid the nightly health check: "reauth required" one
+    // hour, active the next, and neither screen right for long.
+    const { db } = harness({ provider_account_id: "acct_live", status: "reauth_required" });
+    const { reconcileAccount } = await import("../src/accounts.js");
+
+    await reconcileAccount(db.asDb(), WORKSPACE, USER, [], [{ ...dashboardAccount, status: "unknown" as const }]);
+    expect(db.find("linkedin_accounts", { id: ACCOUNT })!.status).toBe("reauth_required");
+
+    await reconcileAccount(db.asDb(), WORKSPACE, USER, [], [dashboardAccount]);
+    expect(db.find("linkedin_accounts", { id: ACCOUNT })!.status).toBe("active");
+  });
+
   it("still marks an account dead when its id is genuinely absent", async () => {
     // The check that must keep working. An id nowhere in the provider's list
     // is gone, whatever anything is labelled.

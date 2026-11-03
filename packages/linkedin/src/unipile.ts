@@ -1,3 +1,4 @@
+import { accountDisconnected } from "./provider-errors.js";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { invitationSentAt } from "./invitations.js";
 import type { ProspectCandidate } from "@le/shared";
@@ -1130,7 +1131,12 @@ function toConnectedAccounts(items: RawUnipileAccount[], via: "push" | "pull"): 
           : via === "pull" && typeof item.name === "string" && item.name.trim()
             ? item.name
             : undefined,
-      status: mapAccountStatus(String(item.status ?? "OK")),
+      // The list carries the state on the account's sources, not at the top:
+      // read as `item.status ?? "OK"`, every listed account was healthy by
+      // default, and a page load put a dead account back to active hours
+      // after the health check had said it needed signing in again. Said
+      // nowhere is unknown, never fine.
+      status: mapAccountStatus(String(item.sources?.[0]?.status ?? item.status ?? "")),
     }))
     // An entry naming no account cannot be acted on. A delivery naming no rep
     // cannot either — guessing which row it meant is how the wrong account
@@ -1146,6 +1152,7 @@ interface RawUnipileAccount {
   reference?: string;
   account_name?: string;
   status?: string;
+  sources?: Array<{ id?: string; status?: string }>;
 }
 
 interface RawUnipileMessage {
@@ -1853,8 +1860,17 @@ function toActionError(err: unknown): ActionResult {
   if (err instanceof UnipileError) {
     // 429 and 403 from the provider mean LinkedIn pushed back. Treat both as a
     // health signal so the scheduler pauses the account rather than retrying.
+    // A disconnected account is said once and the account paused at once:
+    // left as an ordinary error, every queued job tried it in turn and each
+    // one failed its person (`accountDisconnected`).
     const health: AccountHealth | undefined =
-      err.status === 429 ? "warning" : err.status === 403 ? "restricted" : undefined;
+      err.status === 429
+        ? "warning"
+        : err.status === 403
+          ? "restricted"
+          : err.status === 401 && accountDisconnected(`${err.message} ${err.body}`)
+            ? "reauth_required"
+            : undefined;
     return { ok: false, error: err.message, health };
   }
   return { ok: false, error: err instanceof Error ? err.message : String(err) };

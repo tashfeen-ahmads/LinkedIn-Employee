@@ -40,3 +40,49 @@ describe("UnipileProvider.listAccounts", () => {
     expect(await provider.listAccounts()).toHaveLength(1);
   });
 });
+
+/*
+ * The state is on the account's sources, not at the top. Read as
+ * `item.status ?? "OK"`, every listed account was healthy, and a page load put
+ * an account the health check had just said needed signing in back to active.
+ */
+describe("UnipileProvider.listAccounts state", () => {
+  const listed = (sources: unknown) => {
+    const provider = new UnipileProvider({
+      dsn: "https://api.test",
+      accessToken: "t",
+      fetchImpl: (async () =>
+        new Response(JSON.stringify({ items: [{ object: "Account", id: "a", name: "A", type: "LINKEDIN", sources }] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        })) as typeof fetch,
+    });
+    return provider.listAccounts().then((all) => all[0]?.status);
+  };
+
+  it("reads the state from the account's sources", async () => {
+    expect(await listed([{ id: "a_MESSAGING", status: "OK" }])).toBe("ok");
+    expect(await listed([{ id: "a_MESSAGING", status: "CREDENTIALS" }])).toBe("reauth_required");
+  });
+
+  it("calls an account with no state unknown, never healthy", async () => {
+    expect(await listed(undefined)).toBe("unknown");
+  });
+});
+
+describe("a disconnected account on a send", () => {
+  it("is a health signal, so the account is paused at the first refusal", async () => {
+    const provider = new UnipileProvider({
+      dsn: "https://api.test",
+      accessToken: "t",
+      fetchImpl: (async () =>
+        new Response(
+          JSON.stringify({ status: 401, type: "errors/disconnected_account", title: "Disconnected account", detail: "The account appears to be disconnected from the provider service." }),
+          { status: 401, headers: { "content-type": "application/json" } },
+        )) as typeof fetch,
+    });
+    const result = await provider.sendInvitation({ accountId: "a", providerId: "p", note: undefined });
+    expect(result.ok).toBe(false);
+    expect(result.health).toBe("reauth_required");
+  });
+});

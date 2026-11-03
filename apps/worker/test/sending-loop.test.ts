@@ -640,6 +640,41 @@ describe("a follow-up the provider could not deliver", () => {
   });
 });
 
+/*
+ * 29 October: an account disconnected at the provider, and the next
+ * twenty-four invitations each came back "401 Disconnected account". Each was
+ * read as a refusal of the person and marked failed, for good, while the
+ * account stayed active until the nightly health check.
+ */
+describe("an account that disconnects mid-send", () => {
+  const GONE = "Unipile POST /api/v1/users/invite failed with 401: Disconnected account — The account appears to be disconnected from the provider service. — errors/disconnected_account";
+
+  it("is paused at the first refusal, and the person stays queued for when it is back", async () => {
+    const { db, ctx, linkedin, prospect } = harness();
+    const id = prospect();
+    linkedin.sendInvitation = async () => ({ ok: false, error: GONE, health: "reauth_required" });
+
+    await runLinkedInAction(ctx, invite(id));
+
+    const row = db.find("campaign_prospects", { id })!;
+    expect(row.status).toBe("queued");
+    expect(row.invite_claimed_at ?? null).toBeNull();
+    expect(db.find("linkedin_accounts", { id: ACCOUNT })?.status).toBe("reauth_required");
+  });
+
+  it("keeps a follow-up waiting rather than failing the person who accepted", async () => {
+    const { db, ctx, linkedin, prospect } = harness();
+    const id = prospect({ status: "accepted", next_action_at: NOW.toISOString(), accepted_at: NOW.toISOString() });
+    linkedin.sendMessage = async () => ({ ok: false, error: GONE.replace("users/invite", "chats"), health: "reauth_required" });
+
+    await runLinkedInAction(ctx, followUp(id));
+
+    const row = db.find("campaign_prospects", { id })!;
+    expect(row.status).toBe("accepted");
+    expect(Date.parse(row.next_action_at as string)).toBeGreaterThan(NOW.getTime());
+  });
+});
+
 describe("a send the provider accepted is never repeated", () => {
   function failCountsOnce(db: FakeDb) {
     const real = db.rpc.bind(db);

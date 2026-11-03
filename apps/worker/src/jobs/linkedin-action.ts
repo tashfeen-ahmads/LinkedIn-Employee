@@ -1,4 +1,5 @@
 import {
+  accountDisconnected,
   backOff,
   checkAction,
   classifyProviderError,
@@ -917,6 +918,19 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
      * The status is untouched, so the step that failed is the step that is
      * tried again.
      */
+    // The account is gone, not this person: the step waits for the account
+    // to be reconnected and is tried again then, never failed.
+    if (accountDisconnected(result.error)) {
+      await db
+        .from("campaign_prospects")
+        .update({
+          status_reason: ACCOUNT_DISCONNECTED_REASON,
+          next_action_at: new Date(Date.now() + 60 * 60_000 + nextGapMs()).toISOString(),
+        })
+        .eq("id", cp.id)
+        .eq("status", cp.status);
+      return;
+    }
     const verdict = classifyProviderError(result.error);
     if (verdict.kind === "retry_later") {
       await db
@@ -1220,6 +1234,9 @@ async function closeProspect(
     .eq("id", campaignProspectId)
     .eq("status", expectedStatus);
 }
+
+/** Why a person is waiting while their campaign's LinkedIn account is disconnected. */
+export const ACCOUNT_DISCONNECTED_REASON = "Waiting for this LinkedIn account to be reconnected";
 
 async function failProspect(ctx: WorkerContext, campaignProspectId: string, reason: string): Promise<void> {
   await ctx.db
@@ -1820,6 +1837,21 @@ async function handleInviteRefusal(
    * time, which the limiter reads for its gap.
    */
   await ctx.db.from("linkedin_accounts").update({ last_action_at: new Date().toISOString() }).eq("id", input.accountId);
+
+  /*
+   * The account is gone, not this person. They stay queued, untouched, for
+   * when the account is reconnected; the account itself was paused by the
+   * health signal this refusal carried. Failing them is how twenty-four people
+   * on one account were dropped for good in an evening.
+   */
+  if (accountDisconnected(input.error)) {
+    await ctx.db
+      .from("campaign_prospects")
+      .update({ invite_claimed_at: null, status_reason: ACCOUNT_DISCONNECTED_REASON })
+      .eq("id", input.campaignProspectId)
+      .eq("status", "queued");
+    return;
+  }
 
   const verdict = classifyProviderError(input.error);
   if (verdict.kind === "permanent") {

@@ -270,7 +270,9 @@ export async function reconcileAccount(
     .update({
       provider_account_id: account.providerAccountId,
       display_name: account.displayName ?? null,
-      status: account.status === "ok" ? "active" : "reauth_required",
+      // Unknown is not broken: an account the rep has just signed in to is
+      // claimed as working unless the provider says otherwise.
+      status: account.status === "ok" || account.status === "unknown" ? "active" : "reauth_required",
       status_detail: null,
       // Stamped only when the account itself changed. The warm-up ramp reads
       // `first_action_at`, not this, so a refresh cannot hand an account a

@@ -1,6 +1,17 @@
 import { BRAND, SUPPORT_ANSWER_MAX_CHARS, TOUR_STAGES, YOUR_DECISIONS } from "@le/shared";
 
-export const SUPPORT_PROMPT_VERSION = "support/2026-10-06";
+export const SUPPORT_PROMPT_VERSION = "support/2026-11-03";
+
+/**
+ * How a meeting is booked. Asked "I don't have a Calendly link", the
+ * assistant held its answer at 59% because nothing it was given said a
+ * scheduling link is optional or where one goes.
+ */
+const MEETINGS = `HOW MEETINGS ARE BOOKED
+- No Calendly or other scheduling link is needed. ${BRAND.name} has its own booking page and offers times from the customer's meeting hours.
+- Meeting hours are set during setup (the sending hours step) and changed any time on Profile, then Meetings ("Meeting hours").
+- A customer who already uses Calendly or Cal.com may paste that link on Profile, then Meetings, instead. It is optional.
+- Nothing about meetings blocks a launch.`;
 
 /** The product, as the tutorial explains it — one definition, read by both. */
 function guide(): string {
@@ -11,7 +22,7 @@ function guide(): string {
     (s) =>
       `- ${s.title}${s.href ? ` (${s.href})` : ""}\n  The customer: ${s.youDo ?? "nothing — it runs by itself"}\n  ${BRAND.name}: ${s.weDo}\n  Limit: ${s.caveat}`,
   ).join("\n");
-  return `THE THREE DECISIONS THAT ARE THE CUSTOMER'S\n${decisions}\n\nHOW IT WORKS, START TO FINISH\n${stages}`;
+  return `THE THREE DECISIONS THAT ARE THE CUSTOMER'S\n${decisions}\n\nHOW IT WORKS, START TO FINISH\n${stages}\n\n${MEETINGS}`;
 }
 
 export const SUPPORT_SYSTEM = `You answer support tickets for ${BRAND.name}, an AI sales assistant that finds
