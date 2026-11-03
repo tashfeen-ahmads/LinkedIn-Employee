@@ -346,6 +346,38 @@ describe("runTargetingJob", () => {
     expect(db.rows("campaigns")).toHaveLength(0);
   });
 
+  it("leaves out somebody whose invitation cleanup withdrew lately, and only lately", async () => {
+    // LinkedIn refuses a new invitation for about three weeks after one is
+    // withdrawn, and the refusal reads as the whole account being held.
+    const { db, ctx, linkedin } = harness();
+    const { runTargetingJob } = await import("../src/jobs/targeting.js");
+    db.seed("events", [
+      {
+        workspace_id: WORKSPACE,
+        name: "linkedin.invitations_withdrawn",
+        payload: { withdrawn: 1, people: ["p1"] },
+        created_at: new Date(Date.now() - 5 * 86_400_000).toISOString(),
+      },
+      {
+        workspace_id: WORKSPACE,
+        name: "linkedin.invitations_withdrawn",
+        payload: { withdrawn: 1, people: ["p2"] },
+        created_at: new Date(Date.now() - 40 * 86_400_000).toISOString(),
+      },
+    ]);
+    linkedin.candidates = {
+      items: [candidate("p1", "https://www.linkedin.com/in/a"), candidate("p2", "https://www.linkedin.com/in/b")],
+      cursor: null,
+      droppedFilters: [],
+    };
+    scoreMock.mockResolvedValue([ranked("https://www.linkedin.com/in/b", "p2", 90)]);
+
+    await runTargetingJob(ctx, job);
+
+    const scored = (scoreMock.mock.calls[0]?.[1] as { candidates?: Array<{ providerId?: string }> } | undefined)?.candidates ?? [];
+    expect(scored.map((c) => c.providerId)).toEqual(["p2"]);
+  });
+
   it("does nothing when nothing clears the fit threshold", async () => {
     const { db, ctx, linkedin } = harness();
     const { runTargetingJob } = await import("../src/jobs/targeting.js");

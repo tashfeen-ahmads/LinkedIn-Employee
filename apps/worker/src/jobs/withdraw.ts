@@ -3,6 +3,8 @@ import { classifyProviderError, localDayStart, parseWorkingHours, type PendingIn
 import type { WorkerContext } from "../context.js";
 import { recordEvent } from "../context.js";
 import { outreachPause } from "../platform.js";
+import { workspaceEntitlement } from "../billing.js";
+import { recordBeat } from "../heartbeat.js";
 
 /**
  * Keep every account's pile of unanswered invitations small, every working day.
@@ -110,11 +112,24 @@ export async function withdrawStaleInvites(ctx: WorkerContext, now: Date = new D
   const { data: switches } = await ctx.db.from("workspaces").select("id").eq("withdraw_old_invites", true);
   const cleanup = new Set((switches ?? []).map((w) => w.id));
 
+  // A workspace that cannot send (trial over, plan lapsed) is not ours to act
+  // for: nothing is done on its LinkedIn, cleanup included. Unreadable counts
+  // as cannot, as everywhere else the plan is read (rule 67).
+  const entitled = new Map<string, boolean>();
   for (const account of (accounts ?? []) as Account[]) {
     if (!account.provider_account_id) continue;
+    if (!entitled.has(account.workspace_id)) {
+      const entitlement = await workspaceEntitlement(ctx.db, account.workspace_id, now).catch(() => null);
+      entitled.set(account.workspace_id, Boolean(entitlement?.canSend));
+    }
+    if (!entitled.get(account.workspace_id)) {
+      await beat(ctx, account, now, { outcome: "workspace_cannot_send" });
+      continue;
+    }
     // One account's failure never costs another its turn.
-    const result = await withdrawForAccount(ctx, account, cleanup.has(account.workspace_id), now).catch((err) => {
+    const result = await withdrawForAccount(ctx, account, cleanup.has(account.workspace_id), now).catch(async (err) => {
       console.error("invitation withdrawal failed", { accountId: account.id, err });
+      await beat(ctx, account, now, { outcome: "failed", reason: err instanceof Error ? err.message.slice(0, 200) : String(err).slice(0, 200) });
       return null;
     });
     if (!result) continue;
@@ -139,7 +154,10 @@ async function withdrawForAccount(
   // Outside the account's sending hours and inside waking ones: evenings
   // after a sending day, and the whole of a day it does not send.
   const window = cleanupWindow(now, parseWorkingHours(account.working_hours), timezone, LINKEDIN_LIMITS);
-  if (!window) return none;
+  if (!window) {
+    await beat(ctx, account, now, { outcome: "outside_cleanup_hours", timezone });
+    return none;
+  }
 
   // Today's record, in the owner's own day. Unreadable is not "nothing yet":
   // the day's ceiling is the promise, so the account waits for the next run.
@@ -150,9 +168,13 @@ async function withdrawForAccount(
     .eq("subject_id", account.id)
     .in("name", [WITHDRAWN_EVENT, WITHDRAW_REFUSED_EVENT])
     .gte("created_at", new Date(now.getTime() - REFUSAL_MEMORY_MS).toISOString());
-  if (historyError) return none;
+  if (historyError) {
+    await beat(ctx, account, now, { outcome: "history_unreadable", window: window.kind });
+    return none;
+  }
   const today = (history ?? []).filter((e) => Date.parse(e.created_at) >= dayStart);
   if (today.some((e) => e.name === WITHDRAW_REFUSED_EVENT && (e.payload as { stop?: boolean } | null)?.stop)) {
+    await beat(ctx, account, now, { outcome: "stopped_for_today", window: window.kind });
     return none;
   }
   const doneToday = today
@@ -168,7 +190,10 @@ async function withdrawForAccount(
       .filter((id): id is string => Boolean(id)),
   );
   const budget = Math.min(window.perHour, window.perDay - doneToday);
-  if (budget <= 0) return none;
+  if (budget <= 0) {
+    await beat(ctx, account, now, { outcome: "day_allowance_spent", window: window.kind, doneToday });
+    return none;
+  }
 
   // LinkedIn's own answer to "what is still pending". Never acted on blind.
   const { invitations, truncated } = await withDeadline(
@@ -176,9 +201,12 @@ async function withdrawForAccount(
     LIST_DEADLINE_MS,
   );
 
-  const picks = (await chooseWithdrawals(ctx, account, invitations, truncated, cleanupOn, now)).filter(
-    (pick) => !refusedIds.has(pick.invitationId),
-  );
+  const chosen = await chooseWithdrawals(ctx, account, invitations, truncated, cleanupOn, now);
+  const picks = chosen.picks.filter((pick) => !refusedIds.has(pick.invitationId));
+  // The people withdrawn this run, for the record and for targeting: LinkedIn
+  // refuses a new invitation to somebody whose last one was withdrawn for
+  // about three weeks, and that refusal reads as the whole account held.
+  const people: string[] = [];
   const tally = { withdrawn: 0, outside: 0, failed: 0 };
   let stopped = false;
   let blindTried = false;
@@ -217,6 +245,7 @@ async function withdrawForAccount(
       if (stopped) break;
       continue;
     }
+    if (pick.person) people.push(pick.person);
     if (pick.rowIds.length) {
       tally.withdrawn += 1;
       await ctx.db
@@ -236,7 +265,7 @@ async function withdrawForAccount(
       name: WITHDRAWN_EVENT,
       subjectType: "linkedin_account",
       subjectId: account.id,
-      payload: { withdrawn: total, own: tally.withdrawn, outside: tally.outside },
+      payload: { withdrawn: total, own: tally.withdrawn, outside: tally.outside, people },
     }).catch((err) => console.error("could not record withdrawn invitations", err));
     // The owner's number moves the moment the pile does, not an hour later;
     // never from a list that was cut short, which would understate it.
@@ -247,6 +276,16 @@ async function withdrawForAccount(
         .eq("id", account.id);
     }
   }
+  await beat(ctx, account, now, {
+    outcome: total ? "withdrew" : tally.failed ? "refused" : "nothing_old_enough",
+    window: window.kind,
+    budget,
+    pending: invitations.length,
+    truncated,
+    ...chosen.stats,
+    withdrawn: total,
+    failed: tally.failed,
+  });
   return tally;
 }
 
@@ -258,6 +297,28 @@ interface Pick {
   sentMs: number;
   /** Not on LinkedIn's list because the list was cut short: tried by its stored id. */
   blind?: boolean;
+  /** The person invited, when known: remembered once withdrawn. */
+  person?: string | null;
+}
+
+/**
+ * What a run saw, so a run that withdrew nothing still says why: "nothing
+ * old enough" and "Nora's own never matched LinkedIn's list" are different
+ * faults and looked identical.
+ */
+interface ChoiceStats {
+  /** Nora's own still `invited` and past `withdrawAfterDays`. */
+  ownOld: number;
+  /** Of those, found on LinkedIn's list (by invitation id or by person). */
+  ownListed: number;
+  /** The rep's own on LinkedIn's list past `withdrawOutsideAfterDays`, cleanup on. */
+  outsideOld: number;
+  /** On LinkedIn's list with no age LinkedIn would give. */
+  unknownAge: number;
+}
+
+async function beat(ctx: WorkerContext, account: Account, now: Date, detail: Record<string, unknown>): Promise<void> {
+  await recordBeat(ctx.db, `withdraw:${account.id}`, { account: account.id, ...detail }, now).catch(() => undefined);
 }
 
 /**
@@ -271,7 +332,8 @@ async function chooseWithdrawals(
   truncated: boolean,
   cleanupOn: boolean,
   now: Date,
-): Promise<Pick[]> {
+): Promise<{ picks: Pick[]; stats: ChoiceStats }> {
+  const stats: ChoiceStats = { ownOld: 0, ownListed: 0, outsideOld: 0, unknownAge: 0 };
   const ownCutoff = now.getTime() - LINKEDIN_LIMITS.withdrawAfterDays * 86_400_000;
   const outsideCutoff = now.getTime() - LINKEDIN_LIMITS.withdrawOutsideAfterDays * 86_400_000;
   const byInvitation = new Map(pending.filter((p) => p.invitationId).map((p) => [p.invitationId!, p]));
@@ -325,9 +387,11 @@ async function chooseWithdrawals(
     if (row.status !== "invited") continue;
     const sentMs = row.invited_at ? Date.parse(row.invited_at) : Number.NaN;
     if (!Number.isFinite(sentMs) || sentMs > ownCutoff) continue;
+    stats.ownOld += 1;
     const person = personOf.get(row.prospect_id);
     const listed =
       (row.invitation_id ? byInvitation.get(row.invitation_id) : undefined) ?? (person ? byPerson.get(person) : undefined);
+    if (listed) stats.ownListed += 1;
     // Not on LinkedIn's list: answered, or expired. A complete list means the
     // acceptance poll will move it; a list cut short cannot say, so the stored
     // id is tried, once a run, and LinkedIn refuses it if it is not pending.
@@ -338,7 +402,7 @@ async function chooseWithdrawals(
       existing.rowIds.push(row.id);
       existing.sentMs = Math.min(existing.sentMs, sentMs);
     } else {
-      picksById.set(invitationId, { invitationId, rowIds: [row.id], sentMs, blind: !listed });
+      picksById.set(invitationId, { invitationId, rowIds: [row.id], sentMs, blind: !listed, person: person ?? null });
     }
   }
   const picks: Pick[] = [...picksById.values()];
@@ -359,12 +423,17 @@ async function chooseWithdrawals(
       if (invitation.providerId && engaged.has(invitation.providerId)) continue;
       const sentMs = invitation.sentAt ? Date.parse(invitation.sentAt) : Number.NaN;
       // Unknown age is never old.
-      if (!Number.isFinite(sentMs) || sentMs > outsideCutoff) continue;
-      picks.push({ invitationId: invitation.invitationId, rowIds: [], sentMs });
+      if (!Number.isFinite(sentMs)) {
+        stats.unknownAge += 1;
+        continue;
+      }
+      if (sentMs > outsideCutoff) continue;
+      stats.outsideOld += 1;
+      picks.push({ invitationId: invitation.invitationId, rowIds: [], sentMs, person: invitation.providerId });
     }
   }
 
-  return picks.sort((a, b) => a.sentMs - b.sentMs);
+  return { picks: picks.sort((a, b) => a.sentMs - b.sentMs), stats };
 }
 
 function validZone(zone: string | null | undefined): string {

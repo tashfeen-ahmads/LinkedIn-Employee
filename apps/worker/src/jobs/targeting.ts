@@ -20,6 +20,7 @@ import { brandOf, withBrand } from "../brand.js";
 import type { WorkerContext } from "../context.js";
 import { recordEvent } from "../context.js";
 import { loadExclusions } from "../exclusions.js";
+import { WITHDRAWN_EVENT } from "./withdraw.js";
 import { knowledgeFor } from "../knowledge.js";
 import type { TargetingJob } from "../queues.js";
 
@@ -1381,22 +1382,33 @@ async function loadKnown(
   const providerIds = [...new Set(candidates.map((c) => c.providerId).filter(Boolean))];
   if (urls.length === 0) return { urls: new Set(), providerIds: new Set() };
 
-  const [byUrl, byProviderId] = await Promise.all([
+  const since = new Date(Date.now() - LINKEDIN_LIMITS.reinviteBlockDays * 86_400_000).toISOString();
+  const [byUrl, byProviderId, withdrawals] = await Promise.all([
     ctx.db.from("prospects").select("linkedin_url").eq("workspace_id", workspaceId).in("linkedin_url", urls),
     providerIds.length
       ? ctx.db.from("prospects").select("provider_id").eq("workspace_id", workspaceId).in("provider_id", providerIds)
       : Promise.resolve({ data: [] as Array<{ provider_id: string | null }>, error: null }),
+    // Somebody whose invitation cleanup withdrew lately: LinkedIn refuses a
+    // new one to them for about three weeks, and the refusal reads as the
+    // whole account being held (rule 70).
+    ctx.db.from("events").select("payload").eq("workspace_id", workspaceId).eq("name", WITHDRAWN_EVENT).gte("created_at", since),
   ]);
   // Unanswered is not "nobody". A dedupe that silently reads an error as an
   // empty list is how somebody already contacted is put on a second campaign.
   if (byUrl.error) throw new Error(`could not check who is already known: ${byUrl.error.message}`);
   if (byProviderId.error) throw new Error(`could not check who is already known: ${byProviderId.error.message}`);
+  if (withdrawals.error) throw new Error(`could not check who was withdrawn lately: ${withdrawals.error.message}`);
 
+  const withdrawn = (withdrawals.data ?? []).flatMap((e) => {
+    const people = (e.payload as { people?: unknown } | null)?.people;
+    return Array.isArray(people) ? people.filter((id): id is string => typeof id === "string" && id.length > 0) : [];
+  });
   return {
     urls: new Set((byUrl.data ?? []).map((p) => normalizeLinkedInUrl(p.linkedin_url))),
-    providerIds: new Set(
-      (byProviderId.data ?? []).map((p) => p.provider_id).filter((id): id is string => Boolean(id)),
-    ),
+    providerIds: new Set([
+      ...(byProviderId.data ?? []).map((p) => p.provider_id).filter((id): id is string => Boolean(id)),
+      ...withdrawn,
+    ]),
   };
 }
 

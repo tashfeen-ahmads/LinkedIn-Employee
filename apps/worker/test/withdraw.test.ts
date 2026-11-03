@@ -18,11 +18,13 @@ const daysAgo = (n: number, from = SATURDAY_2PM) => new Date(from.getTime() - n 
 
 type Pending = { id: string; person?: string; days: number | null };
 
-function harness(options: { cleanup?: boolean; pending?: Record<string, Pending[]>; truncated?: boolean } = {}) {
+function harness(
+  options: { cleanup?: boolean; pending?: Record<string, Pending[]>; truncated?: boolean; plan?: string } = {},
+) {
   const db = new FakeDb();
   db.seed("workspaces", [
-    { id: "w1", withdraw_old_invites: options.cleanup ?? false },
-    { id: "w2", withdraw_old_invites: false },
+    { id: "w1", withdraw_old_invites: options.cleanup ?? false, plan: options.plan ?? "free" },
+    { id: "w2", withdraw_old_invites: false, plan: "free" },
   ]);
   db.seed("linkedin_accounts", [
     { id: "a1", workspace_id: "w1", user_id: "u1", provider_account_id: "pa1", status: "active", working_hours: null },
@@ -40,6 +42,7 @@ function harness(options: { cleanup?: boolean; pending?: Record<string, Pending[
   db.seed("campaign_prospects", []);
   db.seed("events", []);
   db.seed("platform_settings", []);
+  db.seed("worker_heartbeats", []);
   const linkedin = new MockLinkedInProvider();
   const withdrawn: Array<{ accountId: string; invitationId: string }> = [];
   linkedin.withdrawInvitation = async (input) => {
@@ -341,6 +344,40 @@ describe("cleaning up invitations sent outside Nora", () => {
     await withdrawStaleInvites(ctx, SATURDAY_2PM);
     expect(withdrawn).toHaveLength(0);
     for (const d of [0, 1, 2, 3]) expect(db.find("campaign_prospects", { id: `own-${d}` })?.status).toBe("invited");
+  });
+
+  it("does nothing on the LinkedIn of a workspace that cannot send", async () => {
+    const { db, ctx, withdrawn } = harness({ cleanup: true, plan: "canceled", pending: { pa1: [{ id: "x-old", days: 60 }] } });
+    own(db, "old", "c1", 20);
+    await withdrawStaleInvites(ctx, SATURDAY_2PM);
+    expect(withdrawn).toHaveLength(0);
+    expect(db.find("campaign_prospects", { id: "old" })?.status).toBe("invited");
+    expect(db.find("worker_heartbeats", { name: "withdraw:a1" })?.detail).toMatchObject({ outcome: "workspace_cannot_send" });
+  });
+
+  it("remembers who was withdrawn, so a new search leaves them out while LinkedIn would refuse them", async () => {
+    const { db, ctx } = harness({ cleanup: true, pending: { pa1: [{ id: "x-old", person: "person-rep", days: 60 }, { id: "inv-old", days: 20 }] } });
+    own(db, "old", "c1", 20);
+    await withdrawStaleInvites(ctx, SATURDAY_2PM);
+    const event = db.rows("events").find((e) => e.name === WITHDRAWN_EVENT);
+    expect((event?.payload as { people?: string[] }).people?.sort()).toEqual(["person-old", "person-rep"]);
+  });
+
+  it("says why a run withdrew nothing, and what it saw", async () => {
+    const { db, ctx } = harness({ cleanup: true, pending: { pa1: [{ id: "x-young", days: 5 }, { id: "x-unknown", days: null }] } });
+    own(db, "young", "c1", 5);
+    await withdrawStaleInvites(ctx, SATURDAY_2PM);
+    expect(db.find("worker_heartbeats", { name: "withdraw:a1" })?.detail).toMatchObject({
+      outcome: "nothing_old_enough",
+      pending: 2,
+      ownOld: 0,
+      outsideOld: 0,
+      unknownAge: 1,
+      withdrawn: 0,
+    });
+    const weekday = new Date("2026-10-28T12:00:00Z");
+    await withdrawStaleInvites(ctx, weekday);
+    expect(db.find("worker_heartbeats", { name: "withdraw:a1" })?.detail).toMatchObject({ outcome: "outside_cleanup_hours" });
   });
 
   it("leaves a person Nora is still waiting on to Nora's own rule", async () => {

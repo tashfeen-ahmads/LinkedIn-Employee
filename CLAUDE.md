@@ -2083,6 +2083,18 @@ tests that were verified by deliberately breaking the code.
     (`linkedin.withdraw_refused`, an Issues row), and pushback stops the
     account until tomorrow. The operator's pause stops it too.
 
+    Nothing sent today or this week is ever withdrawn: those two ages are
+    the floor, pinned by test. Who was withdrawn is recorded on the event
+    (`people`), and a search leaves them out for `reinviteBlockDays` (30)
+    (`loadKnown`, `targeting.ts`): LinkedIn refuses a new invitation for about
+    three weeks after a withdrawal, in words that hold the whole account. A
+    workspace that cannot send (rule 67) has nothing done on its LinkedIn,
+    cleanup included. Every run stamps `withdraw:<account>` with what it did
+    or why not, and what it saw (Nora's own past age, how many of those
+    LinkedIn's list matched, the rep's own past age, unknown ages), because a
+    run that withdrew nothing for a bad reason looked exactly like a run with
+    nothing old enough.
+
     The acceptance poll looks back `acceptanceLookbackDays` (60), never the
     withdrawal window: a withdrawal that failed leaves a live invitation, and a
     yes to it is still a yes. The hourly sample is written to

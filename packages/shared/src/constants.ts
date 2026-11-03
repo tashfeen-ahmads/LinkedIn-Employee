@@ -109,6 +109,13 @@ export const LINKEDIN_LIMITS = {
    */
   withdrawOutsideAfterDays: 21,
   /**
+   * How long somebody whose invitation was withdrawn is kept out of new
+   * searches. LinkedIn refuses a fresh invitation to them for about three
+   * weeks after a withdrawal, in words that read as the whole account being
+   * held; a week's margin on top.
+   */
+  reinviteBlockDays: 30,
+  /**
    * When invitations are withdrawn, and how many. Never while the account is
    * sending: withdrawals and invitations interleaved in the same hour are two
    * kinds of automation in one burst. On a sending day they wait until its
