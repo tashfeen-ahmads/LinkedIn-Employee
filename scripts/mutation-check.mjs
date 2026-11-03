@@ -355,6 +355,22 @@ const MUTATIONS = [
     pkg: "@le/worker",
   },
   {
+    id: "issues/failed-this-week-only",
+    rule: "Issues lists people failed this week, never a month-old failure for ever",
+    file: "apps/worker/src/jobs/issues.ts",
+    from: "    if (row.status === \"failed\" && !(Date.parse(row.updated_at ?? \"\") >= failedSince)) continue;",
+    to: "",
+    pkg: "@le/worker",
+  },
+  {
+    id: "issues/dropped-account-said-once",
+    rule: "A signed-out account is one Issues row, not one per campaign and search",
+    file: "apps/worker/src/jobs/issues.ts",
+    from: "    if (droppedWorkspaces.has(workspaceId)) continue;",
+    to: "",
+    pkg: "@le/worker",
+  },
+  {
     id: "accounts/disconnect-pauses-account",
     rule: "A 401 disconnected account pauses the account at the first refusal (rule 8)",
     file: "packages/linkedin/src/unipile.ts",

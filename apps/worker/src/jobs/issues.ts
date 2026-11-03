@@ -118,7 +118,7 @@ export async function collectIssues(
         "id, workspace_id, user_id, status, status_detail, provider_account_id, invites_paused_until, invites_paused_reason, created_at",
       ),
     db.from("campaigns").select("id, workspace_id, name, status, launched_at, linkedin_account_id, created_at, updated_at"),
-    db.from("campaign_prospects").select("campaign_id, status").limit(20000),
+    db.from("campaign_prospects").select("campaign_id, status, updated_at").limit(20000),
     db.from("worker_heartbeats").select("name, beat_at, detail"),
     db
       .from("events")
@@ -247,15 +247,27 @@ export async function collectIssues(
   // Only what the provider did, never what a member has not done yet: an
   // account the provider stopped recognising is a system fault, a sign-in a
   // person never finished is not.
+  // One row per broken account, carrying what it stops. It used to be four
+  // rows for one cause (the account, each running campaign on it, and the
+  // search it could not run), so one customer's sign-in read as four faults.
+  const droppedAccounts = new Set<string>();
+  const droppedWorkspaces = new Set<string>();
   for (const account of accounts ?? []) {
     if (!account.provider_account_id) continue;
     if (["reauth_required", "disconnected"].includes(account.status)) {
+      droppedAccounts.add(account.id);
+      if (account.workspace_id) droppedWorkspaces.add(account.workspace_id);
+      const stuck = (campaigns ?? []).filter((c) => c.status === "running" && c.linkedin_account_id === account.id);
       add({
         id: `unipile:dropped:${account.id}`,
         severity: "critical",
         area: "Unipile",
         title: `The provider no longer accepts this account (${account.status.replaceAll("_", " ")})`,
-        detail: account.status_detail ?? "Every job for this account fails until it is reconnected or re-pointed.",
+        detail: `${account.status_detail ?? "Every job for this account fails until it is reconnected or re-pointed."} The owner has to reconnect LinkedIn.${
+          stuck.length
+            ? ` ${stuck.length} running ${stuck.length === 1 ? "campaign waits" : "campaigns wait"} on it: ${stuck.map((c) => `"${c.name}"`).join(", ")}. Nobody on them is lost; they send once it is back.`
+            : ""
+        }`,
         ...at(account.workspace_id),
         person: person.get(account.user_id) ?? null,
       });
@@ -309,8 +321,13 @@ export async function collectIssues(
   }
 
   // ── Campaigns ───────────────────────────────────────────────────────────
+  // A failure is a fault while it is recent. One from last month is history
+  // on the campaign's own page, and kept here for ever it was a warning
+  // nobody could clear.
+  const failedSince = now.getTime() - 7 * 86_400_000;
   const counts = new Map<string, Record<string, number>>();
   for (const row of campaignProspects ?? []) {
+    if (row.status === "failed" && !(Date.parse(row.updated_at ?? "") >= failedSince)) continue;
     const c = counts.get(row.campaign_id) ?? {};
     c[row.status] = (c[row.status] ?? 0) + 1;
     counts.set(row.campaign_id, c);
@@ -319,11 +336,15 @@ export async function collectIssues(
     const c = counts.get(campaign.id) ?? {};
     const account = (accounts ?? []).find((a) => a.id === campaign.linkedin_account_id);
     const base = { ...at(campaign.workspace_id) };
-    if (campaign.status === "running" && (!account || !["active", "warning"].includes(account.status) || !account.provider_account_id)) {
+    if (
+      campaign.status === "running" &&
+      !(account && droppedAccounts.has(account.id)) &&
+      (!account || !["active", "warning"].includes(account.status) || !account.provider_account_id)
+    ) {
       add({ id: `campaigns:running-dead:${campaign.id}`, severity: "critical", area: "Campaigns", title: `"${campaign.name}" is running on an account that cannot send`, detail: "The campaign says running and nothing will leave until its LinkedIn account is fixed.", ...base });
     }
     if ((c.failed ?? 0) > 0) {
-      add({ id: `campaigns:failed:${campaign.id}`, severity: "warning", area: "Campaigns", title: `${c.failed} failed in "${campaign.name}"`, detail: "Rows marked failed are not retried; read the campaign's failures.", ...base });
+      add({ id: `campaigns:failed:${campaign.id}`, severity: "warning", area: "Campaigns", title: `${c.failed} failed this week in "${campaign.name}"`, detail: "Rows marked failed are not retried; read the campaign's failures.", ...base });
     }
   }
   // One row per workspace, for its latest stop, and only while nothing has
@@ -342,6 +363,9 @@ export async function collectIssues(
     }
   }
   for (const [workspaceId, { event, count }] of stops) {
+    // A search stopped because the account is signed out is the account's
+    // row above, said once.
+    if (droppedWorkspaces.has(workspaceId)) continue;
     const payload = (event.payload ?? {}) as Record<string, unknown>;
     add({
       id: `campaigns:targeting:${workspaceId}`,
@@ -357,7 +381,13 @@ export async function collectIssues(
   // fill writes the missing notes (`fillMissingNotes`), and a row that
   // kept saying "1 of 40 not personalised" after the note was written would be
   // reporting a fault that no longer exists.
-  const notesEvents = (events ?? []).filter((e) => e.name === "campaign.notes_missing" && e.subject_id);
+  // Only while the hourly fill is still working on it. A day on, it has had
+  // four tries; somebody it still cannot write for gets the campaign's own
+  // note, which is the designed fallback (rule 16), not a fault to clear.
+  const notesSince = now.getTime() - 86_400_000;
+  const notesEvents = (events ?? [])
+    .filter((e) => e.name === "campaign.notes_missing" && e.subject_id && Date.parse(e.created_at) >= notesSince)
+    .sort((a, b) => b.created_at.localeCompare(a.created_at));
   const stillMissing = new Map<string, number>();
   if (notesEvents.length) {
     const { data: gaps } = await db
