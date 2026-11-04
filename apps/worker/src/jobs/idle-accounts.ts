@@ -1,4 +1,4 @@
-import { IDLE_RELEASE_DAYS, IDLE_RELEASE_DETAIL, isIdleForRelease } from "@le/shared";
+import { IDLE_RELEASE_DAYS, IDLE_RELEASE_DETAIL, SIGNED_OUT_RELEASE_DAYS, SIGNED_OUT_RELEASE_DETAIL, isIdleForRelease } from "@le/shared";
 import type { WorkerContext } from "../context.js";
 import { recordEvent } from "../context.js";
 
@@ -135,4 +135,67 @@ export async function releaseIdleAccounts(ctx: WorkerContext, now: Date = new Da
     );
   }
   return { checked: held.length, released, refused };
+}
+
+/**
+ * Release accounts LinkedIn signed out and nobody signed back in to.
+ *
+ * A signed-out account sends nothing and is billed by the provider every
+ * month all the same. Once it has waited SIGNED_OUT_RELEASE_DAYS it is deleted
+ * at the provider and marked `disconnected` with SIGNED_OUT_RELEASE_DETAIL,
+ * which the rep's own screens show with the Connect button. Their campaigns
+ * and the people queued on them stay exactly where they are, and carry on when
+ * the account is connected again.
+ *
+ * Never one part-way through being reconnected, and never on a read that
+ * failed: a refusal leaves the row as it was and is raised once every account
+ * has had its turn.
+ */
+export async function releaseSignedOutAccounts(ctx: WorkerContext, now: Date = new Date()): Promise<IdleReleaseRun> {
+  const { db } = ctx;
+  const cutoff = new Date(now.getTime() - SIGNED_OUT_RELEASE_DAYS * 86_400_000).toISOString();
+  const { data: rows, error } = await db
+    .from("linkedin_accounts")
+    .select("id, workspace_id, provider_account_id, pending_provider_account_id, paused_at")
+    .eq("status", "reauth_required")
+    .lte("paused_at", cutoff);
+  if (error) throw new Error(`could not read signed-out accounts: ${error.message}`);
+
+  const due = (rows ?? []).filter((row) => row.provider_account_id && !row.pending_provider_account_id);
+  let released = 0;
+  const refused: IdleReleaseRun["refused"] = [];
+  for (const row of due) {
+    const providerAccountId = row.provider_account_id as string;
+    const result = await ctx.linkedin.deleteAccount(providerAccountId);
+    if (!result.ok) {
+      refused.push({ accountId: row.id, error: result.error ?? "refused" });
+      continue;
+    }
+    // Only while it still holds that id and is still signed out: a reconnect
+    // that landed in between is never overwritten.
+    const { error: updateError } = await db
+      .from("linkedin_accounts")
+      .update({ status: "disconnected", status_detail: SIGNED_OUT_RELEASE_DETAIL, provider_account_id: null })
+      .eq("id", row.id)
+      .eq("provider_account_id", providerAccountId)
+      .eq("status", "reauth_required");
+    if (updateError) {
+      refused.push({ accountId: row.id, error: `released at the provider, row not marked: ${updateError.message}` });
+      continue;
+    }
+    released += 1;
+    await recordEvent(db, {
+      workspaceId: row.workspace_id,
+      name: "linkedin.account.released_signed_out",
+      subjectType: "linkedin_account",
+      subjectId: row.id,
+      payload: { days: SIGNED_OUT_RELEASE_DAYS, providerAccountId },
+    });
+  }
+  if (refused.length > 0) {
+    throw new Error(
+      `released ${released}, ${refused.length} refused: ${refused.map((r) => `${r.accountId} (${r.error})`).join("; ")}`,
+    );
+  }
+  return { checked: (rows ?? []).length, released, refused };
 }

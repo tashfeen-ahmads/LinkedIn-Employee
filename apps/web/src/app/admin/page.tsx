@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { NavIcon } from "@/components/icons";
-import { BOOT_BEAT, PACING_LOOP, PACING_STALE_MS, isIdleReleased } from "@le/shared";
+import { BOOT_BEAT, PACING_LOOP, PACING_STALE_MS, isReleasedByUs } from "@le/shared";
 import { createClient } from "@/lib/supabase-server";
 import { requirePlatformAdmin, ago, hiddenWorkspaces, shown, shownUserIds } from "@/lib/admin";
 import { formatSpend } from "@/lib/spend-display";
@@ -104,7 +104,7 @@ export default async function AdminOverviewPage({ searchParams }: { searchParams
   // had not finished connecting read as four broken accounts.
   const unfinished = (accounts ?? []).filter((a) => a.status === "connecting" && !a.provider_account_id).length;
   const notSending = (accounts ?? []).filter(
-    (a) => a.status !== "active" && !(a.status === "connecting" && !a.provider_account_id) && !isIdleReleased(a),
+    (a) => a.status !== "active" && !(a.status === "connecting" && !a.provider_account_id) && !isReleasedByUs(a),
   ).length;
   const held = (accounts ?? []).filter(
     (a) => a.invites_paused_until && Date.parse(a.invites_paused_until) > Date.now(),

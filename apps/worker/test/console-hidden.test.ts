@@ -42,16 +42,19 @@ describe("hiding a workspace from the console", () => {
 
   it("leaves a hidden workspace's faults out of Issues and keeps everyone else's", async () => {
     const db = new FakeDb();
-    for (const table of ["memberships", "profiles", "campaigns", "campaign_prospects", "worker_heartbeats", "events", "llm_calls", "email_sends"]) {
+    for (const table of ["memberships", "profiles", "campaign_prospects", "worker_heartbeats", "events", "llm_calls", "email_sends"]) {
       db.seed(table, []);
     }
     db.seed("workspaces", [
       { id: WS, name: "Freelancer", created_at: "2026-09-01T00:00:00Z", console_hidden: true },
       { id: OTHER, name: "A customer", created_at: "2026-09-01T00:00:00Z", console_hidden: false },
     ]);
-    db.seed("linkedin_accounts", [
-      { id: "a1", workspace_id: WS, user_id: "u1", status: "reauth_required", provider_account_id: "acct_1", created_at: "2026-10-01T00:00:00Z" },
-      { id: "a2", workspace_id: OTHER, user_id: "u2", status: "reauth_required", provider_account_id: "acct_2", created_at: "2026-10-01T00:00:00Z" },
+    // A running campaign with no account behind it is a fault of ours (a
+    // signed-out account is the customer's to-do and never listed at all).
+    db.seed("linkedin_accounts", []);
+    db.seed("campaigns", [
+      { id: "c1", workspace_id: WS, name: "Hidden", status: "running", linkedin_account_id: null, created_at: "2026-09-17T00:00:00Z", updated_at: "2026-09-28T00:00:00Z" },
+      { id: "c2", workspace_id: OTHER, name: "Shown", status: "running", linkedin_account_id: null, created_at: "2026-09-17T00:00:00Z", updated_at: "2026-09-28T00:00:00Z" },
     ]);
     const ctx = {
       db: db.asDb(),

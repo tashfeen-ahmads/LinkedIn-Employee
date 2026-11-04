@@ -247,30 +247,17 @@ export async function collectIssues(
   // Only what the provider did, never what a member has not done yet: an
   // account the provider stopped recognising is a system fault, a sign-in a
   // person never finished is not.
-  // One row per broken account, carrying what it stops. It used to be four
-  // rows for one cause (the account, each running campaign on it, and the
-  // search it could not run), so one customer's sign-in read as four faults.
-  const droppedAccounts = new Set<string>();
-  const droppedWorkspaces = new Set<string>();
+  // A LinkedIn account signed out (or released by us after it was) is the
+  // customer's to reconnect, on their own dashboard, which says so with the
+  // button. It is not a fault of ours, so it is not here, and neither are the
+  // campaigns and the search waiting on it: one customer's sign-in used to
+  // read as four critical rows.
+  const signedOut = new Set<string>();
+  const signedOutWorkspaces = new Set<string>();
   for (const account of accounts ?? []) {
-    if (!account.provider_account_id) continue;
     if (["reauth_required", "disconnected"].includes(account.status)) {
-      droppedAccounts.add(account.id);
-      if (account.workspace_id) droppedWorkspaces.add(account.workspace_id);
-      const stuck = (campaigns ?? []).filter((c) => c.status === "running" && c.linkedin_account_id === account.id);
-      add({
-        id: `unipile:dropped:${account.id}`,
-        severity: "critical",
-        area: "Unipile",
-        title: `The provider no longer accepts this account (${account.status.replaceAll("_", " ")})`,
-        detail: `${account.status_detail ?? "Every job for this account fails until it is reconnected or re-pointed."} The owner has to reconnect LinkedIn.${
-          stuck.length
-            ? ` ${stuck.length} running ${stuck.length === 1 ? "campaign waits" : "campaigns wait"} on it: ${stuck.map((c) => `"${c.name}"`).join(", ")}. Nobody on them is lost; they send once it is back.`
-            : ""
-        }`,
-        ...at(account.workspace_id),
-        person: person.get(account.user_id) ?? null,
-      });
+      signedOut.add(account.id);
+      if (account.workspace_id) signedOutWorkspaces.add(account.workspace_id);
     }
   }
 
@@ -338,7 +325,7 @@ export async function collectIssues(
     const base = { ...at(campaign.workspace_id) };
     if (
       campaign.status === "running" &&
-      !(account && droppedAccounts.has(account.id)) &&
+      !(account && signedOut.has(account.id)) &&
       (!account || !["active", "warning"].includes(account.status) || !account.provider_account_id)
     ) {
       add({ id: `campaigns:running-dead:${campaign.id}`, severity: "critical", area: "Campaigns", title: `"${campaign.name}" is running on an account that cannot send`, detail: "The campaign says running and nothing will leave until its LinkedIn account is fixed.", ...base });
@@ -365,7 +352,7 @@ export async function collectIssues(
   for (const [workspaceId, { event, count }] of stops) {
     // A search stopped because the account is signed out is the account's
     // row above, said once.
-    if (droppedWorkspaces.has(workspaceId)) continue;
+    if (signedOutWorkspaces.has(workspaceId)) continue;
     const payload = (event.payload ?? {}) as Record<string, unknown>;
     add({
       id: `campaigns:targeting:${workspaceId}`,
@@ -377,42 +364,16 @@ export async function collectIssues(
       since: event.created_at,
     });
   }
-  // Read from the campaign as it is now, not from the event. The hourly
-  // fill writes the missing notes (`fillMissingNotes`), and a row that
-  // kept saying "1 of 40 not personalised" after the note was written would be
-  // reporting a fault that no longer exists.
-  // Only while the hourly fill is still working on it. A day on, it has had
-  // four tries; somebody it still cannot write for gets the campaign's own
-  // note, which is the designed fallback (rule 16), not a fault to clear.
-  const notesSince = now.getTime() - 86_400_000;
-  const notesEvents = (events ?? [])
-    .filter((e) => e.name === "campaign.notes_missing" && e.subject_id && Date.parse(e.created_at) >= notesSince)
-    .sort((a, b) => b.created_at.localeCompare(a.created_at));
-  const stillMissing = new Map<string, number>();
-  if (notesEvents.length) {
-    const { data: gaps } = await db
-      .from("campaign_prospects")
-      .select("campaign_id")
-      .in("campaign_id", [...new Set(notesEvents.map((e) => e.subject_id as string))])
-      .eq("status", "queued")
-      .is("invite_note", null);
-    for (const row of gaps ?? []) stillMissing.set(row.campaign_id, (stillMissing.get(row.campaign_id) ?? 0) + 1);
-  }
-  const reportedNotes = new Set<string>();
-  for (const event of notesEvents) {
-    const campaignId = event.subject_id as string;
-    const missing = stillMissing.get(campaignId) ?? 0;
-    if (!missing || reportedNotes.has(campaignId)) continue;
-    reportedNotes.add(campaignId);
-    add({ id: `campaigns:notes:${campaignId}`, severity: "info", area: "Campaigns", title: "Some invitation notes fell back to the template", detail: `${missing} ${missing === 1 ? "person is" : "people are"} still queued without a personalised note. Nora retries every few hours until each is written or invited.`, ...at(event.workspace_id), since: event.created_at });
-  }
+  // A note that fell back to the campaign's own is the designed fallback
+  // (rule 16), and the hourly fill keeps trying: not a fault of ours, so not
+  // a row here. A writer that is down shows as failing AI calls above.
 
   // Withdrawals LinkedIn refused in the last day. These used to be skipped
   // without a word, and every one ever tried was refused: the address was
   // wrong, nothing was withdrawn on any account, and the piles grew until
   // LinkedIn stopped taking invitations (rule 70). One row per account, with
   // the provider's own words.
-  const refusedWithdrawals = new Map<string, { event: (typeof notesEvents)[number]; count: number }>();
+  const refusedWithdrawals = new Map<string, { event: (typeof searchEvents)[number]; count: number }>();
   for (const event of (events ?? []).filter((e) => e.name === WITHDRAW_REFUSED_EVENT && e.subject_id)) {
     if (Date.parse(event.created_at) < now.getTime() - DAY) continue;
     const key = event.subject_id as string;

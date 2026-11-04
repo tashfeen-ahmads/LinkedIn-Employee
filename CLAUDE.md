@@ -1662,6 +1662,15 @@ tests that were verified by deliberately breaking the code.
     is the ordinary Connect button. It is not a fault, so it never appears in
     Issues.
 
+    **A signed-out account is released too** (`releaseSignedOutAccounts`,
+    nightly): one LinkedIn signed out and nobody reconnected for
+    `SIGNED_OUT_RELEASE_DAYS` (3) sends nothing and is billed all the same.
+    Its campaigns and the people queued on them stay as they are and carry on
+    after Connect; never one part-way through reconnecting
+    (`pending_provider_account_id`). `SIGNED_OUT_RELEASE_DETAIL` is written for
+    the rep, who sees it on their own screens; a signed-out or released account
+    is the customer's to-do and never an operator Issues row (`isReleasedByUs`).
+
     **A duplicate is released the same way, and sooner.** Finishing the
     LinkedIn sign-in twice makes the provider create a second account that
     nothing here holds and the provider bills monthly. `releaseDuplicateAccounts`

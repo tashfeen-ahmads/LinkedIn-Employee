@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { MockLinkedInProvider } from "@le/linkedin";
-import { IDLE_RELEASE_DETAIL, isIdleForRelease, isIdleReleased } from "@le/shared";
+import { IDLE_RELEASE_DETAIL, SIGNED_OUT_RELEASE_DETAIL, isIdleForRelease, isIdleReleased, isReleasedByUs } from "@le/shared";
 import type { WorkerContext } from "../src/context.js";
-import { releaseIdleAccounts } from "../src/jobs/idle-accounts.js";
+import { releaseIdleAccounts, releaseSignedOutAccounts } from "../src/jobs/idle-accounts.js";
 import { FakeDb } from "./fake-db.js";
 
 const NOW = new Date("2026-10-30T03:00:00Z");
@@ -147,5 +147,51 @@ describe("isIdleForRelease", () => {
   it("is told apart from any other disconnection by its detail", () => {
     expect(isIdleReleased({ status: "disconnected", status_detail: IDLE_RELEASE_DETAIL })).toBe(true);
     expect(isIdleReleased({ status: "disconnected", status_detail: "No sign-in happened" })).toBe(false);
+  });
+});
+
+/*
+ * A signed-out account sends nothing and is billed every month all the same.
+ * Monic's sat signed out from 30 October, two running campaigns waiting on
+ * it, paid for and doing nothing.
+ */
+describe("releaseSignedOutAccounts", () => {
+  const THREE_DAYS_AGO = new Date(NOW.getTime() - 3 * 86_400_000 - 60_000).toISOString();
+  const YESTERDAY = new Date(NOW.getTime() - 86_400_000).toISOString();
+
+  it("releases an account left signed out for three days, and keeps its campaigns and people", async () => {
+    const { db, linkedin, ctx } = setup({ status: "reauth_required", paused_at: THREE_DAYS_AGO });
+    db.seed("campaigns", [{ id: "c1", linkedin_account_id: "a1", status: "running" }]);
+    db.seed("campaign_prospects", [{ id: "cp1", campaign_id: "c1", status: "queued" }]);
+
+    const run = await releaseSignedOutAccounts(ctx, NOW);
+
+    expect(run.released).toBe(1);
+    expect(linkedin.deletedAccounts).toEqual(["acct-1"]);
+    const row = db.find("linkedin_accounts", { id: "a1" })!;
+    expect(row).toMatchObject({ status: "disconnected", provider_account_id: null, status_detail: SIGNED_OUT_RELEASE_DETAIL });
+    expect(isReleasedByUs(row as { status: string; status_detail: string })).toBe(true);
+    expect(db.find("campaigns", { id: "c1" })?.status).toBe("running");
+    expect(db.find("campaign_prospects", { id: "cp1" })?.status).toBe("queued");
+  });
+
+  it("leaves one signed out only since yesterday, one mid-reconnect, and a working one", async () => {
+    for (const account of [
+      { status: "reauth_required", paused_at: YESTERDAY },
+      { status: "reauth_required", paused_at: THREE_DAYS_AGO, pending_provider_account_id: "acct-new" },
+      { status: "active", paused_at: THREE_DAYS_AGO },
+    ]) {
+      const { db, linkedin, ctx } = setup(account);
+      expect((await releaseSignedOutAccounts(ctx, NOW)).released).toBe(0);
+      expect(linkedin.deletedAccounts).toEqual([]);
+      expect(db.find("linkedin_accounts", { id: "a1" })?.provider_account_id).toBe("acct-1");
+    }
+  });
+
+  it("leaves the row as it was when the provider refuses", async () => {
+    const { db, linkedin, ctx } = setup({ status: "reauth_required", paused_at: THREE_DAYS_AGO });
+    linkedin.deleteAccount = async () => ({ ok: false, error: "500" });
+    await expect(releaseSignedOutAccounts(ctx, NOW)).rejects.toThrow(/refused/);
+    expect(db.find("linkedin_accounts", { id: "a1" })).toMatchObject({ status: "reauth_required", provider_account_id: "acct-1" });
   });
 });

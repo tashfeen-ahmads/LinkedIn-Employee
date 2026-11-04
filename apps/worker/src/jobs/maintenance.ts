@@ -12,7 +12,7 @@ import { runRetentionSweep } from "./retention.js";
 import { fillMissingNotes } from "./rewrite-notes.js";
 import { repairCopy, repairSeededLines } from "./repair-copy.js";
 import { fillFirstMessages } from "./first-message.js";
-import { releaseIdleAccounts } from "./idle-accounts.js";
+import { releaseIdleAccounts, releaseSignedOutAccounts } from "./idle-accounts.js";
 import { writeWeeklyPosts } from "./weekly-posts.js";
 import { releaseDuplicateAccounts } from "./duplicate-accounts.js";
 import { enqueueOnce, jobId } from "../queues.js";
@@ -123,6 +123,7 @@ export async function runMaintenance(
   // with no running campaign and nothing done for a fortnight is billed for
   // nothing; it is released and the rep is told to reconnect (rule 63).
   await step("release-idle-accounts", async () => (await releaseIdleAccounts(ctx, now)).released);
+  await step("release-signed-out-accounts", async () => (await releaseSignedOutAccounts(ctx, now)).released);
   // A second account for somebody who already has a working one is billed
   // monthly and used by nothing. After recovery, so a re-pointed row counts.
   await step("release-duplicate-accounts", async () => (await releaseDuplicateAccounts(ctx)).released);
