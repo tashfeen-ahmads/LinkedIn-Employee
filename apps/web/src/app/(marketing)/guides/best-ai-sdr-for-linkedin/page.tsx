@@ -405,7 +405,9 @@ export default function Page() {
         searched. It finds real people, opens each profile before it reaches the list, and writes one connection note per person.
         You launch the campaign. It sends inside the caps above, spread across your working hours, and drafts each reply from the
         facts you gave it for you to approve; switch on autopilot and the clean ones go out on their own. It offers meeting times
-        only from the free slots in its booking calendar.{" "}
+        only from the free slots in its booking calendar. Between conversations it likes and comments on your prospects&rsquo;
+        posts, writes LinkedIn posts for your buyers each week with a designed graphic and publishes the ones you approve on a
+        schedule, and withdraws old invitations nobody answered so LinkedIn keeps accepting new ones.{" "}
         <Link href="/how-it-works">How Nora works</Link> covers every step, and you can try it free for 14 days with no
         card. The <Link href="/free-linkedin-automation-tool">free LinkedIn automation tool</Link> page says what the trial
         includes, and the <Link href="/pricing">pricing page</Link> lists the plans after it.

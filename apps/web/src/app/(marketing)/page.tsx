@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { Faq, FAQ_ITEMS } from "@/components/marketing";
-import { Decisions, Hero, Notes, Replies, SafetyBento, SalesNavigator } from "@/components/home";
+import { Decisions, Hero, Notes, Presence, Replies, SafetyBento, SalesNavigator } from "@/components/home";
 import { FaqSchema, SoftwareSchema } from "@/components/schema";
 import { SITE, pageMeta } from "@/lib/site";
 
@@ -11,11 +11,12 @@ export const metadata: Metadata = pageMeta({
 });
 
 /*
- * Eight sections, in the order a buyer asks: what it is, what is left for
+ * Nine sections, in the order a buyer asks: what it is, what is left for
  * them to do, whether it works with the search they already pay for, whether
  * it will sound like them, whether it will cost them the
- * account, what happens when somebody answers, the questions people ask
- * first, and the one ask (the closing band, from the layout).
+ * account, what happens when somebody answers, what it keeps doing between
+ * conversations, the questions people ask first, and the one ask (the
+ * closing band, from the layout).
  */
 export default function HomePage() {
   return (
@@ -28,6 +29,7 @@ export default function HomePage() {
       <Notes />
       <SafetyBento />
       <Replies />
+      <Presence />
       <Faq eyebrow="FAQ" id="faq" />
     </>
   );

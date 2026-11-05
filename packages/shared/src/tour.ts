@@ -2,6 +2,7 @@ import { ONBOARDING_STEPS, type OnboardingState } from "./onboarding.js";
 import { LINKEDIN_LIMITS } from "./constants.js";
 import { RAMP_SENTENCE } from "./ramp.js";
 import { alwaysHoldsSentence } from "./autopilot.js";
+import { POST_SPACING_DAYS } from "./posts.js";
 
 /**
  * How this product works, start to finish, in one definition.
@@ -197,6 +198,39 @@ export const TOUR_STAGES: readonly TourStage[] = [
       `It may never invent a price, a date or a link. ${alwaysHoldsSentence()}`,
     step: "hasKnowledge",
     href: "/app/inbox",
+  },
+  {
+    id: "engage",
+    title: "It likes and comments on your prospects' posts",
+    owner: "agent",
+    youDo: null,
+    weDo: `People in your live conversations keep seeing your name: up to ${LINKEDIN_LIMITS.reactionsPerDay} likes a day on their recent posts, and up to ${LINKEDIN_LIMITS.commentsPerDay} short comments a day (${LINKEDIN_LIMITS.commentsPerDayNew} in an account's first two weeks) that respond to what they actually wrote.`,
+    caveat:
+      "A comment never sells, never asks a question and never names your company, and job ads and adverts are only liked. Likes and comments each have their own switch.",
+    step: null,
+    href: "/app/engagement",
+  },
+  {
+    id: "posts",
+    title: "It writes and schedules your LinkedIn posts",
+    owner: "agent",
+    youDo: null,
+    weDo: `Every week it writes posts for the people your strategies reach (a how-to, a myth corrected, a checklist, a short story and this week's news in their industry), each with a graphic drawn in your brand colours, and publishes approved ones one every ${POST_SPACING_DAYS} days.`,
+    caveat:
+      "Nothing is published until you approve it. The news post is written only from real headlines from the last seven days, and a post never advertises you.",
+    step: null,
+    href: "/app/posts",
+  },
+  {
+    id: "cleanup",
+    title: "It keeps your invitations tidy",
+    owner: "agent",
+    youDo: null,
+    weDo: `Invitations nobody answered are withdrawn once they are ${LINKEDIN_LIMITS.withdrawAfterDays} days old, a few at a time in the evenings and at weekends, never while you are sending. Turn it on and your own older invitations go too, once LinkedIn says they are ${LINKEDIN_LIMITS.withdrawOutsideAfterDays} days old.`,
+    caveat:
+      "LinkedIn stops taking new invitations from an account carrying a big pile of unanswered ones. Nothing sent in the last week is ever withdrawn, and somebody withdrawn is not invited again for a month, because LinkedIn would refuse it.",
+    step: null,
+    href: "/app/profile/activity",
   },
   {
     id: "close",

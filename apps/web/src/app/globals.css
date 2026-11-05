@@ -5604,6 +5604,7 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
 .pr-points li { display: grid; grid-template-columns: 1.25rem minmax(0, 1fr); gap: var(--space-3); align-items: start; }
 .pr-points li.is-off { color: var(--text-subtle); }
 .pr-detail { display: block; font-size: 0.875rem; color: var(--text-muted); }
+.pr-points-head { font-size: 0.875rem; font-weight: 600; color: var(--text-muted); }
 .pr-none { display: inline-block; width: 1.25rem; text-align: center; color: var(--text-subtle); }
 .pr-cta { align-self: stretch; justify-content: center; }
 .pr-fineprint { text-align: center; font-size: 0.875rem; color: var(--text-muted); }

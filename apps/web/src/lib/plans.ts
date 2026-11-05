@@ -1,4 +1,4 @@
-import { LINKEDIN_LIMITS } from "@le/shared";
+import { LINKEDIN_LIMITS, POST_SPACING_DAYS } from "@le/shared";
 
 /**
  * The two plans, said once for the pricing page and the in-app plan cards.
@@ -73,22 +73,49 @@ export function priceKey(plan: PlanKey, interval: Interval): `${PlanKey}_${"mont
   return `${plan}_${interval === "year" ? "yearly" : "monthly"}`;
 }
 
-/** A row of the comparison: the same on both, or one plan only. */
+/**
+ * A row of the comparison: the same on both, or one plan only.
+ *
+ * Read from what the code gates (`TIER_FEATURES` in `@le/billing`): replies
+ * sent for you, booking, pricing answers and CRM sync are Autopilot's, and
+ * everything else, likes, comments, posts and invitation cleanup included,
+ * runs on both. `highlight` puts a shared row on the plan cards as well as in
+ * the table, so somebody choosing Pro sees what they still get.
+ */
 export interface PlanFeature {
   label: string;
   pro: string | boolean;
   autopilot: string | boolean;
+  highlight?: boolean;
 }
 
 export const PLAN_FEATURES: readonly PlanFeature[] = [
   { label: "Prospecting on regular LinkedIn and Sales Navigator", pro: true, autopilot: true },
-  { label: "A personal note written for every person", pro: true, autopilot: true },
+  { label: "A personal note written for every person", pro: true, autopilot: true, highlight: true },
   {
     label: `Safe pacing: ${LINKEDIN_LIMITS.invitesPerDayStart} a day, rising to ${LINKEDIN_LIMITS.invitesPerDayMax}, never more than ${LINKEDIN_LIMITS.invitesPerWeek} a week`,
     pro: true,
     autopilot: true,
+    highlight: true,
   },
-  { label: "Automatic follow-ups", pro: true, autopilot: true },
+  { label: "Profile views before inviting, to warm each person up", pro: true, autopilot: true },
+  { label: "A first message written for each person who accepts", pro: true, autopilot: true },
+  { label: "Automatic follow-ups", pro: true, autopilot: true, highlight: true },
+  { label: "Lists that refill themselves while a campaign runs", pro: true, autopilot: true },
+  { label: "Likes and short comments on your prospects' posts", pro: true, autopilot: true, highlight: true },
+  { label: "LinkedIn posts written for you every week, each with a designed graphic", pro: true, autopilot: true, highlight: true },
+  {
+    label: `Approved posts scheduled and published for you, one every ${POST_SPACING_DAYS} days`,
+    pro: true,
+    autopilot: true,
+    highlight: true,
+  },
+  {
+    label: "Old unanswered invitations withdrawn automatically, to keep your account healthy",
+    pro: true,
+    autopilot: true,
+    highlight: true,
+  },
   { label: "Unlimited campaigns", pro: true, autopilot: true },
   { label: "Replies drafted for you", pro: "You approve each one", autopilot: "Sent for you" },
   { label: "Meetings booked on your calendar", pro: "You confirm each one", autopilot: "Fully automatic" },

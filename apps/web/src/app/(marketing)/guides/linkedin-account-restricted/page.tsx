@@ -420,7 +420,7 @@ export default function Page() {
         </li>
         <li>
           <strong>It clears old invitations.</strong> Invitations still pending after {LINKEDIN_LIMITS.withdrawAfterDays} days are
-          withdrawn automatically, in small batches.
+          withdrawn automatically, a few at a time in the evenings and at weekends, never while the account is sending.
         </li>
       </ul>
       <p>

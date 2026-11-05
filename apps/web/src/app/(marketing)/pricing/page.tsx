@@ -35,7 +35,7 @@ const QA = [
   },
   {
     q: "What is the difference between the plans?",
-    a: `How much ${BRAND.name} does on its own. On ${PRO.name} you approve every reply and confirm every booking. On ${AUTOPILOT.name} clean replies are sent for you, pricing questions are answered from your own facts, meetings go straight into your calendar and contacts sync to your CRM. Both send the same amount, on the same limits.`,
+    a: `How much ${BRAND.name} does on its own. On ${PRO.name} you approve every reply and confirm every booking. On ${AUTOPILOT.name} clean replies are sent for you, pricing questions are answered from your own facts, meetings go straight into your calendar and contacts sync to your CRM. Everything else is on both: the same sending limits, a personal note for every person, likes and comments on your prospects' posts, weekly posts with designed graphics published on a schedule, and old invitations withdrawn to keep your account healthy.`,
   },
   {
     q: "Why do both plans have the same sending limits?",
@@ -156,8 +156,15 @@ export default function PricingPage() {
                     ${plan.yearly.toLocaleString("en-US")} billed yearly. Two months free, ${yearlySaving(plan)} saved.
                   </p>
                 </div>
+                {/* Pro lists what both plans share, then its own terms; Autopilot
+                    is everything in Pro plus what it does on its own. */}
+                <p className="pr-points-head">
+                  {plan.key === "autopilot" ? `Everything in ${PRO.name}, plus:` : "Includes:"}
+                </p>
                 <ul className="pr-points">
-                  {PLAN_FEATURES.filter((f) => f.pro !== f.autopilot).map((feature) => {
+                  {PLAN_FEATURES.filter((f) =>
+                    plan.key === "autopilot" ? f.pro !== f.autopilot : f.highlight || f.pro !== f.autopilot,
+                  ).map((feature) => {
                     const value = feature[plan.key];
                     return (
                       <li key={feature.label} className={value === false ? "is-off" : undefined}>

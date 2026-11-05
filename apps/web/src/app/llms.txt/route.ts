@@ -14,10 +14,10 @@ export const dynamic = "force-static";
 
 export function GET() {
   const core: Record<string, string> = {
-    "/": "What Nora is: an AI SDR for LinkedIn that finds buyers, writes one note per person, answers replies and books meetings inside conservative limits.",
+    "/": "What Nora is: an AI SDR for LinkedIn that finds buyers, writes one note per person, answers replies and books meetings inside conservative limits. Between conversations it likes and comments on prospects' posts, writes weekly LinkedIn posts with designed graphics and publishes approved ones on a schedule, and withdraws old unanswered invitations to keep the account healthy.",
     "/how-it-works": "The three decisions a person makes (who to reach, what they read, launch) and what runs on its own.",
     "/linkedin-automation-limits": "LinkedIn connection request limits, the warm-up ramp and the signs before a restriction.",
-    "/pricing": "Pricing: a 14-day free trial of Nora Autopilot with no card, then Nora Pro or Nora Autopilot. Workspaces that signed up before pricing stay free.",
+    "/pricing": "Pricing: a 14-day free trial of Nora Autopilot with no card, then Nora Pro or Nora Autopilot. Both include likes, comments, posts with graphics, scheduling and invitation cleanup; Autopilot adds replies sent for you, automatic booking, pricing answers and CRM sync. Workspaces that signed up before pricing stay free.",
     "/security": "Where data is stored, who can reach it, and how a prospect is erased.",
     "/about": "Why the product is built this way.",
     "/privacy": "Privacy policy: what is collected, the customer as controller of prospect data, retention, export and erasure.",

@@ -10,6 +10,7 @@ const PATH = "/guides/withdraw-pending-linkedin-invitations";
 export const metadata: Metadata = articleMeta(PATH);
 
 const WITHDRAW_DAYS = LINKEDIN_LIMITS.withdrawAfterDays;
+const OUTSIDE_DAYS = LINKEDIN_LIMITS.withdrawOutsideAfterDays;
 const SENT_URL = "https://www.linkedin.com/mynetwork/invitation-manager/sent/";
 const LI_WITHDRAW = "https://www.linkedin.com/help/linkedin/answer/a568295";
 const LI_PROHIBITED = "https://www.linkedin.com/help/linkedin/answer/a1341387";
@@ -248,9 +249,10 @@ export default function Page() {
           bring them back.
         </li>
         <li>
-          <strong>Clear the backlog you inherited.</strong> Invitations sent before you used a tool are
-          still yours. Nora only withdraws invitations it sent itself, so an old pile from before is a job
-          to do by hand, once.
+          <strong>Clear the backlog you inherited.</strong> Invitations you sent before you used a tool
+          count against your account just the same. In Nora that is one switch: turn on cleanup and your own
+          older invitations are withdrawn too, once LinkedIn says they are {OUTSIDE_DAYS} days old, never one
+          whose age LinkedIn does not show.
         </li>
         <li>
           <strong>Fix the cause.</strong> A pile that keeps growing means invitations are going to people
@@ -258,8 +260,10 @@ export default function Page() {
         </li>
       </ul>
       <p>
-        Nora does the first and third automatically on every connected account, withdrawing in small
-        nightly batches, alongside the daily and weekly caps on the{" "}
+        Nora does all of this automatically on every connected account. It withdraws a few at a time in the
+        evenings after a sending day and through the days you do not send, never while you are sending and
+        never overnight, and nothing sent in the last week is ever touched. That sits alongside the daily
+        and weekly caps on the{" "}
         <Link href="/linkedin-automation-limits">LinkedIn automation limits page</Link>. LinkedIn&rsquo;s user
         agreement prohibits automated activity, so no tool can promise an account will never be restricted;
         keeping the pending pile small removes one of the reasons LinkedIn names. See{" "}

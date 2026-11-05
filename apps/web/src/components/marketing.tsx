@@ -163,6 +163,10 @@ export const FAQ_ITEMS = [
     a: "Yes, and that is the default: Nora drafts each reply from your documents and you approve it with one click. Autopilot is a switch you flip once you trust it, and then clean replies go out on their own. " + alwaysHoldsSentence(),
   },
   {
+    q: "Does Nora post, like and comment for me?",
+    a: "Yes, on both plans, and each has its own switch. Every week it writes LinkedIn posts for the people you sell to, each with a graphic in your brand colours, and publishes the ones you approve on a schedule. It likes recent posts from the people you are talking to and adds a short comment that responds to what they wrote, never a pitch. It also withdraws old invitations nobody answered, in the evenings and at weekends, so LinkedIn keeps accepting new ones from your account.",
+  },
+  {
     q: "What happens when a prospect asks something hard?",
     a: "By default it stops and hands the conversation to you. Pricing, legal or security questions, anything negative, a request to speak to a person, or simply low confidence: all of them park the draft in your inbox instead of sending it.",
   },

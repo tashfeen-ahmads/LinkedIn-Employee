@@ -73,8 +73,8 @@ const AGENTS: ReadonlyArray<{
     icon: "inbox",
     job: "Sends, answers and books",
     detail:
-      "Sends invitations and follow-ups under daily caps, spread across your working hours. Reads every reply before writing anything and drafts answers only from the documents you gave it. Offers only times you have open.",
-    output: "Paced invitations, drafted replies, booked meetings",
+      "Sends invitations and follow-ups under daily caps, spread across your working hours. Reads every reply before writing anything and drafts answers only from the documents you gave it. Offers only times you have open. Between conversations it likes and comments on your prospects' posts, publishes the posts you approve on a schedule, and withdraws invitations nobody answered.",
+    output: "Paced invitations, drafted replies, booked meetings, likes, comments and posts",
     then: `At launch you choose: every reply waits for your approval, or ${TEAM_MEMBER.reese.name} answers and books on its own.`,
   },
   {

@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { BRAND, DEFAULT_WORKING_HOURS, FREE_NOTES_PER_MONTH, INVITE_NOTE_MAX_CHARS, LINKEDIN_LIMITS, SUSTAINED_INVITES_PER_DAY, WEEKS_TO_CEILING } from "@le/shared";
+import { BRAND, DEFAULT_WORKING_HOURS, FREE_NOTES_PER_MONTH, INVITE_NOTE_MAX_CHARS, LINKEDIN_LIMITS, POST_SPACING_DAYS, SUSTAINED_INVITES_PER_DAY, WEEKS_TO_CEILING } from "@le/shared";
 import { SITE } from "@/lib/site";
 import { TRIAL_DAYS } from "@/lib/plans";
 import {
@@ -701,6 +701,79 @@ export function Replies() {
               <div>
                 <h3>{fact.title}</h3>
                 <p>{fact.body}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </section>
+  );
+}
+
+/*
+ * What runs between conversations, on both plans: the presence a prospect
+ * sees when they look the sender up after an invitation, and the cleanup
+ * that keeps LinkedIn accepting new invitations. Every number is the
+ * product's own.
+ */
+const PRESENCE = [
+  {
+    icon: "view",
+    title: "Likes and comments that are earned",
+    body: `Up to ${LINKEDIN_LIMITS.reactionsPerDay} likes a day on recent posts from the people you are talking to, and a few short comments that respond to what they actually wrote. A comment never sells.`,
+  },
+  {
+    icon: "posts",
+    title: "Posts written for your buyers, every week",
+    body: "How-tos, myths corrected, checklists and this week's real news in their industry, written for the people your strategies reach rather than about you.",
+  },
+  {
+    icon: "pitch",
+    title: "A designed graphic with every post",
+    body: "Each picture is drawn from what the post says, in your brand colours. No stock photos, and no invented faces or text.",
+  },
+  {
+    icon: "clock",
+    title: "Scheduled and published for you",
+    body: `Approve a post and it goes out on its own, one every ${POST_SPACING_DAYS} days, so your profile stays active without a content calendar.`,
+  },
+  {
+    icon: "invite",
+    title: "Old invitations withdrawn for you",
+    body: `Invitations nobody answered are withdrawn after ${LINKEDIN_LIMITS.withdrawAfterDays} days, a few at a time in the evenings and at weekends, so LinkedIn keeps accepting new ones from your account.`,
+  },
+  {
+    icon: "shield",
+    title: "Yours to switch off",
+    body: "Likes, comments, posts and cleanup each have their own switch, and all of them are on both plans.",
+  },
+] as const;
+
+export function Presence() {
+  return (
+    <section className="mk-section">
+      <div className="container mk-stack">
+        <Reveal>
+          <header className="mk-head">
+            <h2 className="mk-h2">
+              <span className="mk-line">It keeps working</span>{" "}
+              <span className="mk-line">between conversations.</span>
+            </h2>
+            <p className="mk-lede">
+              When somebody looks you up after an invitation, they find an active profile, not a sales
+              account. {BRAND.name} keeps it that way, and keeps your account healthy while it does.
+            </p>
+          </header>
+        </Reveal>
+        <ul className="mk-facts">
+          {PRESENCE.map((item) => (
+            <li key={item.title}>
+              <span className="mk-fact-icon">
+                <NavIcon name={item.icon} className="mk-icon" />
+              </span>
+              <div>
+                <h3>{item.title}</h3>
+                <p>{item.body}</p>
               </div>
             </li>
           ))}
