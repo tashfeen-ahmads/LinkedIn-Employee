@@ -57,15 +57,18 @@ export function Hero() {
             <span className="mk-hero-badge-dot" aria-hidden="true" />
             {TRIAL_DAYS}-day free trial. No card.
           </p>
+          {/* The outcome first: what somebody gets, before how it is made safe. */}
           <h1 className="mk-display">
-            <span className="mk-line">The AI SDR for LinkedIn</span>{" "}
+            <span className="mk-line">Turn LinkedIn connections into</span>{" "}
             <span className="mk-line">
-              built around <span className="mk-hero-em">account safety</span>.
+              <span className="mk-hero-em">real sales opportunities</span> with AI.
             </span>
           </h1>
+          <p className="mk-hero-kicker">The AI SDR for LinkedIn, built around account safety.</p>
           <p className="mk-hero-sub">
-            {BRAND.name} finds the right people, writes each one a personal note, drafts your replies and
-            books the call, all paced inside daily limits.
+            Meet {BRAND.name}, your AI-powered sales development rep. {BRAND.name} finds your ideal prospects,
+            starts a personal LinkedIn conversation with each one and nurtures it into qualified leads and sales
+            opportunities, automatically, while you stay in control.
           </p>
           <p className="mk-hero-fast">
             <NavIcon name="campaigns" className="mk-icon" />
@@ -76,7 +79,7 @@ export function Hero() {
           </p>
           <div className="mk-hero-actions">
             <Link href={SIGNUP} className="btn large">
-              Start a {TRIAL_DAYS}-day free trial
+              Get started with {BRAND.name}
             </Link>
             <Link href="/how-it-works" className="btn large secondary mk-hero-second">
               See how it works <span aria-hidden="true">→</span>

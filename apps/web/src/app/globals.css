@@ -4300,6 +4300,13 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
 .mk-hero-badge-dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--accent-2); }
 .mk-hero .mk-display { font-size: clamp(2.25rem, 1.4rem + 2.3vw, 3.25rem); line-height: 1.05; max-width: none; }
 .mk-hero-em { color: var(--accent); }
+/* The safety line, kept under the outcome headline. */
+.mk-hero-kicker {
+  margin-top: calc(var(--space-2) * -1);
+  font-size: clamp(1rem, 0.95rem + 0.25vw, 1.125rem);
+  font-weight: 600;
+  color: var(--text);
+}
 .mk-hero-sub {
   font-size: clamp(1.0625rem, 1rem + 0.35vw, 1.25rem);
   line-height: 1.6;
