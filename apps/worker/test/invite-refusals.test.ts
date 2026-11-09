@@ -107,3 +107,27 @@ describe("an invitation that went out after a refusal", () => {
     expect(row.status_reason ?? null).toBeNull();
   });
 });
+
+describe("a person LinkedIn will not let this account invite", () => {
+  it("leaves the campaign with the reason in words, never as a failure, and the account is not held", async () => {
+    // "This invitation requires the user's email address" is the person's
+    // own setting. Marked failed, it read as something broken and was raised
+    // to the operator as a warning.
+    vi.useFakeTimers();
+    const now = new Date("2026-10-07T10:00:00Z");
+    vi.setSystemTime(now);
+    const { ctx, db, prospect, linkedin } = harness(now);
+    const id = prospect();
+    linkedin.invitationRefusal =
+      "Unipile POST /api/v1/users/invite failed with 400: Missing parameters — One or more request parameters are missing. This invitation requires the user's email address. — errors/missing_parameters";
+
+    await runLinkedInAction(ctx, { kind: "invite", workspaceId: WORKSPACE, campaignProspectId: id });
+
+    const row = db.find("campaign_prospects", { id })!;
+    expect(row.status).toBe("closed");
+    expect(String(row.status_reason)).toContain("email address");
+    expect(String(row.status_reason)).not.toMatch(/unipile|\/api\//i);
+    expect(db.find("linkedin_accounts", { id: ACCOUNT })?.invites_paused_until ?? null).toBeNull();
+    expect(db.rows("prospects")[0]?.last_contacted_at ?? null).toBeNull();
+  });
+});

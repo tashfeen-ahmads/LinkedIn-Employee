@@ -209,6 +209,26 @@ export function accountDisconnected(error: string | null | undefined): boolean {
   return /errors\/disconnected_account|disconnected account|appears to be disconnected/i.test(error);
 }
 
+/**
+ * LinkedIn will never take an invitation to this person from this account,
+ * and says why: they only accept invitations from people who know their email
+ * address, or they cannot be reached at all. That is a fact about the person,
+ * not a fault, so they are left out of the campaign with a reason in words
+ * rather than marked failed, which reads as something broken and was raised
+ * to the operator as a warning. Null when the refusal is anything else.
+ */
+export function recipientUnavailable(error: string | null | undefined): string | null {
+  if (!error) return null;
+  const text = error.toLowerCase();
+  if (/requires the user'?s email|email address (is )?required/.test(text)) {
+    return "LinkedIn only lets people who know this person's email address invite them, so they were left out";
+  }
+  if (/recipient cannot be reached|errors\/recipient_cannot_be_reached/.test(text)) {
+    return "LinkedIn says this person cannot be reached, so they were left out";
+  }
+  return null;
+}
+
 export function mightBeNoteQuota(error: string | null | undefined): boolean {
   if (!error) return false;
   return /errors\/cannot_resend_yet|temporary provider limit|personali[sz]ed (invitation|message|note)|invitation note|custom (message|note)/.test(

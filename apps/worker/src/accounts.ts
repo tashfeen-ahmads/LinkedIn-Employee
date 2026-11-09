@@ -46,6 +46,7 @@ export async function recordObservedAccounts(
       providerAccountId: a.providerAccountId,
       reference: a.reference,
       displayName: a.displayName ?? null,
+      memberId: a.memberId ?? null,
       status: a.status,
     })),
   });

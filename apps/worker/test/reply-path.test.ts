@@ -1073,6 +1073,21 @@ describe("a sent message and its conversation", () => {
     expect(conversation(db).provider_chat_id).toBe("chat_prov_jane");
     expect(conversation(db).last_message_at).toBe(NOW.toISOString());
   });
+
+  it("moves to the new chat when the stored one was gone after a reconnect", async () => {
+    // The provider opens a fresh chat when the stored one belonged to the
+    // account the rep had before reconnecting; keeping the dead id would send
+    // every later message into it.
+    const { db, ctx, queues, log, linkedin } = harness();
+    await handleInboundMessage(ctx, queues, inboundJob("Sounds interesting"));
+    db.find("conversations", { id: conversation(db).id as string })!.provider_chat_id = "chat_from_old_account";
+    vi.spyOn(linkedin, "sendMessage").mockResolvedValue({ ok: true, providerId: "m1", chatId: "chat_new" });
+    const job = replyJobs(log)[0]!.data as { kind: "reply"; workspaceId: string; conversationId: string; draftId: string };
+
+    await runLinkedInAction(ctx, job);
+
+    expect(conversation(db).provider_chat_id).toBe("chat_new");
+  });
 });
 
 describe("a webhook delivery that was accepted", () => {

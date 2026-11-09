@@ -18,6 +18,13 @@ export interface ConnectedAccount {
   providerAccountId: string;
   reference: string;
   displayName?: string;
+  /**
+   * The LinkedIn member this provider account signs in as, from the
+   * provider's own connection details. Two provider accounts with the same
+   * member id are the same LinkedIn login connected twice: an identity, unlike
+   * a display name, which two people can share.
+   */
+  memberId?: string;
   status: AccountHealth;
 }
 

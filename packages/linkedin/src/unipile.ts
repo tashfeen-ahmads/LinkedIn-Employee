@@ -716,11 +716,24 @@ export class UnipileProvider implements LinkedInProvider {
   }): Promise<ActionResult> {
     try {
       if (input.chatId) {
-        const res = await this.request<{ message_id?: string }>(ROUTES.chatMessages(input.chatId), {
-          method: "POST",
-          body: JSON.stringify({ account_id: input.accountId, text: input.text }),
-        });
-        return { ok: true, providerId: res.message_id, chatId: input.chatId };
+        try {
+          const res = await this.request<{ message_id?: string }>(ROUTES.chatMessages(input.chatId), {
+            method: "POST",
+            body: JSON.stringify({ account_id: input.accountId, text: input.text }),
+          });
+          return { ok: true, providerId: res.message_id, chatId: input.chatId };
+        } catch (err) {
+          /*
+           * A chat belongs to the provider account that opened it. A rep who
+           * reconnects LinkedIn often gets a new account, and every chat id
+           * stored under the old one answers 404 "Chat not found": the first
+           * follow-up after Monica Tomasso reconnected failed its person for
+           * good that way. The person is still there, so the message starts a
+           * fresh chat with them and the caller stores the new chat id. Only a
+           * missing chat falls through; any other refusal is reported as is.
+           */
+          if (!(err instanceof UnipileError && err.status === 404 && input.providerId)) throw err;
+        }
       }
       if (!input.providerId) {
         return { ok: false, error: "sendMessage requires chatId or providerId" };
@@ -1136,6 +1149,10 @@ function toConnectedAccounts(items: RawUnipileAccount[], via: "push" | "pull"): 
       // default, and a page load put a dead account back to active hours
       // after the health check had said it needed signing in again. Said
       // nowhere is unknown, never fine.
+      memberId:
+        typeof item.connection_params?.im?.id === "string" && item.connection_params.im.id.trim()
+          ? item.connection_params.im.id.trim()
+          : undefined,
       status: mapAccountStatus(String(item.sources?.[0]?.status ?? item.status ?? "")),
     }))
     // An entry naming no account cannot be acted on. A delivery naming no rep
@@ -1153,6 +1170,7 @@ interface RawUnipileAccount {
   account_name?: string;
   status?: string;
   sources?: Array<{ id?: string; status?: string }>;
+  connection_params?: { im?: { id?: string } | null } | null;
 }
 
 interface RawUnipileMessage {

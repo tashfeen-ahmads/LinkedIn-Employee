@@ -86,3 +86,76 @@ describe("a disconnected account on a send", () => {
     expect(result.health).toBe("reauth_required");
   });
 });
+
+/*
+ * The list carries no label for whose account it is, but it does carry the
+ * LinkedIn member each account signs in as. Two accounts for one member are
+ * the same login connected twice, which is what lets a spare be released.
+ */
+describe("UnipileProvider.listAccounts member id", () => {
+  const listed = (connection_params: unknown) =>
+    new UnipileProvider({
+      dsn: "https://api.test",
+      accessToken: "t",
+      fetchImpl: (async () =>
+        new Response(
+          JSON.stringify({ items: [{ object: "Account", id: "a", name: "A", type: "LINKEDIN", connection_params }] }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        )) as typeof fetch,
+    })
+      .listAccounts()
+      .then((all) => all[0]?.memberId);
+
+  it("reads the LinkedIn member id from the connection details", async () => {
+    expect(await listed({ im: { id: "ACoAAmember", publicIdentifier: "someone" } })).toBe("ACoAAmember");
+  });
+
+  it("has none when the provider gives none", async () => {
+    expect(await listed({})).toBeUndefined();
+    expect(await listed(undefined)).toBeUndefined();
+    expect(await listed({ im: { id: "  " } })).toBeUndefined();
+  });
+});
+
+/*
+ * A rep who reconnects LinkedIn can get a new provider account, and the chats
+ * stored under the old one are gone: the first follow-up after Monica Tomasso
+ * reconnected was refused "Chat not found" and its person failed for good.
+ */
+describe("UnipileProvider.sendMessage into a chat that is gone", () => {
+  function provider() {
+    const calls: Array<{ url: string; body: string }> = [];
+    const p = new UnipileProvider({
+      dsn: "https://api.test",
+      accessToken: "t",
+      fetchImpl: (async (url: string, init?: RequestInit) => {
+        calls.push({ url: String(url), body: String(init?.body ?? "") });
+        if (String(url).includes("/chats/old/messages")) {
+          return new Response(
+            JSON.stringify({ status: 404, type: "errors/resource_not_found", title: "Resource not found.", detail: "Chat not found" }),
+            { status: 404, headers: { "content-type": "application/json" } },
+          );
+        }
+        return new Response(JSON.stringify({ chat_id: "fresh", message_id: "m1" }), {
+          status: 201,
+          headers: { "content-type": "application/json" },
+        });
+      }) as typeof fetch,
+    });
+    return { p, calls };
+  }
+
+  it("starts a new chat with the person and hands back its id", async () => {
+    const { p, calls } = provider();
+    const result = await p.sendMessage({ accountId: "acct", chatId: "old", providerId: "ACoAAperson", text: "hi" });
+    expect(result).toMatchObject({ ok: true, chatId: "fresh" });
+    expect(calls).toHaveLength(2);
+    expect(JSON.parse(calls[1]!.body).attendees_ids).toEqual(["ACoAAperson"]);
+  });
+
+  it("reports the refusal when there is nobody to start a new chat with", async () => {
+    const { p } = provider();
+    const result = await p.sendMessage({ accountId: "acct", chatId: "old", text: "hi" });
+    expect(result.ok).toBe(false);
+  });
+});

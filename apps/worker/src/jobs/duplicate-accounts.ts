@@ -18,7 +18,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  * spare, because nothing here holds it.
  *
  * Only an exact duplicate is removed. The spare must be held by no row here,
- * and must carry the same person's label as an account a row does hold, and
+ * and must carry the same person's label, or sign in as the same LinkedIn
+ * member, as an account a row does hold, and
  * that held account must be healthy at the provider. So the account somebody
  * actually sends from is never the one released, and an account connected for
  * somebody new is never mistaken for a spare. A provider that could not be
@@ -73,6 +74,11 @@ export async function releaseDuplicateAccounts(ctx: WorkerContext): Promise<{ re
       // labelled with somebody's id is that person's, and only that person's
       // twin; two different people who share a name are never each other's.
       if (UUID.test(spare.reference)) return spare.reference === owner?.user_id;
+      // The provider's list carries no label at all, so the label alone never
+      // found a twin and every spare stayed billed. The LinkedIn member the
+      // account signs in as is an identity: the same member id twice is the
+      // same login connected twice, never two people.
+      if (spare.memberId && held.memberId) return spare.memberId === held.memberId;
       // Never by display name (rule 8): the provider's list carries the
       // LinkedIn name, two people share names, and a match on it deleted a
       // stranger's freshly connected account. A spare with no reference of

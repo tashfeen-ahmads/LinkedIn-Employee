@@ -1,5 +1,6 @@
 import {
   accountDisconnected,
+  recipientUnavailable,
   backOff,
   checkAction,
   classifyProviderError,
@@ -1198,8 +1199,8 @@ export async function ensureConversation(
  * inbound message, so a thread the agent had just written to sorted as if it
  * had been silent for days; and the chat a first message opened was dropped, so
  * every later message started a new chat by attendee instead of continuing
- * the one the prospect was reading. The chat id is only ever filled in, never
- * replaced: a thread does not move.
+ * the one the prospect was reading. The chat id changes only when the provider
+ * no longer had the stored one and the message opened a new chat.
  */
 async function noteOutbound(
   db: WorkerContext["db"],
@@ -1207,7 +1208,10 @@ async function noteOutbound(
   chatId: string | undefined,
 ): Promise<void> {
   const patch: { last_message_at: string; provider_chat_id?: string } = { last_message_at: new Date().toISOString() };
-  if (chatId && !conversation.provider_chat_id) patch.provider_chat_id = chatId;
+  // A different chat id comes back only when the stored one was gone at the
+  // provider (a reconnect issues a new account, and its chats are new too),
+  // so the new one replaces it or every later message would hit the dead one.
+  if (chatId && chatId !== conversation.provider_chat_id) patch.provider_chat_id = chatId;
   await db.from("conversations").update(patch).eq("id", conversation.id);
 }
 
@@ -1854,6 +1858,13 @@ async function handleInviteRefusal(
   }
 
   const verdict = classifyProviderError(input.error);
+  // Refused because of who they are, not because anything broke: closed with
+  // the reason in words, never failed.
+  const unavailable = recipientUnavailable(input.error);
+  if (unavailable) {
+    await closeProspect(ctx, input.campaignProspectId, unavailable, "queued");
+    return;
+  }
   if (verdict.kind === "permanent") {
     await failProspect(ctx, input.campaignProspectId, input.error);
     return;

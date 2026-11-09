@@ -135,3 +135,22 @@ describe("how long to wait after being refused again", () => {
     expect(backOff(SIX_HOURS, -5)).toBe(SIX_HOURS);
   });
 });
+
+describe("recipientUnavailable", () => {
+  it("names a person who only takes invitations from people who know their email", async () => {
+    const { recipientUnavailable } = await import("../src/provider-errors.js");
+    expect(
+      recipientUnavailable(
+        "Unipile POST /api/v1/users/invite failed with 400: Missing parameters — One or more request parameters are missing. This invitation requires the user's email address. — errors/missing_parameters",
+      ),
+    ).toMatch(/email address/);
+    expect(recipientUnavailable("422: Recipient cannot be reached")).toMatch(/cannot be reached/);
+  });
+
+  it("is null for an account-wide refusal or anything else", async () => {
+    const { recipientUnavailable } = await import("../src/provider-errors.js");
+    expect(recipientUnavailable("422 cannot_resend_yet — You have reached a temporary provider limit")).toBeNull();
+    expect(recipientUnavailable("400: Missing parameters")).toBeNull();
+    expect(recipientUnavailable(null)).toBeNull();
+  });
+});

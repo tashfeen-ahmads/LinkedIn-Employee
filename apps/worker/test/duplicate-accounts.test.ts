@@ -65,6 +65,26 @@ describe("releaseDuplicateAccounts", () => {
     expect(linkedin.deletedAccounts).toEqual([]);
   });
 
+  it("releases a spare that signs in as the same LinkedIn member, though the list carries no label", async () => {
+    // Monica Tomasso finished the sign-in twice: two accounts, both healthy,
+    // neither labelled, one held here. The member id is the same login.
+    const { ctx, linkedin } = harness([held], [
+      { providerAccountId: "yq9", reference: "", displayName: "Monica Tomasso", memberId: "ACoAAmember1", status: "ok" },
+      { providerAccountId: "spare", reference: "", displayName: "Monica Tomasso", memberId: "ACoAAmember1", status: "ok" },
+    ]);
+    expect((await releaseDuplicateAccounts(ctx)).released).toBe(1);
+    expect(linkedin.deletedAccounts).toEqual(["spare"]);
+  });
+
+  it("never releases a different LinkedIn member, even with the same name", async () => {
+    const { ctx, linkedin } = harness([held], [
+      { providerAccountId: "yq9", reference: "", displayName: "Phil Whitebloom", memberId: "ACoAAone", status: "ok" },
+      { providerAccountId: "stranger", reference: "", displayName: "Phil Whitebloom", memberId: "ACoAAtwo", status: "ok" },
+    ]);
+    await releaseDuplicateAccounts(ctx);
+    expect(linkedin.deletedAccounts).toEqual([]);
+  });
+
   it("leaves alone anybody part-way through connecting", async () => {
     const { ctx, linkedin } = harness(
       [held, { id: "row2", workspace_id: "w2", user_id: PHIL, provider_account_id: null, status: "connecting" }],
