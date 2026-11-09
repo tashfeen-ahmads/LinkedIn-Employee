@@ -3955,6 +3955,14 @@ const MUTATIONS = [
     pkg: "@le/linkedin",
   },
   {
+    id: "search/foreign-cursor-dropped",
+    rule: "A search position written by another provider account is never continued from this one",
+    file: "packages/linkedin/src/unipile.ts",
+    from: "    if (typeof owner === \"string\" && owner && owner !== accountId) return undefined;",
+    to: "    if (false) return undefined;",
+    pkg: "@le/linkedin",
+  },
+  {
     id: "strategy/no-duplicate-segments",
     rule: "A new strategy repeating an existing one is dropped, not stored",
     file: "apps/worker/src/jobs/strategy.ts",

@@ -210,3 +210,29 @@ describe("the position itself", () => {
     expect(decodeClassicCursor(forged)).toBeNull();
   });
 });
+
+/*
+ * A provider search position names the account that searched. After a rep
+ * reconnected and was given a new account, continuing the old account's
+ * position was answered "Account not found", and a healthy account was marked
+ * as needing sign-in again.
+ */
+describe("cursorForAccount", () => {
+  const pos = (account: string) => Buffer.from(JSON.stringify({ account_id: account, limit: 50 })).toString("base64");
+
+  it("keeps a position the same account wrote", async () => {
+    const { cursorForAccount } = await import("../src/unipile.js");
+    expect(cursorForAccount(pos("acct_new"), "acct_new")).toBe(pos("acct_new"));
+  });
+
+  it("drops a position another account wrote, so the term starts from its first page", async () => {
+    const { cursorForAccount } = await import("../src/unipile.js");
+    expect(cursorForAccount(pos("acct_old"), "acct_new")).toBeUndefined();
+  });
+
+  it("passes on a position it cannot read, and nothing for nothing", async () => {
+    const { cursorForAccount } = await import("../src/unipile.js");
+    expect(cursorForAccount("not-base64-json", "acct_new")).toBe("not-base64-json");
+    expect(cursorForAccount(undefined, "acct_new")).toBeUndefined();
+  });
+});

@@ -279,7 +279,8 @@ export class UnipileProvider implements LinkedInProvider {
 
       for (const attempt of attempts.slice(from)) {
         const params = new URLSearchParams({ account_id: input.accountId, limit: String(limit) });
-        if (resume && resume.attempt === attempt.attempt) params.set("cursor", resume.cursor);
+        const own = resume && resume.attempt === attempt.attempt ? cursorForAccount(resume.cursor, input.accountId) : undefined;
+        if (own) params.set("cursor", own);
         try {
           const res = await this.request<{ items?: UnipileRawProfile[]; cursor?: string | null }>(
             `${ROUTES.search}?${params.toString()}`,
@@ -363,7 +364,8 @@ export class UnipileProvider implements LinkedInProvider {
         if (want <= 0) break;
 
         const params = new URLSearchParams({ account_id: input.accountId, limit: String(want) });
-        if (at) params.set("cursor", at);
+        const own = cursorForAccount(at, input.accountId);
+        if (own) params.set("cursor", own);
 
         const res = await this.request<{ items?: UnipileRawProfile[]; cursor?: string | null }>(
           `${ROUTES.search}?${params.toString()}`,
@@ -1630,6 +1632,29 @@ export function readSalesNavigatorCursor(
     }
   }
   return { attempt: "full", cursor };
+}
+
+/**
+ * A provider search position, or nothing if it belongs to another account.
+ *
+ * The provider's cursor names the account that searched. A rep who reconnects
+ * LinkedIn can be given a new account, and continuing the old account's
+ * position from the new one is answered "Account not found": Monica Tomasso's
+ * reconnected, healthy account was marked as needing sign-in again eight
+ * minutes later by exactly that. Such a position starts the term from its
+ * first page instead; everybody already known is left out of the search
+ * anyway (rule 20). A cursor that cannot be read is passed on unchanged.
+ */
+export function cursorForAccount(cursor: string | undefined | null, accountId: string): string | undefined {
+  if (!cursor) return undefined;
+  try {
+    const raw: unknown = JSON.parse(Buffer.from(cursor, "base64").toString("utf8"));
+    const owner = raw && typeof raw === "object" ? (raw as { account_id?: unknown }).account_id : undefined;
+    if (typeof owner === "string" && owner && owner !== accountId) return undefined;
+  } catch {
+    // Not a position this code can read: the provider's to judge.
+  }
+  return cursor;
 }
 
 /** The provider rejected the request itself, as opposed to failing to answer it. */
