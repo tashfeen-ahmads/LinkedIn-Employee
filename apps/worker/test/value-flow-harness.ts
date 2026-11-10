@@ -389,6 +389,15 @@ export class RecordingLlm implements LlmClient {
         return this.classification;
       case "reply-draft":
         return replyDraft(system, user);
+      case "reply-read":
+        return {
+          theirSituation: ["They handle partner referrals by hand today"],
+          toolsTheyUse: [],
+          problemStatus: "confirmed",
+          lastMessageMeans: "They want to know how it would work for them.",
+          askedForNextStep: true,
+          bestNextMove: "Say what it is for them and offer the next step.",
+        };
       case "comment": {
         const post = between(user, 'The post:\n"""\n', '\n"""') ?? "";
         const grounding = post.split(/\s+/).slice(0, 6).join(" ");
@@ -408,6 +417,7 @@ function identify(request: LlmRequest, system: string): string {
   if (keys.includes("notes")) return "invite-note";
   if (keys.includes("intent")) return "classify";
   if (keys.includes("proposesMeeting")) return "reply-draft";
+  if (keys.includes("problemStatus")) return "reply-read";
   if (keys.includes("comment") && keys.includes("grounding")) return "comment";
   if (keys.includes("connectionNote") && keys.includes("steps")) return "campaign";
   if (keys.includes("variants")) {

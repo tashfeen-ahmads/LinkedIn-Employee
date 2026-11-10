@@ -358,3 +358,33 @@ describe("writing the openers", () => {
     expect(sent[0]!.user).toContain("no tracking");
   });
 });
+
+describe("the conversation read reaches the writer", () => {
+  it("tells the writer what the prospect has said, the tools they use, and that a solved problem is not pitched", async () => {
+    const { ctx, sent } = recordingCtx(draft);
+    await draftReply(ctx, {
+      business,
+      repName: "Rep",
+      knowledge: [],
+      history: [{ role: "rep", text: "Is Odoo already hosting your onboarding docs?", at: "2026-11-09T20:30:40Z" }],
+      message: "Yes",
+      classification,
+      rules,
+      pitch: PITCH,
+      availableSlots: [],
+      read: {
+        theirSituation: ["Their onboarding documents live in Odoo"],
+        toolsTheyUse: [{ name: "Odoo", whatItCovers: "An ERP suite with documents and CRM.", whereItFallsShort: "Outreach still runs by hand." }],
+        problemStatus: "already_solved",
+        lastMessageMeans: "Odoo already hosts the documents.",
+        askedForNextStep: false,
+        bestNextMove: "Ask what still takes manual work around Odoo.",
+      },
+    });
+    const prompt = JSON.stringify(sent[0]);
+    expect(prompt).toContain("Their onboarding documents live in Odoo");
+    expect(prompt).toContain("They use Odoo");
+    expect(prompt).toContain("Outreach still runs by hand.");
+    expect(prompt).toContain("already handled. Do not pitch it");
+  });
+});

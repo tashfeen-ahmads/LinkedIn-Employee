@@ -3,6 +3,7 @@ export * from "./llm.js";
 export * from "./strategy.js";
 export * from "./targeting.js";
 export * from "./reply.js";
+export * from "./conversation-read.js";
 export * from "./scoring.js";
 export * from "./knowledge.js";
 export * from "./pitch.js";

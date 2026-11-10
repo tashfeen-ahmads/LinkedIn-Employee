@@ -46,28 +46,54 @@ const NOT_READY =
 
 /** They already have something that does this: a reason it may not fit, not a yes. */
 const ALREADY_HAVE =
-  /\b(we (already |currently )?(have|use|run|got) (a|an|our own|someone|something)|already (have|use|using|working with)|in-house|in house|do it ourselves)\b/i;
+  /\b(we (already |currently )?(have|use|run|got) (a|an|our own|someone|something)|already (have|use|using|working with|on)|in-house|in house|do it ourselves|we(?:'re| are) (?:already )?(?:using|working (?:on|with)|running on|on) [a-z0-9])/i;
+
+/**
+ * A bare yes or no: the answer to whatever we last asked, and nothing more.
+ *
+ * "Is Odoo already hosting your onboarding docs?" "Yes" was classified as
+ * interested at 0.9, and the reply pitched the one problem the prospect had
+ * just said was solved, with a booking link. A one-word answer means what the
+ * question meant, so it is buying intent only when our question was the
+ * offer of a next step.
+ */
+const BARE_ANSWER = /^\s*(yes|yeah|yep|yup|ya|yes sir|correct|right|exactly|true|no|nope|nah|not really|sure|ok|okay|k)\s*[.!]*\s*$/i;
+
+/** What the prospect has told us that changes what may be said, from reading the conversation. */
+export interface ConversationFacts {
+  /** The problem the offer solves is already handled for them, by their own account. */
+  alreadySolved?: boolean;
+  /** Our last message to them, which a short answer is an answer to. */
+  lastRepMessage?: string;
+}
 
 /**
  * The intent a reply is written for: the classifier's, unless the words say
  * plainly that they are not ready or already covered and they have not asked
  * for the next step themselves.
  */
-export function effectiveIntent(intent: ReplyIntent, message: string): ReplyIntent {
+export function effectiveIntent(intent: ReplyIntent, message: string, facts: ConversationFacts = {}): ReplyIntent {
+  if (BARE_ANSWER.test(message) && intent === "interested") {
+    const offeredNextStep = Boolean(facts.lastRepMessage && ASKS_FOR_NEXT_STEP.test(facts.lastRepMessage));
+    if (!offeredNextStep) return facts.alreadySolved ? "objection" : "other";
+  }
   if (ASKS_FOR_NEXT_STEP.test(message) && !NOT_READY.test(message)) return intent;
   const softened = intent === "interested" || intent === "question" || intent === "other";
   if (!softened) return intent;
   if (NOT_READY.test(message)) return "not_now";
   if (ALREADY_HAVE.test(message)) return "objection";
+  // Told earlier in the conversation that it is handled, and nothing since
+  // asks for the next step: still not a yes.
+  if (facts.alreadySolved) return "objection";
   return intent;
 }
 
 export function replyMove(
   classified: ReplyIntent,
   message: string,
-  context: { linkAlreadySent?: boolean } = {},
+  context: { linkAlreadySent?: boolean } & ConversationFacts = {},
 ): ReplyMove {
-  const intent = effectiveIntent(classified, message);
+  const intent = effectiveIntent(classified, message, context);
   const asked = ASKS_FOR_NEXT_STEP.test(message);
   // "I'll check your calendar and get back to you" after the link went out is
   // a yes that needs nothing more. Sending the pitch and the link again is
@@ -109,8 +135,9 @@ export function replyMove(
         pitch: false,
         link: false,
         slots: false,
-        guidance:
-          "They have a concern. Do not argue and do not pitch again. Acknowledge it in a few plain words, then ask one question that helps you understand it (cost, timing, fit, or who decides). No link, no times.",
+        guidance: context.alreadySolved
+          ? "They have told you this is already handled, often with a tool they named. Do not pitch the problem they solved and do not argue. Acknowledge what they use in a few plain words, then ask one specific question about where it falls short for them or what still takes manual work around it, using what you know about that tool. No link, no times."
+          : "They have a concern. Do not argue and do not pitch again. Acknowledge it in a few plain words, then ask one question that helps you understand it (cost, timing, fit, or who decides). No link, no times.",
       };
     case "not_now":
       return {

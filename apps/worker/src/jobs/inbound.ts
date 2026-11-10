@@ -4,6 +4,8 @@ import {
   containsOptOut,
   draftReply,
   DRAFT_PROMPT_VERSION,
+  readConversation,
+  type ConversationRead,
   type ConversationTurn,
 } from "@le/agents";
 import {
@@ -402,10 +404,36 @@ export async function handleInboundMessage(
   const linkAlreadySent = Boolean(
     offeredLink && history.some((turn) => turn.role === "rep" && turn.text.includes(offeredLink)),
   );
+  /*
+   * The whole conversation is read before anything is written: what they have
+   * told us, the tools they use, and whether the problem the offer solves is
+   * theirs at all. A prospect who said Odoo already holds their documents and
+   * then answered "Yes" was pitched exactly that problem with a booking link.
+   * A read that fails costs the reply nothing it had before.
+   */
+  let read: ConversationRead | null = null;
+  try {
+    read = await readConversation(agents, {
+      business,
+      profile: customerProfile,
+      pitch: pitch ?? undefined,
+      history,
+      message: job.text,
+    });
+  } catch (error) {
+    console.error("could not read the conversation before replying", { conversationId: conversation.id, error });
+  }
+  const lastRepMessage = [...history].reverse().find((turn) => turn.role === "rep")?.text;
+  const facts = {
+    // Solved by their own account, and they have not asked for the next step
+    // since: no pitch, no link, whatever the classifier made of the words.
+    alreadySolved: read?.problemStatus === "already_solved" && read.askedForNextStep !== true,
+    lastRepMessage,
+  };
   // The words win over a warm misreading: "when I can convince the owner" is
-  // not a yes, whatever the classifier said.
-  const intent = effectiveIntent(classification.intent, job.text);
-  const move = replyMove(intent, job.text, { linkAlreadySent });
+  // not a yes, whatever the classifier said, and "Yes" answers our question.
+  const intent = effectiveIntent(classification.intent, job.text, facts);
+  const move = replyMove(intent, job.text, { linkAlreadySent, ...facts });
   if (!move.reply && !bookedMeeting && !bookingHeld) {
     // An auto-reply or spam: answering it is a message to nobody.
     await recordEvent(db, {
@@ -462,6 +490,7 @@ export async function handleInboundMessage(
       availableSlots: goal === "meeting" && move.slots ? slots.readable : [],
       bookedMeeting,
       move,
+      read: read ?? undefined,
     });
   } catch (error) {
     // The prospect replied and we could not write an answer. Retrying is the
@@ -1025,9 +1054,13 @@ async function loadHistory(
     .from("messages")
     .select("id, direction, body, created_at")
     .eq("conversation_id", conversationId)
-    .order("created_at", { ascending: true })
+    // The latest forty, put back in order. Ascending with a limit kept the
+    // oldest forty, so a long conversation was answered without its most
+    // recent turns, which are the ones the reply is about.
+    .order("created_at", { ascending: false })
     .limit(40);
-  return (data ?? [])
+  return [...(data ?? [])]
+    .reverse()
     .filter((m) => m.id !== excludeMessageId)
     .map((m) => ({
       role: m.direction === "outbound" ? ("rep" as const) : ("prospect" as const),

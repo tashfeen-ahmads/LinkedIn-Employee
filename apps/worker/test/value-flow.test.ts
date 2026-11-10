@@ -286,6 +286,13 @@ describe("A: a meeting campaign, the rep's own scheduling link, Nora answers", (
     expect(prompt.system).toContain(SEEDED_PITCH);
     expect(prompt.user).toContain(`The ONLY link you may send is ${DEFAULT_ANSWERS.cta.bookingUrl}.`);
     expect(prompt.user).not.toContain("Times you may offer");
+    // The conversation is read before the reply is written, from the whole
+    // history, and what the read found is what the writer is told.
+    const read = f.w.llm.last("reply-read")!;
+    expect(read.user).toContain("Yes, this sounds useful. How would it work for us?");
+    expect(read.user).toContain("Us: ");
+    expect(prompt.user).toContain("What you know about this person");
+    expect(prompt.user).toContain("They handle partner referrals by hand today");
     const draft = f.w.db.rows("reply_drafts").at(-1)!;
     expect(draft.body).toContain(DEFAULT_ANSWERS.cta.bookingUrl);
     expect(draft.proposed_slots).toEqual([]);

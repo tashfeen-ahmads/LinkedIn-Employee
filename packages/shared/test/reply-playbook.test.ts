@@ -57,3 +57,35 @@ describe("effectiveIntent: the words win over a warm misreading", () => {
     expect(effectiveIntent("not_interested", "not right now, and please don't follow up")).toBe("not_interested");
   });
 });
+
+describe("a short answer means what our question meant", () => {
+  // Muhammad, on a live campaign: "No we are working on odoo", then "Yes" to
+  // "Is Odoo already hosting your onboarding docs?" The classifier read the
+  // Yes as interested at 0.9 and the reply pitched the solved problem with a
+  // booking link.
+  const ourQuestion = "Good to know. Is Odoo already hosting your onboarding docs for the franchise and acquisition deals?";
+
+  it("is never a yes to buying when our question did not offer a next step", () => {
+    expect(effectiveIntent("interested", "Yes", { lastRepMessage: ourQuestion })).toBe("other");
+    expect(replyMove("interested", "Yes", { lastRepMessage: ourQuestion })).toMatchObject({ pitch: false, link: false, slots: false });
+  });
+
+  it("is an objection when the read says the problem is already handled", () => {
+    const move = replyMove("interested", "Yes", { lastRepMessage: ourQuestion, alreadySolved: true });
+    expect(move).toMatchObject({ pitch: false, link: false, slots: false });
+    expect(move.guidance).toMatch(/already handled/);
+  });
+
+  it("is a yes when our question was the offer of a next step", () => {
+    expect(effectiveIntent("interested", "Yes", { lastRepMessage: "Want me to send the link over?" })).toBe("interested");
+  });
+
+  it("reads naming the system they are on as already covered", () => {
+    expect(effectiveIntent("other", "No we are working on odoo")).toBe("objection");
+  });
+
+  it("keeps a problem solved earlier in the conversation solved, until they ask for the next step", () => {
+    expect(effectiveIntent("interested", "Sounds good", { alreadySolved: true })).toBe("objection");
+    expect(effectiveIntent("interested", "Ok send me the link", { alreadySolved: true })).toBe("interested");
+  });
+});

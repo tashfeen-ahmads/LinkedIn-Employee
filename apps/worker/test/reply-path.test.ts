@@ -173,12 +173,14 @@ function harness() {
 
 const classifyMock = vi.fn();
 const draftMock = vi.fn();
+const readMock = vi.fn();
 
 vi.mock("@le/agents", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@le/agents")>();
   return {
     ...actual,
     classifyReply: (...args: unknown[]) => classifyMock(...args),
+    readConversation: (...args: unknown[]) => readMock(...args),
     // The real drafter checks its own voice; a mocked draft is taken as clean.
     draftReply: async (...args: unknown[]) => ({ voiceProblems: [], ...(await draftMock(...args)) }),
   };
@@ -222,6 +224,9 @@ beforeEach(() => {
   vi.setSystemTime(NOW);
   classifyMock.mockReset();
   draftMock.mockReset();
+  readMock.mockReset();
+  // No read unless a test gives one: a failed read changes nothing.
+  readMock.mockRejectedValue(new Error("no read in this test"));
   classifyMock.mockResolvedValue(classification());
   draftMock.mockResolvedValue(draft("Happy to talk — what does your week look like?"));
 });
@@ -1252,5 +1257,81 @@ describe("a rep with their own scheduling link", () => {
     await handleInboundMessage(ctx, queues, inboundJob("Thursday at 10 works"));
 
     expect(db.rows("meetings")).toHaveLength(1);
+  });
+});
+
+describe("a reply written from the whole conversation", () => {
+  // Muhammad, on a live campaign: he said Odoo holds the documents, answered
+  // "Yes" to our question about it, and was pitched the solved problem with a
+  // booking link.
+  const ourQuestion = "Good to know. Is Odoo already hosting your onboarding docs for the franchise and acquisition deals?";
+
+  async function afterOurQuestion(read?: Record<string, unknown>) {
+    const h = harness();
+    await handleInboundMessage(h.ctx, h.queues, inboundJob("No we are working on odoo"));
+    h.db.seed("messages", [
+      {
+        id: "out-question",
+        workspace_id: WORKSPACE,
+        conversation_id: conversation(h.db).id,
+        direction: "outbound",
+        source: "agent",
+        body: ourQuestion,
+        created_at: new Date(NOW.getTime() + 60_000).toISOString(),
+      },
+    ]);
+    vi.setSystemTime(new Date(NOW.getTime() + 120_000));
+    if (read) readMock.mockResolvedValue(read);
+    draftMock.mockClear();
+    await handleInboundMessage(h.ctx, h.queues, { ...inboundJob("Yes", "msg_2"), receivedAt: new Date(NOW.getTime() + 120_000).toISOString() });
+    return { ...h, input: draftMock.mock.calls.at(-1)?.[1] as Record<string, any> };
+  }
+
+  it("never pitches or sends a link for a one-word answer to a question that offered nothing", async () => {
+    const { input } = await afterOurQuestion();
+    expect(input.move).toMatchObject({ pitch: false, link: false, slots: false });
+    expect(input.rules.bookingLink).toBeUndefined();
+    expect(input.history.at(-1).text).toBe(ourQuestion);
+  });
+
+  it("hands the writer what the conversation says, and holds the pitch when the problem is already solved", async () => {
+    const read = {
+      theirSituation: ["Their onboarding documents live in Odoo"],
+      toolsTheyUse: [{ name: "Odoo", whatItCovers: "An ERP suite with documents and CRM.", whereItFallsShort: null }],
+      problemStatus: "already_solved",
+      lastMessageMeans: "Odoo already hosts the documents.",
+      askedForNextStep: false,
+      bestNextMove: "Ask what still takes manual work around Odoo.",
+    };
+    const { input } = await afterOurQuestion(read);
+    expect(input.read).toEqual(read);
+    expect(input.move).toMatchObject({ pitch: false, link: false });
+    expect(input.move.guidance).toMatch(/already handled/);
+  });
+});
+
+describe("the history a reply is written from", () => {
+  it("is the latest forty messages, in order, not the oldest", async () => {
+    const h = harness();
+    await handleInboundMessage(h.ctx, h.queues, inboundJob("Hello"));
+    const conv = conversation(h.db).id;
+    h.db.seed(
+      "messages",
+      Array.from({ length: 50 }, (_, i) => ({
+        id: `old-${i}`,
+        workspace_id: WORKSPACE,
+        conversation_id: conv,
+        direction: i % 2 ? "inbound" : "outbound",
+        source: "agent",
+        body: `turn ${i}`,
+        created_at: new Date(NOW.getTime() + (i + 1) * 60_000).toISOString(),
+      })),
+    );
+    vi.setSystemTime(new Date(NOW.getTime() + 3 * 3_600_000));
+    draftMock.mockClear();
+    await handleInboundMessage(h.ctx, h.queues, { ...inboundJob("And one more thing", "msg_9"), receivedAt: new Date(NOW.getTime() + 3 * 3_600_000).toISOString() });
+    const history = (draftMock.mock.calls.at(-1)?.[1] as { history: Array<{ text: string }> }).history;
+    expect(history.at(-1)?.text).toBe("turn 49");
+    expect(history.map((t) => t.text)).not.toContain("turn 0");
   });
 });

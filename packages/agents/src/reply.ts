@@ -17,6 +17,7 @@ import {
 } from "@le/shared";
 import { callStructured, type AgentContext } from "./client.js";
 import { renderKnowledge } from "./knowledge.js";
+import { renderRead, type ConversationRead } from "./conversation-read.js";
 import {
   CLASSIFY_PROMPT_VERSION,
   CLASSIFY_SYSTEM,
@@ -229,6 +230,13 @@ export interface DraftInput {
    * question here never overrides a prospect asking for a human.
    */
   qualification?: Array<{ ask: string; required: boolean }>;
+  /**
+   * The conversation read before this reply (`readConversation`): what they
+   * have told us, the tools they use, and whether the problem is theirs.
+   * Absent when the read failed; the reply is then written from the history
+   * alone, as it always was.
+   */
+  read?: ConversationRead;
 }
 
 /** Agent 3, step two: write the reply. */
@@ -302,6 +310,7 @@ export async function draftReply(ctx: AgentContext, input: DraftInput): Promise<
       system: [{ text: stableContext, cached: true }],
       userContent: [
         `Conversation so far:\n${renderHistory(input.history)}`,
+        input.read ? `\n${renderRead(input.read)}` : "",
         `\nThe prospect just wrote:\n"""\n${input.message}\n"""`,
         `\nThe move for this message: ${move.guidance}`,
         `\n${nextStep}`,

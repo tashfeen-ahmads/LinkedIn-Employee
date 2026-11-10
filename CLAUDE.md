@@ -1902,6 +1902,18 @@ tests that were verified by deliberately breaking the code.
     `writeHooks` at seeding, and `repairSeededLines` replaces rows still
     holding the old seeded text, unapproved and agent-written only.
 
+    **The conversation is read before every reply** (`readConversation`,
+    `packages/agents/src/conversation-read.ts`): what they have told us, the
+    tools they use and what those generally cover, whether the problem the
+    offer solves is theirs, and what their last message means. A prospect who
+    said Odoo already holds their documents, then answered "Yes" to our
+    question about it, was pitched exactly that problem with a booking link.
+    The writer is handed the read; `alreadySolved` and a bare yes/no (which
+    answers our last question, `BARE_ANSWER`) narrow the move in code, so no
+    pitch or link reaches somebody whose problem is handled unless they ask.
+    A read that fails leaves the reply as it was. History is the latest forty
+    messages, never the oldest.
+
     **The first message is written for the person who accepted.** Step 1 was
     one template for everybody, so every acceptance read the same sentence.
     `writeFirstMessages` (`apps/worker/src/jobs/first-message.ts`) runs in the

@@ -1,7 +1,7 @@
 import { MESSAGE_MAX_CHARS, VOICE_RULES } from "@le/shared";
 
-export const CLASSIFY_PROMPT_VERSION = "reply.classify/2026-10-19-intents";
-export const DRAFT_PROMPT_VERSION = "reply.draft/2026-10-19-human";
+export const CLASSIFY_PROMPT_VERSION = "reply.classify/2026-11-10-answers";
+export const DRAFT_PROMPT_VERSION = "reply.draft/2026-11-10-context";
 
 export const CLASSIFY_SYSTEM = `You read one inbound LinkedIn message from a prospect and classify it so the system knows whether an AI may answer or a human must.
 
@@ -28,6 +28,10 @@ Intent is what they want to happen next, not how polite they are. Read the whole
 
 When a message both answers a question and says they will look at it later, it is not_now. Choose interested only when they are asking for the next step themselves.
 
+A short answer ("Yes", "No", "Correct", "We do") answers the question we last asked, and means what that question meant. "Yes" to "Is X already handling this for you?" says the need is covered: that is objection, never interested. "Yes" is interested only when our question offered the next step ("Want me to send it over?").
+
+Telling us the tool or process they already use ("we are on Odoo", "we use HubSpot for that") is objection when it covers what we offer, and other when it does not say.
+
 Set optOut true only for an unambiguous request to stop being contacted. "Not right now" is not an opt-out; it is not_now.
 
 For not_now, set followUpAfterDays from what the message actually says (for example "circle back in Q2" near the end of Q1 means about 60 days). Leave it unset if the message gives no signal.`;
@@ -39,6 +43,7 @@ ${VOICE_RULES}
 What a reply is:
 - One to three short sentences. Usually shorter than their message. Under ${MESSAGE_MAX_CHARS.reply} characters, not counting a link.
 - Respond to what they actually said first. If they asked something, answer it. If they told you something, react to it like a person would, without summarising it back.
+- Read the whole conversation, not only the last message. Never pitch a problem they have told you is already solved, and never ignore a tool or system they named. When they use a tool, talk about it the way someone who knows it would: where your offer fits alongside it, or the work it usually still leaves, asked as a question rather than claimed. Use only widely known facts about that tool, never its prices.
 - Follow the move you are given for this message exactly. It decides whether you may pitch, send a link or offer times. When it says no pitch, do not describe the product at all.
 - Only state facts present in the business profile or knowledge base below. If you cannot answer from that material, say you will check and come back, and list the question in unansweredQuestions.
 - Never invent numbers, customer names, case studies, dates, or capabilities.
