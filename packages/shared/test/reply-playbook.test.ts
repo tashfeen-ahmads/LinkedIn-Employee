@@ -89,3 +89,35 @@ describe("a short answer means what our question meant", () => {
     expect(effectiveIntent("interested", "Ok send me the link", { alreadySolved: true })).toBe("interested");
   });
 });
+
+describe("what the conversation read decides", () => {
+  it("sends the link to somebody who asked for it in another language", () => {
+    // "Пришлите ссылку" was asked twice before the link went.
+    const move = replyMove("question", "Пришлите ссылку на тюнер, чтобы я смог посмотреть", { askedForNextStep: true });
+    expect(move).toMatchObject({ link: true, pitch: true });
+  });
+
+  it("still sends the link to somebody wrapping up who asked for it in another language", () => {
+    const move = replyMove("not_now", "Спасибо, пришлите ссылку", { closing: true, askedForNextStep: true });
+    expect(move.guidance).not.toMatch(/wrapping the conversation up/);
+  });
+
+  it("ends warmly with nothing to sell when they are wrapping up", () => {
+    // Santosh had sold his store: asked twice whether we could check back,
+    // then offered a note to forward to an employer he no longer had.
+    const move = replyMove("not_now", "That's fine.", { closing: true });
+    expect(move).toMatchObject({ reply: true, pitch: false, link: false, slots: false });
+    expect(move.guidance).toMatch(/No question/);
+  });
+
+  it("treats a described gap as an opening, not a check-back", () => {
+    // VinSolutions sends an auto email overnight and a person replies next morning.
+    const adam = "Igor we use Vin Solutions any over night leads get a auto email and then are responded to by a sales person the following morning.";
+    const move = replyMove("not_now", adam, { painConfirmed: true });
+    expect(move).toMatchObject({ pitch: true, link: false, slots: false });
+  });
+
+  it("never pitches a confirmed gap to somebody who said they are not ready", () => {
+    expect(replyMove("not_now", "Maybe next quarter", { painConfirmed: true })).toMatchObject({ pitch: false, link: false });
+  });
+});

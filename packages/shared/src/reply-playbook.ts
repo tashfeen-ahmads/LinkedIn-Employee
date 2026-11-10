@@ -63,6 +63,12 @@ const BARE_ANSWER = /^\s*(yes|yeah|yep|yup|ya|yes sir|correct|right|exactly|true
 export interface ConversationFacts {
   /** The problem the offer solves is already handled for them, by their own account. */
   alreadySolved?: boolean;
+  /** They described the problem the offer solves (a gap, a delay, a manual step) as theirs. */
+  painConfirmed?: boolean;
+  /** They asked for the next step themselves, read in any language (the words below are English only). */
+  askedForNextStep?: boolean;
+  /** They are politely ending the conversation and nothing is left to answer. */
+  closing?: boolean;
   /** Our last message to them, which a short answer is an answer to. */
   lastRepMessage?: string;
 }
@@ -73,11 +79,16 @@ export interface ConversationFacts {
  * for the next step themselves.
  */
 export function effectiveIntent(intent: ReplyIntent, message: string, facts: ConversationFacts = {}): ReplyIntent {
+  // They asked for it, in whatever language: "пришлите ссылку" twice before
+  // the link went, because the words above are English.
+  if (facts.askedForNextStep && !NOT_READY.test(message) && (intent === "question" || intent === "other")) {
+    return "interested";
+  }
   if (BARE_ANSWER.test(message) && intent === "interested") {
     const offeredNextStep = Boolean(facts.lastRepMessage && ASKS_FOR_NEXT_STEP.test(facts.lastRepMessage));
     if (!offeredNextStep) return facts.alreadySolved ? "objection" : "other";
   }
-  if (ASKS_FOR_NEXT_STEP.test(message) && !NOT_READY.test(message)) return intent;
+  if ((ASKS_FOR_NEXT_STEP.test(message) || facts.askedForNextStep) && !NOT_READY.test(message)) return intent;
   const softened = intent === "interested" || intent === "question" || intent === "other";
   if (!softened) return intent;
   if (NOT_READY.test(message)) return "not_now";
@@ -94,7 +105,33 @@ export function replyMove(
   context: { linkAlreadySent?: boolean } & ConversationFacts = {},
 ): ReplyMove {
   const intent = effectiveIntent(classified, message, context);
-  const asked = ASKS_FOR_NEXT_STEP.test(message);
+  const asked = ASKS_FOR_NEXT_STEP.test(message) || context.askedForNextStep === true;
+  // Politely ending it, with nothing asked: one warm line, nothing to sell.
+  // A prospect who had sold his store was asked twice whether we could check
+  // back, then offered a note to forward to an employer he no longer had.
+  if (context.closing && !asked && intent !== "question" && intent !== "referral") {
+    return {
+      reply: true,
+      pitch: false,
+      link: false,
+      slots: false,
+      guidance:
+        "They are wrapping the conversation up. One short, warm line that fits what they said. No question, no pitch, no link, nothing to forward, and do not ask again anything you already asked.",
+    };
+  }
+  // They told us how they handle it today and it leaves the gap the offer
+  // closes: an opening, not a "check back later". Name the gap, say in one
+  // sentence how you help, and ask whether it is worth a look. No link yet.
+  if (context.painConfirmed && !context.alreadySolved && !asked && (intent === "other" || intent === "not_now") && !NOT_READY.test(message)) {
+    return {
+      reply: true,
+      pitch: true,
+      link: false,
+      slots: false,
+      guidance:
+        "What they described leaves the gap your offer closes. Acknowledge their setup in a few words, point to that one gap as a question or a plain observation, say in one sentence how you help using the approved offer, and ask if it is worth a look. No link and no times until they say yes.",
+    };
+  }
   // "I'll check your calendar and get back to you" after the link went out is
   // a yes that needs nothing more. Sending the pitch and the link again is
   // what turned a warm prospect's polite answer into a second advert.
@@ -146,7 +183,7 @@ export function replyMove(
         link: false,
         slots: false,
         guidance:
-          "They are not ready. Respect that. No pitch, no feature, no link, no times. Either ask whether it is all right to check back at a sensible time, or ask one small question about what would need to change. If someone else has to be convinced (an owner, a boss), offer a two-line summary they could forward, or ask what that person will care about most.",
+          "They are not ready. Respect that. No pitch, no feature, no link, no times. Ask once whether it is timing or fit, or whether you may check back in a named month that fits what they said. If someone else decides (an owner, a head office), ask who that is or what they will care about most. Never ask anything you already asked, and never offer something that does not fit their situation.",
       };
     case "referral":
       return {
@@ -155,7 +192,7 @@ export function replyMove(
         link: false,
         slots: false,
         guidance:
-          "They pointed you to someone else. Thank them briefly and ask the best way to reach that person, or whether they would mind making an introduction. No pitch.",
+          "They pointed you to someone else. Thank them briefly, and ask whether it is fine to mention they suggested it, or the best way to reach that person. If they pointed to themselves, treat it as their answer. No pitch.",
       };
     case "not_interested":
       return {

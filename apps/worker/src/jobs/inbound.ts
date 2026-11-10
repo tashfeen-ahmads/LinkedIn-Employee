@@ -29,7 +29,7 @@ import { recordEvent } from "../context.js";
 import { flagForHuman } from "../holds.js";
 import { enqueueOnce, jobId } from "../queues.js";
 import type { InboundMessageJob, Queues } from "../queues.js";
-import { ensureConversation } from "./linkedin-action.js";
+import { ensureConversation, newerInboundExists } from "./linkedin-action.js";
 import { offerSlots, resolveCalendar, type CalendarBinding } from "../calendar.js";
 import { syncConversationToCrm, syncMeetingToCrm } from "../crm.js";
 import { bookAcceptedSlot } from "./booking.js";
@@ -180,6 +180,27 @@ export async function handleInboundMessage(
       prospectId: prospect.id,
       conversationId: conversation.id,
       reason: "opt-out phrase detected",
+    });
+    return;
+  }
+
+  /*
+   * A newer message from them is the one to answer.
+   *
+   * People write in bursts: "I'm not sure", then "what you mean" eight
+   * seconds later. Each message was answered on its own, minutes apart, the
+   * second reply contradicting the first, and one prospect was asked the same
+   * question three times while he had already moved on. The latest message's
+   * own run answers with every earlier one in its history, so an older one
+   * stops here.
+   */
+  if (await newerInboundExists(ctx, conversation.id, job.receivedAt)) {
+    await recordEvent(db, {
+      workspaceId: job.workspaceId,
+      name: "reply.superseded",
+      subjectType: "conversation",
+      subjectId: conversation.id,
+      payload: { reason: "a newer message from the prospect will be answered instead" },
     });
     return;
   }
@@ -428,6 +449,9 @@ export async function handleInboundMessage(
     // Solved by their own account, and they have not asked for the next step
     // since: no pitch, no link, whatever the classifier made of the words.
     alreadySolved: read?.problemStatus === "already_solved" && read.askedForNextStep !== true,
+    painConfirmed: read?.problemStatus === "confirmed",
+    askedForNextStep: read?.askedForNextStep === true,
+    closing: read?.conversationState === "closing",
     lastRepMessage,
   };
   // The words win over a warm misreading: "when I can convince the owner" is
@@ -651,10 +675,17 @@ export async function handleInboundMessage(
       queues.linkedinAction,
       "reply",
       { kind: "reply", workspaceId: job.workspaceId, conversationId: conversation.id, draftId: saved.id as string },
-      { jobId: jobId("reply", saved.id as string) },
+      // A short pause before a machine-written reply leaves, so a burst of
+      // messages gets one answer: a newer one supersedes this draft at send.
+      { jobId: jobId("reply", saved.id as string), delay: REPLY_SETTLE_MS },
     );
   }
 }
+
+/** How long a machine-written reply waits for the prospect to finish typing. */
+export const REPLY_SETTLE_MS = 75_000;
+
+
 
 /**
  * The prospect a message came from.

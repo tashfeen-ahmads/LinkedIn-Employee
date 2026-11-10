@@ -396,6 +396,8 @@ export class RecordingLlm implements LlmClient {
           problemStatus: "confirmed",
           lastMessageMeans: "They want to know how it would work for them.",
           askedForNextStep: true,
+          language: "English",
+          conversationState: "open",
           bestNextMove: "Say what it is for them and offer the next step.",
         };
       case "comment": {

@@ -3,7 +3,7 @@ import type { BusinessProfile, CustomerProfile } from "@le/shared";
 import { callStructured, type AgentContext } from "./client.js";
 import type { ConversationTurn } from "./reply.js";
 
-export const READ_PROMPT_VERSION = "reply.read/2026-11-10";
+export const READ_PROMPT_VERSION = "reply.read/2026-11-10-state";
 
 /**
  * What a good rep knows before answering, read from the whole conversation.
@@ -49,7 +49,15 @@ export const ConversationReadSchema = z.object({
   lastMessageMeans: z
     .string()
     .describe("What their latest message means in context. A one-word answer means what our question meant."),
-  askedForNextStep: z.boolean().describe("True only if they themselves asked to talk, see it, book, or get a link."),
+  askedForNextStep: z
+    .boolean()
+    .describe("True only if they themselves asked, in any language, to talk, see it, book, or get the link."),
+  language: z.string().describe("The language their latest message is written in, in English, e.g. English, Russian, Spanish."),
+  conversationState: z
+    .enum(["open", "closing"])
+    .describe(
+      "closing: they are politely wrapping up (thanks, no need, keep in touch, that's fine) and there is nothing left to answer. open: anything else.",
+    ),
   bestNextMove: z
     .string()
     .describe("One sentence: what a skilled human rep would do next, given all of the above."),
@@ -64,6 +72,9 @@ Read every message, ours and theirs, in order. Then:
 - Decide whether the problem our offer addresses is theirs. If they said it is already handled, that is already_solved, even if they were polite about it.
 - Say what their latest message means in context. A short answer such as "Yes" or "No" answers the question we asked: "Yes" to "Is X already handling this?" means it is handled, not that they want to buy.
 - askedForNextStep is true only when they asked, in their own words, to talk, see it, book, or get a link.
+- When they describe how they handle it today, look for the gap a buyer would care about (a delay, a manual step, something left until the next morning). If there is one, the problem is confirmed, even if they did not call it a problem.
+- conversationState is closing when they are politely ending it (thanks, all good, keep in touch, that's fine) with nothing left to answer. Then the right move is one warm line and no new question.
+- Note every question we have already asked. The next reply must never ask one of them again.
 - Say, in one sentence, what a skilled human rep would do next. Never "pitch and send the link" to somebody whose problem is already solved.`;
 
 export async function readConversation(
@@ -113,6 +124,10 @@ export function renderRead(read: ConversationRead): string {
     );
   }
   lines.push(`- Their latest message means: ${read.lastMessageMeans}`);
+  lines.push(`- They wrote in ${read.language}. Reply in ${read.language}.`);
+  if (read.conversationState === "closing") {
+    lines.push("- They are wrapping the conversation up. One short warm line, no question, no pitch, nothing to forward.");
+  }
   if (read.problemStatus === "already_solved") {
     lines.push("- They have told you the problem your offer solves is already handled. Do not pitch it.");
   }

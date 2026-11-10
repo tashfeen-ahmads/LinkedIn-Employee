@@ -329,16 +329,21 @@ export async function draftReply(ctx: AgentContext, input: DraftInput): Promise<
    * reads like a model after one rewrite carries its problems out, and the
    * worker holds it for a person rather than sending it under a real name.
    */
+  // Everything we have already said here: a question in it is never asked again.
+  const ourEarlierMessages = input.history.filter((turn) => turn.role === "rep").map((turn) => turn.text);
   const first = await ask();
   const tidied = { ...first, message: tidyVoice(first.message) };
-  const firstProblems = voiceProblems(tidied.message, "reply", { theirMessage: input.message });
+  const firstProblems = voiceProblems(tidied.message, "reply", { theirMessage: input.message, ourEarlierMessages });
   if (!firstProblems.length) return { ...tidied, voiceProblems: [] };
 
   const second = await ask(
     `${rewriteInstruction(firstProblems)}\n\nYour last version was:\n"""\n${first.message}\n"""`,
   );
   const retidied = { ...second, message: tidyVoice(second.message) };
-  return { ...retidied, voiceProblems: voiceProblems(retidied.message, "reply", { theirMessage: input.message }) };
+  return {
+    ...retidied,
+    voiceProblems: voiceProblems(retidied.message, "reply", { theirMessage: input.message, ourEarlierMessages }),
+  };
 }
 
 function renderHistory(history: ConversationTurn[]): string {

@@ -131,9 +131,44 @@ function mirrors(text: string, theirs: string): boolean {
   return false;
 }
 
+/** Words of any script, for comparing two sentences. */
+function anyWords(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}' ]+/gu, " ")
+    .split(/\s+/)
+    .filter((w) => w.length > 2);
+}
+
+/**
+ * The question in this reply, if we have already asked it in this
+ * conversation. One prospect was asked "which city in SE Asia are you based
+ * in now?" three times in twenty minutes, and another whether we could check
+ * back, twice in a row.
+ */
+export function repeatedQuestion(text: string, earlier: readonly string[]): string | null {
+  const asked = text.split(/(?<=[.?!])\s+/).filter((sentence) => sentence.trim().endsWith("?"));
+  for (const question of asked) {
+    const mine = new Set(anyWords(question));
+    if (mine.size < 3) continue;
+    for (const before of earlier) {
+      for (const theirs of before.split(/(?<=[.?!])\s+/).filter((sentence) => sentence.trim().endsWith("?"))) {
+        const other = new Set(anyWords(theirs));
+        if (other.size < 3) continue;
+        let shared = 0;
+        for (const word of mine) if (other.has(word)) shared++;
+        if (shared / Math.min(mine.size, other.size) >= 0.6) return theirs.trim();
+      }
+    }
+  }
+  return null;
+}
+
 export interface VoiceOptions {
   /** What the prospect just wrote, for a reply: never read back to them. */
   theirMessage?: string;
+  /** Everything we have already said in this conversation: a question in it is never asked again. */
+  ourEarlierMessages?: readonly string[];
   /**
    * A campaign's template, filled per person at send time, so the step
    * placeholders are allowed. A note written for one named person has none.
@@ -404,6 +439,10 @@ export function voiceProblems(text: string, kind: MessageKind, options: VoiceOpt
 
   if (options.theirMessage && mirrors(body, options.theirMessage)) {
     problems.push("It repeats their own words back to them. Respond instead of summarising.");
+  }
+  const again = options.ourEarlierMessages ? repeatedQuestion(body, options.ourEarlierMessages) : null;
+  if (again) {
+    problems.push(`It asks again what you already asked earlier ("${again}"). Build on their answer, ask something new, or ask nothing.`);
   }
 
   // Campaign copy always: nothing given means nothing exists to send. A reply

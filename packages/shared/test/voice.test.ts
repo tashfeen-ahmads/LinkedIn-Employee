@@ -137,3 +137,18 @@ describe("tidyVoice", () => {
     expect(tidyVoice("Keep the one-page note")).toBe("Keep the one-page note");
   });
 });
+
+describe("repeatedQuestion", () => {
+  it("catches a question we already asked, in any language", async () => {
+    const { repeatedQuestion, voiceProblems } = await import("../src/voice.js");
+    const earlier = ["Studio City is a great spot. Which city in SE Asia are you based in now?"];
+    expect(repeatedQuestion("Haha, getting there. Which city in SE Asia are you based in now?", earlier)).toBeTruthy();
+    expect(voiceProblems("Glad you liked it. Which city in SE Asia are you based in now?", "reply", { ourEarlierMessages: earlier }).join(" ")).toMatch(/already asked/);
+    expect(repeatedQuestion("Что отвлекло вас больше всего на главной странице?", ["Что отвлекло вас больше всего на главной странице?"])).toBeTruthy();
+  });
+
+  it("lets a new question through", async () => {
+    const { repeatedQuestion } = await import("../src/voice.js");
+    expect(repeatedQuestion("What does your team do with leads that come in at night?", ["Who decides about outside tools?"])).toBeNull();
+  });
+});

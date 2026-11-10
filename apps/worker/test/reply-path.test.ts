@@ -1301,6 +1301,8 @@ describe("a reply written from the whole conversation", () => {
       problemStatus: "already_solved",
       lastMessageMeans: "Odoo already hosts the documents.",
       askedForNextStep: false,
+      language: "English",
+      conversationState: "open",
       bestNextMove: "Ask what still takes manual work around Odoo.",
     };
     const { input } = await afterOurQuestion(read);
@@ -1333,5 +1335,79 @@ describe("the history a reply is written from", () => {
     const history = (draftMock.mock.calls.at(-1)?.[1] as { history: Array<{ text: string }> }).history;
     expect(history.at(-1)?.text).toBe("turn 49");
     expect(history.map((t) => t.text)).not.toContain("turn 0");
+  });
+});
+
+describe("a burst of messages from one prospect", () => {
+  // "I'm not sure", then "what you mean" eight seconds later: each was answered
+  // on its own, minutes apart, and one prospect was asked the same question
+  // three times while he had already moved on.
+  it("answers only the latest: an older message with a newer one after it gets no draft", async () => {
+    const h = harness();
+    await handleInboundMessage(h.ctx, h.queues, inboundJob("Hello"));
+    const conv = conversation(h.db).id;
+    h.db.seed("messages", [
+      {
+        id: "newer",
+        workspace_id: WORKSPACE,
+        conversation_id: conv,
+        direction: "inbound",
+        source: "human",
+        body: "what you mean",
+        provider_message_id: "msg_newer",
+        sent_at: new Date(NOW.getTime() + 120_000).toISOString(),
+        created_at: new Date(NOW.getTime() + 120_000).toISOString(),
+      },
+    ]);
+    draftMock.mockClear();
+    await handleInboundMessage(h.ctx, h.queues, { ...inboundJob("I'm not sure", "msg_older"), receivedAt: new Date(NOW.getTime() + 60_000).toISOString() });
+    expect(draftMock).not.toHaveBeenCalled();
+    expect(h.db.rows("events").some((e) => e.name === "reply.superseded")).toBe(true);
+  });
+
+  it("waits a moment before an automatic reply leaves, and drops it if they wrote again", async () => {
+    const h = harness();
+    await handleInboundMessage(h.ctx, h.queues, inboundJob("Sounds interesting"));
+    const job = replyJobs(h.log)[0]!;
+    const draft = h.db.rows("reply_drafts")[0]!;
+    expect(draft.status).toBe("approved");
+    h.db.seed("messages", [
+      {
+        id: "later",
+        workspace_id: WORKSPACE,
+        conversation_id: conversation(h.db).id,
+        direction: "inbound",
+        source: "human",
+        body: "Actually, one more thing",
+        provider_message_id: "msg_later",
+        sent_at: new Date(NOW.getTime() + 30_000).toISOString(),
+        created_at: new Date(NOW.getTime() + 30_000).toISOString(),
+      },
+    ]);
+    await runLinkedInAction(h.ctx, job.data as never);
+    expect(h.linkedin.sentMessages).toHaveLength(0);
+    expect(h.db.rows("reply_drafts")[0]?.status).toBe("superseded");
+  });
+
+  it("still sends a reply a person approved, as they approved it", async () => {
+    const h = harness();
+    await handleInboundMessage(h.ctx, h.queues, inboundJob("Sounds interesting"));
+    const job = replyJobs(h.log)[0]!;
+    h.db.rows("reply_drafts")[0]!.resolved_by = USER;
+    h.db.seed("messages", [
+      {
+        id: "later",
+        workspace_id: WORKSPACE,
+        conversation_id: conversation(h.db).id,
+        direction: "inbound",
+        source: "human",
+        body: "Actually, one more thing",
+        provider_message_id: "msg_later",
+        sent_at: new Date(NOW.getTime() + 30_000).toISOString(),
+        created_at: new Date(NOW.getTime() + 30_000).toISOString(),
+      },
+    ]);
+    await runLinkedInAction(h.ctx, job.data as never);
+    expect(h.linkedin.sentMessages).toHaveLength(1);
   });
 });

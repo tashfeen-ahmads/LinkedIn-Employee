@@ -378,6 +378,8 @@ describe("the conversation read reaches the writer", () => {
         problemStatus: "already_solved",
         lastMessageMeans: "Odoo already hosts the documents.",
         askedForNextStep: false,
+        language: "English",
+        conversationState: "open",
         bestNextMove: "Ask what still takes manual work around Odoo.",
       },
     });
@@ -386,5 +388,6 @@ describe("the conversation read reaches the writer", () => {
     expect(prompt).toContain("They use Odoo");
     expect(prompt).toContain("Outreach still runs by hand.");
     expect(prompt).toContain("already handled. Do not pitch it");
+    expect(prompt).toContain("Reply in English");
   });
 });

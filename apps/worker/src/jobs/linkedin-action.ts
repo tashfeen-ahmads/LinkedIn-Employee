@@ -1007,6 +1007,20 @@ export async function runLinkedInAction(ctx: WorkerContext, job: LinkedInActionJ
   });
 }
 
+/** Whether the prospect has written again since `since` in this conversation. */
+export async function newerInboundExists(ctx: WorkerContext, conversationId: string, since: string): Promise<boolean> {
+  const { data, error } = await ctx.db
+    .from("messages")
+    .select("id")
+    .eq("conversation_id", conversationId)
+    .eq("direction", "inbound")
+    .gt("sent_at", since)
+    .limit(1);
+  // A read that failed is not evidence of a newer message: answer this one.
+  if (error) return false;
+  return Boolean(data?.length);
+}
+
 /** Sends a draft a human approved in the inbox. */
 async function sendApprovedReply(
   ctx: WorkerContext,
@@ -1015,10 +1029,33 @@ async function sendApprovedReply(
   const { db } = ctx;
   const { data: draft } = await db
     .from("reply_drafts")
-    .select("id, workspace_id, conversation_id, body, prompt_version, status, resolved_by")
+    .select("id, workspace_id, conversation_id, body, prompt_version, status, resolved_by, in_reply_to")
     .eq("id", job.draftId)
     .single();
   if (!draft || draft.status !== "approved") return;
+
+  /*
+   * A machine-written reply to a message the prospect has since followed up.
+   *
+   * It was written before they wrote again, so it answers a conversation that
+   * has moved on; the newer message is answered with this one in its history.
+   * A reply a person approved goes as they approved it.
+   */
+  if (!draft.resolved_by && draft.in_reply_to) {
+    const { data: answered } = await db
+      .from("messages")
+      .select("sent_at")
+      .eq("id", draft.in_reply_to)
+      .maybeSingle();
+    if (answered?.sent_at && (await newerInboundExists(ctx, draft.conversation_id, answered.sent_at as string))) {
+      await db
+        .from("reply_drafts")
+        .update({ status: "superseded", resolved_at: new Date().toISOString() })
+        .eq("id", draft.id)
+        .eq("status", "approved");
+      return;
+    }
+  }
 
   const { data: conversation } = await db
     .from("conversations")

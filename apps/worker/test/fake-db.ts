@@ -4,7 +4,7 @@ import type { Db } from "@le/db";
 type Row = Record<string, unknown>;
 
 interface Filter {
-  kind: "eq" | "neq" | "in" | "not-in" | "is" | "lt" | "lte" | "gte" | "ilike";
+  kind: "eq" | "neq" | "in" | "not-in" | "is" | "lt" | "lte" | "gt" | "gte" | "ilike";
   column: string;
   value: unknown;
 }
@@ -251,6 +251,11 @@ class QueryBuilder implements PromiseLike<{ data: Row[] | null; error: null | { 
     return this;
   }
 
+  gt(column: string, value: unknown): this {
+    this.filters.push({ kind: "gt", column, value });
+    return this;
+  }
+
   gte(column: string, value: unknown): this {
     this.filters.push({ kind: "gte", column, value });
     return this;
@@ -423,6 +428,8 @@ function matches(row: Row, filter: Filter): boolean {
       return value !== null && value !== undefined && String(value) < String(filter.value);
     case "lte":
       return value !== null && value !== undefined && String(value) <= String(filter.value);
+    case "gt":
+      return value !== null && value !== undefined && String(value) > String(filter.value);
     case "gte":
       return value !== null && value !== undefined && String(value) >= String(filter.value);
     default:
