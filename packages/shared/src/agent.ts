@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { MODEL_PRICING } from "./pricing.js";
+import { MODEL_PRICING, RETIRED_MODELS } from "./pricing.js";
 import { MERGE_FIELDS } from "./merge-fields.js";
 
 /**
@@ -27,11 +27,15 @@ import { MERGE_FIELDS } from "./merge-fields.js";
  * could otherwise be run on a model whose spend no screen can report — and
  * "free" is the one wrong answer about cost that nobody investigates.
  */
-export const SELECTABLE_MODELS = Object.keys(MODEL_PRICING);
+export const SELECTABLE_MODELS = Object.keys(MODEL_PRICING).filter((model) => !RETIRED_MODELS.has(model));
 
-/** Whether this string is a model this deployment can price, and therefore run. */
+/**
+ * Whether this string is a model this deployment can price and still run. A
+ * retired model is priced (its past calls have a cost) and never selectable:
+ * an agent left on one falls back to the deployment's own model.
+ */
 export function isSelectableModel(model: string | null | undefined): boolean {
-  return typeof model === "string" && model in MODEL_PRICING;
+  return typeof model === "string" && model in MODEL_PRICING && !RETIRED_MODELS.has(model);
 }
 
 /**
@@ -172,7 +176,9 @@ export type Agent = z.infer<typeof AgentSchema>;
 export function blankAgent(repName: string | null): Agent {
   return {
     name: "New agent",
-    model: SELECTABLE_MODELS[0] ?? null,
+    // Automatic: the deployment's own model, which moves when a model is
+    // retired. A model written onto a new agent stays there after it dies.
+    model: null,
     systemPrompt:
       "Write like one person messaging another on LinkedIn. Short sentences, no marketing language, " +
       "no exclamation marks, and never more than you would actually type on a phone. " +

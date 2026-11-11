@@ -21,11 +21,22 @@ export interface ModelPrice {
 }
 
 export const MODEL_PRICING: Record<string, ModelPrice> = {
+  "gpt-5.6-luna": { input: 0.2, output: 1.2, cacheRead: 0.02 },
+  "gpt-5.6-terra": { input: 2, output: 12, cacheRead: 0.2 },
+  // Retired: kept so the calls already made on them keep their cost.
   "gpt-5": { input: 1.25, output: 10, cacheRead: 0.125 },
   "gpt-5-mini": { input: 0.25, output: 2, cacheRead: 0.025 },
   "claude-opus-5": { input: 15, output: 75, cacheRead: 1.5 },
   "claude-haiku-4-5": { input: 1, output: 5, cacheRead: 0.1 },
 };
+
+/**
+ * Models still priced, because calls were made on them, and never offered or
+ * called again. OpenAI ends API access to GPT-5, GPT-5 mini, GPT-5 nano,
+ * GPT-5 pro, o3 and o3-pro on 11 December 2026; an agent left on one of them
+ * would have every message refused from that day.
+ */
+export const RETIRED_MODELS: ReadonlySet<string> = new Set(["gpt-5", "gpt-5-mini", "gpt-5-nano", "gpt-5-pro", "o3", "o3-pro"]);
 
 const PER_MILLION = 1_000_000;
 

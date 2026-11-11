@@ -78,10 +78,10 @@ OAuth client whose authorized redirect URI is
 
 ### 3. OpenAI key — 5 minutes
 
-`platform.openai.com` → API keys. Both agent roles run on `gpt-5-mini`
-(`MODELS` in `packages/shared/src/constants.ts`) — a deliberate cost choice,
-since gpt-5's output costs five times as much and the first campaigns are
-reviewed by a human before anything sends.
+`platform.openai.com` → API keys. Both agent roles run on `gpt-5.6-luna`
+(`MODELS` in `packages/shared/src/constants.ts`), the low-cost model of the
+5.6 series. It replaced `gpt-5-mini`, which OpenAI retires on 11 December
+2026. `OPENAI_MODEL` on the worker overrides both roles without a code deploy.
 
 > Check the prices in `packages/shared/src/pricing.ts` against the published
 > rates before quoting anyone a cost per meeting. They are the one thing in this

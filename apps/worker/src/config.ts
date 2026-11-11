@@ -33,6 +33,12 @@ const EnvSchema = z.object({
   OPENAI_API_KEY: z.string().min(1).optional(),
   ANTHROPIC_API_KEY: z.string().min(1).optional(),
   LLM_PROVIDER: z.enum(["openai", "anthropic"]).optional(),
+  /**
+   * The OpenAI model for both roles, over the one in `MODELS`. For the day a
+   * model is retired or refused: changed on the host, it takes effect at the
+   * next restart without a code deploy.
+   */
+  OPENAI_MODEL: z.string().min(1).optional(),
   NODE_ENV: z.string().optional(),
   /**
    * The job queue. Everything this worker does that is not a webhook goes

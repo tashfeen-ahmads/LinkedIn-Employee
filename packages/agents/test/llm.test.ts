@@ -109,7 +109,25 @@ describe("createLlmClient", () => {
   });
 
   it("names the models each provider actually calls", () => {
-    expect(createLlmClient({ OPENAI_API_KEY: "sk-test" }).models.writer).toBe("gpt-5-mini");
+    expect(createLlmClient({ OPENAI_API_KEY: "sk-test" }).models.writer).toBe("gpt-5.6-luna");
+    // The host can move both roles without a code deploy.
+    expect(createLlmClient({ OPENAI_API_KEY: "sk-test", OPENAI_MODEL: "gpt-5.6-terra" }).models).toEqual({
+      writer: "gpt-5.6-terra",
+      classifier: "gpt-5.6-terra",
+    });
     expect(createLlmClient({ ANTHROPIC_API_KEY: "sk-ant" }).models.classifier).toBe("claude-haiku-4-5");
+  });
+});
+
+describe("openAiEffort", () => {
+  it("never sends 'minimal' to a model that does not take it", async () => {
+    // GPT-5.6 Luna takes none, low, medium, high and up: "minimal" on every
+    // classification would be refused and replies would stop.
+    const { openAiEffort } = await import("../src/llm.js");
+    expect(openAiEffort("minimal", "gpt-5.6-luna")).toBe("low");
+    expect(openAiEffort("minimal", "gpt-5-mini")).toBe("minimal");
+    expect(openAiEffort("max", "gpt-5.6-luna")).toBe("high");
+    expect(openAiEffort("medium", "gpt-5.6-luna")).toBe("medium");
+    expect(openAiEffort(undefined, "gpt-5.6-luna")).toBeUndefined();
   });
 });

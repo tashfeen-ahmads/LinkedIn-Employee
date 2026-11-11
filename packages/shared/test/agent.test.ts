@@ -8,14 +8,16 @@ import {
   isSelectableModel,
   modelProvider,
   modelToUse,
+  SELECTABLE_MODELS,
 } from "../src/agent.js";
+import { estimateCostUsd } from "../src/pricing.js";
 
 describe("which model a deployment can actually run", () => {
   it("refuses a model nobody can price", () => {
     // A model missing from the price table costs null and never zero, so a
     // deployment could otherwise run on one whose spend no screen reports —
     // and "free" is the wrong answer about cost that nobody investigates.
-    expect(isSelectableModel("gpt-5")).toBe(true);
+    expect(isSelectableModel("gpt-5.6-luna")).toBe(true);
     expect(isSelectableModel("some-model-nobody-prices")).toBe(false);
     expect(isSelectableModel(null)).toBe(false);
   });
@@ -30,10 +32,20 @@ describe("which model a deployment can actually run", () => {
   });
 
   it("honours the agent's choice when the running provider serves it", () => {
-    expect(modelToUse("gpt-5-mini", { provider: "openai", writer: "gpt-5" })).toEqual({
-      model: "gpt-5-mini",
+    expect(modelToUse("gpt-5.6-terra", { provider: "openai", writer: "gpt-5.6-luna" })).toEqual({
+      model: "gpt-5.6-terra",
       honoured: true,
     });
+  });
+
+  it("never runs a retired model, and moves an agent left on one to the deployment's own", () => {
+    // OpenAI ends API access to GPT-5 and GPT-5 mini on 11 December 2026: an
+    // agent still set to one would have every message refused from that day.
+    expect(isSelectableModel("gpt-5-mini")).toBe(false);
+    expect(SELECTABLE_MODELS).not.toContain("gpt-5");
+    expect(modelToUse("gpt-5-mini", { provider: "openai", writer: "gpt-5.6-luna" }).model).toBe("gpt-5.6-luna");
+    // Still priced, so the calls already made on it keep their cost.
+    expect(estimateCostUsd({ model: "gpt-5-mini", inputTokens: 1_000_000, outputTokens: 0, cacheReadTokens: 0 })).toBe(0.25);
   });
 
   it("falls back when the running provider cannot serve the choice", () => {
@@ -76,7 +88,8 @@ describe("a new agent", () => {
 
     expect(agent.systemPrompt?.length ?? 0).toBeGreaterThan(0);
     expect(agent.fromName).toBe("Tashfeen");
-    expect(isSelectableModel(agent.model)).toBe(true);
+    // Automatic, so it moves with the deployment when a model is retired.
+    expect(agent.model).toBeNull();
   });
 });
 

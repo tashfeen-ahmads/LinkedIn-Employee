@@ -70,10 +70,12 @@ against a real pre-existing account, in a transaction that was rolled back.
 | `LLM_PROVIDER` | Render, already `openai` in render.yaml | — |
 
 Scope the key to a project with a spend limit. **Everything runs on
-`gpt-5-mini`** — writing and classification both (`MODELS` in
-`packages/shared/src/constants.ts`). gpt-5 stays priced in
-`packages/shared/src/pricing.ts` so switching the writer back is one word and
-`/app/usage` keeps reporting correctly either way.
+`gpt-5.6-luna`** — writing and classification both (`MODELS` in
+`packages/shared/src/constants.ts`). `gpt-5.6-terra` is priced and selectable
+for a better writer. `gpt-5` and `gpt-5-mini` stay priced in
+`packages/shared/src/pricing.ts` (`RETIRED_MODELS`) so past usage keeps its
+cost, and are never called again: OpenAI ends them on 11 December 2026.
+`OPENAI_MODEL` on the worker overrides both roles without a code deploy.
 
 That choice is worth revisiting after the first fortnight. Approval mode means a
 human reads every draft before it sends, so the quality of the prose is visible

@@ -331,12 +331,12 @@ export const OPT_OUT_PHRASES = [
  * unpriced model reports its spend as unknown forever.
  */
 export const MODELS = {
-  // Both roles on gpt-5-mini by choice, not by default: gpt-5's output costs
-  // five times as much, and the first campaigns run in approval mode where a
-  // human reads every draft before it sends. That review is the quality gate
-  // the eval cannot be — it scores the classifier, never the prose. If drafts
-  // start reading like a template, `writer` is the one word to change.
-  openai: { writer: "gpt-5-mini", classifier: "gpt-5-mini" },
+  // Both roles on GPT-5.6 Luna, the low-cost model of the 5.6 series. It
+  // replaced gpt-5-mini, which OpenAI retires on 11 December 2026, and it costs
+  // less per token than gpt-5-mini did. Its effort scale has no "minimal"
+  // (`openAiEffort` maps it). If drafts start reading like a template,
+  // `writer` is the one word to change: gpt-5.6-terra is the step up.
+  openai: { writer: "gpt-5.6-luna", classifier: "gpt-5.6-luna" },
   anthropic: { writer: "claude-opus-5", classifier: "claude-haiku-4-5" },
 } as const;
 

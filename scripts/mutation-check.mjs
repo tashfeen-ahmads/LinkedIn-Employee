@@ -4035,6 +4035,22 @@ const MUTATIONS = [
     pkg: "@le/worker",
   },
   {
+    id: "models/no-minimal-effort-on-new-models",
+    rule: "A model that does not take 'minimal' reasoning is never sent it",
+    file: "packages/agents/src/llm.ts",
+    from: "  if (effort === \"minimal\" && !/^gpt-5(-mini|-nano)?$/.test(model)) return \"low\";",
+    to: "",
+    pkg: "@le/agents",
+  },
+  {
+    id: "models/retired-never-selectable",
+    rule: "A retired model is never offered or run",
+    file: "packages/shared/src/agent.ts",
+    from: "  return typeof model === \"string\" && model in MODEL_PRICING && !RETIRED_MODELS.has(model);",
+    to: "  return typeof model === \"string\" && model in MODEL_PRICING;",
+    pkg: "@le/shared",
+  },
+  {
     id: "strategy/no-duplicate-segments",
     rule: "A new strategy repeating an existing one is dropped, not stored",
     file: "apps/worker/src/jobs/strategy.ts",

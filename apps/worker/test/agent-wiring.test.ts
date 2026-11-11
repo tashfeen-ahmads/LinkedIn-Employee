@@ -29,7 +29,7 @@ function harness(options: { withAgent?: boolean } = {}) {
       id: AGENT,
       workspace_id: WORKSPACE,
       name: "Chapter leaders",
-      model: "gpt-5",
+      model: "gpt-5.6-terra",
       system_prompt: "Write like a person, not a brochure.",
       from_name: "Tashfeen",
       playbook: { objective: "Get a reply", qualification: [], handOver: "", avoid: "Buzzwords" },
@@ -196,13 +196,13 @@ describe("the voice handed to a writer", () => {
 });
 
 describe("which model actually runs", () => {
-  const openai = { provider: "openai", models: { writer: "gpt-5", classifier: "gpt-5-mini" } };
+  const openai = { provider: "openai", models: { writer: "gpt-5.6-luna", classifier: "gpt-5.6-luna" } };
 
   it("honours the agent's choice when this deployment serves it", async () => {
     const db = harness({ withAgent: true });
     const agent = await agentForCampaign(db.asDb(), CAMPAIGN);
 
-    expect(modelFor(openai, agent)).toEqual({ model: "gpt-5", honoured: true });
+    expect(modelFor(openai, agent)).toEqual({ model: "gpt-5.6-terra", honoured: true });
   });
 
   it("falls back rather than failing when the provider cannot serve it", async () => {
@@ -217,7 +217,7 @@ describe("which model actually runs", () => {
     const agent = await agentForCampaign(db.asDb(), CAMPAIGN);
 
     const chosen = modelFor(openai, agent);
-    expect(chosen.model).toBe("gpt-5");
+    expect(chosen.model).toBe("gpt-5.6-luna");
     // And never silently: the caller records an event on this being false,
     // because a setting that quietly does nothing is worse than one missing.
     expect(chosen.honoured).toBe(false);

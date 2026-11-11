@@ -7,7 +7,7 @@ import {
   CustomFieldSchema,
   HOOK_MAX_CHARS,
   MAX_STRATEGY_PRIORITY,
-  MODEL_PRICING,
+  isSelectableModel,
   PITCH_MAX_CHARS,
   checkCtaUrl,
   containsLink,
@@ -314,7 +314,7 @@ export async function importWorkspace(
         workspace_id: ws,
         name,
         // A model nobody can price cannot be run (rule: pricing.ts).
-        model: agent.model && agent.model in MODEL_PRICING ? agent.model : null,
+        model: agent.model && isSelectableModel(agent.model) ? agent.model : null,
         system_prompt: agent.system_prompt ?? null,
         from_name: agent.from_name ?? null,
         playbook: playbook.success ? playbook.data : AgentPlaybookSchema.parse({}),

@@ -103,12 +103,22 @@ export interface LlmClient {
 
 /* ----------------------------------------------------------------- openai */
 
-/** Reasoning effort, in OpenAI's four levels rather than Anthropic's five. */
-function openAiEffort(
+/**
+ * Reasoning effort, in the levels the model being called accepts.
+ *
+ * Only the original GPT-5 models take "minimal"; the 5.6 series and later
+ * take none, low, medium, high and up. Sent "minimal", every classification
+ * (the cheapest, most frequent call) would be refused, and replies would stop.
+ * The rungs above "high" are kept to "high", which every model accepts.
+ */
+export function openAiEffort(
   effort: Effort | undefined,
+  model = "",
 ): "minimal" | "low" | "medium" | "high" | undefined {
   if (!effort) return undefined;
-  return effort === "xhigh" || effort === "max" ? "high" : effort;
+  if (effort === "xhigh" || effort === "max") return "high";
+  if (effort === "minimal" && !/^gpt-5(-mini|-nano)?$/.test(model)) return "low";
+  return effort;
 }
 
 /**
@@ -154,7 +164,9 @@ export class OpenAiClient implements LlmClient {
         { role: "user", content: request.user },
       ],
       text: { format: zodTextFormat(request.schema, "output") },
-      ...(openAiEffort(request.effort) ? { reasoning: { effort: openAiEffort(request.effort) } } : {}),
+      ...(openAiEffort(request.effort, request.model)
+        ? { reasoning: { effort: openAiEffort(request.effort, request.model) } }
+        : {}),
     });
 
     const cacheReadTokens = response.usage?.input_tokens_details?.cached_tokens ?? 0;
@@ -258,6 +270,8 @@ export interface LlmEnv {
   LLM_PROVIDER?: "openai" | "anthropic";
   OPENAI_API_KEY?: string;
   ANTHROPIC_API_KEY?: string;
+  /** Both OpenAI roles on this model instead of `MODELS.openai`. */
+  OPENAI_MODEL?: string;
 }
 
 /**
@@ -275,7 +289,10 @@ export function createLlmClient(env: LlmEnv): LlmClient {
   }
   if (provider === "openai") {
     if (!env.OPENAI_API_KEY) throw new Error("LLM_PROVIDER=openai but OPENAI_API_KEY is not set");
-    return new OpenAiClient({ apiKey: env.OPENAI_API_KEY });
+    return new OpenAiClient({
+      apiKey: env.OPENAI_API_KEY,
+      ...(env.OPENAI_MODEL ? { models: { writer: env.OPENAI_MODEL, classifier: env.OPENAI_MODEL } } : {}),
+    });
   }
   if (!env.ANTHROPIC_API_KEY) throw new Error("LLM_PROVIDER=anthropic but ANTHROPIC_API_KEY is not set");
   return new AnthropicClient({ apiKey: env.ANTHROPIC_API_KEY });
