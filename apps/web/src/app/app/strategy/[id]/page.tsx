@@ -23,7 +23,8 @@ import { SEARCH_EVENTS, describeLastSearch } from "@/lib/last-search";
 import { FILTER_FIELDS, formatList } from "@/lib/profile-form";
 import { formatDate, isoAttr } from "@/lib/format";
 import { label } from "@/lib/labels";
-import { approveProfile, dropProfile, findProspects, saveProfile } from "../actions";
+import { approveProfile, dropProfile, growStrategy, saveProfile } from "../actions";
+import { FIND_MORE_BATCH, growableCampaign } from "@/lib/find-more";
 import { businessLabel, loadStrategyMenu, strategyName, strategyState } from "../data";
 
 const UUID = /^[0-9a-f-]{36}$/i;
@@ -58,7 +59,7 @@ export default async function StrategyDetailPage({
     loadStrategyMenu(supabase, session.workspaceId),
     supabase
       .from("campaigns")
-      .select("id, name, status, rules, search_exhausted, searched_at, launched_at, created_at")
+      .select("id, name, status, rules, customer_profile_id, search_exhausted, searched_at, launched_at, created_at")
       .eq("workspace_id", session.workspaceId)
       .eq("customer_profile_id", id)
       .order("created_at", { ascending: false }),
@@ -97,6 +98,10 @@ export default async function StrategyDetailPage({
   const approved = state === "approved";
   const spec = parseCustomerProfile(row.spec);
   const campaigns = campaignRows ?? [];
+  // The campaign Find more grows, and whether LinkedIn has run out for this
+  // strategy (one definition with the Prospects page and the action).
+  const growable = growableCampaign(campaigns, row.id);
+  const searchEnded = !growable && campaigns.some((c) => c.search_exhausted);
 
   /*
    * Is this segment made of the company's own competitors?
@@ -136,16 +141,25 @@ export default async function StrategyDetailPage({
           </SubmitButton>
         </form>
       ) : approved ? (
-        <form action={findProspects}>
+        // Grows the strategy's running campaign from where its search stopped,
+        // or starts its first search. It started a new search from the first
+        // page every time, which found nobody new once a campaign existed.
+        <form action={growStrategy}>
           <input type="hidden" name="profileId" value={row.id} />
           <input type="hidden" name="strategyPage" value={row.id} />
           <SubmitButton
             className="btn small"
-            disabled={!connected}
+            disabled={!connected || searchEnded}
             pendingLabel="Searching LinkedIn…"
-            title={connected ? undefined : "Connect your LinkedIn account first"}
+            title={
+              !connected
+                ? "Connect your LinkedIn account first"
+                : searchEnded
+                  ? "LinkedIn has nobody else matching this strategy"
+                  : undefined
+            }
           >
-            Find {HOW_MANY} prospects
+            {growable ? `Find ${FIND_MORE_BATCH} more` : `Find ${HOW_MANY} prospects`}
           </SubmitButton>
         </form>
       ) : !row.name?.trim() || !spec.success ? (

@@ -11,7 +11,8 @@ import { HOW_MANY } from "@/lib/search";
 import { SEARCH_EVENTS, describeLastSearch } from "@/lib/last-search";
 import { formatDate, isoAttr } from "@/lib/format";
 import { label } from "@/lib/labels";
-import { findProspects } from "../../strategy/actions";
+import { findProspects, growStrategy } from "../../strategy/actions";
+import { FIND_MORE_BATCH, growableCampaign } from "@/lib/find-more";
 import { loadStrategyMenu, strategyName } from "../../strategy/data";
 import { loadProspectMenu } from "../data";
 
@@ -98,9 +99,7 @@ export default async function FindProspectsPage({
                 const campaigns = campaignsFor(strategy.id);
                 // The list to grow: the newest campaign still in use whose
                 // search has somewhere left to go.
-                const growable = campaigns.find(
-                  (c) => c.status !== "archived" && c.status !== "completed" && !c.search_exhausted,
-                );
+                const growable = growableCampaign(campaigns, strategy.id);
                 const exhausted = campaigns.length > 0 && campaigns.every((c) => c.search_exhausted);
                 return (
                   <li key={strategy.id} className="card prospect-find-item">
@@ -137,11 +136,22 @@ export default async function FindProspectsPage({
                     </div>
                     <div className="prospect-find-action">
                       {growable ? (
-                        // Find more lives on the campaign, where the position
-                        // the search stopped at is kept (rule 20).
-                        <Link className="btn small" href={`/app/campaigns/${growable.id}`}>
-                          Find more on this campaign
-                        </Link>
+                        // Searches here and adds the new people to the
+                        // strategy's campaign, from where its search stopped
+                        // (rule 20). It was a link to the campaign, which
+                        // searched nothing.
+                        <form action={growStrategy}>
+                          <input type="hidden" name="profileId" value={strategy.id} />
+                          <input type="hidden" name="from" value="prospects-find" />
+                          <SubmitButton
+                            className="btn small"
+                            disabled={!connected}
+                            pendingLabel="Searching LinkedIn…"
+                            title={connected ? undefined : "Connect your LinkedIn account first"}
+                          >
+                            Find {FIND_MORE_BATCH} more
+                          </SubmitButton>
+                        </form>
                       ) : exhausted ? (
                         <Link className="btn secondary small" href={`/app/strategy/${strategy.id}#search-heading`}>
                           Widen the search

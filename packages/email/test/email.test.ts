@@ -70,11 +70,11 @@ describe("digestEmail", () => {
 
   it("leads the subject with the number that needs the rep", () => {
     const message = digestEmail({ ...base, awaitingApproval: 3 });
-    expect(message.subject).toBe("3 replies need you");
+    expect(message.subject).toBe("3 replies need your attention");
   });
 
   it("uses the singular when there is one", () => {
-    expect(digestEmail({ ...base, awaitingApproval: 1 }).subject).toBe("1 reply needs you");
+    expect(digestEmail({ ...base, awaitingApproval: 1 }).subject).toBe("1 reply needs your attention");
   });
 
   it("falls back to meetings when nothing needs approval", () => {

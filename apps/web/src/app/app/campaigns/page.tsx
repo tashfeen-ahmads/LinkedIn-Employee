@@ -284,5 +284,5 @@ function needsLine(
     return { tone: "attention", text: "Nobody left to invite. Find more on its People section" };
   }
   if (status === "paused") return { tone: "quiet", text: "Paused. Nothing goes out until you resume it" };
-  return { tone: "quiet", text: "Nothing needs you" };
+  return { tone: "quiet", text: "Nothing needs your attention" };
 }

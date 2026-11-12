@@ -4051,6 +4051,14 @@ const MUTATIONS = [
     pkg: "@le/shared",
   },
   {
+    id: "prospects/find-more-grows-the-running-campaign",
+    rule: "Find more on a strategy adds people to its running campaign, never a newer draft",
+    file: "apps/web/src/lib/find-more.ts",
+    from: "  return usable.find((c) => c.status === \"running\") ?? usable[0] ?? null;",
+    to: "  return usable[0] ?? null;",
+    pkg: "@le/web",
+  },
+  {
     id: "strategy/no-duplicate-segments",
     rule: "A new strategy repeating an existing one is dropped, not stored",
     file: "apps/worker/src/jobs/strategy.ts",

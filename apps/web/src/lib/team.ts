@@ -164,7 +164,7 @@ function plural(n: number, one: string, many = `${one}s`): string {
 export function teamStatus(f: TeamFacts): { lead: TeamStatus } & Record<MemberKey, TeamStatus> {
   const lead: TeamStatus =
     f.needsYou === 0
-      ? { status: "Nothing needs you right now.", state: "done" }
+      ? { status: "Nothing needs your attention right now.", state: "done" }
       : {
           status: `${f.needsYou === 1 ? "One thing needs" : `${f.needsYou} things need`} you, listed at the top.`,
           state: "waiting",

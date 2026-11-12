@@ -49,7 +49,9 @@ describe("approving a strategy starts the search", () => {
     // Two copies of the same twelve lines is the shape a rule takes just
     // before they drift, and this one decides whether anybody is searched for.
     const calls = strategyPage.match(/await queueSearch\(/g) ?? [];
-    expect(calls.length, "approving and the button should both call it").toBe(2);
+    // Approving, the first-search button, and Find more on a strategy that has
+    // no campaign yet.
+    expect(calls.length, "approving and the buttons should all call it").toBe(3);
     // And exactly one definition of it, shared with onboarding's approval.
     expect(strategyPage).not.toMatch(/async function queueSearch\(/);
     expect((searchLib.match(/export async function queueSearch\(/g) ?? []).length).toBe(1);

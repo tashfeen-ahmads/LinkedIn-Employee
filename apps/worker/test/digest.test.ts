@@ -67,7 +67,7 @@ describe("runDailyDigest", () => {
     ]);
 
     expect(await runDailyDigest(ctx, NOW)).toBe(1);
-    expect(email.sent[0]?.subject).toBe("1 reply needs you");
+    expect(email.sent[0]?.subject).toBe("1 reply needs your attention");
   });
 
   it("ignores activity older than the window", async () => {

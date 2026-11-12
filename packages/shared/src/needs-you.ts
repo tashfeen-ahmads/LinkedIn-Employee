@@ -576,4 +576,4 @@ export function needsYou(facts: NeedsYouFacts): NeedsYouItem[] {
  */
 
 /** The sentence for a day with nothing on the list. Never the word "None". */
-export const NOTHING_NEEDS_YOU = "Nothing needs you. Here is what your agent did.";
+export const NOTHING_NEEDS_YOU = "Nothing needs your attention. Here is what your agent did.";

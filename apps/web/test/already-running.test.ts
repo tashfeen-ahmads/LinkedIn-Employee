@@ -42,7 +42,9 @@ describe("every web caller of the strategy and targeting jobs", () => {
 
   it("the campaign page's Find more", () => {
     const page = read("app", "app", "campaigns", "[id]", "actions.ts");
-    expect(page).toMatch(/startedNotice\(\s*queued\.data,\s*"Reading the next page/);
+    expect(page).toMatch(/queued\.alreadyRunning\s*\?\s*ALREADY_RUNNING\s*:\s*"Reading the next page/);
+    // The shared path reads the worker's answer, for every Find more button.
+    expect(read("lib", "find-more.ts")).toMatch(/alreadyRunning: isAlreadyRunning\(queued\.data\)/);
   });
 
   it("the Strategy Agent retry", () => {

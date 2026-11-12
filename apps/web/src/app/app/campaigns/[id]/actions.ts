@@ -2,13 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { IDLE_RELEASE_TAGLINE, INVITE_NOTE_MAX_CHARS, isIdleReleased, LINKEDIN_LIMITS } from "@le/shared";
+import { INVITE_NOTE_MAX_CHARS, LINKEDIN_LIMITS } from "@le/shared";
 import { restoreFromFailure } from "@/lib/retry-failed";
 import { requireSession } from "@/lib/workspace";
 import { createClient } from "@/lib/supabase-server";
-import { callWorker, errorQuery, noticeQuery, startedNotice } from "@/lib/worker";
+import { ALREADY_RUNNING, callWorker, errorQuery, noticeQuery } from "@/lib/worker";
+import { queueFindMore } from "@/lib/find-more";
 import { ctaPatchFor } from "./cta-choice";
-import { FIND_MORE_BATCH } from "./data";
 import { launchCampaign } from "./launch-campaign";
 import { sectionFrom, sectionHref, type CampaignSection } from "./sections";
 
@@ -349,55 +349,16 @@ export async function findMore(formData: FormData) {
   const supabase = await createClient();
   const here = sectionHref(campaignId, "people");
 
-  const { data: campaign } = await supabase
-    .from("campaigns")
-    .select("customer_profile_id, linkedin_account_id, search_exhausted")
-    .eq("id", campaignId)
-    .eq("workspace_id", session.workspaceId)
-    .maybeSingle();
-  if (!campaign?.customer_profile_id) {
-    redirect(errorQuery(here, "This campaign's customer profile has been deleted, so there is nothing left to search for."));
-  }
-  if (campaign.search_exhausted) {
-    redirect(errorQuery(here, "This search has already reached the end of what LinkedIn returns for this profile."));
-  }
-
-  const { data: account } = await supabase
-    .from("linkedin_accounts")
-    .select("status, status_detail")
-    .eq("id", campaign.linkedin_account_id)
-    .maybeSingle();
-  if (account?.status !== "active") {
-    redirect(
-      errorQuery(
-        here,
-        isIdleReleased(account)
-          ? IDLE_RELEASE_TAGLINE
-          : "Reconnect your LinkedIn account on your profile first. Nothing can be searched until it is connected.",
-      ),
-    );
-  }
-
-  const queued = await callWorker("/jobs/targeting", {
-    workspaceId: session.workspaceId,
-    userId: session.userId,
-    customerProfileId: campaign.customer_profile_id,
-    linkedinAccountId: campaign.linkedin_account_id,
-    campaignId,
-    limit: FIND_MORE_BATCH,
-  });
-  if (!queued.ok) {
-    redirect(errorQuery(here, `The search has not started. ${queued.error}`));
-  }
+  const queued = await queueFindMore(supabase, session, campaignId);
+  if (!queued.ok) redirect(errorQuery(here, queued.reason));
 
   refresh(campaignId);
   redirect(
     noticeQuery(
       here,
-      startedNotice(
-        queued.data,
-        "Reading the next page of the same search. It takes about a minute. Reload this page and the new names appear at the bottom of the list.",
-      ),
+      queued.alreadyRunning
+        ? ALREADY_RUNNING
+        : "Reading the next page of the same search. It takes about a minute. Reload this page and the new names appear at the bottom of the list.",
     ),
   );
 }

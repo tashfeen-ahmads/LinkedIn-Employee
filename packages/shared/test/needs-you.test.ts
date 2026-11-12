@@ -37,7 +37,7 @@ describe("a day with nothing waiting", () => {
     // Zero items is the good day. A dashboard that looks broken when
     // everything is fine teaches people to stop opening it.
     expect(needsYou(CALM)).toEqual([]);
-    expect(NOTHING_NEEDS_YOU).toContain("Nothing needs you");
+    expect(NOTHING_NEEDS_YOU).toContain("Nothing needs your attention");
   });
 });
 

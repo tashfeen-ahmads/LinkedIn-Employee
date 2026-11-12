@@ -81,7 +81,7 @@ export function digestEmail(input: DigestEmailInput): EmailMessage {
   // The subject line carries the number that decides whether this gets opened.
   const subject =
     input.awaitingApproval > 0
-      ? `${input.awaitingApproval} ${input.awaitingApproval === 1 ? "reply needs" : "replies need"} you`
+      ? `${input.awaitingApproval} ${input.awaitingApproval === 1 ? "reply needs" : "replies need"} your attention`
       : input.meetingsBooked > 0
         ? `${input.meetingsBooked} ${input.meetingsBooked === 1 ? "meeting" : "meetings"} booked yesterday`
         : `Your ${BRAND.name} digest`;

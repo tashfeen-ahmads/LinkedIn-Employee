@@ -33,7 +33,7 @@ import { readWorkspaceEntitlement, replyPlanNote } from "@/lib/entitlement";
  * would produce a list nobody reads, which is the review step this product is
  * built around quietly becoming a rubber stamp.
  */
-export const FIND_MORE_BATCH = 50;
+export { FIND_MORE_BATCH } from "@/lib/find-more";
 
 /**
  * Everything the campaign screen knows about one campaign, read once.

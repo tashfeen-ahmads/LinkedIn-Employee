@@ -10,6 +10,7 @@ import { chosenCtaColumns, ensureCta } from "@/lib/cta-library";
 import { createClient } from "@/lib/supabase-server";
 import { ALREADY_RUNNING, callWorker, errorQuery, noticeQuery, startedNotice } from "@/lib/worker";
 import { FILTER_FIELDS, applyProfileEdits } from "@/lib/profile-form";
+import { FIND_MORE_BATCH, growableCampaign, queueFindMore } from "@/lib/find-more";
 
 /*
  * The strategy screens' actions, shared by the business profile, each
@@ -372,6 +373,72 @@ export async function findProspects(formData: FormData) {
       started.alreadyRunning
         ? ALREADY_RUNNING
         : "Searching LinkedIn now. It takes about a minute; the list appears under Prospects, and this page will say if it stops early.",
+    ),
+  );
+}
+
+/**
+ * More people for a strategy, straight into its campaign.
+ *
+ * People are found per strategy, so this is where the button belongs: on the
+ * Prospects page and the strategy's own page, not only inside one campaign's
+ * People section. It reads the next page of the strategy's search and adds
+ * whoever is new to the campaign that is running for it (`growableCampaign`),
+ * through the same path that campaign's own button takes. A strategy with no
+ * campaign yet starts its first search instead.
+ */
+export async function growStrategy(formData: FormData) {
+  const id = String(formData.get("profileId"));
+  const back = backTo(formData);
+  const session = await requireSession();
+  const supabase = await createClient();
+
+  const { data: strategy } = await supabase
+    .from("customer_profiles")
+    .select("id, approved_at, do_not_pursue")
+    .eq("id", id)
+    .eq("workspace_id", session.workspaceId)
+    .maybeSingle();
+  if (!strategy) redirect(said(back, "error", "That strategy is not available any more. Reload the page."));
+  if (!strategy.approved_at || strategy.do_not_pursue) {
+    redirect(said(back, "error", "Approve this strategy first. Nothing is searched for until it is approved."));
+  }
+
+  const { data: rows } = await supabase
+    .from("campaigns")
+    .select("id, name, status, customer_profile_id, search_exhausted, created_at")
+    .eq("workspace_id", session.workspaceId)
+    .eq("customer_profile_id", id);
+  const campaign = growableCampaign(rows ?? [], id);
+
+  if (!campaign) {
+    if ((rows ?? []).some((c) => c.search_exhausted)) {
+      redirect(said(back, "error", "LinkedIn has nobody else matching this strategy. Widen who it looks for to reach more people."));
+    }
+    const started = await queueSearch(session.workspaceId, session.userId, supabase, id);
+    redirect(
+      said(
+        back,
+        started.ok ? "notice" : "error",
+        started.ok
+          ? started.alreadyRunning
+            ? ALREADY_RUNNING
+            : "Searching now. Nora builds a campaign from what it finds for you to review. It takes about a minute."
+          : `The search has not started: ${started.reason}`,
+      ),
+    );
+  }
+
+  const queued = await queueFindMore(supabase, session, campaign.id);
+  if (!queued.ok) redirect(said(back, "error", queued.reason));
+  revalidatePath(`/app/campaigns/${campaign.id}`, "layout");
+  redirect(
+    said(
+      back,
+      "notice",
+      queued.alreadyRunning
+        ? ALREADY_RUNNING
+        : `Searching the next ${FIND_MORE_BATCH} people for this strategy. Anybody new is added to ${campaign.name} in about a minute, with a note written for each.`,
     ),
   );
 }
