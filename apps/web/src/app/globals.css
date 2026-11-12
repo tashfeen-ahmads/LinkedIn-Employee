@@ -3555,17 +3555,27 @@ input[type="range"]:focus-visible { outline: 2px solid var(--accent); outline-of
 
 /* The shape of a page while its data is read (app/admin/loading.tsx). */
 .app .page-loading { display: flex; flex-direction: column; gap: var(--space-4); }
+.app .page-loading-label { margin: 0; color: var(--text-muted); font-size: 0.9rem; }
 .app .page-loading-bar,
 .app .page-loading-block {
   display: block;
   border-radius: var(--radius-sm);
-  background: var(--surface-sunken);
   animation: page-loading-pulse 1.4s ease-in-out infinite;
 }
+.app .page-loading-bar { background: var(--border-strong); }
 .app .page-loading-bar.is-title { height: 1.75rem; width: min(18rem, 60%); }
 .app .page-loading-bar.is-line { height: 0.9rem; width: min(30rem, 85%); }
-.app .page-loading-block { height: 9rem; border-radius: var(--radius); }
-@keyframes page-loading-pulse { 50% { opacity: 0.55; } }
+.app .page-loading-block {
+  height: 9rem;
+  border-radius: var(--radius);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-strong);
+}
+@keyframes page-loading-pulse { 50% { opacity: 0.7; } }
+@media (prefers-reduced-motion: reduce) {
+  .app .page-loading-bar,
+  .app .page-loading-block { animation: none; }
+}
 
 /* The console's top bar holds a status, two icons and a link, which is more
    than a phone's width in one row: it wraps rather than running off the edge. */
