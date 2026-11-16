@@ -1103,7 +1103,8 @@ async function sendApprovedReply(
   // would otherwise hold the last campaign day's total — every approved reply
   // refused on a cap that was spent weeks ago.
   const replyAccount = await resetCountersIfNeeded(db, account as AccountRecord, localDate(new Date(), replyZone));
-  const replyDecision = checkAction("message", toUsage(replyAccount, replyZone), new Date());
+  // Answering, not reaching out: any hour, every cap (rate-limit.ts).
+  const replyDecision = checkAction("message", toUsage(replyAccount, replyZone), new Date(), { answering: true });
   if (!replyDecision.allowed) {
     throw new RescheduleError(replyDecision.reason, jitteredRetryMs(replyDecision.retryAfterMs, replyDecision.reason));
   }

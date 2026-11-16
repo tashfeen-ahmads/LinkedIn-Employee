@@ -5,6 +5,7 @@ import type {
   PublishPostInput,
   PendingInvitation,
   HostedAuthLink,
+  ChatHistoryMessage,
   InboundMessage,
   LinkedInProvider,
   ProspectPage,
@@ -243,6 +244,13 @@ export class MockLinkedInProvider implements LinkedInProvider {
     if (this.engageError) return { ok: false, error: this.engageError, health: this.engageHealth };
     this.comments.push(input);
     return { ok: true };
+  }
+
+  /** Chats the mock holds, by id; a chat it does not know has no history. */
+  chatHistory = new Map<string, ChatHistoryMessage[]>();
+
+  async getChatHistory(input: { chatId: string }): Promise<ChatHistoryMessage[]> {
+    return this.chatHistory.get(input.chatId) ?? [];
   }
 
   async listNewMessages(): Promise<InboundMessage[]> {

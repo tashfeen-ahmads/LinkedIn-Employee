@@ -2132,6 +2132,34 @@ tests that were verified by deliberately breaking the code.
     `linkedin_accounts.pending_invites`, and Needs you raises `invite_backlog`
     past `pendingInvitesWarn` until cleanup is on, and never after.
 
+71. **Somebody who writes to us is answered promptly, on their own terms.**
+    A recruiter on the Freelancer account accepted an invitation on a
+    Saturday night and wrote "let's schedule a zoom call, I see you are open
+    to work". The reply waited forty hours for the account's sending hours,
+    then pitched the campaign's offer at somebody who wanted to hire the rep.
+
+    *An answer is not outreach.* `checkAction(..., { answering: true })` lets
+    a reply go at any hour; the daily message cap and the minimum gap still
+    apply (rule 4). Invitations and follow-ups keep their sending hours.
+
+    *Who is approaching whom is read, not assumed.* `readConversation`
+    records `theirAgenda` (evaluating our offer, hiring us, selling to us,
+    partnership, networking, personal) and `replyMove` decides from it in
+    code: only a buyer hears the offer; a call goes to whoever asked for one
+    and never to somebody selling to us; a personal message is drafted for
+    the rep (`holdReason`) and never sent on its own. A recruiter's or a
+    vendor's warmth is not counted as `positive` interest in the campaign.
+
+    *A new conversation is taken on* (`adoptNewConversation`). A message from
+    somebody this product never wrote to was counted and dropped. Now a chat
+    whose every message arrived after the account was connected, that the rep
+    has not written in, and that is still short (`isNewConversation`) gets a
+    prospect row and an answer under the workspace's own choice
+    (`workspaceReplyRules`: "let Nora run it" answers, anything else is
+    drafted for a person). A thread the rep already had is never answered by
+    a machine; a failed lookup and the exclusion list take nobody on. The
+    event carries counts and a reason, never names or words (rule 15).
+
 ## Conventions
 
 - Agent output is validated against a zod schema before it touches the

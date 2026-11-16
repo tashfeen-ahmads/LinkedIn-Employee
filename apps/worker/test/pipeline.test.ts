@@ -1518,6 +1518,29 @@ describe("regressions found in review", () => {
     expect(db.find("linkedin_accounts", { id: ACCOUNT })?.messages_today).toBe(1);
   });
 
+  it("sends a reply on a Sunday night, outside the account's sending hours", async () => {
+    // A Saturday-night "let's schedule a zoom call" waited forty hours for
+    // Monday morning (Freelancer, 14 Nov 2026). Outreach waits; answers do not.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-13T23:30:00Z"));
+    try {
+      const { db, ctx, linkedin } = harness();
+      db.find("linkedin_accounts", { id: ACCOUNT })!.working_hours = { start: 9, end: 17, days: [1, 2, 3, 4, 5] };
+      db.seed("conversations", [
+        { id: "conv1", workspace_id: WORKSPACE, prospect_id: PROSPECT, linkedin_account_id: ACCOUNT },
+      ]);
+      db.seed("reply_drafts", [
+        { id: "draft1", workspace_id: WORKSPACE, conversation_id: "conv1", body: "Sure, happy to.", status: "approved", prompt_version: "v1" },
+      ]);
+
+      await runLinkedInAction(ctx, { kind: "reply", workspaceId: WORKSPACE, conversationId: "conv1", draftId: "draft1" });
+
+      expect(linkedin.sentMessages).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("never clears an existing opt-out when a later message is merely negative", async () => {
     const { db, ctx, queues } = harness();
     const prospect = db.find("prospects", { id: PROSPECT })!;

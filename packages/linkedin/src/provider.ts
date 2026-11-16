@@ -146,6 +146,15 @@ export interface InboundMessage {
   receivedAt: string;
 }
 
+/** One message of a chat as the provider holds it, ours or theirs. */
+export interface ChatHistoryMessage {
+  providerMessageId: string;
+  /** Sent by the connected account itself (the rep, by hand or through us). */
+  fromMe: boolean;
+  text: string;
+  sentAt: string;
+}
+
 export interface ActionResult {
   ok: boolean;
   providerId?: string;
@@ -312,6 +321,13 @@ export interface LinkedInProvider {
   /** Comment on a post. Only ever called from the send path (rule 1). */
   commentOnPost(input: { accountId: string; postId: string; text: string }): Promise<ActionResult>;
   listNewMessages(input: { accountId: string; since: string }): Promise<InboundMessage[]>;
+  /**
+   * A chat's messages, newest first, at most `limit`. Read before answering
+   * somebody this product never wrote to, because the answer to "is this a
+   * new person approaching us, or a thread the rep has had for years" is in
+   * the chat and nowhere else.
+   */
+  getChatHistory(input: { accountId: string; chatId: string; limit?: number }): Promise<ChatHistoryMessage[]>;
   /**
    * The account's connections, newest first. This is how an accepted
    * invitation is noticed: LinkedIn sends no acceptance event, and an

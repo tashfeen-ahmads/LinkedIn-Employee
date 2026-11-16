@@ -8,6 +8,7 @@ import type {
   ActionResult,
   PublishPostInput,
   HostedAuthLink,
+  ChatHistoryMessage,
   InboundMessage,
   LinkedInProvider,
   ProspectPage,
@@ -890,6 +891,19 @@ export class UnipileProvider implements LinkedInProvider {
     // A relation with no date is kept: not knowing when someone connected is
     // not evidence that they did not.
     return known.filter((relation) => !relation.connectedAt || relation.connectedAt >= input.since!);
+  }
+
+  async getChatHistory(input: { accountId: string; chatId: string; limit?: number }): Promise<ChatHistoryMessage[]> {
+    const params = new URLSearchParams({ account_id: input.accountId, limit: String(input.limit ?? 50) });
+    const res = await this.request<{ items?: RawUnipileMessage[] }>(
+      `${ROUTES.chatMessages(input.chatId)}?${params.toString()}`,
+    );
+    return (res.items ?? []).map((m) => ({
+      providerMessageId: m.message_id ?? m.id ?? "",
+      fromMe: m.is_sender === true || m.is_sender === 1,
+      text: m.text ?? m.message ?? "",
+      sentAt: m.timestamp ?? "",
+    }));
   }
 
   async listNewMessages(input: { accountId: string; since: string }): Promise<InboundMessage[]> {

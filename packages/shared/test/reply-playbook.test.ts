@@ -121,3 +121,33 @@ describe("what the conversation read decides", () => {
     expect(replyMove("not_now", "Maybe next quarter", { painConfirmed: true })).toMatchObject({ pitch: false, link: false });
   });
 });
+
+
+describe("somebody who came with their own agenda (16 Nov 2026)", () => {
+  it("a recruiter is not pitched, and is given the way to book when they asked to talk", () => {
+    const move = replyMove("interested", "I see you are open to work. Lets schedule a zoom call.", { agenda: "hiring_us" });
+    expect(move).toMatchObject({ reply: true, pitch: false, link: true });
+    expect(move.holdReason).toBeUndefined();
+  });
+
+  it("somebody selling to us gets no pitch and no link, even when they ask for a call", () => {
+    expect(replyMove("interested", "Can we book a call to show you our SEO service?", { agenda: "selling_to_us" })).toMatchObject({
+      pitch: false,
+      link: false,
+      slots: false,
+    });
+  });
+
+  it("partnership and networking get no link unless they asked", () => {
+    expect(replyMove("interested", "Would love to explore a referral partnership", { agenda: "partnership" }).link).toBe(false);
+    expect(replyMove("interested", "Great to connect!", { agenda: "networking" })).toMatchObject({ pitch: false, link: false });
+  });
+
+  it("somebody the rep knows is drafted for the rep", () => {
+    expect(replyMove("other", "Hey, how was the trip?", { agenda: "personal" }).holdReason).toBeTruthy();
+  });
+
+  it("a buyer still hears the offer", () => {
+    expect(replyMove("interested", "Sounds good, tell me more", { agenda: "evaluating_our_offer" }).pitch).toBe(true);
+  });
+});

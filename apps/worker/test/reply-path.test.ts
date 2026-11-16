@@ -1141,6 +1141,118 @@ describe("who a reply is from", () => {
   });
 });
 
+describe("somebody who wrote to the rep first (16 Nov 2026)", () => {
+  /*
+   * A message from somebody this product never wrote to was counted and
+   * dropped. A NEW conversation is now taken on and answered the way the
+   * workspace said replies are handled; a thread the rep already had is not.
+   */
+  function read(overrides: Record<string, unknown> = {}) {
+    return {
+      theirSituation: [],
+      toolsTheyUse: [],
+      problemStatus: "unclear",
+      lastMessageMeans: "They want to talk.",
+      askedForNextStep: false,
+      language: "English",
+      conversationState: "open",
+      theirAgenda: "unclear",
+      whatTheyWant: "To talk.",
+      bestNextMove: "Answer them.",
+      ...overrides,
+    };
+  }
+  const job = (text: string) => ({ ...inboundJob(text, "msg_new"), fromProviderId: "prov_new", providerChatId: "chat_new" });
+
+  it("takes on a new conversation, writes the person down and answers on autopilot", async () => {
+    const { db, ctx, queues, log, linkedin } = harness();
+    db.rows("workspaces")[0]!.onboarding = { autonomy: "autonomous" };
+    linkedin.chatHistory.set("chat_new", [
+      { providerMessageId: "msg_new", fromMe: false, text: "Hi, saw your profile", sentAt: NOW.toISOString() },
+    ]);
+
+    await handleInboundMessage(ctx, queues, job("Hi, saw your profile. Are you taking new clients?"));
+
+    const person = db.rows("prospects").find((p) => p.provider_id === "prov_new");
+    expect(person).toBeTruthy();
+    expect(db.rows("events").filter((e) => e.name === "inbound.adopted")).toHaveLength(1);
+    expect(db.rows("events").filter((e) => e.name === "inbound.unmatched")).toHaveLength(0);
+    expect(db.rows("reply_drafts")[0]?.status).toBe("approved");
+    expect(replyJobs(log)).toHaveLength(1);
+  });
+
+  it("drafts it for a person when the workspace did not choose to let Nora run it", async () => {
+    const { db, ctx, queues, log, linkedin } = harness();
+    linkedin.chatHistory.set("chat_new", [
+      { providerMessageId: "msg_new", fromMe: false, text: "Hi", sentAt: NOW.toISOString() },
+    ]);
+
+    await handleInboundMessage(ctx, queues, job("Hi there"));
+
+    expect(db.rows("reply_drafts")[0]?.status).toBe("pending");
+    expect(conversation(db).needs_human).toBe(true);
+    expect(replyJobs(log)).toHaveLength(0);
+  });
+
+  it("never takes on a thread the rep already had, or one they wrote in by hand", async () => {
+    for (const history of [
+      [{ providerMessageId: "old", fromMe: false, text: "Long time", sentAt: new Date(NOW.getTime() - 200 * 86_400_000).toISOString() }],
+      [
+        { providerMessageId: "msg_new", fromMe: false, text: "Hi", sentAt: NOW.toISOString() },
+        { providerMessageId: "mine", fromMe: true, text: "Hey!", sentAt: NOW.toISOString() },
+      ],
+      [],
+    ]) {
+      const { db, ctx, queues, linkedin } = harness();
+      db.rows("workspaces")[0]!.onboarding = { autonomy: "autonomous" };
+      linkedin.chatHistory.set("chat_new", history);
+
+      await handleInboundMessage(ctx, queues, job("Hi"));
+
+      expect(db.rows("prospects").some((p) => p.provider_id === "prov_new")).toBe(false);
+      expect(db.rows("reply_drafts")).toHaveLength(0);
+      expect(db.rows("events").filter((e) => e.name === "inbound.unmatched")).toHaveLength(1);
+    }
+  });
+
+  it("answers a recruiter about the rep with no pitch, and gives the way to book when they asked", async () => {
+    const { db, ctx, queues } = harness();
+    db.seed("profiles", [{ id: USER, email: "rep@acme.test", full_name: "Rep Person", timezone: "UTC", bio: null, booking_url: "https://cal.com/rep" }]);
+    readMock.mockResolvedValue(read({ theirAgenda: "hiring_us", askedForNextStep: true }));
+
+    await handleInboundMessage(
+      ctx,
+      queues,
+      inboundJob("I see you are open to work. Lets schedule a zoom call about your background."),
+    );
+
+    const move = (draftMock.mock.calls[0]![1] as { move: { pitch: boolean; link: boolean; guidance: string } }).move;
+    expect(move.pitch).toBe(false);
+    expect(move.link).toBe(true);
+    expect(move.guidance).toContain("about the rep");
+    // Not counted as interest in the campaign's offer.
+    expect(db.rows("campaign_prospects")[0]?.status).not.toBe("positive");
+  });
+
+  it("sends somebody selling to us no link, and holds a friend's message for the rep", async () => {
+    {
+      const { ctx, queues } = harness();
+      readMock.mockResolvedValue(read({ theirAgenda: "selling_to_us", askedForNextStep: true }));
+      await handleInboundMessage(ctx, queues, inboundJob("We do SEO, can we book a call?"));
+      const move = (draftMock.mock.calls.at(-1)![1] as { move: { pitch: boolean; link: boolean } }).move;
+      expect(move).toMatchObject({ pitch: false, link: false });
+    }
+    {
+      const { db, ctx, queues, log } = harness();
+      readMock.mockResolvedValue(read({ theirAgenda: "personal" }));
+      await handleInboundMessage(ctx, queues, inboundJob("Hey, how was the trip?"));
+      expect(db.rows("reply_drafts")[0]?.status).toBe("pending");
+      expect(String(conversation(db).needs_human_reason)).toContain("already know");
+      expect(replyJobs(log)).toHaveLength(0);
+    }
+  });
+});
+
 describe("a reply to the last message of a sequence", () => {
   /*
    * Maintenance closes a row once its last step has gone out. The reply that

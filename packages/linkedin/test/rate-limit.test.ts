@@ -140,6 +140,18 @@ describe("checkAction", () => {
     expect(decision.allowed).toBe(false);
     if (!decision.allowed) expect(decision.reason).toBe("outside_working_hours");
   });
+
+  it("lets an answer go at any hour, and still holds it to the caps", () => {
+    // A Saturday-night "let's schedule a call" waited forty hours for Monday
+    // (Freelancer, 14 Nov 2026). Outreach waits; an answer does not.
+    const sunday = new Date("2026-09-13T14:00:00Z");
+    expect(checkAction("message", usage(), sunday).allowed).toBe(false);
+    expect(checkAction("message", usage(), sunday, { answering: true }).allowed).toBe(true);
+    const capped = checkAction("message", usage({ messagesToday: LINKEDIN_LIMITS.messagesPerDay }), sunday, { answering: true });
+    expect(capped.allowed).toBe(false);
+    const quick = checkAction("message", usage({ lastActionAt: new Date(sunday.getTime() - 30_000) }), sunday, { answering: true });
+    expect(quick.allowed).toBe(false);
+  });
 });
 
 describe("nextGapMs", () => {

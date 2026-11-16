@@ -428,8 +428,22 @@ export function invitationCouldFollow(
   return from.getTime() + decision.retryAfterMs <= deadline;
 }
 
-export function checkAction(kind: ActionKind, usage: AccountUsage, now: Date = new Date()): Decision {
-  if (!isWithinWorkingHours(now, usage.workingHours, usage.timezone)) {
+export function checkAction(
+  kind: ActionKind,
+  usage: AccountUsage,
+  now: Date = new Date(),
+  opts: { answering?: boolean } = {},
+): Decision {
+  /*
+   * An answer to somebody who wrote to us is not outreach (`answering`).
+   *
+   * Sending hours exist so a campaign reaches strangers when a person would.
+   * A reply is the opposite case: they spoke first, and a person who is
+   * answered on Monday morning for a Saturday-night "let's schedule a call"
+   * has been left waiting forty hours (Freelancer, 14 Nov 2026). The caps and
+   * the minimum gap still apply to every message, whoever started it.
+   */
+  if (!opts.answering && !isWithinWorkingHours(now, usage.workingHours, usage.timezone)) {
     return {
       allowed: false,
       reason: "outside_working_hours",

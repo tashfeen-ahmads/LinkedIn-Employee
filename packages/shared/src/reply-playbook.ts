@@ -30,7 +30,36 @@ export interface ReplyMove {
   slots: boolean;
   /** What to do, said to the writer. */
   guidance: string;
+  /** Set when a person should read this reply before it goes, whatever the mode. */
+  holdReason?: string;
 }
+
+/**
+ * Who is approaching whom, as the conversation read sees it. Only somebody
+ * weighing our offer hears it; everybody else came with their own agenda.
+ */
+export type TheirAgenda =
+  | "evaluating_our_offer"
+  | "hiring_us"
+  | "selling_to_us"
+  | "partnership"
+  | "networking"
+  | "personal"
+  | "unclear";
+
+/** What the reply does for each agenda that is not ours. */
+const OWN_AGENDA_MOVES: Partial<Record<TheirAgenda, string>> = {
+  hiring_us:
+    "They are interested in the rep, not in buying: a recruiter, an employer, a client looking to hire. Answer as the rep about the rep, from what you know about them, and answer what they asked. Never pitch the offer.",
+  selling_to_us:
+    "They are selling their own product or service to us. One short, polite line: thank them, say it is not something we need right now. No pitch, no question, no link.",
+  partnership:
+    "They propose working together. Respond to their idea itself and ask the one question that shows whether it fits. Never pitch the offer.",
+  networking:
+    "They want to connect, not to buy. Warm, short, about what they said. Never pitch the offer.",
+  personal:
+    "Somebody the rep already knows. Short and personal, never sales.",
+};
 
 /** They asked to see it, book it, or get the link, in so many words. */
 const ASKS_FOR_NEXT_STEP = /\b(link|book|booking|calendar|schedule|slot|time works|times|available|availability|demo|call|meet|zoom|send (it|me|over))\b/i;
@@ -71,6 +100,8 @@ export interface ConversationFacts {
   closing?: boolean;
   /** Our last message to them, which a short answer is an answer to. */
   lastRepMessage?: string;
+  /** Who is approaching whom (the conversation read). */
+  agenda?: TheirAgenda;
 }
 
 /**
@@ -117,6 +148,29 @@ export function replyMove(
       slots: false,
       guidance:
         "They are wrapping the conversation up. One short, warm line that fits what they said. No question, no pitch, no link, nothing to forward, and do not ask again anything you already asked.",
+    };
+  }
+  /*
+   * They came with their own agenda: hiring the rep, selling to us, a
+   * partnership, networking, or somebody the rep knows. A recruiter wrote
+   * "I see you are open to work, let's talk about your background" and was
+   * answered with the campaign's pitch (Freelancer, 14 Nov 2026). None of them
+   * hears the offer; a call goes only to whoever asked for one, and never to
+   * somebody selling to us. A personal conversation is drafted for the rep,
+   * never sent on its own.
+   */
+  const own = context.agenda ? OWN_AGENDA_MOVES[context.agenda] : undefined;
+  if (own && context.agenda) {
+    const mayBook = asked && context.agenda !== "selling_to_us" && context.agenda !== "personal";
+    return {
+      reply: true,
+      pitch: false,
+      link: mayBook,
+      slots: mayBook,
+      guidance: `${own} ${mayBook ? "They asked to talk: agree in a few words and give the way to book." : "No link and no times."}`,
+      ...(context.agenda === "personal"
+        ? { holdReason: "This looks like somebody you already know, so Nora drafted a reply for you to check rather than sending it." }
+        : {}),
     };
   }
   // They told us how they handle it today and it leaves the gap the offer

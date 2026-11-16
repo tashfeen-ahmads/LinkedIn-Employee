@@ -16,6 +16,7 @@ import {
   extractLinks,
   effectiveIntent,
   hasOwnBookingLink,
+  matchExclusion,
   replyMove,
   type CampaignProspectStatus,
   type ReplyClassification,
@@ -35,6 +36,7 @@ import { syncConversationToCrm, syncMeetingToCrm } from "../crm.js";
 import { bookAcceptedSlot } from "./booking.js";
 import { readCampaignCta } from "../cta.js";
 import { rulesForPlan, workspaceFeatures } from "../billing.js";
+import { loadExclusions } from "../exclusions.js";
 
 /**
  * Agent 3 end to end: a prospect replies, we classify it, decide whether a
@@ -51,7 +53,7 @@ export async function handleInboundMessage(
 
   const { data: account } = await db
     .from("linkedin_accounts")
-    .select("id, workspace_id, user_id, provider_account_id")
+    .select("id, workspace_id, user_id, provider_account_id, connected_at")
     .eq("id", job.linkedinAccountId)
     .single();
   if (!account) return;
@@ -66,19 +68,32 @@ export async function handleInboundMessage(
    * form matched nobody and was dropped without a trace, while every screen
    * read "no replies yet".
    */
-  const prospect =
+  const known =
     (await findSender(ctx, job.workspaceId, job.fromProviderId)) ??
     (await findByChat(ctx, job.workspaceId, account.id, job.providerChatId));
-  // A message from someone we never contacted is not ours to answer, but it is
-  // counted: "nobody replied" and "replies were dropped" must not look alike.
-  // The count only, never the words or who sent them (rule 15).
+  /*
+   * Somebody we never wrote to, who wrote to the rep first.
+   *
+   * They were counted and dropped: a person who found the rep and opened a
+   * conversation was never answered, while every screen read "no replies".
+   * A new conversation is taken on (`adoptNewConversation`); a thread the rep
+   * already had, or one they have written in by hand, is the rep's own and is
+   * still only counted. The count only, never the words or who sent them
+   * (rule 15).
+   */
+  const adoption = known ? null : await adoptNewConversation(ctx, job, account);
+  const prospect = known ?? (adoption && "prospect" in adoption ? adoption.prospect : null);
   if (!prospect) {
     await recordEvent(db, {
       workspaceId: job.workspaceId,
       name: "inbound.unmatched",
       subjectType: "linkedin_account",
       subjectId: account.id,
-      payload: { hasSender: Boolean(job.fromProviderId), hasChat: Boolean(job.providerChatId) },
+      payload: {
+        hasSender: Boolean(job.fromProviderId),
+        hasChat: Boolean(job.providerChatId),
+        why: adoption && "skipped" in adoption ? adoption.skipped : "no sender or chat",
+      },
     }).catch(() => undefined);
     return;
   }
@@ -222,6 +237,10 @@ export async function handleInboundMessage(
     RulesOfEngagementSchema.parse({
       ...(campaign?.rules && typeof campaign.rules === "object" ? campaign.rules : {}),
       ...(campaign?.reply_mode ? { mode: campaign.reply_mode } : {}),
+      // No campaign: somebody who wrote to the rep first. They are answered
+      // the way the workspace said replies are handled, not held for a person
+      // by the schema's default while they wait (`workspaceReplyRules`).
+      ...(campaign ? {} : await workspaceReplyRules(ctx, job.workspaceId)),
     }),
     features,
   );
@@ -453,6 +472,8 @@ export async function handleInboundMessage(
     askedForNextStep: read?.askedForNextStep === true,
     closing: read?.conversationState === "closing",
     lastRepMessage,
+    // Who is approaching whom: only somebody weighing our offer hears it.
+    agenda: read?.theirAgenda,
   };
   // The words win over a warm misreading: "when I can convince the owner" is
   // not a yes, whatever the classifier said, and "Yes" answers our question.
@@ -570,6 +591,8 @@ export async function handleInboundMessage(
       ? { action: "hold_for_human", reason: slotCheck.reason }
       : bookingHeld
       ? { action: "hold_for_human", reason: bookingHeld }
+      : move.holdReason
+      ? { action: "hold_for_human", reason: move.holdReason }
       : decision.action === "send"
         ? { action: "send" }
         : { action: "hold_for_human", reason: decision.reason };
@@ -641,7 +664,10 @@ export async function handleInboundMessage(
    * Set after the draft is written, so it records what the agent acted on
    * rather than what it intended to.
    */
-  if (intent === "interested" && campaignProspect) {
+  // A recruiter keen to talk about the rep, or a vendor keen to sell, is not
+  // interest in the campaign's offer and is not counted as it.
+  const buyer = !facts.agenda || facts.agenda === "evaluating_our_offer" || facts.agenda === "unclear";
+  if (intent === "interested" && campaignProspect && buyer) {
     await db
       .from("campaign_prospects")
       .update({ status: "positive", status_reason: "replied with interest" })
@@ -680,6 +706,22 @@ export async function handleInboundMessage(
       { jobId: jobId("reply", saved.id as string), delay: REPLY_SETTLE_MS },
     );
   }
+}
+
+/**
+ * How the workspace said replies are handled, for a conversation no campaign
+ * owns. "Let Nora run it" (`autonomy: autonomous`, rule 65) answers on its
+ * own; anything else, or an answer that could not be read, is drafted for a
+ * person, which is what the schema's default already did.
+ */
+export async function workspaceReplyRules(
+  ctx: WorkerContext,
+  workspaceId: string,
+): Promise<{ mode?: "autopilot"; autonomy?: "autonomous" }> {
+  const { data, error } = await ctx.db.from("workspaces").select("onboarding").eq("id", workspaceId).maybeSingle();
+  if (error || !data) return {};
+  const answers = (data.onboarding ?? {}) as { autonomy?: unknown };
+  return answers.autonomy === "autonomous" ? { mode: "autopilot", autonomy: "autonomous" } : {};
 }
 
 /** How long a machine-written reply waits for the prospect to finish typing. */
@@ -729,6 +771,117 @@ async function findByChat(
     last_name: row.last_name,
     do_not_contact: row.do_not_contact === true,
   };
+}
+
+/** Their messages a new conversation may already hold when it is taken on. */
+const NEW_CONVERSATION_MAX_THEIR_MESSAGES = 6;
+
+type Adoption =
+  | { prospect: { id: string; workspace_id: string; first_name: string | null; last_name: string | null; do_not_contact: boolean } }
+  | { skipped: string };
+
+/**
+ * Takes on a new conversation somebody started with the rep.
+ *
+ * Only a NEW one: every message in the chat arrived after the account was
+ * connected here, the rep has written nothing in it by hand, and it is still
+ * short. Anything else is a thread the rep already had, with a friend, a
+ * client or a colleague, and a machine answering it under their name is the
+ * one thing worse than not answering. Who they are and what they want is
+ * then read like any other conversation: a recruiter, a vendor or a partner
+ * is answered on their own terms, and somebody the rep knows is drafted for
+ * the rep (`replyMove`, `holdReason`).
+ *
+ * The prospect row it writes takes that person out of every future search,
+ * which is right: they are already in conversation (rules 24, 27). A person on
+ * the exclusion list is never taken on. A lookup that fails takes nobody on.
+ */
+export async function adoptNewConversation(
+  ctx: WorkerContext,
+  job: InboundMessageJob,
+  account: { id: string; user_id: string; provider_account_id: string | null; connected_at: string | null },
+): Promise<Adoption> {
+  if (!job.fromProviderId || !job.providerChatId || !account.provider_account_id) return { skipped: "no sender or chat" };
+  let history: Awaited<ReturnType<WorkerContext["linkedin"]["getChatHistory"]>>;
+  try {
+    history = await ctx.linkedin.getChatHistory({
+      accountId: account.provider_account_id,
+      chatId: job.providerChatId,
+      limit: 50,
+    });
+  } catch {
+    return { skipped: "chat history unreadable" };
+  }
+  const decision = isNewConversation(history, account.connected_at);
+  if (decision !== "new") return { skipped: decision };
+
+  let profile: Awaited<ReturnType<WorkerContext["linkedin"]["getProfile"]>>;
+  try {
+    profile = await ctx.linkedin.getProfile({ accountId: account.provider_account_id, providerId: job.fromProviderId });
+  } catch {
+    return { skipped: "profile unreadable" };
+  }
+  const excluded = matchExclusion(await loadExclusions(ctx.db, job.workspaceId), {
+    company: profile.company ?? null,
+    linkedinUrl: profile.linkedinUrl,
+  });
+  if (excluded) return { skipped: "on the exclusion list" };
+
+  const { data: inserted, error } = await ctx.db
+    .from("prospects")
+    .insert({
+      workspace_id: job.workspaceId,
+      provider_id: job.fromProviderId,
+      linkedin_url: profile.linkedinUrl,
+      first_name: profile.firstName,
+      last_name: profile.lastName,
+      headline: profile.headline ?? null,
+      title: profile.title ?? null,
+      company: profile.company ?? null,
+      location: profile.location ?? null,
+      about: profile.about ?? null,
+      owner_user_id: account.user_id,
+      signals: { source: "inbound" } as never,
+    })
+    .select("id, workspace_id, first_name, last_name, do_not_contact")
+    .single();
+  // Written a moment ago by the other door (webhook and poll both deliver).
+  const row = inserted ?? (error ? await findSender(ctx, job.workspaceId, job.fromProviderId) : null);
+  if (!row) return { skipped: "could not store the person" };
+  if (inserted) {
+    await recordEvent(ctx.db, {
+      workspaceId: job.workspaceId,
+      name: "inbound.adopted",
+      subjectType: "prospect",
+      subjectId: inserted.id as string,
+    }).catch(() => undefined);
+  }
+  return {
+    prospect: {
+      id: row.id as string,
+      workspace_id: row.workspace_id as string,
+      first_name: (row.first_name as string | null) ?? null,
+      last_name: (row.last_name as string | null) ?? null,
+      do_not_contact: Boolean(row.do_not_contact),
+    },
+  };
+}
+
+/**
+ * Is this chat a new conversation somebody started, or a thread the rep
+ * already had? Pure, and the whole rule. Unknown is never "new".
+ */
+export function isNewConversation(
+  history: ReadonlyArray<{ fromMe: boolean; sentAt: string }>,
+  connectedAt: string | null,
+): "new" | "empty history" | "the rep has written in it" | "older than this account's connection" | "a long thread" {
+  if (history.length === 0) return "empty history";
+  if (history.some((m) => m.fromMe)) return "the rep has written in it";
+  const since = connectedAt ? Date.parse(connectedAt) : NaN;
+  if (!Number.isFinite(since)) return "older than this account's connection";
+  if (history.some((m) => !(Date.parse(m.sentAt) >= since))) return "older than this account's connection";
+  if (history.length > NEW_CONVERSATION_MAX_THEIR_MESSAGES) return "a long thread";
+  return "new";
 }
 
 async function findSender(
