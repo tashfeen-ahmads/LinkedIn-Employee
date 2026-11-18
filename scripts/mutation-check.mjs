@@ -4083,6 +4083,14 @@ const MUTATIONS = [
     pkg: "@le/worker",
   },
   {
+    id: "accounts/restricted-is-rechecked",
+    rule: "A restricted account is asked again, so a lifted restriction un-pauses its campaigns",
+    file: "apps/worker/src/accounts.ts",
+    from: "    .in(\"status\", [\"restricted\", \"warning\"]);",
+    to: "    .in(\"status\", [\"warning\"]);",
+    pkg: "@le/worker",
+  },
+  {
     id: "reply/history-is-the-latest",
     rule: "A reply is written from the latest messages of a conversation, not the oldest",
     file: "apps/worker/src/jobs/inbound.ts",

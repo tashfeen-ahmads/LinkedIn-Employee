@@ -79,7 +79,9 @@ export async function runMaintenance(
   const { data: accounts } = await db
     .from("linkedin_accounts")
     .select("id, workspace_id, status, provider_account_id")
-    .in("status", ["active", "warning"]);
+    // `restricted` too: a LinkedIn restriction usually lifts, and an account
+    // left out of this poll could never be seen recovering (Monic, 16 Nov).
+    .in("status", ["active", "warning", "restricted"]);
 
   // Before polling: repair any account whose stored id the provider has
   // replaced. Polling first asks about an id that is already gone, marks the

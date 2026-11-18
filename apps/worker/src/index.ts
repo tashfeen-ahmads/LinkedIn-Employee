@@ -22,7 +22,7 @@ import { refillCampaigns } from "./jobs/refill.js";
 import { planEngagement } from "./jobs/engagement.js";
 import { publishApprovedPosts } from "./jobs/publish-posts.js";
 import { recoverThrottledProspects, unstickProspects } from "./jobs/unstick.js";
-import { recoverAccounts } from "./accounts.js";
+import { recheckPausedAccounts, recoverAccounts } from "./accounts.js";
 import { ensureWebhooks } from "./webhooks.js";
 import { cleanFailedJobs, runMaintenance } from "./jobs/maintenance.js";
 import { fillMissingNotes } from "./jobs/rewrite-notes.js";
@@ -297,6 +297,14 @@ const workers = [
             // are checked on the same hourly beat rather than waiting for the
             // night.
             .then(() => recoverThrottledProspects(ctx.db))
+            // A restricted or warned account is asked again every hour, so a
+            // restriction that lifted is not left pausing its campaigns until
+            // somebody notices (recheckPausedAccounts).
+            .then(() =>
+              recheckPausedAccounts(ctx.db, ctx.linkedin, { email: ctx.email, appUrl: ctx.env.APP_URL }).catch((err) =>
+                console.error("re-checking paused accounts failed", err),
+              ),
+            )
             /*
              * An account whose provider id has moved is repaired within the
              * hour, not overnight.

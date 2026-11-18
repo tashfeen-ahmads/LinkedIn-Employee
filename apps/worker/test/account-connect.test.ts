@@ -4,7 +4,7 @@ import { LINKEDIN_CONNECT_ERRORS, linkedInConnectError } from "@le/shared";
 import { FakeDb } from "./fake-db.js";
 import { encryptJson } from "../src/crypto.js";
 import { createServer } from "../src/server.js";
-import { applyHealth, type AccountRecord } from "../src/accounts.js";
+import { applyHealth, recheckPausedAccounts, type AccountRecord } from "../src/accounts.js";
 import type { WorkerContext } from "../src/context.js";
 import type { Queues } from "../src/queues.js";
 
@@ -204,6 +204,35 @@ function refresh(app: ReturnType<typeof createServer>, body: unknown, secret = I
     headers: { "content-type": "application/json", authorization: `Bearer ${secret}` },
   });
 }
+
+describe("recheckPausedAccounts (Monic, 18 Nov 2026)", () => {
+  it("restores a restricted account the provider now reports healthy, hourly", async () => {
+    const db = new FakeDb();
+    db.seed("linkedin_accounts", [
+      { id: "r1", workspace_id: "w1", user_id: "u1", status: "restricted", status_detail: "provider reported restricted", provider_account_id: "p1" },
+    ]);
+    const provider = new MockLinkedInProvider();
+    provider.health = "ok";
+    const run = await recheckPausedAccounts(db.asDb(), provider);
+    expect(run).toEqual({ checked: 1, recovered: 1 });
+    expect(db.find("linkedin_accounts", { id: "r1" })!.status).toBe("active");
+    expect(db.rows("events").some((e) => e.name === "linkedin.account.recovered")).toBe(true);
+  });
+
+  it("leaves one still restricted, or one it could not ask about, exactly as it was", async () => {
+    const db = new FakeDb();
+    db.seed("linkedin_accounts", [
+      { id: "r1", workspace_id: "w1", user_id: "u1", status: "restricted", status_detail: "provider reported restricted", provider_account_id: "p1" },
+    ]);
+    const provider = new MockLinkedInProvider();
+    provider.health = "restricted";
+    expect((await recheckPausedAccounts(db.asDb(), provider)).recovered).toBe(0);
+    provider.healthError = new Error("timeout");
+    expect((await recheckPausedAccounts(db.asDb(), provider)).recovered).toBe(0);
+    expect(db.find("linkedin_accounts", { id: "r1" })!.status).toBe("restricted");
+    expect(db.rows("events")).toHaveLength(0);
+  });
+});
 
 describe("confirming a connection by asking", () => {
   const OTHER = "44444444-4444-4444-8444-444444444444";

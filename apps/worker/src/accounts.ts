@@ -620,6 +620,42 @@ export async function refreshAccountPlan(
   return detected;
 }
 
+/**
+ * Asks the provider again about every account a restriction or a warning
+ * paused, hourly. `applyHealth` restores one the moment it answers `ok`, but
+ * only the nightly poll asked, and it asked about `active` and `warning`
+ * accounts only: a `restricted` row was never looked at again. Monic's account
+ * was restricted on 16 Nov, the provider reported it healthy again soon after,
+ * and two running campaigns sent nothing for two days while the console listed
+ * them as critical. A lookup that fails changes nothing (rule 17).
+ */
+export async function recheckPausedAccounts(
+  db: Db,
+  provider: LinkedInProvider,
+  notify?: { email: EmailProvider | null; appUrl: string },
+): Promise<{ checked: number; recovered: number }> {
+  const { data: rows } = await db
+    .from("linkedin_accounts")
+    .select("id, workspace_id, status, provider_account_id")
+    .in("status", ["restricted", "warning"]);
+  let recovered = 0;
+  for (const row of rows ?? []) {
+    if (!row.provider_account_id) continue;
+    try {
+      const health = await provider.getAccountHealth(row.provider_account_id as string);
+      // Only a recovery is acted on here; a worse answer is the nightly poll's
+      // and the send path's to apply, so an hourly check never sends a second
+      // "your account was paused" email for the same pause.
+      if (health !== "ok") continue;
+      await applyHealth(db, row as { id: string; workspace_id: string; status: string }, health, notify);
+      recovered += 1;
+    } catch (err) {
+      console.error("could not re-check a paused account", { accountId: row.id, reason: String(err) });
+    }
+  }
+  return { checked: rows?.length ?? 0, recovered };
+}
+
 export async function pollHealth(
   db: Db,
   provider: LinkedInProvider,
