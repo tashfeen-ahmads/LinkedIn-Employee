@@ -1194,6 +1194,27 @@ describe("somebody who wrote to the rep first (16 Nov 2026)", () => {
     expect(replyJobs(log)).toHaveLength(0);
   });
 
+  it("never takes on a group conversation, and holds a new message in one already on file", async () => {
+    {
+      const { db, ctx, queues, linkedin } = harness();
+      db.rows("workspaces")[0]!.onboarding = { autonomy: "autonomous" };
+      linkedin.chatHistory.set("chat_new", [{ providerMessageId: "msg_new", fromMe: false, text: "@All", sentAt: NOW.toISOString() }]);
+      linkedin.chatOthers.set("chat_new", 2);
+      await handleInboundMessage(ctx, queues, job("Hey guys did you see this? @All"));
+      expect(db.rows("prospects").some((p) => p.provider_id === "prov_new")).toBe(false);
+      expect(db.rows("reply_drafts")).toHaveLength(0);
+    }
+    {
+      const { db, ctx, queues, linkedin, log } = harness();
+      db.rows("workspaces")[0]!.onboarding = { autonomy: "autonomous" };
+      db.seed("prospects", [{ id: "p-new", workspace_id: WORKSPACE, provider_id: "prov_new", first_name: "Ann", do_not_contact: false }]);
+      linkedin.chatOthers.set("chat_new", 2);
+      await handleInboundMessage(ctx, queues, job("did you guys connect?"));
+      expect(db.rows("reply_drafts")[0]?.status).toBe("pending");
+      expect(replyJobs(log)).toHaveLength(0);
+    }
+  });
+
   it("never takes on a thread the rep already had, or one they wrote in by hand", async () => {
     for (const history of [
       [{ providerMessageId: "old", fromMe: false, text: "Long time", sentAt: new Date(NOW.getTime() - 200 * 86_400_000).toISOString() }],

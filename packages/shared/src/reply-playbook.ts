@@ -102,7 +102,16 @@ export interface ConversationFacts {
   lastRepMessage?: string;
   /** Who is approaching whom (the conversation read). */
   agenda?: TheirAgenda;
+  /** The conversation belongs to a campaign; false for somebody who wrote first. */
+  fromCampaign?: boolean;
 }
+
+/**
+ * Asked to carry on somewhere else: another messenger, a phone number. That
+ * is the rep's call, and the commonest shape of a recruiting scam ("before
+ * moving to Signal", Palma, 18 Nov 2026), so a person decides.
+ */
+const MOVE_OFF_LINKEDIN = /\b(signal|whats\s?app|telegram|wechat|viber|text me|my (cell|mobile|phone) (number|is))\b/i;
 
 /**
  * The intent a reply is written for: the classifier's, unless the words say
@@ -159,9 +168,27 @@ export function replyMove(
    * somebody selling to us. A personal conversation is drafted for the rep,
    * never sent on its own.
    */
+  if (MOVE_OFF_LINKEDIN.test(message)) {
+    return {
+      reply: true,
+      pitch: false,
+      link: false,
+      slots: false,
+      guidance: "They want to move the conversation off LinkedIn. Do not agree to it and do not offer times. One short, polite line that keeps the conversation here.",
+      holdReason: "They asked to continue on another app or by phone, so Nora drafted a reply for you to decide on rather than sending it.",
+    };
+  }
   const own = context.agenda ? OWN_AGENDA_MOVES[context.agenda] : undefined;
   if (own && context.agenda) {
     const mayBook = asked && context.agenda !== "selling_to_us" && context.agenda !== "personal";
+    /*
+     * Somebody who wrote first with a job or a partnership is asking the rep
+     * to commit to something. On a campaign that is often the sale itself (a
+     * freelancer being hired); from a stranger it is the rep's decision, and
+     * Nora answering "I'd be open to reviewing the opportunity" for a CEO who
+     * had not signed in for two weeks is a career move made on his behalf.
+     */
+    const commits = context.fromCampaign === false && (context.agenda === "hiring_us" || context.agenda === "partnership");
     return {
       reply: true,
       pitch: false,
@@ -170,7 +197,9 @@ export function replyMove(
       guidance: `${own} ${mayBook ? "They asked to talk: agree in a few words and give the way to book." : "No link and no times."}`,
       ...(context.agenda === "personal"
         ? { holdReason: "This looks like somebody you already know, so Nora drafted a reply for you to check rather than sending it." }
-        : {}),
+        : commits
+          ? { holdReason: "They wrote to you first with a job or a partnership, which is your decision, so Nora drafted a reply for you to check." }
+          : {}),
     };
   }
   // They told us how they handle it today and it leaves the gap the offer

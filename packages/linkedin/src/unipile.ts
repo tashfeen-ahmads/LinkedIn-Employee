@@ -51,6 +51,7 @@ const ROUTES = {
   postReaction: "/api/v1/posts/reaction",
   postComments: (id: string) => `/api/v1/posts/${encodeURIComponent(id)}/comments`,
   chatMessages: (id: string) => `/api/v1/chats/${id}/messages`,
+  chatAttendees: (id: string) => `/api/v1/chats/${id}/attendees`,
   messages: "/api/v1/messages",
   relations: "/api/v1/users/relations",
   inmailBalance: "/api/v1/linkedin/inmail_balance",
@@ -904,6 +905,14 @@ export class UnipileProvider implements LinkedInProvider {
       text: m.text ?? m.message ?? "",
       sentAt: m.timestamp ?? "",
     }));
+  }
+
+  async countChatOthers(input: { accountId: string; chatId: string }): Promise<number> {
+    const params = new URLSearchParams({ account_id: input.accountId });
+    const res = await this.request<{ items?: Array<{ is_self?: boolean | number }> }>(
+      `${ROUTES.chatAttendees(input.chatId)}?${params.toString()}`,
+    );
+    return (res.items ?? []).filter((a) => !(a.is_self === true || a.is_self === 1)).length;
   }
 
   async listNewMessages(input: { accountId: string; since: string }): Promise<InboundMessage[]> {

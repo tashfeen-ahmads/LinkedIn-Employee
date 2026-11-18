@@ -66,9 +66,16 @@ describe("releaseIdleAccounts", () => {
 
   it("keeps an account a prospect wrote to within the window", async () => {
     const { db, linkedin, ctx } = setup();
-    db.seed("conversations", [{ id: "v1", linkedin_account_id: "a1", last_message_at: RECENT }]);
+    db.seed("conversations", [{ id: "v1", linkedin_account_id: "a1", campaign_id: "c1", last_message_at: RECENT }]);
     await releaseIdleAccounts(ctx, NOW);
     expect(linkedin.deletedAccounts).toEqual([]);
+  });
+
+  it("is not kept alive by Nora answering strangers who wrote first (Palma, 18 Nov 2026)", async () => {
+    const { db, linkedin, ctx } = setup();
+    db.seed("conversations", [{ id: "v1", linkedin_account_id: "a1", campaign_id: null, last_message_at: RECENT }]);
+    await releaseIdleAccounts(ctx, NOW);
+    expect(linkedin.deletedAccounts).toHaveLength(1);
   });
 
   it("keeps an account that sent within the window, or was connected within it", async () => {

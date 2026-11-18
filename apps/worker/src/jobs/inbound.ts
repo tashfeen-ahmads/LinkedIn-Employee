@@ -474,9 +474,23 @@ export async function handleInboundMessage(
     lastRepMessage,
     // Who is approaching whom: only somebody weighing our offer hears it.
     agenda: read?.theirAgenda,
+    fromCampaign: Boolean(campaign),
   };
   // The words win over a warm misreading: "when I can convince the owner" is
   // not a yes, whatever the classifier said, and "Yes" answers our question.
+  /*
+   * A conversation no campaign owns that turns out to be a group is the
+   * rep's, whoever started it: an introduction thread is answered by the
+   * person being introduced. Unreadable counts as a group, because guessing
+   * wrong here is a machine talking in front of several real people.
+   */
+  let groupChat = false;
+  if (!campaign && job.providerChatId && account.provider_account_id) {
+    groupChat = await ctx.linkedin
+      .countChatOthers({ accountId: account.provider_account_id, chatId: job.providerChatId })
+      .then((others) => others !== 1)
+      .catch(() => true);
+  }
   const intent = effectiveIntent(classification.intent, job.text, facts);
   const move = replyMove(intent, job.text, { linkAlreadySent, ...facts });
   if (!move.reply && !bookedMeeting && !bookingHeld) {
@@ -591,6 +605,8 @@ export async function handleInboundMessage(
       ? { action: "hold_for_human", reason: slotCheck.reason }
       : bookingHeld
       ? { action: "hold_for_human", reason: bookingHeld }
+      : groupChat
+      ? { action: "hold_for_human", reason: GROUP_CHAT_HOLD }
       : move.holdReason
       ? { action: "hold_for_human", reason: move.holdReason }
       : decision.action === "send"
@@ -773,6 +789,10 @@ async function findByChat(
   };
 }
 
+/** Said on the inbox for a group conversation Nora will not answer on its own. */
+export const GROUP_CHAT_HOLD =
+  "This is a group conversation, so Nora drafted a reply for you to check rather than answering in front of several people.";
+
 /** Their messages a new conversation may already hold when it is taken on. */
 const NEW_CONVERSATION_MAX_THEIR_MESSAGES = 6;
 
@@ -814,6 +834,16 @@ export async function adoptNewConversation(
   }
   const decision = isNewConversation(history, account.connected_at);
   if (decision !== "new") return { skipped: decision };
+  // A group (an introduction thread, a team chat) is never one person
+  // approaching the rep: Nora answered "did you see this? @All" and then
+  // promised to follow up with somebody it had never spoken to (Palma).
+  let others: number;
+  try {
+    others = await ctx.linkedin.countChatOthers({ accountId: account.provider_account_id, chatId: job.providerChatId });
+  } catch {
+    return { skipped: "chat members unreadable" };
+  }
+  if (others !== 1) return { skipped: others > 1 ? "a group conversation" : "chat members unreadable" };
 
   let profile: Awaited<ReturnType<WorkerContext["linkedin"]["getProfile"]>>;
   try {

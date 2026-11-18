@@ -45,11 +45,16 @@ export async function releaseIdleAccounts(ctx: WorkerContext, now: Date = new Da
       .from("campaigns")
       .select("linkedin_account_id, status, created_at, updated_at, launched_at")
       .in("linkedin_account_id", ids),
-    // Only recent messages matter, and only whether there was one.
+    // Only recent messages matter, and only whether there was one. Only a
+    // campaign's conversations count: Nora answering strangers who wrote to
+    // the rep first (rule 71) is not the rep using the product, and counted
+    // it kept every account that receives messages held for ever (Palma,
+    // 18 Nov 2026: no sign-in since 3 Nov, kept alive by its own replies).
     db
       .from("conversations")
       .select("linkedin_account_id, last_message_at")
       .in("linkedin_account_id", ids)
+      .not("campaign_id", "is", null)
       .gte("last_message_at", cutoff),
     db.rpc("account_last_seen", { p_user_ids: [...new Set(held.map((row) => row.user_id))] }),
   ]);

@@ -249,6 +249,13 @@ export class MockLinkedInProvider implements LinkedInProvider {
   /** Chats the mock holds, by id; a chat it does not know has no history. */
   chatHistory = new Map<string, ChatHistoryMessage[]>();
 
+  /** People besides the account in each chat; one when the mock is not told. */
+  chatOthers = new Map<string, number>();
+
+  async countChatOthers(input: { chatId: string }): Promise<number> {
+    return this.chatOthers.get(input.chatId) ?? 1;
+  }
+
   async getChatHistory(input: { chatId: string }): Promise<ChatHistoryMessage[]> {
     return this.chatHistory.get(input.chatId) ?? [];
   }

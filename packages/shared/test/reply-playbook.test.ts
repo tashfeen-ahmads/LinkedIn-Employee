@@ -151,3 +151,18 @@ describe("somebody who came with their own agenda (16 Nov 2026)", () => {
     expect(replyMove("interested", "Sounds good, tell me more", { agenda: "evaluating_our_offer" }).pitch).toBe(true);
   });
 });
+
+describe("what is the rep's own decision (18 Nov 2026)", () => {
+  it("a request to move to another app is held for a person, whoever asks", () => {
+    const move = replyMove("interested", "Before moving to Signal, please send your CV", { agenda: "hiring_us", fromCampaign: true });
+    expect(move.holdReason).toBeTruthy();
+    expect(move).toMatchObject({ link: false, slots: false });
+  });
+
+  it("a stranger's job or partnership offer is drafted for the rep; on a campaign it is answered", () => {
+    expect(replyMove("interested", "We are recruiting executives", { agenda: "hiring_us", fromCampaign: false }).holdReason).toBeTruthy();
+    expect(replyMove("interested", "Let's collaborate", { agenda: "partnership", fromCampaign: false }).holdReason).toBeTruthy();
+    expect(replyMove("interested", "Let's schedule a zoom call", { agenda: "hiring_us", fromCampaign: true }).holdReason).toBeUndefined();
+    expect(replyMove("interested", "We sell SEO", { agenda: "selling_to_us", fromCampaign: false }).holdReason).toBeUndefined();
+  });
+});

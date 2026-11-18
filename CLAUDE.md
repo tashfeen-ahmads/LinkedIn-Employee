@@ -2160,6 +2160,21 @@ tests that were verified by deliberately breaking the code.
     a machine; a failed lookup and the exclusion list take nobody on. The
     event carries counts and a reason, never names or words (rule 15).
 
+    *Some answers are the rep's alone.* A group conversation is never taken
+    on, and a new message in one outside a campaign is drafted for the rep
+    (`countChatOthers`, `GROUP_CHAT_HOLD`; unreadable counts as a group): on
+    Palma Nora answered an introduction thread, offered times and promised to
+    "follow up with him directly". A request to move to another app or a
+    phone (`MOVE_OFF_LINKEDIN`) is always held, and a job or partnership
+    offer from somebody who wrote first is drafted, never answered: Nora told
+    a recruiter "I'd be open to reviewing the opportunity" for a CEO who had
+    not signed in for two weeks. On a campaign a hiring enquiry is often the
+    sale itself (a freelancer) and is answered.
+
+    *Answering strangers is not using the product.* Rule 63's conversation
+    signal counts only conversations a campaign owns, or every account that
+    receives messages is kept, and billed, for ever.
+
 ## Conventions
 
 - Agent output is validated against a zod schema before it touches the

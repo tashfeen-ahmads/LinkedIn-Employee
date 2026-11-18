@@ -329,6 +329,12 @@ export interface LinkedInProvider {
    */
   getChatHistory(input: { accountId: string; chatId: string; limit?: number }): Promise<ChatHistoryMessage[]>;
   /**
+   * How many people besides the account itself are in a chat. More than one
+   * is a group: an introduction thread or a team chat, never a person
+   * approaching the rep on their own.
+   */
+  countChatOthers(input: { accountId: string; chatId: string }): Promise<number>;
+  /**
    * The account's connections, newest first. This is how an accepted
    * invitation is noticed: LinkedIn sends no acceptance event, and an
    * invitation leaving the pending list could equally mean it was declined.
