@@ -4075,6 +4075,14 @@ const MUTATIONS = [
     pkg: "@le/shared",
   },
   {
+    id: "acceptance/sales-navigator-ids-match-by-name",
+    rule: "An acceptance is matched by public profile name as well as id, so a Sales Navigator search sees its yeses",
+    file: "apps/worker/src/jobs/acceptance.ts",
+    from: "|| (slug && connectedSlugs.has(slug))",
+    to: "",
+    pkg: "@le/worker",
+  },
+  {
     id: "reply/history-is-the-latest",
     rule: "A reply is written from the latest messages of a conversation, not the oldest",
     file: "apps/worker/src/jobs/inbound.ts",

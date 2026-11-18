@@ -1974,7 +1974,9 @@ tests that were verified by deliberately breaking the code.
 68. **Nora likes and comments on prospects' posts, and every one is earned.**
     `planEngagement` (`apps/worker/src/jobs/engagement.ts`, hourly) picks, for
     each working account inside its owner's hours, people in its running
-    campaigns who are still in a live conversation, none engaged with in the
+    campaigns who are in a live conversation or about to be invited (accepted
+    first; most people never post, and live conversations alone gave two to
+    four likes a day), none engaged with in the
     last week, and one recent post of their own each (`choosePost`: no
     reposts, nothing older than three weeks, nothing about grief, illness, a
     lost job or politics). A like, and a comment when the post says enough to
@@ -1991,7 +1993,7 @@ tests that were verified by deliberately breaking the code.
     is read again on the send path. A workspace that had turned the old shared
     switch off keeps comments off.
 
-    Likes and comments have their own allowances (25 and 5 a day, 2 a day in an
+    Likes and comments have their own allowances (25 and 7 a day, 2 a day in an
     account's first fortnight), counted in the same statement as every other
     action (rule 2), and neither starts the invitation ramp (rule 3). A day's
     allowance spent means skipped, never carried into tomorrow onto an older
@@ -2015,7 +2017,7 @@ tests that were verified by deliberately breaking the code.
     copy from an older prompt is held to the same line. Job openings and
     adverts are liked and never commented on (`sellingPost`). Congratulating
     somebody on news they shared is allowed; a stock line on its own is not.
-    Comments are 2 a day in an account's first 14 days of sending, then 5, and
+    Comments are 2 a day in an account's first 14 days of sending, then 7, and
     the screens say so beside the meter. Every
     like and comment, with the words of the post and of the comment, is listed
     on `/app/engagement`, where an owner or admin can turn it off.

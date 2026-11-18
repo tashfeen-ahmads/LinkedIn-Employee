@@ -203,7 +203,7 @@ describe("likes and comments", () => {
   it("have their own daily allowances, which invitations never spend", () => {
     expect(checkAction("post_reaction", { ...base, invitesToday: 35 }, NOON).allowed).toBe(true);
     expect(checkAction("post_reaction", { ...base, reactionsToday: 25 }, NOON)).toMatchObject({ allowed: false, reason: "daily_reaction_cap" });
-    expect(checkAction("post_comment", { ...base, commentsToday: 5 }, NOON)).toMatchObject({ allowed: false, reason: "daily_comment_cap" });
+    expect(checkAction("post_comment", { ...base, commentsToday: LINKEDIN_LIMITS.commentsPerDay }, NOON)).toMatchObject({ allowed: false, reason: "daily_comment_cap" });
   });
 
   it("allows fewer comments in an account's first fortnight of sending", () => {
@@ -211,6 +211,6 @@ describe("likes and comments", () => {
     expect(dailyCommentCap(fresh.firstActionAt, NOON)).toBe(2);
     expect(checkAction("post_comment", { ...fresh, commentsToday: 2 }, NOON).allowed).toBe(false);
     expect(dailyCommentCap(null, NOON)).toBe(2);
-    expect(dailyCommentCap(base.firstActionAt, NOON)).toBe(5);
+    expect(dailyCommentCap(base.firstActionAt, NOON)).toBe(LINKEDIN_LIMITS.commentsPerDay);
   });
 });

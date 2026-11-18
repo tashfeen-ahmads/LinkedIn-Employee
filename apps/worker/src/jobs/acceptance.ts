@@ -1,4 +1,5 @@
 import {
+  profileSlug,
   FIRST_STEP_DELAY_DAYS,
   LINKEDIN_LIMITS,
   canTransition,
@@ -74,14 +75,18 @@ async function detectForAccount(
   // In slices: hundreds of ids in one `in` filter is a URL the server refuses,
   // and a refused read here is every acceptance on the account missed.
   const providerIdByProspect = new Map<string, string | null>();
+  const slugByProspect = new Map<string, string | null>();
   const prospectIds = [...new Set(outstanding.map((row) => row.prospect_id))];
   for (let i = 0; i < prospectIds.length; i += 200) {
     const { data: prospects, error } = await db
       .from("prospects")
-      .select("id, provider_id")
+      .select("id, provider_id, linkedin_url")
       .in("id", prospectIds.slice(i, i + 200));
     if (error) throw new Error(`could not read prospects: ${error.message}`);
-    for (const p of prospects ?? []) providerIdByProspect.set(p.id, p.provider_id);
+    for (const p of prospects ?? []) {
+      providerIdByProspect.set(p.id, p.provider_id);
+      slugByProspect.set(p.id, profileSlug(p.linkedin_url, p.provider_id));
+    }
   }
 
   const relations = await ctx.linkedin.listRelations({
@@ -90,12 +95,20 @@ async function detectForAccount(
   });
   const connected = new Set(relations.map((relation) => relation.providerId));
   if (connected.size === 0) return 0;
+  // Matched by public name as well: a Sales Navigator search stores `ACwAA…`
+  // ids and the connections list carries `ACoAA…`, so by id alone an account
+  // searching on Sales Navigator never saw anybody accept (`profileSlug`).
+  const connectedSlugs = new Set(
+    relations.map((relation) => relation.publicIdentifier?.toLowerCase()).filter((slug): slug is string => Boolean(slug)),
+  );
 
   let count = 0;
   const acceptedIds: string[] = [];
   for (const row of outstanding) {
     const providerId = providerIdByProspect.get(row.prospect_id);
-    if (!providerId || !connected.has(providerId)) continue;
+    const slug = slugByProspect.get(row.prospect_id);
+    const matched = (providerId && connected.has(providerId)) || (slug && connectedSlugs.has(slug));
+    if (!matched) continue;
     if (!canTransition(row.status as CampaignProspectStatus, "accepted")) continue;
 
     // Not read off the campaign. Step 1 has no configurable delay, because

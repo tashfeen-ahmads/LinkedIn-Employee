@@ -47,10 +47,11 @@ export const LINKEDIN_LIMITS = {
   /**
    * Comments per day, and the lower number for an account's first fortnight
    * of sending. LinkedIn's 2026 policy singles out automated comments, so this
-   * is the action held tightest: five a day is a person who comments on a few
-   * posts, never a feed being worked.
+   * is the action held tightest: seven a day is a person who comments on a
+   * handful of posts, never a feed being worked. Raised from five on 18 Nov
+   * 2026 at the owner's decision; an account's first fortnight stays at two.
    */
-  commentsPerDay: 5,
+  commentsPerDay: 7,
   commentsPerDayNew: 2,
   /** Days from an account's first send during which the lower comment cap applies. */
   commentsRampDays: 14,

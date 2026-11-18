@@ -132,6 +132,8 @@ export type PostReaction = "like" | "celebrate" | "support" | "love" | "insightf
 /** One connection the account has, as the provider reports it. */
 export interface ProviderRelation {
   providerId: string;
+  /** The public name in their profile address, when the provider gives one. */
+  publicIdentifier?: string | null;
   /** ISO datetime the connection was made, when the provider says. */
   connectedAt: string | null;
 }

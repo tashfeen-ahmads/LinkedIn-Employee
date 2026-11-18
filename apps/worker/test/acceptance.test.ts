@@ -53,6 +53,27 @@ describe("detectAcceptedInvitations", () => {
     expect(cp.accepted_at).toBe(NOW.toISOString());
   });
 
+  it("sees a yes from a Sales Navigator search, whose ids never match the connections list (ShyMarketing)", async () => {
+    const { db, ctx, linkedin } = harness();
+    const jane = db.find("prospects", { id: PROSPECT })!;
+    jane.provider_id = "ACwAAAbc123";
+    jane.linkedin_url = "linkedin.com/in/Jane-Doe-42";
+    linkedin.relations = [{ providerId: "ACoAAXyz789", publicIdentifier: "jane-doe-42", connectedAt: NOW.toISOString() }];
+
+    expect(await detectAcceptedInvitations(ctx, NOW)).toBe(1);
+    expect(db.find("campaign_prospects", { id: CP })!.status).toBe("accepted");
+  });
+
+  it("never matches on a fabricated address built from the id", async () => {
+    const { db, ctx, linkedin } = harness();
+    const jane = db.find("prospects", { id: PROSPECT })!;
+    jane.provider_id = "ACwAAAbc123";
+    jane.linkedin_url = "linkedin.com/in/ACwAAAbc123";
+    linkedin.relations = [{ providerId: "ACoAAXyz789", publicIdentifier: "acwaaabc123", connectedAt: NOW.toISOString() }];
+
+    expect(await detectAcceptedInvitations(ctx, NOW)).toBe(0);
+  });
+
   it("schedules the first follow-up, which is the whole point", async () => {
     // Without next_action_at the prospect sits in accepted and is still never
     // messaged, which is the bug this job exists to fix.

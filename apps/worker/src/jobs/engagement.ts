@@ -28,7 +28,7 @@ const REACTIONS_PER_RUN = 3;
 /** Comments planned per account in one hourly run. */
 const COMMENTS_PER_RUN = 1;
 /** People whose posts are read per account per run. Every read comes off the rep's seat. */
-const LOOKUPS_PER_RUN = 6;
+const LOOKUPS_PER_RUN = 12;
 /**
  * A person whose posts were read is not read again for this long, found or
  * not. Without it the same six people at the top of the list were read every
@@ -38,8 +38,14 @@ export const POSTS_RECHECK_MS = 3 * 86_400_000;
 /** The most rows read to choose from; ordered, so "newest first" means the whole list. */
 const CANDIDATE_ROWS = 300;
 
-/** The people worth engaging with: in a live conversation with this account, not finished with it. */
-const ENGAGEABLE = ["invited", "accepted", "messaged_1", "messaged_2", "messaged_3", "replied", "positive"] as const;
+/**
+ * The people worth engaging with: in a live conversation with this account,
+ * not finished with it, or about to be invited. Most people never post, so
+ * the live conversations alone gave two to four likes a day per account; a
+ * like on somebody about to be invited is the softest warm-up there is.
+ * Accepted people still come first (`candidates`).
+ */
+const ENGAGEABLE = ["queued", "invited", "accepted", "messaged_1", "messaged_2", "messaged_3", "replied", "positive"] as const;
 
 /**
  * Plans likes and comments on prospects' recent posts (rule 68), hourly.

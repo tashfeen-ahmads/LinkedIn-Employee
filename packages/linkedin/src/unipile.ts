@@ -884,6 +884,7 @@ export class UnipileProvider implements LinkedInProvider {
 
     const relations = items.map((item) => ({
       providerId: String(item.member_id ?? item.provider_id ?? item.id ?? ""),
+      publicIdentifier: typeof item.public_identifier === "string" ? item.public_identifier : null,
       connectedAt: typeof item.created_at === "string" ? item.created_at : null,
     }));
 

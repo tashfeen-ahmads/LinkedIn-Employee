@@ -146,6 +146,26 @@ export function isPublicProfileUrl(url: string | null | undefined, providerId?: 
 }
 
 /**
+ * The public name in a profile address (`linkedin.com/in/<this>`), lowercased,
+ * or null when the address has none a person could open.
+ *
+ * Two searches name one person differently: Sales Navigator returns `ACwAA…`
+ * ids and the classic API `ACoAA…`, so an account searching on Sales Navigator
+ * never matched its own connections by id and saw nobody accept (ShyMarketing,
+ * 187 people left at "invited" for weeks). The public name is the same in both.
+ */
+export function profileSlug(url: string | null | undefined, providerId?: string | null): string | null {
+  if (!isPublicProfileUrl(url, providerId)) return null;
+  const raw = /(?:^|\/)in\/([^/?#]+)/.exec(url ?? "")?.[1];
+  if (!raw) return null;
+  try {
+    return decodeURIComponent(raw).toLowerCase();
+  } catch {
+    return raw.toLowerCase();
+  }
+}
+
+/**
  * The address to put in an `href` for a prospect's profile.
  *
  * Every `linkedin_url` in this database is stored without a scheme
