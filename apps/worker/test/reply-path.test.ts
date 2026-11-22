@@ -1164,8 +1164,47 @@ describe("somebody who wrote to the rep first (16 Nov 2026)", () => {
   }
   const job = (text: string) => ({ ...inboundJob(text, "msg_new"), fromProviderId: "prov_new", providerChatId: "chat_new" });
 
+  const launch = (db: FakeDb) => {
+    db.rows("campaigns")[0]!.launched_at = NOW.toISOString();
+  };
+
+  it("takes on nobody, and answers nothing on its own, in a workspace that never launched (Palma, 20 Nov)", async () => {
+    const { db, ctx, queues, log, linkedin } = harness();
+    db.rows("workspaces")[0]!.onboarding = { autonomy: "autonomous" };
+    linkedin.chatHistory.set("chat_new", [{ providerMessageId: "msg_new", fromMe: false, text: "Hi", sentAt: NOW.toISOString() }]);
+    await handleInboundMessage(ctx, queues, job("Hi Terry, are you taking clients?"));
+    expect(db.rows("prospects").some((p) => p.provider_id === "prov_new")).toBe(false);
+    expect(replyJobs(log)).toHaveLength(0);
+    expect(db.rows("events").find((e) => e.name === "inbound.unmatched")?.payload).toMatchObject({ why: "nothing launched" });
+  });
+
+  it("holds a reply to somebody already on file when nothing was ever launched, whatever setup said", async () => {
+    const { db, ctx, queues, log, linkedin } = harness();
+    db.rows("workspaces")[0]!.onboarding = { autonomy: "autonomous" };
+    db.seed("prospects", [{ id: "p-new", workspace_id: WORKSPACE, provider_id: "prov_new", first_name: "Rob", do_not_contact: false }]);
+    linkedin.chatOthers.set("chat_new", 1);
+    await handleInboundMessage(ctx, queues, job("Thanks for the reply"));
+    expect(db.rows("reply_drafts")[0]?.status).toBe("pending");
+    expect(replyJobs(log)).toHaveLength(0);
+  });
+
+  it("never pitches, links or books somebody who wrote first, and tells the owner by email", async () => {
+    const { db, ctx, queues, linkedin } = harness();
+    launch(db);
+    db.rows("workspaces")[0]!.onboarding = { autonomy: "autonomous" };
+    const sent: Array<{ to: string; subject: string; text: string }> = [];
+    (ctx as unknown as { email: unknown }).email = { send: async (m: { to: string; subject: string; text: string }) => { sent.push(m); return { id: "e1" }; } };
+    linkedin.chatHistory.set("chat_new", [{ providerMessageId: "msg_new", fromMe: false, text: "Can we book a call?", sentAt: NOW.toISOString() }]);
+    readMock.mockResolvedValue(read({ theirAgenda: "evaluating_our_offer", askedForNextStep: true }));
+    await handleInboundMessage(ctx, queues, job("Saw your profile, can we book a call?"));
+    const move = (draftMock.mock.calls[0]![1] as { move: { pitch: boolean; link: boolean; slots: boolean } }).move;
+    expect(move).toMatchObject({ pitch: false, link: false, slots: false });
+    expect(sent.some((m) => m.to === "rep@acme.test" && m.subject.startsWith("New LinkedIn message from"))).toBe(true);
+  });
+
   it("takes on a new conversation, writes the person down and answers on autopilot", async () => {
     const { db, ctx, queues, log, linkedin } = harness();
+    launch(db);
     db.rows("workspaces")[0]!.onboarding = { autonomy: "autonomous" };
     linkedin.chatHistory.set("chat_new", [
       { providerMessageId: "msg_new", fromMe: false, text: "Hi, saw your profile", sentAt: NOW.toISOString() },
@@ -1183,6 +1222,7 @@ describe("somebody who wrote to the rep first (16 Nov 2026)", () => {
 
   it("drafts it for a person when the workspace did not choose to let Nora run it", async () => {
     const { db, ctx, queues, log, linkedin } = harness();
+    launch(db);
     linkedin.chatHistory.set("chat_new", [
       { providerMessageId: "msg_new", fromMe: false, text: "Hi", sentAt: NOW.toISOString() },
     ]);
@@ -1197,6 +1237,7 @@ describe("somebody who wrote to the rep first (16 Nov 2026)", () => {
   it("never takes on a group conversation, and holds a new message in one already on file", async () => {
     {
       const { db, ctx, queues, linkedin } = harness();
+      launch(db);
       db.rows("workspaces")[0]!.onboarding = { autonomy: "autonomous" };
       linkedin.chatHistory.set("chat_new", [{ providerMessageId: "msg_new", fromMe: false, text: "@All", sentAt: NOW.toISOString() }]);
       linkedin.chatOthers.set("chat_new", 2);
@@ -1206,6 +1247,7 @@ describe("somebody who wrote to the rep first (16 Nov 2026)", () => {
     }
     {
       const { db, ctx, queues, linkedin, log } = harness();
+      launch(db);
       db.rows("workspaces")[0]!.onboarding = { autonomy: "autonomous" };
       db.seed("prospects", [{ id: "p-new", workspace_id: WORKSPACE, provider_id: "prov_new", first_name: "Ann", do_not_contact: false }]);
       linkedin.chatOthers.set("chat_new", 2);
@@ -1225,6 +1267,7 @@ describe("somebody who wrote to the rep first (16 Nov 2026)", () => {
       [],
     ]) {
       const { db, ctx, queues, linkedin } = harness();
+      launch(db);
       db.rows("workspaces")[0]!.onboarding = { autonomy: "autonomous" };
       linkedin.chatHistory.set("chat_new", history);
 

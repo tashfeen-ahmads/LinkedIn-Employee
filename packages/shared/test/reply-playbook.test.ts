@@ -166,3 +166,22 @@ describe("what is the rep's own decision (18 Nov 2026)", () => {
     expect(replyMove("interested", "We sell SEO", { agenda: "selling_to_us", fromCampaign: false }).holdReason).toBeUndefined();
   });
 });
+
+describe("hello, and somebody who wrote first (22 Nov 2026)", () => {
+  it("a bare hello is answered with a hello and how can I help, never a question about their business", () => {
+    for (const hi of ["Hi", "Hi ", "hello!", "Hey Sam", "Good morning", "Thanks for connecting!"]) {
+      const move = replyMove("other", hi, { fromCampaign: true });
+      expect(move).toMatchObject({ pitch: false, link: false, slots: false });
+      expect(move.guidance).toContain("how you can help");
+    }
+    expect(replyMove("interested", "Hi, how much does it cost?", {}).guidance).not.toContain("only said hello");
+  });
+
+  it("somebody who wrote first is never pitched, linked or booked, even when they ask", () => {
+    expect(replyMove("interested", "Can we book a call?", { fromCampaign: false, askedForNextStep: true })).toMatchObject({
+      pitch: false,
+      link: false,
+      slots: false,
+    });
+  });
+});

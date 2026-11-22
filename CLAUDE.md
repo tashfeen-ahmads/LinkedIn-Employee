@@ -2173,6 +2173,23 @@ tests that were verified by deliberately breaking the code.
     not signed in for two weeks. On a campaign a hiring enquiry is often the
     sale itself (a freelancer) and is answered.
 
+    *Nothing launched, nothing answered.* "Let Nora run it" is an answer
+    about campaigns: a workspace that never launched one has no conversation
+    taken on and none answered on its own (`hasLaunched`,
+    `workspaceReplyRules`). Palma's owner, stuck on setup's last step, had
+    twenty-four chats answered in his name and asked how to disconnect.
+
+    *Somebody who wrote first is answered like a person, never sold to.*
+    Outside a campaign there is no pitch, no link and no times, whatever they
+    say (`fromCampaign: false` in `replyMove`). A bare hello anywhere gets a
+    hello and "how can I help" (`GREETING_ONLY`), never a discovery
+    question: Sunny wrote "Hi" and was asked about his ATS. Every message a
+    person sends the rep is emailed to the account's owner with what Nora did
+    about it (`notifyOwnerOfMessage`, once per conversation every six hours).
+    An operator disconnects an account a customer asked to leave from the
+    console (`account-disconnect`): released at the provider, running
+    campaigns paused, `REQUESTED_RELEASE_DETAIL` on the rep's screens.
+
     *Answering strangers is not using the product.* Rule 63's conversation
     signal counts only conversations a campaign owns, or every account that
     receives messages is kept, and billed, for ever.

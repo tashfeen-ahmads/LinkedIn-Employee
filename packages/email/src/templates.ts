@@ -561,3 +561,38 @@ export function signInReminderEmail(input: SignInReminderInput): EmailMessage {
     text: [...lines, "", ...rows.map((r) => `- ${r}`), "", `Sign in: ${input.appUrl}/login`].join("\n"),
   };
 }
+
+export interface NewMessageInput {
+  to: string;
+  appUrl: string;
+  /** Who wrote, as their profile names them. */
+  fromName: string;
+  /** Their words, as they arrived. */
+  theirWords: string;
+  /** What Nora did with it, in one plain sentence. */
+  whatNoraDid: string;
+}
+
+/**
+ * A person wrote to the rep on LinkedIn. Sent for every conversation, at most
+ * once per conversation every few hours (the caller's `sendOnce` step), so an
+ * owner hears about a new message the day it arrives instead of finding a
+ * reply Nora sent in a chat they never opened.
+ */
+export function newMessageEmail(input: NewMessageInput): EmailMessage {
+  const words = input.theirWords.length > 400 ? `${input.theirWords.slice(0, 397)}...` : input.theirWords;
+  const lines = [`${input.fromName} wrote to you on LinkedIn:`, `“${words}”`, input.whatNoraDid];
+  return {
+    to: input.to,
+    subject: `New LinkedIn message from ${input.fromName}`,
+    html: layout({
+      title: `New message from ${input.fromName}`,
+      preheader: words.slice(0, 120),
+      appUrl: input.appUrl,
+      body: lines.map(paragraph).join(""),
+      cta: { label: "Open the conversation", url: `${input.appUrl}/app/inbox` },
+      after: signoff(),
+    }),
+    text: [...lines, "", `${input.appUrl}/app/inbox`].join("\n"),
+  };
+}

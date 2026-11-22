@@ -111,6 +111,15 @@ export interface ConversationFacts {
  * is the rep's call, and the commonest shape of a recruiting scam ("before
  * moving to Signal", Palma, 18 Nov 2026), so a person decides.
  */
+/**
+ * Nothing but a hello. Sunny on Freelancer wrote "Hi" and was asked whether
+ * candidate outreach is tracked in his ATS: a stranger's greeting answered
+ * with a discovery question. A person says hello back and asks how they can
+ * help.
+ */
+export const GREETING_ONLY =
+  /^\s*(hi+|hello|hey+|hiya|yo|greetings|good (morning|afternoon|evening|day)|thanks for (connecting|the connection|the add)|nice to connect)\b[\s,.!:)\-]*([a-z]+[\s,.!:)]*)?$/i;
+
 const MOVE_OFF_LINKEDIN = /\b(signal|whats\s?app|telegram|wechat|viber|text me|my (cell|mobile|phone) (number|is))\b/i;
 
 /**
@@ -168,6 +177,16 @@ export function replyMove(
    * somebody selling to us. A personal conversation is drafted for the rep,
    * never sent on its own.
    */
+  if (GREETING_ONLY.test(message.trim())) {
+    return {
+      reply: true,
+      pitch: false,
+      link: false,
+      slots: false,
+      guidance:
+        "They only said hello. Say hello back by first name, warmly and briefly, the way a person would (for example: hope your week is going well), and ask how you can help. Nothing about their business, no pitch, no question about their tools or process.",
+    };
+  }
   if (MOVE_OFF_LINKEDIN.test(message)) {
     return {
       reply: true,
@@ -178,17 +197,36 @@ export function replyMove(
       holdReason: "They asked to continue on another app or by phone, so Nora drafted a reply for you to decide on rather than sending it.",
     };
   }
+  /*
+   * Somebody who wrote to the rep first, outside any campaign, is not a lead
+   * this product found, and is never pitched, sent a link or offered times
+   * by a machine: on Palma Nora answered a stranger's message with the
+   * offer and a booking time. Answer what they said like a person and leave
+   * what happens next to them and the rep.
+   */
+  if (context.fromCampaign === false) {
+    const own = context.agenda ? OWN_AGENDA_MOVES[context.agenda] : undefined;
+    const holdsForRep =
+      context.agenda === "personal" || context.agenda === "hiring_us" || context.agenda === "partnership";
+    return {
+      reply: true,
+      pitch: false,
+      link: false,
+      slots: false,
+      guidance: `${own ?? ""} They wrote to the rep first. Answer what they actually said, briefly and like a person, and ask how you can help if it is not clear. Never pitch the offer, never send a link, never offer times.`.trim(),
+      ...(holdsForRep
+        ? {
+            holdReason:
+              context.agenda === "personal"
+                ? "This looks like somebody you already know, so Nora drafted a reply for you to check rather than sending it."
+                : "They wrote to you first with a job or a partnership, which is your decision, so Nora drafted a reply for you to check.",
+          }
+        : {}),
+    };
+  }
   const own = context.agenda ? OWN_AGENDA_MOVES[context.agenda] : undefined;
   if (own && context.agenda) {
     const mayBook = asked && context.agenda !== "selling_to_us" && context.agenda !== "personal";
-    /*
-     * Somebody who wrote first with a job or a partnership is asking the rep
-     * to commit to something. On a campaign that is often the sale itself (a
-     * freelancer being hired); from a stranger it is the rep's decision, and
-     * Nora answering "I'd be open to reviewing the opportunity" for a CEO who
-     * had not signed in for two weeks is a career move made on his behalf.
-     */
-    const commits = context.fromCampaign === false && (context.agenda === "hiring_us" || context.agenda === "partnership");
     return {
       reply: true,
       pitch: false,
@@ -197,9 +235,7 @@ export function replyMove(
       guidance: `${own} ${mayBook ? "They asked to talk: agree in a few words and give the way to book." : "No link and no times."}`,
       ...(context.agenda === "personal"
         ? { holdReason: "This looks like somebody you already know, so Nora drafted a reply for you to check rather than sending it." }
-        : commits
-          ? { holdReason: "They wrote to you first with a job or a partnership, which is your decision, so Nora drafted a reply for you to check." }
-          : {}),
+        : {}),
     };
   }
   // They told us how they handle it today and it leaves the gap the offer

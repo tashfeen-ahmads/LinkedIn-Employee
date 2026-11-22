@@ -197,6 +197,17 @@ export default async function AdminWorkspacePage({
                             })()}
                             {a.status_detail ? <p className="tiny muted">{a.status_detail}</p> : null}
                             {a.has_sales_navigator ? <p className="tiny subtle">Sales Navigator</p> : null}
+                            {a.status !== "disconnected" ? (
+                              <ControlButton
+                                op="account-disconnect"
+                                fields={{ accountId: a.id }}
+                                back={back}
+                                label="Disconnect LinkedIn"
+                                tone="ghost"
+                                confirm="Disconnect for good"
+                                title="Releases the account at the provider and pauses its running campaigns. The customer reconnects with Connect LinkedIn."
+                              />
+                            ) : null}
                             {a.invites_paused_until && Date.parse(a.invites_paused_until) > Date.now() ? (
                               <div className="stack-1">
                                 <span className="pill tiny warning">LinkedIn hold until {when(a.invites_paused_until)}</span>

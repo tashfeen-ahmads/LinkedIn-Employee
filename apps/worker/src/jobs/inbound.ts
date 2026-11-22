@@ -37,6 +37,8 @@ import { bookAcceptedSlot } from "./booking.js";
 import { readCampaignCta } from "../cta.js";
 import { rulesForPlan, workspaceFeatures } from "../billing.js";
 import { loadExclusions } from "../exclusions.js";
+import { sendOnce } from "../email.js";
+import { newMessageEmail } from "@le/email";
 
 /**
  * Agent 3 end to end: a prospect replies, we classify it, decide whether a
@@ -704,10 +706,27 @@ export async function handleInboundMessage(
    * a duplicate and also did nothing. A held reply nobody was told about,
    * whose Send button was dead.
    */
+  const fromName = [prospect.first_name, prospect.last_name].filter(Boolean).join(" ").trim() || "Somebody";
   if (gate.action === "hold_for_human") {
     await flagForHuman(db, conversation.id, gate.reason ?? "held for review");
+    await notifyOwnerOfMessage(ctx, {
+      ownerUserId: account.user_id as string,
+      conversationId: conversation.id,
+      fromName,
+      text: job.text,
+      whatNoraDid: "Nora drafted a reply and is holding it for you. Nothing has been sent.",
+      at: new Date(job.receivedAt),
+    });
     return;
   }
+  await notifyOwnerOfMessage(ctx, {
+    ownerUserId: account.user_id as string,
+    conversationId: conversation.id,
+    fromName,
+    text: job.text,
+    whatNoraDid: `Nora is replying: “${draft.message}”`,
+    at: new Date(job.receivedAt),
+  });
 
   if (saved) {
     // `enqueueOnce`, not `add`: a finished job must never hold this id
@@ -734,10 +753,59 @@ export async function workspaceReplyRules(
   ctx: WorkerContext,
   workspaceId: string,
 ): Promise<{ mode?: "autopilot"; autonomy?: "autonomous" }> {
+  // "Let Nora run it" was answered about campaigns. A workspace that never
+  // launched one has not let Nora loose on anything: Palma's owner, stuck on
+  // setup's last step, had twenty-four chats answered in his name (20 Nov).
+  if (!(await hasLaunched(ctx, workspaceId))) return {};
   const { data, error } = await ctx.db.from("workspaces").select("onboarding").eq("id", workspaceId).maybeSingle();
   if (error || !data) return {};
   const answers = (data.onboarding ?? {}) as { autonomy?: unknown };
   return answers.autonomy === "autonomous" ? { mode: "autopilot", autonomy: "autonomous" } : {};
+}
+
+/** Whether the workspace has ever launched a campaign. Unreadable counts as no. */
+export async function hasLaunched(ctx: WorkerContext, workspaceId: string): Promise<boolean> {
+  const { count, error } = await ctx.db
+    .from("campaigns")
+    .select("id", { count: "exact", head: true })
+    .eq("workspace_id", workspaceId)
+    .not("launched_at", "is", null);
+  return !error && (count ?? 0) > 0;
+}
+
+/** At most one "new message" email per conversation in this many hours. */
+const NEW_MESSAGE_EMAIL_EVERY_HOURS = 6;
+
+/**
+ * Tells the account's owner a person wrote, the day it happens, and what Nora
+ * did about it. An owner found out from LinkedIn itself that a reply had gone
+ * out in a chat they had never opened. Never fatal: the message is stored and
+ * answered whether or not the email goes.
+ */
+export async function notifyOwnerOfMessage(
+  ctx: WorkerContext,
+  input: { ownerUserId: string; conversationId: string; fromName: string; text: string; whatNoraDid: string; at: Date },
+): Promise<void> {
+  if (!ctx.email) return;
+  try {
+    const { data: owner } = await ctx.db.from("profiles").select("email").eq("id", input.ownerUserId).maybeSingle();
+    if (!owner?.email) return;
+    const bucket = Math.floor(input.at.getTime() / (NEW_MESSAGE_EMAIL_EVERY_HOURS * 3_600_000));
+    await sendOnce(ctx.db, ctx.email, {
+      userId: input.ownerUserId,
+      step: `new-message:${input.conversationId}:${bucket}`,
+      kind: "transactional",
+      message: newMessageEmail({
+        to: owner.email as string,
+        appUrl: ctx.env.APP_URL,
+        fromName: input.fromName,
+        theirWords: input.text,
+        whatNoraDid: input.whatNoraDid,
+      }),
+    });
+  } catch (err) {
+    console.error("could not email the owner about a new message", { conversationId: input.conversationId, reason: String(err) });
+  }
 }
 
 /** How long a machine-written reply waits for the prospect to finish typing. */
@@ -822,6 +890,8 @@ export async function adoptNewConversation(
   account: { id: string; user_id: string; provider_account_id: string | null; connected_at: string | null },
 ): Promise<Adoption> {
   if (!job.fromProviderId || !job.providerChatId || !account.provider_account_id) return { skipped: "no sender or chat" };
+  // Nothing launched, nothing taken on: the owner has not started using Nora.
+  if (!(await hasLaunched(ctx, job.workspaceId))) return { skipped: "nothing launched" };
   let history: Awaited<ReturnType<WorkerContext["linkedin"]["getChatHistory"]>>;
   try {
     history = await ctx.linkedin.getChatHistory({

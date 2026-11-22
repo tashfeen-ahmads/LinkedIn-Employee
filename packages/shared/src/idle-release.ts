@@ -36,8 +36,16 @@ export const SIGNED_OUT_RELEASE_DAYS = 3;
 export const SIGNED_OUT_RELEASE_DETAIL = `LinkedIn signed this account out and it was not reconnected for ${SIGNED_OUT_RELEASE_DAYS} days, so it was disconnected. Press Connect LinkedIn to sign in again; your campaigns carry on from where they stopped.`;
 
 /** Released by this product for either reason: the rep's to-do, never a fault of ours. */
+/** Said on the rep's screens after an operator disconnected the account at their request. */
+export const REQUESTED_RELEASE_DETAIL =
+  "Disconnected at your request. Nora no longer reads or sends anything on this LinkedIn account. Press Connect LinkedIn if you want it back.";
+
 export function isReleasedByUs(account: { status?: string | null; status_detail?: string | null } | null | undefined): boolean {
-  return isIdleReleased(account) || (account?.status === "disconnected" && account.status_detail === SIGNED_OUT_RELEASE_DETAIL);
+  return (
+    isIdleReleased(account) ||
+    (account?.status === "disconnected" &&
+      (account.status_detail === SIGNED_OUT_RELEASE_DETAIL || account.status_detail === REQUESTED_RELEASE_DETAIL))
+  );
 }
 
 export interface IdleActivity {

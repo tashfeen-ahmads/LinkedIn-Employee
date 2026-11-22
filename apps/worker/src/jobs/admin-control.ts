@@ -8,6 +8,7 @@ import { startPendingSearches } from "./pending-searches.js";
 import { unstickProspects } from "./unstick.js";
 import { sendRecovery } from "./account-recovery.js";
 import { jobDueAt } from "./campaign-tick.js";
+import { REQUESTED_RELEASE_DETAIL } from "@le/shared";
 
 /**
  * What an operator can do from the console without opening a SQL editor.
@@ -35,6 +36,8 @@ export const AdminControlSchema = z.discriminatedUnion("op", [
   /** `on` hides the workspace from every console list; false shows it again. */
   z.object({ op: z.literal("workspace-console-hidden"), workspaceId: z.string().uuid(), on: z.boolean() }),
   z.object({ op: z.literal("account-clear-hold"), accountId: z.string().uuid() }),
+  /** A customer asked to be disconnected: released at the provider, campaigns on it paused. */
+  z.object({ op: z.literal("account-disconnect"), accountId: z.string().uuid() }),
   z.object({ op: z.literal("accounts-recover") }),
   z.object({ op: z.literal("user-password-reset"), targetUserId: z.string().uuid() }),
   z.object({
@@ -214,6 +217,52 @@ export async function runAdminControl(
       return {
         ok: true,
         detail: `Hold cleared${woken ? " and the waiting invitation released" : ""}. If LinkedIn is still refusing, the next refusal puts it straight back: that is the safety working.`,
+      };
+    }
+    case "account-disconnect": {
+      /*
+       * A customer asked to stop (Terry, Palma, 20 Nov 2026: "How do I
+       * disconnect you from my LinkedIn account"), and there was no way to
+       * do it short of SQL. Released at the provider, so nothing is read or
+       * sent and the seat stops being billed; every running campaign on it is
+       * paused rather than left "running" on an account that cannot send.
+       * Marked only while the row still holds the id that was released.
+       */
+      const { data: account } = await db
+        .from("linkedin_accounts")
+        .select("id, workspace_id, provider_account_id")
+        .eq("id", control.accountId)
+        .maybeSingle();
+      if (!account) return { ok: false, error: "No such account." };
+      const held = account.provider_account_id as string | null;
+      if (held) {
+        const result = await ctx.linkedin.deleteAccount(held);
+        if (!result.ok) return { ok: false, error: `The provider refused the disconnect: ${result.error ?? "no reason given"}` };
+      }
+      let marking = db
+        .from("linkedin_accounts")
+        .update({ status: "disconnected", status_detail: REQUESTED_RELEASE_DETAIL, provider_account_id: null })
+        .eq("id", account.id);
+      marking = held ? marking.eq("provider_account_id", held) : marking.is("provider_account_id", null);
+      const { error: markError } = await marking;
+      if (markError) return { ok: false, error: `Disconnected at the provider, but the account row was not marked: ${markError.message}` };
+      const { data: paused } = await db
+        .from("campaigns")
+        .update({ status: "paused" })
+        .eq("linkedin_account_id", account.id)
+        .eq("status", "running")
+        .select("id");
+      await recordEvent(db, {
+        workspaceId: account.workspace_id,
+        name: "linkedin.account.disconnected_on_request",
+        actorUserId: userId,
+        subjectType: "linkedin_account",
+        subjectId: account.id,
+        payload: { by: "operator", providerAccountId: held, campaignsPaused: paused?.length ?? 0 },
+      }).catch(() => undefined);
+      return {
+        ok: true,
+        detail: `LinkedIn disconnected${held ? " at the provider" : ""}${paused?.length ? `, and ${paused.length} running campaign(s) paused` : ""}. Nothing will be read or sent on it.`,
       };
     }
     case "user-password-reset": {

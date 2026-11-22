@@ -250,3 +250,27 @@ describe("console controls", () => {
     expect(promoted).toEqual([CP]);
   });
 });
+
+describe("disconnecting an account at the customer's request (Palma, 22 Nov 2026)", () => {
+  it("releases it at the provider, marks it in the customer's words, and pauses its running campaigns", async () => {
+    const { db, ctx, linkedin } = harness(false);
+    const { queues } = fakeQueues();
+    const result = await runAdminControl(ctx, queues, ADMIN, { op: "account-disconnect", accountId: ACCOUNT });
+    expect(result.ok).toBe(true);
+    expect(linkedin.deletedAccounts).toEqual(["acct"]);
+    const row = db.find("linkedin_accounts", { id: ACCOUNT })!;
+    expect(row).toMatchObject({ status: "disconnected", provider_account_id: null });
+    expect(String(row.status_detail)).toContain("at your request");
+    expect(db.find("campaigns", { id: CAMPAIGN })!.status).toBe("paused");
+  });
+
+  it("changes nothing when the provider refuses", async () => {
+    const { db, ctx, linkedin } = harness(false);
+    const { queues } = fakeQueues();
+    linkedin.deleteAccount = async () => ({ ok: false, error: "nope" });
+    const result = await runAdminControl(ctx, queues, ADMIN, { op: "account-disconnect", accountId: ACCOUNT });
+    expect(result.ok).toBe(false);
+    expect(db.find("linkedin_accounts", { id: ACCOUNT })!.status).toBe("active");
+    expect(db.find("campaigns", { id: CAMPAIGN })!.status).toBe("running");
+  });
+});
