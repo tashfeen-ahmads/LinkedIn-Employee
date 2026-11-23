@@ -222,6 +222,27 @@ export async function handleInboundMessage(
     return;
   }
 
+  /*
+   * A conversation already waiting for the rep is not Nora's to carry on.
+   *
+   * A recruiter asked for the rep's resume, was told it was attached, wrote
+   * back that it had not come through, and was told it was being sent again
+   * (Freelancer, 22 Nov 2026). Each message was answered on its own as if
+   * nothing were waiting. Once a person has to step in, every later message
+   * in that conversation waits for them too, until they send a reply or mark
+   * it handled. A follow-up held for copy is not about this conversation and
+   * does not count.
+   */
+  const { data: standing } = await db
+    .from("conversations")
+    .select("needs_human, needs_human_reason, needs_human_kind")
+    .eq("id", conversation.id)
+    .maybeSingle();
+  const standingHold =
+    standing?.needs_human === true && standing.needs_human_kind !== "copy"
+      ? ((standing.needs_human_reason as string | null) ?? "an earlier message is waiting for you")
+      : null;
+
   const { data: campaign } = campaignId
     ? await db
         .from("campaigns")
@@ -611,6 +632,8 @@ export async function handleInboundMessage(
       ? { action: "hold_for_human", reason: GROUP_CHAT_HOLD }
       : move.holdReason
       ? { action: "hold_for_human", reason: move.holdReason }
+      : standingHold
+      ? { action: "hold_for_human", reason: `${STANDING_HOLD} ${standingHold}` }
       : decision.action === "send"
         ? { action: "send" }
         : { action: "hold_for_human", reason: decision.reason };
@@ -714,8 +737,9 @@ export async function handleInboundMessage(
       conversationId: conversation.id,
       fromName,
       text: job.text,
-      whatNoraDid: "Nora drafted a reply and is holding it for you. Nothing has been sent.",
+      whatNoraDid: `Nora has not replied. ${gate.reason ?? "This one needs you."} A draft is waiting in your inbox, and nothing has been sent.`,
       at: new Date(job.receivedAt),
+      held: gate.reason ?? "held for review",
     });
     return;
   }
@@ -784,7 +808,20 @@ const NEW_MESSAGE_EMAIL_EVERY_HOURS = 6;
  */
 export async function notifyOwnerOfMessage(
   ctx: WorkerContext,
-  input: { ownerUserId: string; conversationId: string; fromName: string; text: string; whatNoraDid: string; at: Date },
+  input: {
+    ownerUserId: string;
+    conversationId: string;
+    fromName: string;
+    text: string;
+    whatNoraDid: string;
+    at: Date;
+    /**
+     * Why Nora is waiting for the owner, when it is. A hold is always told:
+     * it has its own email per reason, never swallowed by the "Nora is
+     * replying" email that went out for an earlier message the same hour.
+     */
+    held?: string;
+  },
 ): Promise<void> {
   if (!ctx.email) return;
   try {
@@ -793,7 +830,9 @@ export async function notifyOwnerOfMessage(
     const bucket = Math.floor(input.at.getTime() / (NEW_MESSAGE_EMAIL_EVERY_HOURS * 3_600_000));
     await sendOnce(ctx.db, ctx.email, {
       userId: input.ownerUserId,
-      step: `new-message:${input.conversationId}:${bucket}`,
+      step: input.held
+        ? `held-message:${input.conversationId}:${shortHash(input.held)}:${bucket}`
+        : `new-message:${input.conversationId}:${bucket}`,
       kind: "transactional",
       message: newMessageEmail({
         to: owner.email as string,
@@ -801,12 +840,23 @@ export async function notifyOwnerOfMessage(
         fromName: input.fromName,
         theirWords: input.text,
         whatNoraDid: input.whatNoraDid,
+        needsYou: Boolean(input.held),
       }),
     });
   } catch (err) {
     console.error("could not email the owner about a new message", { conversationId: input.conversationId, reason: String(err) });
   }
 }
+
+/** A short stable key for a hold's reason, so one email goes per reason. */
+function shortHash(text: string): string {
+  let hash = 5381;
+  for (let i = 0; i < text.length; i++) hash = ((hash << 5) + hash + text.charCodeAt(i)) | 0;
+  return (hash >>> 0).toString(36);
+}
+
+/** Said when a message arrives in a conversation that is already waiting for the rep. */
+export const STANDING_HOLD = "This conversation is already waiting for you, so Nora is not replying in it.";
 
 /** How long a machine-written reply waits for the prospect to finish typing. */
 export const REPLY_SETTLE_MS = 75_000;

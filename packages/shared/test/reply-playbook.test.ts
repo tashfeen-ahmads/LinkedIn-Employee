@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { effectiveIntent, replyMove } from "../src/reply-playbook.js";
+import { asksRepTerms, effectiveIntent, replyMove, requestedFile } from "../src/reply-playbook.js";
 
 describe("replyMove", () => {
   it("lets somebody interested hear the offer and get the next step", () => {
@@ -183,5 +183,52 @@ describe("hello, and somebody who wrote first (22 Nov 2026)", () => {
       link: false,
       slots: false,
     });
+  });
+});
+
+describe("a request for a file Nora cannot send (Freelancer, 22 Nov 2026)", () => {
+  it("is read from the recruiter's own words", () => {
+    expect(requestedFile("Can you please share a copy of your resume and let me know what you are looking for?")).toBe("resume");
+    expect(requestedFile("Perfect! Yes, please share your resume here and I'll take a look.")).toBe("resume");
+    expect(requestedFile("Your resume didn't come through, can you send it again?")).toBe("resume");
+    expect(requestedFile("Could you send me the deck?")).toBe("deck");
+    expect(requestedFile("Do you have a case study?")).toBe("case study");
+    expect(requestedFile("Send me your CV")).toBe("cv");
+    expect(requestedFile("It didn't come through")).toBe("file");
+  });
+
+  it("is never their own process described, or a link", () => {
+    expect(requestedFile("We send quotes to customers by hand and track invoices in a spreadsheet.")).toBeNull();
+    expect(requestedFile("We already have a system for our documents.")).toBeNull();
+    expect(requestedFile("Can I send you our proposal?")).toBeNull();
+    expect(requestedFile("The link didn't come through")).toBeNull();
+    expect(requestedFile("Sure, send it over")).toBeNull();
+  });
+
+  it("is held for the rep on any intent, with nothing to pitch, link or book", () => {
+    for (const intent of ["interested", "question", "other"] as const) {
+      const move = replyMove(intent, "Please share your resume here.", { fromCampaign: true, agenda: "hiring_us" });
+      expect(move).toMatchObject({ reply: true, pitch: false, link: false, slots: false });
+      expect(move.holdReason).toContain("resume");
+      expect(move.guidance).toContain("cannot attach");
+    }
+  });
+});
+
+describe("somebody hiring the rep asking about the rep's own terms", () => {
+  it("is held on a campaign: only the rep knows contract or perm", () => {
+    expect(asksRepTerms("Are you looking for contract or direct-hire/perm?")).toBe(true);
+    const move = replyMove("question", "Are you looking for contract or direct-hire/perm?", { fromCampaign: true, agenda: "hiring_us" });
+    expect(move.holdReason).toContain("your own terms");
+  });
+
+  it("is answered when they ask nothing about the rep's terms", () => {
+    const move = replyMove("question", "What kinds of projects have you built?", { fromCampaign: true, agenda: "hiring_us" });
+    expect(move.holdReason).toBeUndefined();
+  });
+
+  it("is a buyer's ordinary question when the agenda is our offer", () => {
+    const move = replyMove("question", "Is it remote friendly?", { fromCampaign: true, agenda: "evaluating_our_offer" });
+    expect(move.holdReason).toBeUndefined();
   });
 });

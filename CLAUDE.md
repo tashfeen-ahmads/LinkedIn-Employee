@@ -2190,6 +2190,22 @@ tests that were verified by deliberately breaking the code.
     console (`account-disconnect`): released at the provider, running
     campaigns paused, `REQUESTED_RELEASE_DETAIL` on the rep's screens.
 
+    *Nora sends text, never a file, and says so to nobody but the rep.* A
+    recruiter on Freelancer asked for the rep's resume and was told "I've
+    attached my resume here", then "Sending it again here", with nothing
+    attached either time, and the rep's contract-or-perm preference was
+    answered for him. A request for a file (`requestedFile`: resume, CV,
+    portfolio, deck, proposal, anything to attach) is held on any intent and
+    any plan, and so is somebody hiring the rep asking about the rep's own
+    terms (`asksRepTerms`). A draft that says a file is attached, sent or on
+    its way without a link in it fails the voice check (`claimsFileSent`),
+    and a reply's offer is checked against what exists (`offeredAsset`, with
+    the knowledge titles). Once a conversation is waiting for the rep, every
+    later message in it waits too (`STANDING_HOLD`) until they reply or mark
+    it handled. Every hold emails the owner its reason, one email per reason
+    (`held-message:` steps), never swallowed by the "Nora is replying" email
+    sent for an earlier message the same hour.
+
     *Answering strangers is not using the product.* Rule 63's conversation
     signal counts only conversations a campaign owns, or every account that
     receives messages is kept, and billed, for ever.

@@ -331,9 +331,17 @@ export async function draftReply(ctx: AgentContext, input: DraftInput): Promise<
    */
   // Everything we have already said here: a question in it is never asked again.
   const ourEarlierMessages = input.history.filter((turn) => turn.role === "rep").map((turn) => turn.text);
+  // What really exists to hand over (rule 66). Without it a reply could offer
+  // "my resume" or "a quick checklist" that nobody can ever send.
+  const assets = [
+    ...input.knowledge.map((doc) => doc.title),
+    ...(move.link && input.rules.bookingLink ? [input.rules.bookingLink] : []),
+  ];
+  const check = (message: string) =>
+    voiceProblems(message, "reply", { theirMessage: input.message, ourEarlierMessages, assets });
   const first = await ask();
   const tidied = { ...first, message: tidyVoice(first.message) };
-  const firstProblems = voiceProblems(tidied.message, "reply", { theirMessage: input.message, ourEarlierMessages });
+  const firstProblems = check(tidied.message);
   if (!firstProblems.length) return { ...tidied, voiceProblems: [] };
 
   const second = await ask(
@@ -342,7 +350,7 @@ export async function draftReply(ctx: AgentContext, input: DraftInput): Promise<
   const retidied = { ...second, message: tidyVoice(second.message) };
   return {
     ...retidied,
-    voiceProblems: voiceProblems(retidied.message, "reply", { theirMessage: input.message, ourEarlierMessages }),
+    voiceProblems: check(retidied.message),
   };
 }
 

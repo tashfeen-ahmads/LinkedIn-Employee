@@ -107,6 +107,24 @@ describe("the reply writer rewrites a draft that reads like a model", () => {
     expect(out.voiceProblems).toEqual([]);
   });
 
+  it("never lets an offer of a file nobody holds through (Freelancer, 22 Nov 2026)", async () => {
+    const offer = "Thanks for offering to take a look. I can send my resume here.";
+    const { ctx, users } = scriptedCtx([reply(offer), reply(offer)]);
+    const out = await draftReply(ctx, {
+      business,
+      repName: "Rep",
+      knowledge: [],
+      history: [],
+      message: "Happy to see if we have a fit for you.",
+      classification,
+      rules,
+      availableSlots: [],
+    });
+    expect(users).toHaveLength(2);
+    expect(users[1]).toMatch(/resume/);
+    expect(out.voiceProblems.join(" ")).toMatch(/does not exist/);
+  });
+
   it("does not spend a rewrite on a draft that is already fine", async () => {
     const { ctx, users } = scriptedCtx([reply(HUMAN)]);
     const out = await draftReply(ctx, {

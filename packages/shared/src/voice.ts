@@ -207,7 +207,7 @@ export interface VoiceOptions {
  * artefact exists, checked in code because `callStructured` casts.
  */
 const ASSET_NOUN =
-  "(case stud(?:y|ies)|cheat ?sheets?|white ?papers?|swipe files?|one-pagers?|e-?books?|examples?|checklists?|guides?|templates?|audits?|playbooks?|samples?|frameworks?|scripts?|breakdowns?|teardowns?|worksheets?|pdfs?)";
+  "(r[eé]sum[eé]s?|cvs?|portfolios?|decks?|proposals?|brochures?|price ?lists?|rate ?cards?|case stud(?:y|ies)|cheat ?sheets?|white ?papers?|swipe files?|one-pagers?|e-?books?|examples?|checklists?|guides?|templates?|audits?|playbooks?|samples?|frameworks?|scripts?|breakdowns?|teardowns?|worksheets?|pdfs?)";
 const OFFER_PATTERNS = [
   // "want a two sentence example", "can I send a quick checklist",
   // "want me to send over a guide", "interested in a free audit".
@@ -254,6 +254,46 @@ export function offeredAsset(text: string, assets: readonly string[] = []): stri
     }
   }
   return null;
+}
+
+/*
+ * Saying a file went when nothing can go.
+ *
+ * Nora sends text. "I've attached my resume here" and then "Sending it again
+ * here" went to a recruiter who asked for a resume (Freelancer, 22 Nov 2026),
+ * and nothing was attached either time. Attaching is never true. "Here's my
+ * portfolio" and "I've sent it" are true only with the link in the message.
+ */
+const ATTACH_CLAIM = /\b(attach(?:ed|ing)?|attachments?|enclos(?:ed|ing)|uploaded|in the file below)\b/i;
+const SENT_FILE =
+  "(?:r[eé]sum[eé]|cv|portfolio|deck|file|doc|document|pdf|proposal|brochure|case study|one[- ]?pager|attachment|copy)";
+const SENT_OBJECT = String.raw`(?:my (?:\w+ ){0,2}${SENT_FILE}|a copy|the (?:\w+ ){0,2}${SENT_FILE}|(?:it|this|that|them) (?:over|across|again|here|now|to you|your way|through))`;
+const SENT_CLAIM = new RegExp(
+  [
+    // "I've sent my resume", "I just shared the deck"
+    String.raw`\b(?:i've|i have|i just|i)\s+(?:re-?)?(?:sent|shared|forwarded|emailed|dropped)\s+(?:it|this|that|them|${SENT_OBJECT})\b`,
+    // "Sending it again here", "resending my CV"
+    String.raw`\b(?:re-?)?sending (?:it|this|that|them|my|a copy|over)\b`,
+    // "I can send my resume here", "I'll share the deck", "let me send it over"
+    String.raw`\b(?:i'll|i will|let me|i can|i'm going to|i am going to|happy to)\s+(?:re-?)?(?:send|share|forward|email|drop)\s+(?:you\s+)?${SENT_OBJECT}\b`,
+    // "here's my resume", "here is the deck"
+    String.raw`\bhere(?:'s| is| are) (?:my|the|our|a copy of (?:my|the)) (?:\w+ ){0,2}${SENT_FILE}\b`,
+    String.raw`\bhere it is\b`,
+  ].join("|"),
+  "i",
+);
+
+/**
+ * The claim a message makes that a file was attached or sent, or null. Pure.
+ * A link in the message is what was sent, so only attaching is checked then.
+ */
+export function claimsFileSent(text: string): string | null {
+  const lower = text.replace(/[‘’]/g, "'");
+  const attached = lower.match(ATTACH_CLAIM);
+  if (attached) return attached[0];
+  if (/https?:\/\/|www\./i.test(lower)) return null;
+  const sent = lower.match(SENT_CLAIM);
+  return sent ? sent[0] : null;
 }
 
 /*
@@ -454,6 +494,14 @@ export function voiceProblems(text: string, kind: MessageKind, options: VoiceOpt
     if (asset) {
       problems.push(
         `It offers ${/^[aeiou]/.test(asset) ? "an" : "a"} ${asset} that does not exist, so a yes cannot be answered. Offer only what you were told exists, or ask a question instead.`,
+      );
+    }
+  }
+  if (kind === "reply") {
+    const claim = claimsFileSent(body);
+    if (claim) {
+      problems.push(
+        `It says "${claim}", but nothing can be attached or sent from here. Do not say a file is attached, sent or coming.`,
       );
     }
   }

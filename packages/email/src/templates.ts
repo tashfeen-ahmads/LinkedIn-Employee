@@ -571,6 +571,8 @@ export interface NewMessageInput {
   theirWords: string;
   /** What Nora did with it, in one plain sentence. */
   whatNoraDid: string;
+  /** Nora is waiting for the owner rather than replying. */
+  needsYou?: boolean;
 }
 
 /**
@@ -584,7 +586,9 @@ export function newMessageEmail(input: NewMessageInput): EmailMessage {
   const lines = [`${input.fromName} wrote to you on LinkedIn:`, `“${words}”`, input.whatNoraDid];
   return {
     to: input.to,
-    subject: `New LinkedIn message from ${input.fromName}`,
+    subject: input.needsYou
+      ? `${input.fromName} is waiting for your reply on LinkedIn`
+      : `New LinkedIn message from ${input.fromName}`,
     html: layout({
       title: `New message from ${input.fromName}`,
       preheader: words.slice(0, 120),

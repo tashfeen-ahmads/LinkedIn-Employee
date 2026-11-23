@@ -120,6 +120,66 @@ export interface ConversationFacts {
 export const GREETING_ONLY =
   /^\s*(hi+|hello|hey+|hiya|yo|greetings|good (morning|afternoon|evening|day)|thanks for (connecting|the connection|the add)|nice to connect)\b[\s,.!:)\-]*([a-z]+[\s,.!:)]*)?$/i;
 
+/*
+ * A file only the rep holds: a resume, a CV, a portfolio, a deck.
+ *
+ * Nora sends text and nothing else. A recruiter on Freelancer asked for the
+ * rep's resume and was told "I've attached my resume here", then, when it did
+ * not arrive, "Sending it again here" (22 Nov 2026). Nothing was ever
+ * attached, and a prospect who is told twice that a file is on its way and
+ * never gets it does not reply a third time. So a request for a file is the
+ * rep's, always: drafted, held, and the owner told by email.
+ */
+const FILE_NOUN =
+  "(r[eé]sum[eé]s?|cvs?|curriculum vitae|portfolios?|(?:pitch |sales |slide )?decks?|proposals?|brochures?|price ?lists?|rate ?cards?|quotes?|quotations?|invoices?|contracts?|agreements?|case stud(?:y|ies)|one[- ]?pagers?|pdfs?|attachments?|files?|documents?|docs?|w-?9|references|work samples?|samples? of (?:your|the) work|writing samples?|certificates?|credentials)";
+/** Asked of us, not described: "we send quotes by hand" is their process, not a request. */
+const SEND_VERB = "(?:send|share|attach|forward|email|e-mail|upload|provide|resend|re-send|drop|pass along)";
+const FILE_REQUESTS = [
+  // "can you please share a copy of your resume", "could you send me the deck"
+  String.raw`\b(?:can|could|would|will) you (?:please |kindly |also )?${SEND_VERB}\b[^.?!]{0,60}?\b${FILE_NOUN}\b`,
+  // "please share your resume here", "kindly send the proposal"
+  String.raw`\b(?:please|kindly|pls) ${SEND_VERB}\b[^.?!]{0,60}?\b${FILE_NOUN}\b`,
+  // "send me your CV", "send over the deck", "share your portfolio"
+  String.raw`\b${SEND_VERB} (?:me|us|over|across|along)\b[^.?!]{0,40}?\b${FILE_NOUN}\b`,
+  String.raw`\b${SEND_VERB}\b[^.?!]{0,30}?\b(?:your|a copy of) (?:\w+ ){0,2}${FILE_NOUN}\b`,
+  // "a copy of your resume", "see your portfolio", "do you have a deck"
+  String.raw`\b(?:copy of|see|look at|review|read|get|receive) (?:your|the rep's) (?:\w+ ){0,2}${FILE_NOUN}\b`,
+  String.raw`\bdo you have (?:a|an|any) (?:\w+ ){0,2}${FILE_NOUN}\b`,
+  // "your resume didn't come through"
+  String.raw`\byour (?:\w+ ){0,2}${FILE_NOUN}\b[^.?!]{0,40}?(?:\b(?:did ?n[o']?t|did not|has ?n[o']?t|has not|never) (?:come|came|go|went|arrive|get|got) (?:through|over)|\bcan'?t (?:open|see|find)\b|\bplease\b|\?)`,
+].map((source) => new RegExp(source, "i"));
+/** "It didn't come through", with no file named: the thing they asked for earlier. */
+const DID_NOT_ARRIVE = /\b(?:did ?n[o']?t|did not|has ?n[o']?t|has not|never) (?:come|came|go|went|arrive|get|got) (?:through|over)\b|\bcan'?t (?:open|see|find) (?:it|the (?:file|attachment))\b/i;
+
+/**
+ * The file a message asks for, or null. Pure. A missing link ("the link did
+ * not come through") is not a file: sending a link is something Nora can do.
+ */
+export function requestedFile(message: string): string | null {
+  if (FILE_REQUESTS.some((pattern) => pattern.test(message))) {
+    const noun = message.match(new RegExp(String.raw`\b${FILE_NOUN}\b`, "i"));
+    return (noun?.[1] ?? "file").toLowerCase();
+  }
+  if (DID_NOT_ARRIVE.test(message) && !/\blink\b/i.test(message)) return "file";
+  return null;
+}
+
+/**
+ * Somebody hiring the rep asking about the rep's own terms: contract or
+ * permanent, rate, salary, availability, location, the next role. Nora was
+ * told none of it, and answered anyway: "I'm open to either contract or
+ * direct-hire roles, especially in senior product, automation, or AI
+ * systems" went to a recruiter on the rep's behalf with nobody having said
+ * so. A wrong answer here is the one that loses the placement.
+ */
+const REP_TERMS =
+  /\b(contract|contractor|direct[- ]?hire|perm|permanent|full[- ]time|part[- ]time|salary|compensation|pay range|expected pay|rates?|hourly|day rate|availability|available to start|start date|notice period|relocat\w*|visa|sponsorship|work authori[sz]ation|remote|on[- ]?site|hybrid|next role|next position|looking for in|what (?:kind|type|sort) of (?:role|work|position|job|opportunit\w+)|what you(?:'re| are) looking for)\b/i;
+
+/** Whether somebody hiring the rep asked about the rep's own terms. Pure. */
+export function asksRepTerms(message: string): boolean {
+  return REP_TERMS.test(message);
+}
+
 const MOVE_OFF_LINKEDIN = /\b(signal|whats\s?app|telegram|wechat|viber|text me|my (cell|mobile|phone) (number|is))\b/i;
 
 /**
@@ -155,6 +215,19 @@ export function replyMove(
 ): ReplyMove {
   const intent = effectiveIntent(classified, message, context);
   const asked = ASKS_FOR_NEXT_STEP.test(message) || context.askedForNextStep === true;
+  // A file only the rep has. Nora cannot attach one, so nothing it writes
+  // can answer this, and saying it is attached is a lie under the rep's name.
+  const file = requestedFile(message);
+  if (file) {
+    return {
+      reply: true,
+      pitch: false,
+      link: false,
+      slots: false,
+      guidance: `They asked for the rep's ${file}. You cannot attach or send files. Never say it is attached, sent, coming or on its way. One short line thanking them, nothing else.`,
+      holdReason: `They asked for your ${file}. Nora cannot send files, so nothing has been sent: send it to them yourself.`,
+    };
+  }
   // Politely ending it, with nothing asked: one warm line, nothing to sell.
   // A prospect who had sold his store was asked twice whether we could check
   // back, then offered a note to forward to an employer he no longer had.
@@ -235,7 +308,12 @@ export function replyMove(
       guidance: `${own} ${mayBook ? "They asked to talk: agree in a few words and give the way to book." : "No link and no times."}`,
       ...(context.agenda === "personal"
         ? { holdReason: "This looks like somebody you already know, so Nora drafted a reply for you to check rather than sending it." }
-        : {}),
+        : context.agenda === "hiring_us" && asksRepTerms(message)
+          ? {
+              holdReason:
+                "They asked about your own terms (the kind of role, contract or permanent, rate or availability). Only you can answer that, so Nora drafted a reply for you to check.",
+            }
+          : {}),
     };
   }
   // They told us how they handle it today and it leaves the gap the offer

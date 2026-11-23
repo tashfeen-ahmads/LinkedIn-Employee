@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { tidyVoice, voiceProblems } from "../src/voice";
+import { claimsFileSent, offeredAsset, tidyVoice, voiceProblems } from "../src/voice";
 
 /*
  * Calibrated on what this deployment actually sent to real prospects in
@@ -150,5 +150,27 @@ describe("repeatedQuestion", () => {
   it("lets a new question through", async () => {
     const { repeatedQuestion } = await import("../src/voice.js");
     expect(repeatedQuestion("What does your team do with leads that come in at night?", ["Who decides about outside tools?"])).toBeNull();
+  });
+});
+
+describe("a reply saying a file went when nothing can go (Freelancer, 22 Nov 2026)", () => {
+  it("catches what reached the recruiter", () => {
+    expect(claimsFileSent("I’ve attached my resume here. I’m open to either contract or direct-hire roles.")).toBe("attached");
+    expect(claimsFileSent("Sending it again here, Erica.")).toBe("Sending it");
+    expect(claimsFileSent("Here’s my resume.")).toBe("Here's my resume");
+    expect(claimsFileSent("Let me send it over.")).toBe("Let me send it over");
+    expect(voiceProblems("Sending it again here, Erica.", "reply").join(" ")).toContain("nothing can be attached or sent");
+  });
+
+  it("leaves ordinary sentences and a real link alone", () => {
+    expect(claimsFileSent("Here’s my portfolio: https://example.com/portfolio")).toBeNull();
+    expect(claimsFileSent("Here is the thing, we help agencies.")).toBeNull();
+    expect(claimsFileSent("I sent the details over yesterday.")).toBeNull();
+    expect(claimsFileSent("Thanks for connecting, Sam. How is the new role going?")).toBeNull();
+  });
+
+  it("an offer of a resume nobody holds is an offer of nothing", () => {
+    expect(offeredAsset("Thanks for offering to take a look. I can send my resume here.", [])).toBe("resume");
+    expect(offeredAsset("Happy to share my portfolio", ["Portfolio"])).toBeNull();
   });
 });

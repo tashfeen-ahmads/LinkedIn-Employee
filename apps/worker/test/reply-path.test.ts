@@ -1587,3 +1587,98 @@ describe("a burst of messages from one prospect", () => {
     expect(h.linkedin.sentMessages).toHaveLength(1);
   });
 });
+
+/*
+ * Freelancer, 22 Nov 2026: a recruiter on a campaign asked for the rep's
+ * resume and was told "I've attached my resume here", then "Sending it again
+ * here", and nothing was ever attached. Nora cannot send a file, so a request
+ * for one is the rep's, the owner is emailed why, and the conversation waits
+ * for them from then on.
+ */
+describe("a prospect asking for a file Nora cannot send", () => {
+  const hiringRead = {
+    theirSituation: [],
+    toolsTheyUse: [],
+    problemStatus: "unclear",
+    lastMessageMeans: "They want the rep's resume.",
+    askedForNextStep: false,
+    language: "English",
+    conversationState: "open",
+    theirAgenda: "hiring_us",
+    whatTheyWant: "The rep's resume.",
+    bestNextMove: "Send it.",
+  };
+  const withEmail = (ctx: WorkerContext) => {
+    const sent: Array<{ to: string; subject: string; text: string }> = [];
+    (ctx as unknown as { email: unknown }).email = {
+      send: async (m: { to: string; subject: string; text: string }) => {
+        sent.push(m);
+        return { id: `e${sent.length}` };
+      },
+    };
+    return sent;
+  };
+
+  it("is held for the rep on autopilot, never sent, and the owner is emailed why", async () => {
+    const { db, ctx, queues, log } = harness();
+    const sent = withEmail(ctx);
+    readMock.mockResolvedValue(hiringRead);
+    draftMock.mockResolvedValue(draft("Thanks Erica, I will get that to you."));
+
+    await handleInboundMessage(ctx, queues, inboundJob("Can you please share a copy of your resume?"));
+
+    expect(db.rows("reply_drafts")[0]?.status).toBe("pending");
+    expect(replyJobs(log)).toHaveLength(0);
+    expect(conversation(db).needs_human).toBe(true);
+    expect(String(conversation(db).needs_human_reason)).toContain("resume");
+    const mail = sent.find((m) => m.to === "rep@acme.test");
+    expect(mail?.subject).toContain("is waiting for your reply");
+    expect(mail?.text).toContain("resume");
+  });
+
+  it("keeps waiting for the rep: the next message in that conversation is not answered either", async () => {
+    const { db, ctx, queues, log } = harness();
+    const sent = withEmail(ctx);
+    readMock.mockResolvedValue(hiringRead);
+    await handleInboundMessage(ctx, queues, inboundJob("Please share your resume here."));
+    expect(replyJobs(log)).toHaveLength(0);
+
+    // A later message that asks nothing Nora cannot answer is still not Nora's.
+    vi.setSystemTime(new Date(NOW.getTime() + 60_000));
+    readMock.mockResolvedValue({ ...hiringRead, theirAgenda: "evaluating_our_offer" });
+    await handleInboundMessage(ctx, queues, {
+      ...inboundJob("Also, how does the sync work?", "msg_2"),
+      receivedAt: new Date(NOW.getTime() + 60_000).toISOString(),
+    });
+
+    expect(replyJobs(log)).toHaveLength(0);
+    expect(db.rows("reply_drafts").filter((d) => d.status === "approved")).toHaveLength(0);
+    expect(String(conversation(db).needs_human_reason)).toContain("already waiting for you");
+    // Each reason is told, even inside the same six hours.
+    expect(sent.filter((m) => m.subject.includes("is waiting for your reply"))).toHaveLength(2);
+  });
+
+  it("answers again once the rep has handled it", async () => {
+    const { db, ctx, queues, log } = harness();
+    readMock.mockResolvedValue(hiringRead);
+    await handleInboundMessage(ctx, queues, inboundJob("Please share your resume here."));
+    await clearHold(ctx.db, conversation(db).id as string, "reply");
+
+    vi.setSystemTime(new Date(NOW.getTime() + 60_000));
+    readMock.mockResolvedValue({ ...hiringRead, theirAgenda: "evaluating_our_offer" });
+    await handleInboundMessage(ctx, queues, {
+      ...inboundJob("Got it, thanks. How does the sync work?", "msg_2"),
+      receivedAt: new Date(NOW.getTime() + 60_000).toISOString(),
+    });
+    expect(replyJobs(log)).toHaveLength(1);
+  });
+
+  it("holds a recruiter's question about the rep's own terms", async () => {
+    const { db, ctx, queues, log } = harness();
+    readMock.mockResolvedValue(hiringRead);
+    draftMock.mockResolvedValue(draft("Thanks Erica, glad to hear it."));
+    await handleInboundMessage(ctx, queues, inboundJob("Are you looking for contract or direct-hire/perm?"));
+    expect(replyJobs(log)).toHaveLength(0);
+    expect(String(conversation(db).needs_human_reason)).toContain("your own terms");
+  });
+});

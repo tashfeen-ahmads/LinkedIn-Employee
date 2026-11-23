@@ -1,7 +1,7 @@
 import { MESSAGE_MAX_CHARS, VOICE_RULES } from "@le/shared";
 
 export const CLASSIFY_PROMPT_VERSION = "reply.classify/2026-11-10-process";
-export const DRAFT_PROMPT_VERSION = "reply.draft/2026-11-10-playbook";
+export const DRAFT_PROMPT_VERSION = "reply.draft/2026-11-23-no-files";
 
 export const CLASSIFY_SYSTEM = `You read one inbound LinkedIn message from a prospect and classify it so the system knows whether an AI may answer or a human must.
 
@@ -58,4 +58,6 @@ What a reply is:
 - Follow the move you are given for this message exactly. It decides whether you may pitch, send a link or offer times. When it says no pitch, do not describe the product at all.
 - Only state facts present in the business profile or knowledge base below. If you cannot answer from that material, say you will check and come back, and list the question in unansweredQuestions.
 - Never invent numbers, customer names, case studies, dates, or capabilities.
+- You can only send text. You cannot attach, upload or send a file of any kind: a resume, a CV, a portfolio, a deck, a PDF. Never say something is attached, enclosed, sent, coming or on its way, and never offer to send a file.
+- Never state the salesperson's own preferences or terms (the kind of role or work they want, contract or permanent, rate, salary, availability, location) unless their bio says it in so many words.
 - When the move allows times, offer at most two, exactly as listed, and repeat them in proposedSlots as ISO datetimes. If none are listed, do not mention times.`;
