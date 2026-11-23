@@ -39,6 +39,7 @@ import {
 } from "@/lib/wizard";
 import { describeRepair, type RefreshResult } from "@/app/app/team/repair";
 import {
+  BusinessEdit,
   BusinessForm,
   CtaForm,
   HoursForm,
@@ -95,6 +96,9 @@ const ERRORS: Record<string, string> = {
   "rewrite-failed": "Sage could not start just now. Try again in a minute.",
   unreadable: "Your setup could not be loaded just now, so nothing was saved. Try again in a minute.",
   "sage-not-started": "Sage could not be started just now. Try again in a minute.",
+  "business-admin-only": "Only an owner or admin of this workspace can change what Sage reads about the business.",
+  "business-has-campaign":
+    "A campaign was already built from these strategies, so they cannot be replaced here. Use None of these fit on the strategy step instead.",
   "sage-admin-only": "Only an owner or admin can change what Sage reads. Press Try again to run it on what you gave at the start.",
   "sage-needs-source":
     "Tell Sage what you sell first: your website, or a few sentences on what you sell and who buys it. A LinkedIn page alone cannot be read.",
@@ -380,6 +384,18 @@ async function stepBody(
     }
     const strategy = await readStrategyState(supabase, workspaceId, await hasBusiness(workspaceId));
     const known = hasStrategySource(wizard.stash.source);
+    // What Sage wrote, by name, so a correction can be judged here rather
+    // than only after LinkedIn is connected and the approval step opens.
+    const { data: written } =
+      strategy.phase === "ready"
+        ? await supabase
+            .from("customer_profiles")
+            .select("name")
+            .eq("workspace_id", workspaceId)
+            .eq("do_not_pursue", false)
+            .order("priority")
+        : { data: null };
+    const names = (written ?? []).map((row) => String(row.name ?? "").trim()).filter(Boolean);
     return (
       <>
         <p>
@@ -397,6 +413,25 @@ async function stepBody(
           <StrategyDetailsForm source={wizard.stash.source} from="onboarding" />
         ) : null}
         {strategy.phase === "running" ? <AutoRefresh seconds={15} /> : null}
+        {strategy.phase === "ready" && names.length ? (
+          <div className="stack-2">
+            <p className="small">
+              <strong>The strategies Sage wrote.</strong> You choose one to approve after LinkedIn is connected.
+            </p>
+            <ul className="small">
+              {names.map((name) => (
+                <li key={name}>{name}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+        {strategy.phase === "ready" ? (
+          <BusinessEdit
+            source={wizard.stash.source}
+            canEdit={(wizard.role === "owner" || wizard.role === "admin") && !wizard.facts.hasCampaign}
+            hasCampaign={wizard.facts.hasCampaign}
+          />
+        ) : null}
         <ContinueLink />
       </>
     );

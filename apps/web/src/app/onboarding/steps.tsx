@@ -99,6 +99,90 @@ export function BusinessForm() {
   );
 }
 
+/**
+ * Step 1 once the workspace exists: what Sage read, open to correction.
+ *
+ * It was read-only, and the screen that could correct it (Profile, Company)
+ * is closed until setup ends, so an owner whose strategies were written from
+ * the wrong description could go back to this step and change nothing
+ * (BeenThere, 23 Nov 2026). Saving replaces the strategies Sage wrote, which
+ * is only allowed while no campaign was built from them (`rebuildBusiness`).
+ */
+export function BusinessEdit({
+  source,
+  canEdit,
+  hasCampaign,
+}: {
+  source: OnboardingStash["source"];
+  canEdit: boolean;
+  hasCampaign: boolean;
+}) {
+  if (!canEdit) {
+    return (
+      <p className="small muted">
+        {hasCampaign
+          ? "A campaign was already built from these strategies, so the business they came from is not changed here. Use None of these fit on the strategy step to get different ones."
+          : "Only an owner or admin of this workspace can change what Sage reads about the business."}
+      </p>
+    );
+  }
+  return (
+    <details className="card">
+      <summary>
+        <strong>Change what Sage read about your business</strong>
+      </summary>
+      <form action="/onboarding/save" method="post" className="stack-3">
+        <input type="hidden" name="action" value="business" />
+        <label className="field">
+          <span>Website</span>
+          <input
+            name="websiteUrl"
+            type="text"
+            inputMode="url"
+            autoComplete="url"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            defaultValue={source.websiteUrl ?? ""}
+            placeholder="brightwaterdental.com"
+          />
+        </label>
+        <label className="field">
+          <span>LinkedIn company page</span>
+          <input
+            name="linkedinCompanyUrl"
+            type="text"
+            inputMode="url"
+            autoComplete="off"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            defaultValue={source.linkedinCompanyUrl ?? ""}
+            placeholder="linkedin.com/company/brightwater-dental"
+          />
+        </label>
+        <label className="field">
+          <span>What you sell, and who buys it</span>
+          <textarea
+            name="description"
+            rows={5}
+            maxLength={2000}
+            defaultValue={source.description ?? ""}
+            placeholder="Who you sell to, what you charge, what makes you different."
+          />
+          <span className="hint">
+            Saving asks Sage to read this again and write new strategies in place of the ones it wrote before. Nothing
+            has been searched for or sent yet.
+          </span>
+        </label>
+        <PostButton className="btn" pendingLabel="Asking Sage…">
+          Save and rewrite my strategies
+        </PostButton>
+      </form>
+    </details>
+  );
+}
+
 /* ------------------------------------------------------------------ 2 */
 
 const PLANS = [

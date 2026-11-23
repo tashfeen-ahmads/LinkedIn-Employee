@@ -4,7 +4,8 @@ import { isUuid, meetingBookingUrl, stepPath, withScheme } from "@/lib/wizard-la
 import { createClient } from "@/lib/supabase-server";
 import { seeOther } from "@/lib/see-other";
 import { callWorker } from "@/lib/worker";
-import { mergeStash, stampConfirmation, type StashedCta } from "@/lib/onboarding-stash";
+import { hasStrategySource, mergeStash, sourceFromForm, stampConfirmation, type StashedCta } from "@/lib/onboarding-stash";
+import { rebuildBusiness } from "@/lib/rebuild-business";
 import { readWizard } from "@/lib/wizard-state";
 import { ALREADY_RUNNING_NOTICE, canDefer, currentStep, stepIndex, type WizardStepKey } from "@/lib/wizard";
 import { queueSearch } from "@/lib/search";
@@ -36,6 +37,7 @@ import { AVAILABILITY_DEFAULTS, availabilityProblem, saveAvailability } from "@/
 
 /** Which wizard step each posted action belongs to. */
 const ACTION_STEP: Record<string, WizardStepKey> = {
+  business: "business",
   "linkedin-connect": "linkedin",
   hours: "hours",
   voice: "voice",
@@ -113,6 +115,26 @@ export async function POST(request: NextRequest) {
   };
 
   switch (action) {
+    case "business": {
+      // Back on the first step with strategies written from the wrong
+      // description: correct it here, without having to connect LinkedIn first
+      // to reach a screen that could (BeenThere, 23 Nov 2026).
+      const typed = sourceFromForm(form);
+      if (!hasStrategySource(typed)) return again("source-missing");
+      const outcome = await rebuildBusiness(supabase, { workspaceId, userId: user.id, role: wizard.role }, typed);
+      if (outcome.ok) return seeOther("/onboarding?step=business");
+      const code: Record<typeof outcome.reason, string> = {
+        role: "business-admin-only",
+        unreadable: "unreadable",
+        campaigns: "business-has-campaign",
+        "no-source": "source-missing",
+        "save-failed": "save-failed",
+        "clear-failed": "save-failed",
+        worker: "sage-not-started",
+      };
+      return again(code[outcome.reason]);
+    }
+
     case "linkedin-connect": {
       const flags = planFlags(form.get("linkedinPlan"));
       if (!flags) return again("plan-missing");

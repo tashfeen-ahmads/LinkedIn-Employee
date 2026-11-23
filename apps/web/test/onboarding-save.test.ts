@@ -11,6 +11,8 @@ const h = vi.hoisted(() => ({
   blockers: [] as string[],
   launchOutcome: { status: "launched", kicked: true } as unknown,
   replyHandlingOk: true,
+  rebuildCalls: [] as unknown[],
+  rebuildOutcome: { ok: true, data: {} } as unknown,
 }));
 
 vi.mock("@/lib/supabase-server", () => ({ createClient: async () => h.client }));
@@ -25,6 +27,12 @@ vi.mock("@/lib/availability", () => ({
   saveAvailability: async () => true,
 }));
 vi.mock("@/lib/campaign", () => ({ launchBlockers: () => h.blockers }));
+vi.mock("@/lib/rebuild-business", () => ({
+  rebuildBusiness: async (...args: unknown[]) => {
+    h.rebuildCalls.push(args);
+    return h.rebuildOutcome;
+  },
+}));
 vi.mock("@/lib/launch", () => ({
   launchState: async () => ({}),
   launch: async () => h.launchOutcome,
@@ -77,6 +85,8 @@ const draftDb = (call: FakeCall): FakeResult => {
 };
 
 beforeEach(() => {
+  h.rebuildCalls = [];
+  h.rebuildOutcome = { ok: true, data: {} };
   h.blockers = [];
   h.launchOutcome = { status: "launched", kicked: true };
   h.replyHandlingOk = true;
@@ -204,5 +214,35 @@ describe("Book a meeting keeps a scheduling link typed in the general link box",
     const db = useDb(ctaDb);
     await post({ action: "cta", ctaKind: "link", ctaUrl: "acme.com/offer", bookingUrl: "" });
     expect(bookingWrites(db.calls)).toEqual([]);
+  });
+});
+
+/*
+ * BeenThere, 23 Nov 2026: back on the first step with strategies written from
+ * the wrong description, and nothing there could be changed until LinkedIn
+ * was connected.
+ */
+describe("setup's first step corrects what Sage read", () => {
+  it("rewrites from the corrected description, past a step not yet done", async () => {
+    useDb(() => ({ data: [{ id: "row" }] }));
+    const res = await post({ action: "business", description: "Sales coaching for owners of service firms." });
+    expect(res.headers.get("Location")).toBe("/onboarding?step=business");
+    const [, who, typed] = h.rebuildCalls[0] as [unknown, { role: string }, { description: string }];
+    expect(who.role).toBe("owner");
+    expect(typed.description).toBe("Sales coaching for owners of service firms.");
+  });
+
+  it("asks for a website or a description before anything is cleared", async () => {
+    useDb(() => ({ data: [{ id: "row" }] }));
+    const res = await post({ action: "business", description: "  " });
+    expect(res.headers.get("Location")).toBe("/onboarding?step=business&error=source-missing");
+    expect(h.rebuildCalls).toHaveLength(0);
+  });
+
+  it("says so when a campaign was already built from these strategies", async () => {
+    useDb(() => ({ data: [{ id: "row" }] }));
+    h.rebuildOutcome = { ok: false, reason: "campaigns" };
+    const res = await post({ action: "business", websiteUrl: "https://example.com" });
+    expect(res.headers.get("Location")).toBe("/onboarding?step=business&error=business-has-campaign");
   });
 });

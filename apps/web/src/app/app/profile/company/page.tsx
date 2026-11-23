@@ -10,6 +10,7 @@ import { ConfirmButton } from "@/components/confirm-button";
 import { Section } from "@/components/page";
 import { hasStrategySource, mergeStash, readOnboardingStash } from "@/lib/onboarding-stash";
 import { BUSINESS_DESCRIPTION_MAX, COMPANY_NAME_MAX, readBusinessForm } from "@/lib/profile-business";
+import { rebuildBusiness as rebuild } from "@/lib/rebuild-business";
 import { PROFILE_SECTIONS } from "../sections";
 import { normalizeHex } from "@le/shared";
 
@@ -93,53 +94,45 @@ async function saveCompany(formData: FormData) {
 async function rebuildBusiness() {
   "use server";
   const session = await requireSession();
-  if (!["owner", "admin"].includes(session.role)) {
-    redirect(errorQuery(HERE, "Only an owner or admin can rebuild the business profile."));
-  }
   const supabase = await createClient();
-  const [{ count: campaigns, error: countError }, { data: ws, error: wsError }] = await Promise.all([
-    supabase.from("campaigns").select("id", { count: "exact", head: true }).eq("workspace_id", session.workspaceId),
-    supabase.from("workspaces").select("onboarding").eq("id", session.workspaceId).maybeSingle(),
-  ]);
-  // Deleting the profile takes every strategy with it, so a count that could
-  // not be read is never "no campaigns" (rule 17).
-  if (countError || campaigns === null || wsError) {
-    redirect(errorQuery(HERE, "Your campaigns could not be checked just now, so nothing was changed. Try again."));
-  }
-  if (campaigns) {
-    redirect(
-      errorQuery(
-        HERE,
-        "Your campaigns were built from the current business profile, so it cannot be replaced here. Add the corrected business on the Strategy page instead.",
-      ),
-    );
-  }
-  const source = readOnboardingStash(ws?.onboarding).source;
-  if (!hasStrategySource(source)) {
-    redirect(
-      errorQuery(
-        HERE,
-        "Add your website or a few sentences on what you sell first. A LinkedIn page alone cannot be read, and Sage will not invent a business from nothing.",
-      ),
-    );
-  }
-
-  // Strategies hang off the business profile and go with it.
-  const { error } = await supabase.from("business_profiles").delete().eq("workspace_id", session.workspaceId);
-  if (error) redirect(errorQuery(HERE, "Your old business profile could not be cleared. Please try again."));
-
-  const queued = await callWorker("/jobs/strategy", {
+  const outcome = await rebuild(supabase, {
     workspaceId: session.workspaceId,
     userId: session.userId,
-    ...source,
+    role: session.role,
   });
-  if (!queued.ok) redirect(errorQuery("/app/strategy", `Sage could not be started: ${queued.error}`));
+  if (!outcome.ok) {
+    switch (outcome.reason) {
+      case "role":
+        redirect(errorQuery(HERE, "Only an owner or admin can rebuild the business profile."));
+      case "unreadable":
+        redirect(errorQuery(HERE, "Your campaigns could not be checked just now, so nothing was changed. Try again."));
+      case "campaigns":
+        redirect(
+          errorQuery(
+            HERE,
+            "Your campaigns were built from the current business profile, so it cannot be replaced here. Add the corrected business on the Strategy page instead.",
+          ),
+        );
+      case "no-source":
+        redirect(
+          errorQuery(
+            HERE,
+            "Add your website or a few sentences on what you sell first. A LinkedIn page alone cannot be read, and Sage will not invent a business from nothing.",
+          ),
+        );
+      case "save-failed":
+      case "clear-failed":
+        redirect(errorQuery(HERE, "Your old business profile could not be cleared. Please try again."));
+      case "worker":
+        redirect(errorQuery("/app/strategy", `Sage could not be started: ${outcome.error ?? "try again"}`));
+    }
+  }
   revalidatePath("/app/profile", "layout");
   redirect(
     noticeQuery(
       "/app/strategy",
       startedNotice(
-        queued.data,
+        outcome.data,
         "Sage is reading your business again. New strategies appear on this page in a few minutes, unapproved. Nothing is searched for until you approve one.",
       ),
     ),

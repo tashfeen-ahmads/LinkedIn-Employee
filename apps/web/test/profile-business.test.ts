@@ -77,7 +77,17 @@ describe("the profile edits every onboarding answer", () => {
   });
 
   it("never rewrites strategies a campaign was built from", () => {
-    expect(profile).toMatch(/if \(campaigns\) \{\s*redirect\(/);
+    const rebuild = readFileSync(join(__dirname, "..", "src", "lib", "rebuild-business.ts"), "utf8");
+    expect(rebuild).toMatch(/if \(campaigns\) return \{ ok: false, reason: "campaigns" \}/);
+    expect(profile).toContain("rebuildBusiness as rebuild");
+  });
+
+  it("lets setup's first step correct the business, through the same rebuild (BeenThere, 23 Nov 2026)", () => {
+    const save = readFileSync(join(SRC, "onboarding", "save", "route.ts"), "utf8");
+    expect(onboarding).toContain('name="action" value="business"');
+    expect(onboarding).toContain("<BusinessEdit");
+    expect(save).toMatch(/business: "business"/);
+    expect(save).toContain("await rebuildBusiness(supabase");
   });
 });
 

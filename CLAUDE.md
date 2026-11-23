@@ -1821,6 +1821,16 @@ tests that were verified by deliberately breaking the code.
     on it; a launch's blockers are checked before anything is written; and no
     wait polls for ever.
 
+    **The first step stays editable.** Once the workspace exists, step 1
+    shows what Sage read and offers to change it (`BusinessEdit`, the
+    `business` action): Sage reads the corrected details and rewrites the
+    strategies through `rebuildBusiness` (`lib/rebuild-business.ts`), the
+    same path as Profile, Company, owners and admins only and never once a
+    campaign was built from them. It was read-only, Profile is closed during
+    setup, and an owner whose account had been released (rule 63) was sent to
+    connect LinkedIn before anything could correct strategies he knew were
+    wrong (BeenThere, 23 Nov 2026).
+
     The approval step always has a way out. "None of these fit?" takes who
     the owner actually sells to, in their words, and runs Sage again with it
     (`guidance` on `StrategyJob`); the rejected suggestions are set aside only

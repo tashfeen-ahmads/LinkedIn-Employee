@@ -4155,6 +4155,22 @@ const MUTATIONS = [
     pkg: "@le/worker",
   },
   {
+    id: "setup/first-step-corrects-the-business",
+    rule: "Setup's first step can correct what Sage read, so a wrong strategy never waits on LinkedIn",
+    file: "apps/web/src/app/onboarding/save/route.ts",
+    from: '  business: "business",',
+    to: "",
+    pkg: "@le/web",
+  },
+  {
+    id: "setup/rebuild-never-replaces-a-campaigns-strategies",
+    rule: "Rewriting the business never replaces strategies a campaign was built from",
+    file: "apps/web/src/lib/rebuild-business.ts",
+    from: '  if (campaigns) return { ok: false, reason: "campaigns" };',
+    to: "",
+    pkg: "@le/web",
+  },
+  {
     id: "inbound/nothing-launched-nothing-answered",
     rule: "A workspace that never launched a campaign has nothing answered on its own",
     file: "apps/worker/src/jobs/inbound.ts",
